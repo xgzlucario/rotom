@@ -193,8 +193,8 @@ github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d/go.mod h1
 github.com/smartystreets/goconvey v1.6.4/go.mod h1:syvi0/a8iFYH4r/RixwvyeAJjdLS9QV7WQ/tjFTllLA=
 github.com/sourcegraph/conc v0.2.0 h1:96VpOCAtXDCQ8Oycz0ftHqdPyMi8w12ltN4L2noYg7s=
 github.com/sourcegraph/conc v0.2.0/go.mod h1:8lmPpTLA0hsWqw4lw7wS1e694U2tMjRrc1Asvupb4QM=
-github.com/sourcegraph/sourcegraph/lib v0.0.0-20230131065733-ff3b4b454e84 h1:zz3MWMyk39wOajW2qF7lBfSIkluHaMoPJ019iXhq5Xg=
-github.com/sourcegraph/sourcegraph/lib v0.0.0-20230131065733-ff3b4b454e84/go.mod h1:GwOFTaHnUY4lQ7Y/vw6sARI8SmT4X/dUiQhct/KLoHs=
+github.com/sourcegraph/sourcegraph/lib v0.0.0-20230131171825-c8641e63421d h1:d8Dk2Mt+FeGnBterzFcJ/cvQoGTS0fj2ddg0ZOQ472M=
+github.com/sourcegraph/sourcegraph/lib v0.0.0-20230131171825-c8641e63421d/go.mod h1:GwOFTaHnUY4lQ7Y/vw6sARI8SmT4X/dUiQhct/KLoHs=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
 github.com/spf13/cast v1.3.0/go.mod h1:Qx5cxh0v+4UWYiBimWS+eyWzqEqokIECu5etghLkUJE=
 github.com/spf13/cobra v0.0.5/go.mod h1:3K3wKZymM7VvHMDS9+Akkh4K60UwM26emMESw8tLCHU=
@@ -250,8 +250,8 @@ golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPh
 golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2/go.mod h1:T9bdIzuCu7OtxOm1hfPfRQxPLYneinmdGuTeoZ9dtd4=
 golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
 golang.org/x/exp v0.0.0-20190121172915-509febef88a4/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
-golang.org/x/exp v0.0.0-20230131013936-aae9b4e6329d h1:EdJVZdqCvJN8QvZSbrto8tf354qfT3cfBUPaxdWuOpQ=
-golang.org/x/exp v0.0.0-20230131013936-aae9b4e6329d/go.mod h1:CxIveKay+FTh1D0yPZemJVgC/95VzuuOLq5Qi4xnoYc=
+golang.org/x/exp v0.0.0-20230131160201-f062dba9d201 h1:BEABXpNXLEz0WxtA+6CQIz2xkg80e+1zrhWyMcq8VzE=
+golang.org/x/exp v0.0.0-20230131160201-f062dba9d201/go.mod h1:CxIveKay+FTh1D0yPZemJVgC/95VzuuOLq5Qi4xnoYc=
 golang.org/x/lint v0.0.0-20181026193005-c67002cb31c3/go.mod h1:UVdnD1Gm6xHRNCYTkRU2/jEulfH38KcIWyp/GAMgvoE=
 golang.org/x/lint v0.0.0-20190227174305-5b3e6a55c961/go.mod h1:wehouNa3lNwaWXcvxsM5YxQ5yQlVC4a0KAMCusXpPoU=
 golang.org/x/lint v0.0.0-20190313153728-d0100b6bd8b3/go.mod h1:6SW0HCj/g11FgYtHlgUYUwCkIfeOF89ocIRzGO/8vkc=

@@ -8,7 +8,7 @@ import (
 
 func main() {
 	tree := structx.NewTrie[int]()
-	for i := 0; i < 3999999; i++ {
+	for i := 0; i < 39999; i++ {
 		tree.Put(gofakeit.URL(), i)
 	}
 	store.DB(0).Set("trie", tree)
