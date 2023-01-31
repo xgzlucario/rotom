@@ -1,14 +1,13 @@
-package test
+package structx
 
 import (
 	"testing"
 
 	"github.com/brianvoe/gofakeit/v6"
-	"github.com/xgzlucario/rotom/structx"
 )
 
-func getTrie() *structx.Trie[int] {
-	tree := structx.NewTrie[int]()
+func getTrie() *Trie[int] {
+	tree := NewTrie[int]()
 	for i := 0; i < million; i++ {
 		tree.Put(gofakeit.URL(), i)
 	}
@@ -17,21 +16,16 @@ func getTrie() *structx.Trie[int] {
 
 // Add
 func BenchmarkTrieAdd(b *testing.B) {
-	tree := structx.NewTrie[int]()
-	b.ResetTimer()
+	tree := NewTrie[int]()
 	for i := 0; i < b.N; i++ {
 		tree.Put(gofakeit.URL(), i)
 	}
 }
 
-// Walk
-func BenchmarkTrieWalk(b *testing.B) {
-	tree := getTrie()
-	b.ResetTimer()
+func BenchmarkMapAdd(b *testing.B) {
+	m := make(map[string]int)
 	for i := 0; i < b.N; i++ {
-		tree.Walk(func(key string, value int) bool {
-			return false
-		})
+		m[gofakeit.URL()] = i
 	}
 }
 

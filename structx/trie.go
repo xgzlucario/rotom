@@ -1,6 +1,5 @@
 package structx
 
-
 import (
 	"github.com/klauspost/compress/s2"
 	"github.com/xgzlucario/rotom/base"

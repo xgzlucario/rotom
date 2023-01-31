@@ -1,16 +1,24 @@
-package test
+package app
 
 import (
 	"testing"
 	"time"
+)
 
-	"github.com/xgzlucario/rotom/app"
+const (
+	billion      = 100000000      // 10^9
+	_100million  = million * 100  // 10^8
+	_10million   = million * 10   // 10^7
+	million      = 1000000        // 10^6
+	_100thousand = thousand * 100 // 10^5
+	_10thousand  = thousand * 10  // 10^4
+	thousand     = 1000           // 10^3
 )
 
 var defaultSign = getSignIn()
 
-func getSignIn() *app.SignIn {
-	s := app.NewSignIn()
+func getSignIn() *SignIn {
+	s := NewSignIn()
 	now := time.Now()
 	for i := 0; i < billion; i++ {
 		s.AddRecord(1, now)
@@ -20,7 +28,7 @@ func getSignIn() *app.SignIn {
 }
 
 func BenchmarkSignIn1(b *testing.B) {
-	s := app.NewSignIn()
+	s := NewSignIn()
 	now := time.Now()
 	for i := 0; i < b.N; i++ {
 		s.AddRecord(uint32(i), now)
@@ -28,7 +36,7 @@ func BenchmarkSignIn1(b *testing.B) {
 }
 
 func BenchmarkSignIn2(b *testing.B) {
-	s := app.NewSignIn()
+	s := NewSignIn()
 	now := time.Now()
 	for i := 0; i < b.N; i++ {
 		s.AddRecord(1, now)

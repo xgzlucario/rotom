@@ -1,14 +1,13 @@
-package test
+package structx
 
 import (
 	"testing"
 
 	"github.com/liyiheng/zset"
-	"github.com/xgzlucario/rotom/structx"
 )
 
-func getZSet1() *structx.ZSet[int64, float64] {
-	s := structx.NewZSet[int64, float64]()
+func getZSet1() *ZSet[int64, float64] {
+	s := NewZSet[int64, float64]()
 	for i := 0; i < thousand; i++ {
 		s.Incr(0, float64(i))
 	}

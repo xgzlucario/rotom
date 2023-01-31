@@ -1,6 +1,5 @@
 package structx
 
-
 import (
 	"fmt"
 

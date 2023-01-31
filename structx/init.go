@@ -1,4 +1,4 @@
-package test
+package structx
 
 const (
 	billion      = 100000000      // 10^9

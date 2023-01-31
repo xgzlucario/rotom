@@ -1,13 +1,11 @@
-package test
+package structx
 
 import (
 	"testing"
-
-	"github.com/xgzlucario/rotom/structx"
 )
 
-func getListSet(n int) *structx.LSet[int] {
-	s := structx.NewLSet[int]()
+func getListSet(n int) *LSet[int] {
+	s := NewLSet[int]()
 	for i := 0; i < n; i++ {
 		if i%2 == 0 {
 			s.Add(i)
@@ -19,7 +17,7 @@ func getListSet(n int) *structx.LSet[int] {
 }
 
 func BenchmarkAdd(b *testing.B) {
-	s := structx.NewLSet[int]()
+	s := NewLSet[int]()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Add(i)

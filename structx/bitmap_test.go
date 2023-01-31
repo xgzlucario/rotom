@@ -1,27 +1,25 @@
-package test
+package structx
 
 import (
 	"testing"
-
-	"github.com/xgzlucario/rotom/structx"
 )
 
-func getBitMap() *structx.BitMap {
-	bm := structx.NewBitMap()
+func getBitMap() *BitMap {
+	bm := NewBitMap()
 	for i := 0; i < billion; i++ {
 		bm.Add(uint32(i))
 	}
 	return bm
 }
 
-func getRangeBitMaps() (*structx.BitMap, *structx.BitMap) {
-	bm := structx.NewBitMap().AddRange(0, 10000)
-	bm1 := structx.NewBitMap().AddRange(5000, 15000)
+func getRangeBitMaps() (*BitMap, *BitMap) {
+	bm := NewBitMap().AddRange(0, 10000)
+	bm1 := NewBitMap().AddRange(5000, 15000)
 	return bm, bm1
 }
 
 func BenchmarkBmAdd(b *testing.B) {
-	bm := structx.NewBitMap()
+	bm := NewBitMap()
 	for i := 0; i < b.N; i++ {
 		bm.Add(uint32(i))
 	}
