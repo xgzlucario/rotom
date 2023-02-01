@@ -96,8 +96,21 @@ func testValue() {
 	fmt.Println()
 }
 
+func testStress() {
+	fmt.Println("===== start test Stress =====")
+
+	db := store.DB(0)
+	defer db.Save()
+
+	for i := 0; i < 10000000; i++ {
+		db.Set(fmt.Sprintf("str%d", i), i)
+		fmt.Println(i)
+	}
+}
+
 func main() {
 	testValue()
 	testList()
 	testTrie()
+	testStress()
 }

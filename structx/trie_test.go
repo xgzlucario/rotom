@@ -8,7 +8,7 @@ import (
 
 func getTrie() *Trie[int] {
 	tree := NewTrie[int]()
-	for i := 0; i < million; i++ {
+	for i := 0; i < thousand; i++ {
 		tree.Put(gofakeit.URL(), i)
 	}
 	return tree
@@ -29,10 +29,23 @@ func BenchmarkTrieAdd(b *testing.B) {
 	}
 }
 
-func BenchmarkMapAdd(b *testing.B) {
-	m := make(map[string]int)
+// Get
+func BenchmarkTrieGet(b *testing.B) {
+	tree := getTrie()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		m[gofakeit.URL()] = i
+		tree.Get(gofakeit.URL())
+	}
+}
+
+// Walk
+func BenchmarkTrieWalk(b *testing.B) {
+	tree := getTrie()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tree.Walk(func(s string, i int) bool {
+			return false
+		})
 	}
 }
 
@@ -42,15 +55,6 @@ func BenchmarkTrieContains(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		tree.Contains(gofakeit.URL())
-	}
-}
-
-// Keys
-func BenchmarkTrieKeys(b *testing.B) {
-	tree := getTrie()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tree.Keys()
 	}
 }
 

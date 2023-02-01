@@ -16,7 +16,6 @@ func DB(i int) *Store {
 // Set
 func (s *Store) Set(key string, value any) {
 	s.m.Set(key, value)
-	s.marshal()
 }
 
 // Exist

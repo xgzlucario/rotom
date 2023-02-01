@@ -1,7 +1,6 @@
 package structx
 
 import (
-	"github.com/klauspost/compress/s2"
 	"github.com/xgzlucario/rotom/base"
 )
 
@@ -262,29 +261,13 @@ type trieJSON[T any] struct {
 // MarshalJSON
 func (t *Trie[T]) MarshalJSON() ([]byte, error) {
 	keys, vals := t.collect(t.root, nil, nil, nil)
-
-	src, _ := base.MarshalJSON(trieJSON[T]{keys, vals})
-	// Compress
-	src = s2.EncodeSnappy(nil, src)
-
-	return base.MarshalJSON(src)
+	return base.MarshalJSON(trieJSON[T]{keys, vals})
 }
 
 // UnmarshalJSON
 func (t *Trie[T]) UnmarshalJSON(src []byte) error {
-	var buf []byte
-	if err := base.UnmarshalJSON(src, &buf); err != nil {
-		return err
-	}
-
-	// Decompress
-	buf1, err := s2.Decode(nil, buf)
-	if err != nil {
-		panic(err)
-	}
-
 	var tree trieJSON[T]
-	if err := base.UnmarshalJSON(buf1, &tree); err != nil {
+	if err := base.UnmarshalJSON(src, &tree); err != nil {
 		return err
 	}
 	// set
