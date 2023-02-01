@@ -1,13 +1,15 @@
 package base
 
 import (
+	"time"
+
 	"golang.org/x/exp/constraints"
 )
 
 type Ordered constraints.Ordered
 
 type Bases interface {
-	Ordered | ~bool
+	Ordered | ~bool | time.Time
 }
 
 type Stringer interface {

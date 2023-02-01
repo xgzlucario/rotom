@@ -1,6 +1,8 @@
 package store
 
 import (
+	"time"
+
 	"github.com/xgzlucario/rotom/app"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
@@ -13,14 +15,8 @@ func DB(i int) *Store {
 
 // Set
 func (s *Store) Set(key string, value any) {
-	switch value.(type) {
-	case base.Marshaler:
-		s.m.Set(key, value)
-		s.marshal()
-
-	default:
-		s.m.Set(key, value)
-	}
+	s.m.Set(key, value)
+	s.marshal()
 }
 
 // Exist
@@ -35,6 +31,16 @@ func (s *Store) Remove(key string) bool {
 		return true
 	}
 	return false
+}
+
+// Count
+func (s *Store) Count() int {
+	return s.m.Count()
+}
+
+// Keys
+func (s *Store) Keys() []string {
+	return s.m.Keys()
 }
 
 // Save
@@ -97,6 +103,16 @@ func (s *Store) GetFloat64(key string) (val float64, err error) {
 // GetBool
 func (s *Store) GetBool(key string) (val bool, err error) {
 	return getValue(s, key, val)
+}
+
+// GetTime
+func (s *Store) GetTime(key string) (val time.Time, err error) {
+	var str string
+	str, err = getValue(s, key, str)
+	if err != nil {
+		return val, err
+	}
+	return time.Parse(time.RFC3339, str)
 }
 
 // GetList

@@ -14,6 +14,13 @@ func getTrie() *Trie[int] {
 	return tree
 }
 
+// FakeURL
+func BenchmarkFakeURL(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		gofakeit.URL()
+	}
+}
+
 // Add
 func BenchmarkTrieAdd(b *testing.B) {
 	tree := NewTrie[int]()
@@ -26,6 +33,24 @@ func BenchmarkMapAdd(b *testing.B) {
 	m := make(map[string]int)
 	for i := 0; i < b.N; i++ {
 		m[gofakeit.URL()] = i
+	}
+}
+
+// Contains
+func BenchmarkTrieContains(b *testing.B) {
+	tree := getTrie()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tree.Contains(gofakeit.URL())
+	}
+}
+
+// Keys
+func BenchmarkTrieKeys(b *testing.B) {
+	tree := getTrie()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tree.Keys()
 	}
 }
 

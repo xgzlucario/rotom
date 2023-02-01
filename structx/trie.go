@@ -226,6 +226,12 @@ func (t *Trie[V]) collect(x *node[V], prefix []byte, keys []string, vals []V) ([
 	return t.collect(x.right, prefix, keys, vals)
 }
 
+// Keys return all keys.
+func (t *Trie[T]) Keys() []string {
+	keys, _ := t.collect(t.root, nil, nil, nil)
+	return keys
+}
+
 // Walk traverses the entire tree.
 func (t *Trie[T]) Walk(f func(string, T) bool) {
 	keys, vals := t.collect(t.root, nil, nil, nil)
