@@ -1,6 +1,5 @@
 package structx
 
-
 import (
 	"github.com/xgzlucario/rotom/base"
 	"golang.org/x/exp/slices"

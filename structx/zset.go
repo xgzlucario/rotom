@@ -1,20 +1,19 @@
 package structx
 
-
 import "github.com/xgzlucario/rotom/base"
 
-type zslNode[K, V base.Value] struct {
+type zslNode[K, V base.Ordered] struct {
 	key   K
 	value V
 }
 
-type ZSet[K, V base.Value] struct {
+type ZSet[K, V base.Ordered] struct {
 	zsl *Skiplist[K, V]
 	m   Map[K, *zslNode[K, V]]
 }
 
 // NewZSet
-func NewZSet[K, V base.Value]() *ZSet[K, V] {
+func NewZSet[K, V base.Ordered]() *ZSet[K, V] {
 	return &ZSet[K, V]{
 		zsl: NewSkipList[K, V](),
 		m:   Map[K, *zslNode[K, V]]{},

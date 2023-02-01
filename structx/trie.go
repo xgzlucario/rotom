@@ -258,7 +258,7 @@ func (t *Trie[T]) MarshalJSON() ([]byte, error) {
 	keys, vals := t.collect(t.root, nil, nil, nil)
 
 	src, _ := base.MarshalJSON(trieJSON[T]{keys, vals})
-	// Use snappy compressed
+	// Compress
 	src = s2.EncodeSnappy(nil, src)
 
 	return base.MarshalJSON(src)

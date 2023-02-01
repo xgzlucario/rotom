@@ -10,20 +10,20 @@ import (
 const maxLevel = 32
 const pFactor = 0.25
 
-type skiplistNode[K, V base.Value] struct {
+type skiplistNode[K, V base.Ordered] struct {
 	key   K
 	value V
 	next  []*skiplistNode[K, V]
 }
 
-type Skiplist[K, V base.Value] struct {
+type Skiplist[K, V base.Ordered] struct {
 	level int
 	len   int
 	head  *skiplistNode[K, V]
 }
 
 // NewSkipList
-func NewSkipList[K, V base.Value]() *Skiplist[K, V] {
+func NewSkipList[K, V base.Ordered]() *Skiplist[K, V] {
 	return &Skiplist[K, V]{
 		head: &skiplistNode[K, V]{
 			next: make([]*skiplistNode[K, V], maxLevel),

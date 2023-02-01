@@ -14,9 +14,13 @@ func (s *Store) marshal() {
 	// sleep
 	if now := time.Now(); now.Sub(s.last) < STORE_DURATION {
 		return
-	} else {
-		s.last = now
 	}
+	s.marshalForce()
+}
+
+func (s *Store) marshalForce() {
+	s.last = time.Now()
+
 	// marshal
 	buf, _ := s.m.MarshalJSON()
 	if err := os.WriteFile(fmt.Sprintf("%s%d.dat", StorePath, s.id), buf, 0666); err != nil {

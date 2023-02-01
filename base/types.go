@@ -4,7 +4,11 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
-type Value constraints.Ordered
+type Ordered constraints.Ordered
+
+type Bases interface {
+	Ordered | ~bool
+}
 
 type Stringer interface {
 	any
