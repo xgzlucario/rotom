@@ -11,7 +11,9 @@ import (
 
 func testTrie() {
 	fmt.Println("===== start test Trie =====")
+
 	db := store.DB(0)
+	defer db.Save()
 
 	var tree *structx.Trie[int]
 
@@ -40,7 +42,9 @@ func testTrie() {
 
 func testList() {
 	fmt.Println("===== start test List =====")
+
 	db := store.DB(0)
+	defer db.Save()
 
 	var list *structx.List[int]
 
@@ -69,7 +73,9 @@ func testList() {
 
 func testValue() {
 	fmt.Println("===== start test Value =====")
+
 	db := store.DB(0)
+	defer db.Save()
 
 	str, err := db.GetString("str")
 	if err != nil {
@@ -88,7 +94,6 @@ func testValue() {
 	}
 
 	fmt.Println()
-	db.Save()
 }
 
 func main() {
