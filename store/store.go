@@ -1,6 +1,7 @@
 package store
 
 import (
+	"github.com/xgzlucario/rotom/app"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -11,9 +12,15 @@ func DB(i int) *Store {
 }
 
 // Set
-func (s *Store) Set(key string, value base.Marshaler) {
-	s.m.Set(key, value)
-	s.marshal()
+func (s *Store) Set(key string, value any) {
+	switch value.(type) {
+	case base.Marshaler:
+		s.m.Set(key, value)
+		s.marshal()
+
+	default:
+		s.m.Set(key, value)
+	}
 }
 
 // Exist
@@ -73,57 +80,56 @@ func getValue[T base.Bases](s *Store, key string, data T) (T, error) {
 }
 
 // GetString
-func GetString(s *Store, key string) (val string, err error) {
+func (s *Store) GetString(key string) (val string, err error) {
 	return getValue(s, key, val)
 }
 
 // GetInt
-func GetInt(s *Store, key string) (val int, eerr error) {
+func (s *Store) GetInt(key string) (val int, eerr error) {
 	return getValue(s, key, val)
 }
 
 // GetFloat64
-func GetFloat64(s *Store, key string) (val float64, err error) {
+func (s *Store) GetFloat64(key string) (val float64, err error) {
 	return getValue(s, key, val)
 }
 
 // GetBool
-func GetBool(s *Store, key string) (val bool, err error) {
+func (s *Store) GetBool(key string) (val bool, err error) {
 	return getValue(s, key, val)
 }
 
 // GetList
-// func GetList[T comparable](s *Store, key string) (*structx.List[T], error) {
-// 	return getStoreValue[*structx.List[T]](s, key)
-// }
+func GetList[T comparable](s *Store, key string) (*structx.List[T], error) {
+	return getGenericValue(s, key, structx.NewList[T]())
+}
 
 // GetLSet
-// func GetLSet[T comparable](s *Store, key string) (*structx.LSet[T], error) {
-// 	return getStoreValue[*structx.LSet[T]](s, key)
-// }
+func GetLSet[T comparable](s *Store, key string) (*structx.LSet[T], error) {
+	return getGenericValue(s, key, structx.NewLSet[T]())
+}
 
 // GetMap
-// func GetMap[K comparable, V any](s *Store, key string) (*structx.Map[K, V], error) {
-// 	return getStoreValue[*structx.Map[K, V]](s, key)
-// }
+func GetMap[K comparable, V any](s *Store, key string) (structx.Map[K, V], error) {
+	return getGenericValue(s, key, structx.NewMap[K, V]())
+}
 
 // GetSyncMap
-// func GetSyncMap[K comparable, V any](s *Store, key string) (*structx.SyncMap[K, V], error) {
-// 	return getStoreValue[*structx.SyncMap[K, V]](s, key)
-// }
+func GetSyncMap[V any](s *Store, key string) (*structx.SyncMap[string, V], error) {
+	return getGenericValue(s, key, structx.NewSyncMap[V]())
+}
 
 // GetTrie
 func GetTrie[T any](s *Store, key string) (*structx.Trie[T], error) {
-	t := structx.NewTrie[T]()
-	return getGenericValue(s, key, t)
+	return getGenericValue(s, key, structx.NewTrie[T]())
 }
 
 // GetBitMap
-// func (s *Store) GetBitMap(key string) (*structx.BitMap, error) {
-// 	return getStoreValue[*structx.BitMap](s, key)
-// }
+func (s *Store) GetBitMap(key string) (*structx.BitMap, error) {
+	return getGenericValue(s, key, structx.NewBitMap())
+}
 
 // GetSignIn
-// func (s *Store) GetSignIn(key string) (*app.SignIn, error) {
-// 	return getStoreValue[*app.SignIn](s, key)
-// }
+func (s *Store) GetSignIn(key string) (*app.SignIn, error) {
+	return getGenericValue(s, key, app.NewSignIn())
+}

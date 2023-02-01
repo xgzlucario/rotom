@@ -11,22 +11,26 @@ import (
 func main() {
 	db := store.DB(0)
 
+	str, err := db.GetString("string")
+	fmt.Println(str, err)
+
 	tree := structx.NewTrie[int]()
 	for i := 0; i < 999; i++ {
 		tree.Put(gofakeit.URL(), i)
 	}
 
 	list := structx.NewList(1, 2, 3, 4, 5)
-	// db.Set("trie", tree)
+	db.Set("trie", tree)
 	db.Set("list", list)
+
+	db.Set("string", "xgz")
 
 	tree1, err := store.GetTrie[int](db, "trie")
 	tree1.Walk(func(s string, i int) bool {
 		fmt.Println(s, i)
 		return false
 	})
-	fmt.Println("===========", tree1, err)
 
-	fmt.Println()
+	fmt.Println("===========", tree1, err)
 	db.Save()
 }
