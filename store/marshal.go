@@ -5,14 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/klauspost/compress/zstd"
+	"github.com/klauspost/compress/s2"
 	"github.com/xgzlucario/rotom/base"
-)
-
-var (
-	// fastest encode level
-	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedFastest))
-	decoder, _ = zstd.NewReader(nil)
 )
 
 func (s *Store) marshal() {
@@ -38,7 +32,7 @@ func (s *Store) marshalForce() {
 	src, _ := s.m.MarshalJSON()
 
 	// Compress
-	src = encoder.EncodeAll(src, nil)
+	src = s2.EncodeSnappy(nil, src)
 
 	// marshal again
 	src, _ = base.MarshalJSON(dbJSON{src})
@@ -61,7 +55,7 @@ func (s *Store) unmarshal() {
 	}
 
 	// Decompress
-	tmp.B, err = decoder.DecodeAll(tmp.B, nil)
+	tmp.B, err = s2.Decode(nil, tmp.B)
 	if err != nil {
 		panic(err)
 	}
