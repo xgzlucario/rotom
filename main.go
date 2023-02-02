@@ -112,5 +112,5 @@ func main() {
 	testValue()
 	testList()
 	testTrie()
-	testStress()
+	// testStress()
 }

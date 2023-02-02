@@ -3,31 +3,20 @@ package store
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/klauspost/compress/s2"
 	"github.com/xgzlucario/rotom/base"
 )
 
-func (s *Store) marshal() {
-	// empty
-	if s.m.IsEmpty() {
-		return
-	}
-	// sleep
-	if now := time.Now(); now.Sub(s.last) < STORE_DURATION {
-		return
-	}
-	s.marshalForce()
-}
-
 type dbJSON struct {
 	B []byte
 }
 
-func (s *Store) marshalForce() {
-	s.last = time.Now()
-
+func (s *Store) marshal() {
+	if !s.Persist {
+		return
+	}
+	
 	// marshal
 	src, _ := s.m.MarshalJSON()
 
@@ -43,6 +32,10 @@ func (s *Store) marshalForce() {
 }
 
 func (s *Store) unmarshal() {
+	if !s.Persist {
+		return
+	}
+
 	src, err := os.ReadFile(fmt.Sprintf("%s%d.dat", StorePath, s.id))
 	if err != nil {
 		return

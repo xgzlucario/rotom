@@ -44,7 +44,7 @@ func (s *Store) Keys() []string {
 
 // Save
 func (s *Store) Save() {
-	s.marshalForce()
+	s.marshal()
 }
 
 // getGenericValue return generic data from store

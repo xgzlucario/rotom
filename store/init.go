@@ -17,9 +17,10 @@ var (
 )
 
 type Store struct {
-	id   int                           // database id
-	last time.Time                     // last marshal time
-	m    *structx.SyncMap[string, any] // data
+	id int                           // database id
+	m  *structx.SyncMap[string, any] // data
+
+	Persist bool // enable persist
 }
 
 // databases
@@ -31,7 +32,7 @@ func init() {
 	dbs = make([]*Store, DB_MAX_COUNT)
 
 	for i := range dbs {
-		dbs[i] = &Store{i, time.Time{}, structx.NewSyncMap[any]()}
+		dbs[i] = &Store{i, structx.NewSyncMap[any](), true}
 		dbs[i].unmarshal()
 
 		// backend
