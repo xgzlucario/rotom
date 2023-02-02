@@ -5,56 +5,46 @@ import (
 	"os"
 
 	"github.com/klauspost/compress/s2"
-	"github.com/xgzlucario/rotom/base"
 )
 
-type dbJSON struct {
-	B []byte
-}
-
 func (s *Store) marshal() {
-	if !s.Persist {
+	if !s.persist {
 		return
 	}
-	
+	// empty
+	if s.m.IsEmpty() {
+		return
+	}
+
 	// marshal
 	src, _ := s.m.MarshalJSON()
 
 	// Compress
 	src = s2.EncodeSnappy(nil, src)
 
-	// marshal again
-	src, _ = base.MarshalJSON(dbJSON{src})
-
-	if err := os.WriteFile(fmt.Sprintf("%s%d.dat", StorePath, s.id), src, 0666); err != nil {
+	if err := os.WriteFile(fmt.Sprintf("%s%d.bin", StorePath, s.id), src, 0666); err != nil {
 		panic(err)
 	}
 }
 
 func (s *Store) unmarshal() {
-	if !s.Persist {
+	if !s.persist {
 		return
 	}
 
-	src, err := os.ReadFile(fmt.Sprintf("%s%d.dat", StorePath, s.id))
+	src, err := os.ReadFile(fmt.Sprintf("%s%d.bin", StorePath, s.id))
 	if err != nil {
 		return
-	}
-
-	// unmarshal
-	var tmp dbJSON
-	if err := base.UnmarshalJSON(src, &tmp); err != nil {
-		panic(err)
 	}
 
 	// Decompress
-	tmp.B, err = s2.Decode(nil, tmp.B)
+	src, err = s2.Decode(nil, src)
 	if err != nil {
 		panic(err)
 	}
 
 	// unmarshal
-	if err := s.m.UnmarshalJSON(tmp.B); err != nil {
+	if err := s.m.UnmarshalJSON(src); err != nil {
 		panic(err)
 	}
 }

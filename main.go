@@ -2,16 +2,17 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 	"github.com/xgzlucario/rotom/structx"
 )
 
 func testTrie() {
 	fmt.Println("===== start test Trie =====")
-
 	db := store.DB(0)
 	defer db.Save()
 
@@ -42,7 +43,6 @@ func testTrie() {
 
 func testList() {
 	fmt.Println("===== start test List =====")
-
 	db := store.DB(0)
 	defer db.Save()
 
@@ -73,10 +73,12 @@ func testList() {
 
 func testValue() {
 	fmt.Println("===== start test Value =====")
-
 	db := store.DB(0)
 	defer db.Save()
 
+	fmt.Println(db.Keys())
+
+	// string
 	str, err := db.GetString("str")
 	if err != nil {
 		fmt.Println(err)
@@ -85,6 +87,7 @@ func testValue() {
 		fmt.Println("str:", str)
 	}
 
+	// time.Time
 	t, err := db.GetTime("time")
 	if err != nil {
 		fmt.Println(err)
@@ -96,21 +99,52 @@ func testValue() {
 	fmt.Println()
 }
 
+// custom struct
+type Stu struct {
+	Name string
+	Age  int
+}
+
+func (s *Stu) MarshalJSON() ([]byte, error) {
+	return base.MarshalJSON(s)
+}
+
+func (s *Stu) UnmarshalJSON(src []byte) error {
+	return base.UnmarshalJSON(src, s)
+}
+
+func testCustom() {
+	fmt.Println("===== start test Custom =====")
+
+	db := store.DB(0)
+	defer db.Save()
+
+	stu := &Stu{}
+	stu, err := store.GetCustomStruct(db, "stu", stu)
+	if err != nil {
+		db.Set("stu", &Stu{"xgz", 22})
+	}
+	fmt.Println(stu, err)
+}
+
 func testStress() {
 	fmt.Println("===== start test Stress =====")
 
 	db := store.DB(0)
 	defer db.Save()
 
-	for i := 0; i < 10000000; i++ {
-		db.Set(fmt.Sprintf("str%d", i), i)
+	a := time.Now()
+	for i := 0; i < 1000000; i++ {
+		db.Set("xgz"+strconv.Itoa(i), i)
 		fmt.Println(i)
 	}
+	fmt.Println("set million data cost:", time.Since(a))
 }
 
 func main() {
 	testValue()
 	testList()
 	testTrie()
-	// testStress()
+	testCustom()
+	testStress()
 }

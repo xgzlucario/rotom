@@ -47,6 +47,18 @@ func (s *Store) Save() {
 	s.marshal()
 }
 
+// WithPersist set persist enable, default is true.
+func (s *Store) WithPersist(p bool) *Store {
+	s.persist = p
+	return s
+}
+
+// WithStoreDuration set store duration, default is one second.
+func (s *Store) WithStoreDuration(d time.Duration) *Store {
+	s.storeDuration = d
+	return s
+}
+
 // getGenericValue return generic data from store
 func getGenericValue[T base.Marshaler](s *Store, key string, data T) (T, error) {
 	val, ok := s.m.Get(key)
@@ -147,4 +159,9 @@ func (s *Store) GetBitMap(key string) (*structx.BitMap, error) {
 // GetSignIn
 func (s *Store) GetSignIn(key string) (*app.SignIn, error) {
 	return getGenericValue(s, key, app.NewSignIn())
+}
+
+// GetCustomStruct
+func GetCustomStruct[T base.Marshaler](s *Store, key string, data T) (T, error) {
+	return getGenericValue(s, key, data)
 }
