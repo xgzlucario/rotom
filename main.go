@@ -23,7 +23,7 @@ func testTrie() {
 		// not exist
 		fmt.Println("get trie error:", err)
 		tree = structx.NewTrie[int]()
-		for i := 0; i < 999; i++ {
+		for i := 0; i < 9999; i++ {
 			tree.Put(gofakeit.URL(), i)
 		}
 		db.Set("trie", tree)
@@ -76,8 +76,6 @@ func testValue() {
 	db := store.DB(0)
 	defer db.Save()
 
-	fmt.Println(db.Keys())
-
 	// string
 	str, err := db.GetString("str")
 	if err != nil {
@@ -105,12 +103,23 @@ type Stu struct {
 	Age  int
 }
 
+type stuJSON struct {
+	N string
+	A int
+}
+
 func (s *Stu) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(s)
+	return base.MarshalJSON(stuJSON{s.Name, s.Age})
 }
 
 func (s *Stu) UnmarshalJSON(src []byte) error {
-	return base.UnmarshalJSON(src, s)
+	var stu stuJSON
+	if err := base.UnmarshalJSON(src, &stu); err != nil {
+		return err
+	}
+	s.Name = stu.N
+	s.Age = stu.A
+	return nil
 }
 
 func testCustom() {
@@ -119,12 +128,14 @@ func testCustom() {
 	db := store.DB(0)
 	defer db.Save()
 
-	stu := &Stu{}
-	stu, err := store.GetCustomStruct(db, "stu", stu)
+	stu, err := store.GetCustomStruct(db, "stu", new(Stu))
 	if err != nil {
+		fmt.Println(err)
 		db.Set("stu", &Stu{"xgz", 22})
+
+	} else {
+		fmt.Println(stu, err)
 	}
-	fmt.Println(stu, err)
 }
 
 func testStress() {
@@ -146,5 +157,5 @@ func main() {
 	testList()
 	testTrie()
 	testCustom()
-	testStress()
+	// testStress()
 }

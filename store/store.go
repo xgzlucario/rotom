@@ -72,7 +72,7 @@ func getGenericValue[T base.Marshaler](s *Store, key string, data T) (T, error) 
 		return obj, nil
 	}
 
-	// marshal from JSON
+	// marshal
 	src, _ := base.MarshalJSON(val)
 	if err := data.UnmarshalJSON(src); err != nil {
 		return data, base.ErrType(data)
