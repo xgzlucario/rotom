@@ -96,32 +96,32 @@ func (s *Store) GetString(key string) (val string, err error) {
 }
 
 // GetInt
-func (s *Store) GetInt(key string) (val int, eerr error) {
+func (s *Store) GetInt(key string) (val int, err error) {
 	return getValue(s, key, val)
 }
 
 // GetInt32
-func (s *Store) GetInt32(key string) (val int32, eerr error) {
+func (s *Store) GetInt32(key string) (val int32, err error) {
 	return getValue(s, key, val)
 }
 
 // GetInt64
-func (s *Store) GetInt64(key string) (val int64, eerr error) {
+func (s *Store) GetInt64(key string) (val int64, err error) {
 	return getValue(s, key, val)
 }
 
 // GetUint
-func (s *Store) GetUint(key string) (val uint, eerr error) {
+func (s *Store) GetUint(key string) (val uint, err error) {
 	return getValue(s, key, val)
 }
 
 // GetUint32
-func (s *Store) GetUint32(key string) (val uint32, eerr error) {
+func (s *Store) GetUint32(key string) (val uint32, err error) {
 	return getValue(s, key, val)
 }
 
 // GetUint64
-func (s *Store) GetUint64(key string) (val uint64, eerr error) {
+func (s *Store) GetUint64(key string) (val uint64, err error) {
 	return getValue(s, key, val)
 }
 
@@ -173,6 +173,11 @@ func GetSyncMap[V any](s *Store, key string) (*structx.SyncMap[string, V], error
 // GetTrie
 func GetTrie[T any](s *Store, key string) (*structx.Trie[T], error) {
 	return getGenericValue(s, key, structx.NewTrie[T]())
+}
+
+// GetZset
+func GetZset[K, V base.Ordered](s *Store, key string) (*structx.ZSet[K, V], error) {
+	return getGenericValue(s, key, structx.NewZSet[K, V]())
 }
 
 // GetBitMap

@@ -104,11 +104,3 @@ func BenchmarkBmDifferenceInplace(b *testing.B) {
 		bm.Difference(bm1, true)
 	}
 }
-
-func BenchmarkBmMarshal(b *testing.B) {
-	bm := getBitMap()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		bm.MarshalJSON()
-	}
-}

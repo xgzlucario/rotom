@@ -38,17 +38,6 @@ func BenchmarkTrieGet(b *testing.B) {
 	}
 }
 
-// Walk
-func BenchmarkTrieWalk(b *testing.B) {
-	tree := getTrie()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tree.Walk(func(s string, i int) bool {
-			return false
-		})
-	}
-}
-
 // Contains
 func BenchmarkTrieContains(b *testing.B) {
 	tree := getTrie()

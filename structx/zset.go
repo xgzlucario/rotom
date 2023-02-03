@@ -137,3 +137,34 @@ func (z *ZSet[K, V]) delete(key K, value V) {
 func (z *ZSet[K, V]) Print() {
 	z.zsl.Print()
 }
+
+// marshal type
+type zsetJSON[K, V base.Ordered] struct {
+	K []K
+	V []V
+}
+
+func (z *ZSet[K, V]) MarshalJSON() ([]byte, error) {
+	tmp := zsetJSON[K, V]{
+		K: make([]K, 0, z.m.Len()),
+		V: make([]V, 0, z.m.Len()),
+	}
+	z.m.Range(func(key K, node *zslNode[K, V]) bool {
+		tmp.K = append(tmp.K, key)
+		tmp.V = append(tmp.V, node.value)
+		return false
+	})
+	return base.MarshalJSON(tmp)
+}
+
+func (z *ZSet[K, V]) UnmarshalJSON(src []byte) error {
+	var tmp zsetJSON[K, V]
+	if err := base.UnmarshalJSON(src, &tmp); err != nil {
+		return err
+	}
+
+	for i, k := range tmp.K {
+		z.insert(k, tmp.V[i])
+	}
+	return nil
+}

@@ -24,14 +24,16 @@ func getZSet2() *zset.SortedSet {
 
 // ========= Add =========
 func Benchmark_ZSetAdd1(b *testing.B) {
+	s := NewZSet[int64, float64]()
 	for i := 0; i < b.N; i++ {
-		getZSet1()
+		s.Incr(0, float64(i))
 	}
 }
 
 func Benchmark_ZSetAdd2(b *testing.B) {
+	s := zset.New()
 	for i := 0; i < b.N; i++ {
-		getZSet2()
+		s.Set(float64(i), int64(i), nil)
 	}
 }
 
