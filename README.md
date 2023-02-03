@@ -1,22 +1,55 @@
-# structx
+# Rotom
 
-Data structures and algorithms implemented using generics.
+Rotom is **In-memory** database, includes many structures and algorithms implemented by Golang **generics**. and upport **persist**.
 
-Currently, structx provides the following types of data structures to support generic types:
+Currently, rotom now provides the following types of data structures to support generic types:
 
+## Support type
+### Base types
+- `string`, `int`, `float64`, `bool`, `time.Time` 
+
+### Generic types
 - `List`
 - `Map`、`SyncMap`
 - `LSet (ListSet)`
-- `Skiplist`、`ZSet (SortedSet)`
-- `Pool`
+- `Skiplist`、`ZSet`
 - `Cache`
 - `BitMap`
+- `Trie`
+
+### Custom types
+Custom struct types also supports, just need to achieve MarshalJSON() and UnmarshalJSON() methods.
+
+## Usage
+```go
+// Get the db instance and call Save() on function exit to persist
+db := store.DB(0)
+defer db.Save()
+
+// trie object
+var tree *structx.Trie[int]
+
+tree, err := store.GetTrie[int](db, "trie")
+if err != nil {
+	// not exist
+	fmt.Println("get trie error:", err)
+	tree = structx.NewTrie[int]()
+	
+	// create a new trie
+	for i := 0; i < 9999; i++ {
+		tree.Put(gofakeit.URL(), i)
+	}
+	db.Set("trie", tree)
+}
+```
+
+## Structx
+structx pakage contains built-in generic data structures.
 
 ### BitMap
+bitmap implement backed by a slice of []uint64, and is nice wrappered.
 
-`bitmap` implement backed by a slice of []uint64, and is `nice wrappered`.
-
-**usage**
+#### usage
 
 ```go
 bm := structx.NewBitMap(1,2,3)
@@ -33,9 +66,9 @@ bm1 := structx.NewBitMap(3,4,5)
 bm.Union(bm1, true) // [1,2,3,4,5] OR operation and set inplaced
 ```
 
-**Benchmark**
+#### Benchmark
 
-Benchmarks below were run on a pre-allocated bitmap of **100,000,000** elements.
+Benchmarks below were run on a pre-allocated bitmap of 100,000,000 elements.
 
 ```
 goos: linux
@@ -85,7 +118,7 @@ ls.Sort(func(i, j int) bool {
 
 `LSet` uses `Map + List` as the storage structure. LSet is Inherited from `List`, where the elements are `sequential` and have `good iterative performance`, as well as `richer api`. When the data volume is small only `list` is used.
 
-#### **usage**
+#### Usage
 
 ```go
 s := structx.NewLSet(1,2,3,4,1) // [1,2,3,4]
@@ -106,7 +139,7 @@ intersect := s.Intersect(s1) // [1,2]
 diff := s.Difference(s1) // [0,3]
 ```
 
-#### **Benchmark**
+#### Benchmark
 
 Compare with mapset [deckarep/golang-set](https://github.com/deckarep/golang-set).
 
