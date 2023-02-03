@@ -6,19 +6,19 @@ Currently, rotom now provides the following types of data structures to support 
 
 ## Support type
 ### Base types
-- `string`, `int`, `float64`, `bool`, `time.Time` 
+- `string` , `int` , `float64` , `bool` , `time.Time` 
 
 ### Generic types
 - `List`
-- `Map`、`SyncMap`
+- `Map` , `SyncMap`
 - `LSet (ListSet)`
-- `Skiplist`、`ZSet`
+- `Skiplist` , `ZSet`
 - `Cache`
 - `BitMap`
 - `Trie`
 
 ### Custom types
-Custom struct types also supports, just need to achieve MarshalJSON() and UnmarshalJSON() methods.
+Custom struct types also supported, just need to achieve MarshalJSON() and UnmarshalJSON() methods.
 
 ## Usage
 ```go
@@ -40,6 +40,49 @@ if err != nil {
 		tree.Put(gofakeit.URL(), i)
 	}
 	db.Set("trie", tree)
+}
+```
+
+## Use Custom Type
+```go
+// custom struct Stu
+type Stu struct {
+	Name string
+	Age  int
+}
+
+// You need to define this to prevent UnMarshalJSON() recursive calls
+type stuJSON struct {
+	N string
+	A int
+}
+
+func (s *Stu) MarshalJSON() ([]byte, error) {
+	return base.MarshalJSON(stuJSON{s.Name, s.Age})
+}
+
+func (s *Stu) UnmarshalJSON(src []byte) error {
+	var stu stuJSON
+	if err := base.UnmarshalJSON(src, &stu); err != nil {
+		return err
+	}
+	s.Name = stu.N
+	s.Age = stu.A
+	return nil
+}
+
+func main() {
+	db := store.DB(0)
+	defer db.Save()
+
+	stu, err := store.GetCustomStruct(db, "stu", new(Stu))
+	if err != nil {
+		fmt.Println(err)
+		db.Set("stu", &Stu{"xgz", 22})
+
+	} else {
+		fmt.Println(stu, err)
+	}
 }
 ```
 

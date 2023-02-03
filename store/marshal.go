@@ -22,7 +22,7 @@ func (s *Store) marshal() {
 	// Compress
 	src = s2.EncodeSnappy(nil, src)
 
-	if err := os.WriteFile(fmt.Sprintf("%s%d.bin", StorePath, s.id), src, 0666); err != nil {
+	if err := os.WriteFile(fmt.Sprintf("%s%d.bin", storePath, s.id), src, 0666); err != nil {
 		panic(err)
 	}
 }
@@ -32,7 +32,7 @@ func (s *Store) unmarshal() {
 		return
 	}
 
-	src, err := os.ReadFile(fmt.Sprintf("%s%d.bin", StorePath, s.id))
+	src, err := os.ReadFile(fmt.Sprintf("%s%d.bin", storePath, s.id))
 	if err != nil {
 		return
 	}

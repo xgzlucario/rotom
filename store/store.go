@@ -48,14 +48,8 @@ func (s *Store) Save() {
 }
 
 // WithPersist set persist enable, default is true.
-func (s *Store) WithPersist(p bool) *Store {
-	s.persist = p
-	return s
-}
-
-// WithStoreDuration set store duration, default is one second.
-func (s *Store) WithStoreDuration(d time.Duration) *Store {
-	s.storeDuration = d
+func (s *Store) WithPersist(v bool) *Store {
+	s.persist = v
 	return s
 }
 
@@ -103,6 +97,36 @@ func (s *Store) GetString(key string) (val string, err error) {
 
 // GetInt
 func (s *Store) GetInt(key string) (val int, eerr error) {
+	return getValue(s, key, val)
+}
+
+// GetInt32
+func (s *Store) GetInt32(key string) (val int32, eerr error) {
+	return getValue(s, key, val)
+}
+
+// GetInt64
+func (s *Store) GetInt64(key string) (val int64, eerr error) {
+	return getValue(s, key, val)
+}
+
+// GetUint
+func (s *Store) GetUint(key string) (val uint, eerr error) {
+	return getValue(s, key, val)
+}
+
+// GetUint32
+func (s *Store) GetUint32(key string) (val uint32, eerr error) {
+	return getValue(s, key, val)
+}
+
+// GetUint64
+func (s *Store) GetUint64(key string) (val uint64, eerr error) {
+	return getValue(s, key, val)
+}
+
+// GetFloat32
+func (s *Store) GetFloat32(key string) (val float32, err error) {
 	return getValue(s, key, val)
 }
 
