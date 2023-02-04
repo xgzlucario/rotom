@@ -19,8 +19,6 @@ var (
 type Store struct {
 	id int                           // database id
 	m  *structx.SyncMap[string, any] // data
-
-	persist bool // persist enabled
 }
 
 // databases
@@ -34,11 +32,7 @@ func init() {
 
 	for i := range dbs {
 		// default store
-		dbs[i] = &Store{
-			id:      i,
-			m:       structx.NewSyncMap[any](),
-			persist: true,
-		}
+		dbs[i] = &Store{i, structx.NewSyncMap[any]()}
 		dbs[i].unmarshal()
 
 		// backend

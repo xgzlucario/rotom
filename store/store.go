@@ -47,12 +47,6 @@ func (s *Store) Save() {
 	s.marshal()
 }
 
-// WithPersist set persist enable, default is true.
-func (s *Store) WithPersist(v bool) *Store {
-	s.persist = v
-	return s
-}
-
 // getGenericValue return generic data from store
 func getGenericValue[T base.Marshaler](s *Store, key string, data T) (T, error) {
 	val, ok := s.m.Get(key)
@@ -90,6 +84,21 @@ func getValue[T base.Bases](s *Store, key string, data T) (T, error) {
 	return data, base.ErrType(obj)
 }
 
+// Incr
+func (s *Store) Incr(key string, increment ...int) (val int, err error) {
+	tmp, err := s.GetFloat64(key)
+	if err != nil && err.Error() != base.ErrKeyNotFound(key).Error() {
+		return -1, err
+	}
+
+	val = int(tmp)
+	for _, i := range increment {
+		val += i
+	}
+	s.Set(key, val)
+	return val, nil
+}
+
 // GetString
 func (s *Store) GetString(key string) (val string, err error) {
 	return getValue(s, key, val)
@@ -97,37 +106,65 @@ func (s *Store) GetString(key string) (val string, err error) {
 
 // GetInt
 func (s *Store) GetInt(key string) (val int, err error) {
-	return getValue(s, key, val)
+	tmp, err := s.GetFloat64(key)
+	if err != nil {
+		return 0, err
+	}
+	return int(tmp), nil
 }
 
 // GetInt32
 func (s *Store) GetInt32(key string) (val int32, err error) {
-	return getValue(s, key, val)
+	tmp, err := s.GetFloat64(key)
+	if err != nil {
+		return 0, err
+	}
+	return int32(tmp), nil
 }
 
 // GetInt64
 func (s *Store) GetInt64(key string) (val int64, err error) {
-	return getValue(s, key, val)
+	tmp, err := s.GetFloat64(key)
+	if err != nil {
+		return 0, err
+	}
+	return int64(tmp), nil
 }
 
 // GetUint
 func (s *Store) GetUint(key string) (val uint, err error) {
-	return getValue(s, key, val)
+	tmp, err := s.GetFloat64(key)
+	if err != nil {
+		return 0, err
+	}
+	return uint(tmp), nil
 }
 
 // GetUint32
 func (s *Store) GetUint32(key string) (val uint32, err error) {
-	return getValue(s, key, val)
+	tmp, err := s.GetFloat64(key)
+	if err != nil {
+		return 0, err
+	}
+	return uint32(tmp), nil
 }
 
 // GetUint64
 func (s *Store) GetUint64(key string) (val uint64, err error) {
-	return getValue(s, key, val)
+	tmp, err := s.GetFloat64(key)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(tmp), nil
 }
 
 // GetFloat32
 func (s *Store) GetFloat32(key string) (val float32, err error) {
-	return getValue(s, key, val)
+	tmp, err := s.GetFloat64(key)
+	if err != nil {
+		return 0, err
+	}
+	return float32(tmp), nil
 }
 
 // GetFloat64
@@ -148,6 +185,15 @@ func (s *Store) GetTime(key string) (val time.Time, err error) {
 		return val, err
 	}
 	return time.Parse(time.RFC3339, str)
+}
+
+// GetDuration
+func (s *Store) GetDuration(key string) (val time.Duration, err error) {
+	tmp, err := s.GetFloat64(key)
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(tmp), nil
 }
 
 // GetList

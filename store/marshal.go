@@ -8,9 +8,6 @@ import (
 )
 
 func (s *Store) marshal() {
-	if !s.persist {
-		return
-	}
 	// empty
 	if s.m.IsEmpty() {
 		return
@@ -28,10 +25,6 @@ func (s *Store) marshal() {
 }
 
 func (s *Store) unmarshal() {
-	if !s.persist {
-		return
-	}
-
 	src, err := os.ReadFile(fmt.Sprintf("%s%d.bin", storePath, s.id))
 	if err != nil {
 		return

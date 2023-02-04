@@ -76,6 +76,9 @@ func testValue() {
 	db := store.DB(0)
 	defer db.Save()
 
+	// incr
+	fmt.Println(db.Incr("incr-test", 2))
+
 	// string
 	str, err := db.GetString("str")
 	if err != nil {
