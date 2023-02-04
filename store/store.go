@@ -175,6 +175,11 @@ func GetTrie[T any](s *Store, key string) (*structx.Trie[T], error) {
 	return getGenericValue(s, key, structx.NewTrie[T]())
 }
 
+// GetBtree
+func GetBtree[K base.Ordered, V any](s *Store, key string) (*structx.Btree[K, V], error) {
+	return getGenericValue(s, key, structx.NewBtree[K, V]())
+}
+
 // GetZset
 func GetZset[K, V base.Ordered](s *Store, key string) (*structx.ZSet[K, V], error) {
 	return getGenericValue(s, key, structx.NewZSet[K, V]())
