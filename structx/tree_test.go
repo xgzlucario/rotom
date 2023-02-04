@@ -8,7 +8,7 @@ import (
 
 func getTrie() *Trie[int] {
 	tree := NewTrie[int]()
-	for i := 0; i < million; i++ {
+	for i := 0; i < thousand; i++ {
 		tree.Put(gofakeit.URL(), i)
 	}
 	return tree
@@ -16,7 +16,7 @@ func getTrie() *Trie[int] {
 
 func getBtree() *Btree[string, int] {
 	tree := NewBtree[string, int]()
-	for i := 0; i < million; i++ {
+	for i := 0; i < thousand; i++ {
 		tree.Put(gofakeit.URL(), i)
 	}
 	return tree

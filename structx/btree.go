@@ -5,10 +5,12 @@ import (
 	"github.com/zyedidia/generic/btree"
 )
 
+// Btree
 type Btree[K base.Ordered, V any] struct {
 	*btree.Tree[K, V]
 }
 
+// NewBtree
 func NewBtree[K base.Ordered, V any]() *Btree[K, V] {
 	return &Btree[K, V]{
 		btree.New[K, V](func(a, b K) bool {
