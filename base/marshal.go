@@ -1,11 +1,11 @@
 package base
 
-import "github.com/bytedance/sonic"
+import jsoniter "github.com/json-iterator/go"
 
 func MarshalJSON(data any) ([]byte, error) {
-	return sonic.Marshal(data)
+	return jsoniter.Marshal(data)
 }
 
 func UnmarshalJSON(src []byte, data any) error {
-	return sonic.Unmarshal(src, data)
+	return jsoniter.Unmarshal(src, data)
 }

@@ -160,5 +160,5 @@ func main() {
 	testList()
 	testTrie()
 	testCustom()
-	// testStress()
+	testStress()
 }

@@ -221,6 +221,23 @@ func (bm *BitMap) Copy() *BitMap {
 	}
 }
 
+// ToSlice: Not recommended for poor performance
+func (bm *BitMap) ToSlice() (arr []uint32) {
+	arr = make([]uint32, 0, bm.len)
+	for i, v := range bm.words {
+		if v == 0 {
+			continue
+		}
+		for j := uint32(0); j < bitSize; j++ {
+			// bit and is not 0
+			if v&(1<<j) != 0 {
+				arr = append(arr, bitSize*uint32(i)+j)
+			}
+		}
+	}
+	return
+}
+
 // Range: Not recommended for poor performance
 func (bm *BitMap) Range(f func(uint32) bool) {
 	for i, v := range bm.words {
