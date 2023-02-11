@@ -11,6 +11,8 @@ var (
 
 	// default expiry time
 	DefaultTTL = time.Minute * 10
+
+	NoTTL int64 = -1
 )
 
 type cacheItem[K string, V any] struct {
@@ -51,7 +53,6 @@ func NewCache[V any]() *Cache[string, V] {
 			return a.T < b.T
 		}),
 	}
-
 	go cache.eviction()
 
 	return cache
@@ -65,8 +66,11 @@ func (c *Cache[K, V]) IsEmpty() bool {
 // Get
 func (c *Cache[K, V]) Get(key K) (val V, ok bool) {
 	item, ok := c.m.Get(key)
+	if !ok {
+		return
+	}
 	// check valid
-	if ok && item.T > c.now() {
+	if item.T > c.now() || item.T == NoTTL {
 		return item.V, true
 	}
 	return
@@ -75,8 +79,11 @@ func (c *Cache[K, V]) Get(key K) (val V, ok bool) {
 // GetWithTTL
 func (c *Cache[K, V]) GetWithTTL(key K) (v V, ttl int64, ok bool) {
 	item, ok := c.m.Get(key)
+	if !ok {
+		return
+	}
 	// check valid
-	if ok && item.T > c.now() {
+	if item.T > c.now() || item.T == NoTTL {
 		return item.V, item.T, true
 	}
 	return
@@ -87,11 +94,11 @@ func (c *Cache[K, V]) Set(key K, value V) {
 	// if exist
 	item, ok := c.m.Get(key)
 	if ok {
-		item.T = -1
+		item.T = NoTTL
 		item.V = value
 
 	} else {
-		item := &cacheItem[K, V]{key, value, -1}
+		item := &cacheItem[K, V]{key, value, NoTTL}
 		c.m.Set(key, item)
 	}
 }

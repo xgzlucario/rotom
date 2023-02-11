@@ -18,7 +18,7 @@ func (s *Store) marshal() {
 	// Compress
 	src = s2.EncodeSnappy(nil, src)
 
-	if err := os.WriteFile(s.storePath, src, 0666); err != nil {
+	if err := os.WriteFile(s.storePath, src, 0744); err != nil {
 		panic(err)
 	}
 }

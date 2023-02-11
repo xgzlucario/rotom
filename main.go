@@ -180,6 +180,6 @@ func main() {
 	testList()
 	testTrie()
 	testCustom()
-	// testTTL()
+	testTTL()
 	// testStress()
 }
