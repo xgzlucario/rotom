@@ -18,18 +18,14 @@ func (s *Store) Set(key string, value any) {
 	s.m.Set(key, value)
 }
 
-// Exist
-func (s *Store) Exist(key string) bool {
-	return s.m.Has(key)
+// SetWithTTL
+func (s *Store) SetWithTTL(key string, value any, ttl time.Duration) {
+	s.m.SetWithTTL(key, value, ttl)
 }
 
 // Remove
 func (s *Store) Remove(key string) bool {
-	if s.Exist(key) {
-		s.m.Remove(key)
-		return true
-	}
-	return false
+	return s.m.Remove(key)
 }
 
 // Count

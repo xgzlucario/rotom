@@ -155,10 +155,31 @@ func testStress() {
 	fmt.Println("set million data cost:", time.Since(a))
 }
 
+func testTTL() {
+	fmt.Println("===== start test TTL =====")
+
+	db := store.DB(0)
+	defer db.Save()
+
+	db.Set("xgz", "123")
+	db.SetWithTTL("xgz-1", "234", time.Second*1)
+	db.SetWithTTL("xgz-2", "234", time.Second*3)
+	db.SetWithTTL("xgz-3", "234", time.Second*5)
+
+	fmt.Println(db.Keys())
+	time.Sleep(time.Second * 2)
+	fmt.Println(db.Keys())
+	time.Sleep(time.Second * 2)
+	fmt.Println(db.Keys())
+	time.Sleep(time.Second * 2)
+	fmt.Println(db.Keys())
+}
+
 func main() {
 	testValue()
 	testList()
 	testTrie()
 	testCustom()
-	testStress()
+	// testTTL()
+	// testStress()
 }

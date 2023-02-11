@@ -23,7 +23,7 @@ var (
 type Store struct {
 	id        int
 	storePath string
-	m         *structx.SyncMap[string, any]
+	m         *structx.Cache[string, any]
 }
 
 // databases
@@ -31,7 +31,7 @@ var dbs []*Store
 
 func init() {
 	// init store dir
-	if err := os.Mkdir(StorePath, os.ModeDir); err != nil {
+	if err := os.MkdirAll(StorePath, os.ModeDir); err != nil {
 		panic(err)
 	}
 
@@ -42,7 +42,7 @@ func init() {
 		dbs[i] = &Store{
 			id:        i,
 			storePath: fmt.Sprintf("%s%d.bin", StorePath, i),
-			m:         structx.NewSyncMap[any](),
+			m:         structx.NewCache[any](),
 		}
 
 		// load

@@ -31,7 +31,6 @@ func (m *SyncMap[K, V]) Print() {
 	for t := range m.IterBuffered() {
 		fmt.Printf("%+v -> %+v\n", t.Key, t.Val)
 	}
-	fmt.Println()
 }
 
 // MarshalJSON

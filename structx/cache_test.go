@@ -3,6 +3,7 @@ package structx
 import (
 	"strconv"
 	"testing"
+	"time"
 )
 
 var defaultCache = getCache()
@@ -22,16 +23,10 @@ func BenchmarkCacheSet(b *testing.B) {
 	}
 }
 
-func BenchmarkCacheMSet(b *testing.B) {
+func BenchmarkCacheSetWithTTL(b *testing.B) {
 	s := NewCache[int]()
 	for i := 0; i < b.N; i++ {
-		s.MSet(map[string]int{
-			strconv.Itoa(i):     i,
-			strconv.Itoa(i + 1): i,
-			strconv.Itoa(i + 2): i,
-			strconv.Itoa(i + 3): i,
-			strconv.Itoa(i + 4): i,
-		})
+		s.SetWithTTL(strconv.Itoa(i), i, time.Second)
 	}
 }
 
@@ -46,13 +41,5 @@ func BenchmarkCacheRemove(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Remove(strconv.Itoa(i))
-	}
-}
-
-func BenchmarkCacheRange(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		defaultCache.Range(func(key string, value int) bool {
-			return false
-		})
 	}
 }

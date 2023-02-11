@@ -3,24 +3,20 @@ package structx
 import (
 	"sync/atomic"
 	"time"
-
-	cmap "github.com/orcaman/concurrent-map/v2"
 )
 
 var (
-	// duration of expired keys evictions
-	GCDuration = time.Minute
-
-	// duration of update current timestamp
-	TickerDuration = time.Millisecond
+	// duration of update timestamp and expired keys evictions
+	TickDuration = time.Millisecond
 
 	// default expiry time
 	DefaultTTL = time.Minute * 10
 )
 
-type cacheItem[V any] struct {
-	Val V
-	TTL int64 // expiredTime
+type cacheItem[K string, V any] struct {
+	K K
+	V V
+	T int64 // TTL
 }
 
 type Cache[K string, V any] struct {
@@ -28,10 +24,13 @@ type Cache[K string, V any] struct {
 	_now int64
 
 	// call when key-value expired
-	onExpired cmap.RemoveCb[K, *cacheItem[V]]
+	onExpired func(K, V)
 
 	// data
-	m *SyncMap[K, *cacheItem[V]]
+	m *SyncMap[K, *cacheItem[K, V]]
+
+	// sortedList
+	sl *LinkList[*cacheItem[K, V]]
 }
 
 func (c *Cache[K, V]) now() int64 {
@@ -41,53 +40,79 @@ func (c *Cache[K, V]) now() int64 {
 // NewCache
 func NewCache[V any]() *Cache[string, V] {
 	cache := &Cache[string, V]{
-		m:    NewSyncMap[*cacheItem[V]](),
+		// data map
+		m: NewSyncMap[*cacheItem[string, V]](),
+
+		// current timestamp
 		_now: time.Now().UnixNano(),
+
+		// create sortedList
+		sl: NewLinkList(func(a, b *cacheItem[string, V]) bool {
+			return a.T < b.T
+		}),
 	}
+
 	go cache.eviction()
-	go cache.ticker()
 
 	return cache
 }
 
+// IsEmpty
+func (c *Cache[K, V]) IsEmpty() bool {
+	return c.m.IsEmpty()
+}
+
 // Get
-func (c *Cache[K, V]) Get(key K) (v V, ok bool) {
+func (c *Cache[K, V]) Get(key K) (val V, ok bool) {
 	item, ok := c.m.Get(key)
 	// check valid
-	if ok && item.TTL > c.now() {
-		return item.Val, true
+	if ok && item.T > c.now() {
+		return item.V, true
+	}
+	return
+}
+
+// GetWithTTL
+func (c *Cache[K, V]) GetWithTTL(key K) (v V, ttl int64, ok bool) {
+	item, ok := c.m.Get(key)
+	// check valid
+	if ok && item.T > c.now() {
+		return item.V, item.T, true
 	}
 	return
 }
 
 // Set
-func (c *Cache[K, V]) Set(key K, value V, ttl ...time.Duration) {
-	item := &cacheItem[V]{
-		Val: value,
+func (c *Cache[K, V]) Set(key K, value V) {
+	// if exist
+	item, ok := c.m.Get(key)
+	if ok {
+		item.T = -1
+		item.V = value
+
+	} else {
+		item := &cacheItem[K, V]{key, value, -1}
+		c.m.Set(key, item)
 	}
-	// with ttl
-	if len(ttl) > 0 {
-		item.TTL = c.now() + int64(ttl[0])
-	}
-	c.m.Set(key, item)
 }
 
-// MSet
-func (c *Cache[K, V]) MSet(values map[K]V, ttl ...time.Duration) {
-	items := make(map[K]*cacheItem[V], len(values))
+// SetWithTTL
+func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
+	item, ok := c.m.Get(key)
+	// exist
+	if ok {
+		item.V = val
+		item.T = c.now() + int64(ttl)
+		c.sl.RemoveFirst(item)
 
-	var _ttl int64
-	if len(ttl) > 0 {
-		_ttl = int64(ttl[0])
+	} else {
+		item = &cacheItem[K, V]{key, val, c.now() + int64(ttl)}
+		c.m.Set(key, item)
 	}
 
-	// ttl
-	for k, v := range values {
-		items[k] = &cacheItem[V]{
-			Val: v, TTL: _ttl,
-		}
-	}
-	c.m.MSet(items)
+	// update
+	c.sl.Insert(item)
+	return ok
 }
 
 // Keys
@@ -95,24 +120,20 @@ func (c *Cache[K, V]) Keys() []K {
 	return c.m.Keys()
 }
 
-// SetTTL
-func (c *Cache[K, V]) SetTTL(key K, ttl time.Duration) bool {
-	item, ok := c.m.Get(key)
-	if ok {
-		item.TTL = c.now() + int64(ttl)
-	}
-	return ok
-}
-
 // OnExpired
-func (c *Cache[K, V]) OnExpired(f cmap.RemoveCb[K, *cacheItem[V]]) *Cache[K, V] {
+func (c *Cache[K, V]) OnExpired(f func(K, V)) *Cache[K, V] {
 	c.onExpired = f
 	return c
 }
 
 // Remove
-func (c *Cache[K, V]) Remove(key K) {
-	c.m.Remove(key)
+func (c *Cache[K, V]) Remove(key K) bool {
+	v, ok := c.m.Get(key)
+	if ok {
+		c.m.Remove(key)
+		c.sl.RemoveFirst(v)
+	}
+	return ok
 }
 
 // Clear
@@ -120,51 +141,32 @@ func (c *Cache[K, V]) Clear() {
 	c.m.Clear()
 }
 
-// Len
-func (c *Cache[K, V]) Len() int {
+// Count
+func (c *Cache[K, V]) Count() int {
 	return c.m.Count()
 }
 
-// Range
-func (c *Cache[K, V]) Range(f func(key K, value V) bool) {
-	for t := range c.m.IterBuffered() {
-		if f(t.Key, t.Val.Val) {
-			break
-		}
-	}
-}
-
-// RangeWithTTL
-func (c *Cache[K, V]) RangeWithTTL(f func(key K, value V, ttl int64) bool) {
-	for t := range c.m.IterBuffered() {
-		if f(t.Key, t.Val.Val, t.Val.TTL) {
-			break
-		}
-	}
-}
-
-// Scheduled update current timestamp
-func (c *Cache[K, V]) ticker() {
-	for c != nil {
-		time.Sleep(TickerDuration)
-		atomic.SwapInt64(&c._now, time.Now().UnixNano())
-	}
-}
-
-// Scheduled expired keys evictions
+// Scheduled update current timestamp and clear expired keys
 func (c *Cache[K, V]) eviction() {
 	for c != nil {
-		time.Sleep(GCDuration)
+		time.Sleep(TickDuration)
 
-		for t := range c.m.IterBuffered() {
-			// clear expired keys
-			if t.Val.TTL > 0 && t.Val.TTL < c.now() {
-				// onExpired
+		// update current timestamp
+		atomic.SwapInt64(&c._now, time.Now().UnixNano())
+
+		// clear expired keys
+		for p := c.sl.head; p != nil; {
+			if p.val.T < c.now() {
+				// remove
+				c.m.Remove(p.val.K)
+				c.sl.Remove(p)
+
 				if c.onExpired != nil {
-					c.m.RemoveCb(t.Key, c.onExpired)
-				} else {
-					c.m.Remove(t.Key)
+					c.onExpired(p.val.K, p.val.V)
 				}
+
+			} else {
+				break
 			}
 		}
 	}
