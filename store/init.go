@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -12,13 +13,17 @@ const (
 )
 
 var (
-	storePath     = "db/"
-	storeDuration = time.Second
+	// database store path
+	StorePath = "db/"
+
+	// datatbase store duration
+	StoreDuration = time.Second
 )
 
 type Store struct {
-	id int                           // database id
-	m  *structx.SyncMap[string, any] // data
+	id        int
+	storePath string
+	m         *structx.SyncMap[string, any]
 }
 
 // databases
@@ -26,19 +31,27 @@ var dbs []*Store
 
 func init() {
 	// init store dir
-	os.Mkdir(storePath, os.ModeDir)
+	if err := os.Mkdir(StorePath, os.ModeDir); err != nil {
+		panic(err)
+	}
 
 	dbs = make([]*Store, DB_MAX_COUNT)
 
 	for i := range dbs {
-		// default store
-		dbs[i] = &Store{i, structx.NewSyncMap[any]()}
+		// init
+		dbs[i] = &Store{
+			id:        i,
+			storePath: fmt.Sprintf("%s%d.bin", StorePath, i),
+			m:         structx.NewSyncMap[any](),
+		}
+
+		// load
 		dbs[i].unmarshal()
 
-		// backend
+		// save
 		go func(i int) {
 			for {
-				time.Sleep(storeDuration)
+				time.Sleep(StoreDuration)
 				dbs[i].marshal()
 			}
 		}(i)

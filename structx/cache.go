@@ -1,8 +1,6 @@
 package structx
 
-
 import (
-	"math"
 	"sync/atomic"
 	"time"
 
@@ -20,13 +18,9 @@ var (
 	DefaultTTL = time.Minute * 10
 )
 
-const (
-	NoTTL int64 = math.MaxInt64
-)
-
 type cacheItem[V any] struct {
-	Value V
-	Ttl   int64 // expiredTime
+	Val V
+	TTL int64 // expiredTime
 }
 
 type Cache[K string, V any] struct {
@@ -59,11 +53,9 @@ func NewCache[V any]() *Cache[string, V] {
 // Get
 func (c *Cache[K, V]) Get(key K) (v V, ok bool) {
 	item, ok := c.m.Get(key)
-	if ok {
-		// check expired
-		if item.Ttl > c.now() {
-			return item.Value, true
-		}
+	// check valid
+	if ok && item.TTL > c.now() {
+		return item.Val, true
 	}
 	return
 }
@@ -71,11 +63,11 @@ func (c *Cache[K, V]) Get(key K) (v V, ok bool) {
 // Set
 func (c *Cache[K, V]) Set(key K, value V, ttl ...time.Duration) {
 	item := &cacheItem[V]{
-		Value: value, Ttl: NoTTL,
+		Val: value,
 	}
 	// with ttl
 	if len(ttl) > 0 {
-		item.Ttl = c.now() + int64(ttl[0])
+		item.TTL = c.now() + int64(ttl[0])
 	}
 	c.m.Set(key, item)
 }
@@ -83,14 +75,16 @@ func (c *Cache[K, V]) Set(key K, value V, ttl ...time.Duration) {
 // MSet
 func (c *Cache[K, V]) MSet(values map[K]V, ttl ...time.Duration) {
 	items := make(map[K]*cacheItem[V], len(values))
-	_ttl := NoTTL
+
+	var _ttl int64
 	if len(ttl) > 0 {
 		_ttl = int64(ttl[0])
 	}
+
 	// ttl
 	for k, v := range values {
 		items[k] = &cacheItem[V]{
-			Value: v, Ttl: _ttl,
+			Val: v, TTL: _ttl,
 		}
 	}
 	c.m.MSet(items)
@@ -105,10 +99,9 @@ func (c *Cache[K, V]) Keys() []K {
 func (c *Cache[K, V]) SetTTL(key K, ttl time.Duration) bool {
 	item, ok := c.m.Get(key)
 	if ok {
-		item.Ttl = c.now() + int64(ttl)
-		return true
+		item.TTL = c.now() + int64(ttl)
 	}
-	return false
+	return ok
 }
 
 // OnExpired
@@ -135,7 +128,7 @@ func (c *Cache[K, V]) Len() int {
 // Range
 func (c *Cache[K, V]) Range(f func(key K, value V) bool) {
 	for t := range c.m.IterBuffered() {
-		if f(t.Key, t.Val.Value) {
+		if f(t.Key, t.Val.Val) {
 			break
 		}
 	}
@@ -144,7 +137,7 @@ func (c *Cache[K, V]) Range(f func(key K, value V) bool) {
 // RangeWithTTL
 func (c *Cache[K, V]) RangeWithTTL(f func(key K, value V, ttl int64) bool) {
 	for t := range c.m.IterBuffered() {
-		if f(t.Key, t.Val.Value, t.Val.Ttl) {
+		if f(t.Key, t.Val.Val, t.Val.TTL) {
 			break
 		}
 	}
@@ -165,7 +158,7 @@ func (c *Cache[K, V]) eviction() {
 
 		for t := range c.m.IterBuffered() {
 			// clear expired keys
-			if t.Val.Ttl < c.now() {
+			if t.Val.TTL > 0 && t.Val.TTL < c.now() {
 				// onExpired
 				if c.onExpired != nil {
 					c.m.RemoveCb(t.Key, c.onExpired)

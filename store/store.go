@@ -85,16 +85,13 @@ func getValue[T base.Bases](s *Store, key string, data T) (T, error) {
 }
 
 // Incr
-func (s *Store) Incr(key string, increment ...int) (val int, err error) {
+func (s *Store) Incr(key string, increment float64) (val float64, err error) {
 	tmp, err := s.GetFloat64(key)
 	if err != nil && err.Error() != base.ErrKeyNotFound(key).Error() {
 		return -1, err
 	}
 
-	val = int(tmp)
-	for _, i := range increment {
-		val += i
-	}
+	val = tmp + increment
 	s.Set(key, val)
 	return val, nil
 }
