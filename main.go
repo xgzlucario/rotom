@@ -148,7 +148,7 @@ func testStress() {
 	defer db.Save()
 
 	a := time.Now()
-	for i := 0; i < 2000000; i++ {
+	for i := 0; i < 1000000; i++ {
 		db.Set("xgz"+strconv.Itoa(i), i)
 		fmt.Println(i)
 	}
@@ -158,7 +158,7 @@ func testStress() {
 func testTTL() {
 	fmt.Println("===== start test TTL =====")
 
-	db := store.DB(0)
+	db := store.DB(1)
 	defer db.Save()
 
 	db.Set("xgz", "123")
@@ -166,13 +166,10 @@ func testTTL() {
 	db.SetWithTTL("xgz-2", "234", time.Second*3)
 	db.SetWithTTL("xgz-3", "234", time.Second*5)
 
-	fmt.Println(db.Keys())
-	time.Sleep(time.Second * 2)
-	fmt.Println(db.Keys())
-	time.Sleep(time.Second * 2)
-	fmt.Println(db.Keys())
-	time.Sleep(time.Second * 2)
-	fmt.Println(db.Keys())
+	for i := 0; i < 8; i++ {
+		fmt.Println(db.Keys())
+		time.Sleep(time.Second)
+	}
 }
 
 func main() {
@@ -181,5 +178,5 @@ func main() {
 	testTrie()
 	testCustom()
 	testTTL()
-	// testStress()
+	testStress()
 }

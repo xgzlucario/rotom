@@ -22,7 +22,7 @@ type cacheItem[K string, V any] struct {
 }
 
 type Cache[K string, V any] struct {
-	// current timestamp update by ticker
+	// current ts
 	_now int64
 
 	// call when key-value expired
@@ -31,8 +31,8 @@ type Cache[K string, V any] struct {
 	// data
 	m *SyncMap[K, *cacheItem[K, V]]
 
-	// sortedList
-	sl *LinkList[*cacheItem[K, V]]
+	// List
+	ls *List[*cacheItem[K, V]]
 }
 
 func (c *Cache[K, V]) now() int64 {
@@ -45,13 +45,11 @@ func NewCache[V any]() *Cache[string, V] {
 		// data map
 		m: NewSyncMap[*cacheItem[string, V]](),
 
-		// current timestamp
+		// current ts
 		_now: time.Now().UnixNano(),
 
-		// create sortedList
-		sl: NewLinkList(func(a, b *cacheItem[string, V]) bool {
-			return a.T < b.T
-		}),
+		// create List
+		ls: NewList[*cacheItem[string, V]](),
 	}
 	go cache.eviction()
 
@@ -110,7 +108,7 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 	if ok {
 		item.V = val
 		item.T = c.now() + int64(ttl)
-		c.sl.RemoveFirst(item)
+		c.ls.RemoveFirst(item)
 
 	} else {
 		item = &cacheItem[K, V]{key, val, c.now() + int64(ttl)}
@@ -118,7 +116,7 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 	}
 
 	// update
-	c.sl.Insert(item)
+	c.ls.RPush(item)
 	return ok
 }
 
@@ -138,7 +136,7 @@ func (c *Cache[K, V]) Remove(key K) bool {
 	v, ok := c.m.Get(key)
 	if ok {
 		c.m.Remove(key)
-		c.sl.RemoveFirst(v)
+		c.ls.RemoveFirst(v)
 	}
 	return ok
 }
@@ -153,27 +151,36 @@ func (c *Cache[K, V]) Count() int {
 	return c.m.Count()
 }
 
-// Scheduled update current timestamp and clear expired keys
+// Scheduled update current ts and clear expired keys
 func (c *Cache[K, V]) eviction() {
 	for c != nil {
 		time.Sleep(TickDuration)
 
-		// update current timestamp
+		// update current ts
 		atomic.SwapInt64(&c._now, time.Now().UnixNano())
 
 		// clear expired keys
-		for p := c.sl.head; p != nil; {
-			if p.val.T < c.now() {
-				// remove
-				c.m.Remove(p.val.K)
-				c.sl.Remove(p)
+		c.ls.Sort(func(t1, t2 *cacheItem[K, V]) bool {
+			return t1.T < t2.T
+		})
 
-				if c.onExpired != nil {
-					c.onExpired(p.val.K, p.val.V)
-				}
+		expiredKeys := make([]*cacheItem[K, V], 0)
 
-			} else {
-				break
+		c.ls.Range(func(item *cacheItem[K, V]) bool {
+			if item.T < c.now() {
+				expiredKeys = append(expiredKeys, item)
+				return false
+			}
+			return true
+		})
+
+		for _, e := range expiredKeys {
+			// remove
+			c.m.Remove(e.K)
+			c.ls.RemoveFirst(e)
+
+			if c.onExpired != nil {
+				c.onExpired(e.K, e.V)
 			}
 		}
 	}
