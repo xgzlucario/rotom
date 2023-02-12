@@ -3,6 +3,13 @@ package structx
 import (
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/exp/slices"
+)
+
+const (
+	// NoTTL
+	NoTTL = -1
 )
 
 var (
@@ -11,8 +18,6 @@ var (
 
 	// default expiry time
 	DefaultTTL = time.Minute * 10
-
-	NoTTL int64 = -1
 )
 
 type cacheItem[K string, V any] struct {
@@ -45,10 +50,10 @@ func NewCache[V any]() *Cache[string, V] {
 		// data map
 		m: NewSyncMap[*cacheItem[string, V]](),
 
-		// current ts
+		// current timstamp
 		_now: time.Now().UnixNano(),
 
-		// create List
+		// ttl List
 		ls: NewList[*cacheItem[string, V]](),
 	}
 	go cache.eviction()
@@ -115,8 +120,16 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 		c.m.Set(key, item)
 	}
 
-	// update
-	c.ls.RPush(item)
+	// insert
+	pos, _ := slices.BinarySearchFunc(c.ls.array, item, func(a, b *cacheItem[K, V]) int {
+		if a.T < b.T {
+			return -1
+		} else if a.T > b.T {
+			return 1
+		}
+		return 0
+	})
+	c.ls.Insert(pos, item)
 	return ok
 }
 
@@ -159,29 +172,20 @@ func (c *Cache[K, V]) eviction() {
 		// update current ts
 		atomic.SwapInt64(&c._now, time.Now().UnixNano())
 
-		// clear expired keys
-		c.ls.Sort(func(t1, t2 *cacheItem[K, V]) bool {
-			return t1.T < t2.T
-		})
-
-		expiredKeys := make([]*cacheItem[K, V], 0)
-
-		c.ls.Range(func(item *cacheItem[K, V]) bool {
-			if item.T < c.now() {
-				expiredKeys = append(expiredKeys, item)
+		// search expired keys
+		expiredItems := make([]*cacheItem[K, V], 0)
+		c.ls.Range(func(t *cacheItem[K, V]) bool {
+			if t.T < c.now() {
+				expiredItems = append(expiredItems, t)
 				return false
 			}
 			return true
 		})
 
-		for _, e := range expiredKeys {
-			// remove
-			c.m.Remove(e.K)
-			c.ls.RemoveFirst(e)
-
-			if c.onExpired != nil {
-				c.onExpired(e.K, e.V)
-			}
+		// clear
+		for _, item := range expiredItems {
+			c.ls.RemoveFirst(item)
+			c.m.Remove(item.K)
 		}
 	}
 }

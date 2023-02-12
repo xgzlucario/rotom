@@ -26,15 +26,7 @@ func (ls *List[T]) RPush(values ...T) {
 
 // Insert
 func (ls *List[T]) Insert(i int, values ...T) {
-	if i <= 0 {
-		ls.array = append(values, ls.array...)
-
-	} else if i >= ls.Len() {
-		ls.array = append(ls.array, values...)
-
-	} else {
-		ls.array = slices.Insert(ls.array, i, values...)
-	}
+	ls.array = slices.Insert(ls.array, i, values...)
 }
 
 // LPop
