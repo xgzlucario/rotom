@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/exp/slices"
+	skiplist "github.com/sean-public/fast-skiplist"
 )
 
 const (
@@ -27,17 +27,20 @@ type cacheItem[K string, V any] struct {
 }
 
 type Cache[K string, V any] struct {
-	// current ts
+	// current timestamp
 	_now int64
 
+	// pairs count in duration
+	_count int64
+
 	// call when key-value expired
-	onExpired func(K, V)
+	onExpired func(K, V, int64)
 
 	// data
 	m *SyncMap[K, *cacheItem[K, V]]
 
-	// List
-	ls *List[*cacheItem[K, V]]
+	// ttl skiplist
+	skl *skiplist.SkipList
 }
 
 func (c *Cache[K, V]) now() int64 {
@@ -53,8 +56,8 @@ func NewCache[V any]() *Cache[string, V] {
 		// current timstamp
 		_now: time.Now().UnixNano(),
 
-		// ttl List
-		ls: NewList[*cacheItem[string, V]](),
+		// skiplist
+		skl: skiplist.New(),
 	}
 	go cache.eviction()
 
@@ -112,24 +115,20 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 	// exist
 	if ok {
 		item.V = val
-		item.T = c.now() + int64(ttl)
-		c.ls.RemoveFirst(item)
+		c.skl.Remove(float64(item.T))
+		item.T = c.now() + int64(ttl) + atomic.AddInt64(&c._count, 1)
 
 	} else {
-		item = &cacheItem[K, V]{key, val, c.now() + int64(ttl)}
+		item = &cacheItem[K, V]{
+			key,
+			val,
+			c.now() + int64(ttl) + atomic.AddInt64(&c._count, 1),
+		}
 		c.m.Set(key, item)
 	}
 
 	// insert
-	pos, _ := slices.BinarySearchFunc(c.ls.array, item, func(a, b *cacheItem[K, V]) int {
-		if a.T < b.T {
-			return -1
-		} else if a.T > b.T {
-			return 1
-		}
-		return 0
-	})
-	c.ls.Insert(pos, item)
+	c.skl.Set(float64(item.T), item)
 	return ok
 }
 
@@ -138,18 +137,18 @@ func (c *Cache[K, V]) Keys() []K {
 	return c.m.Keys()
 }
 
-// OnExpired
-func (c *Cache[K, V]) OnExpired(f func(K, V)) *Cache[K, V] {
+// WithExpired
+func (c *Cache[K, V]) WithExpired(f func(K, V, int64)) *Cache[K, V] {
 	c.onExpired = f
 	return c
 }
 
 // Remove
 func (c *Cache[K, V]) Remove(key K) bool {
-	v, ok := c.m.Get(key)
+	item, ok := c.m.Get(key)
 	if ok {
 		c.m.Remove(key)
-		c.ls.RemoveFirst(v)
+		c.skl.Remove(float64(item.T))
 	}
 	return ok
 }
@@ -157,7 +156,7 @@ func (c *Cache[K, V]) Remove(key K) bool {
 // Clear
 func (c *Cache[K, V]) Clear() {
 	c.m.Clear()
-	c.ls.Clear()
+	c.skl = skiplist.New()
 }
 
 // Count
@@ -168,25 +167,32 @@ func (c *Cache[K, V]) Count() int {
 // Scheduled update current ts and clear expired keys
 func (c *Cache[K, V]) eviction() {
 	for c != nil {
-		time.Sleep(TickDuration)
+		time.Sleep(time.Millisecond)
 
 		// update current ts
 		atomic.SwapInt64(&c._now, time.Now().UnixNano())
+		atomic.SwapInt64(&c._count, 0)
 
 		// search expired keys
 		expiredItems := make([]*cacheItem[K, V], 0)
-		c.ls.Range(func(t *cacheItem[K, V]) bool {
-			if t.T < c.now() {
-				expiredItems = append(expiredItems, t)
-				return false
+
+		for f := c.skl.Front(); f != nil; f = f.Next() {
+			if int64(f.Key()) < c.now() {
+				val := f.Value().(*cacheItem[K, V])
+				expiredItems = append(expiredItems, val)
+				continue
 			}
-			return true
-		})
+			break
+		}
 
 		// clear
 		for _, item := range expiredItems {
-			c.ls.RemoveFirst(item)
+			c.skl.Remove(float64(item.T))
 			c.m.Remove(item.K)
+			// on expired
+			if c.onExpired != nil {
+				c.onExpired(item.K, item.V, item.T)
+			}
 		}
 	}
 }

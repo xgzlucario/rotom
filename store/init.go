@@ -18,6 +18,9 @@ var (
 
 	// datatbase store duration
 	StoreDuration = time.Second
+
+	// enabled persist
+	Persist = true
 )
 
 type Store struct {

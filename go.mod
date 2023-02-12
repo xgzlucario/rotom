@@ -3,19 +3,18 @@ module github.com/xgzlucario/rotom
 go 1.20
 
 require (
-	github.com/bits-and-blooms/bloom/v3 v3.3.1
 	github.com/brianvoe/gofakeit/v6 v6.20.1
 	github.com/bytedance/sonic v1.7.1
 	github.com/klauspost/compress v1.15.15
 	github.com/liyiheng/zset v0.0.0-20211012035528-6679b37ff27a
 	github.com/orcaman/concurrent-map/v2 v2.0.1
+	github.com/sean-public/fast-skiplist v0.0.0-20200308194023-d7f7945b944e
 	github.com/sourcegraph/conc v0.2.0
 	github.com/zyedidia/generic v1.2.1
 	golang.org/x/exp v0.0.0-20230210204819-062eb4c674ab
 )
 
 require (
-	github.com/bits-and-blooms/bitset v1.5.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
 	github.com/cockroachdb/errors v1.9.1 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect

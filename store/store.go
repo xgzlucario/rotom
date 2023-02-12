@@ -33,6 +33,11 @@ func (s *Store) Count() int {
 	return s.m.Count()
 }
 
+// WithExpired
+func (c *Store) WithExpired(f func(string, any, int64)) {
+	c.m.WithExpired(f)
+}
+
 // Keys
 func (s *Store) Keys() []string {
 	return s.m.Keys()

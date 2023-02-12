@@ -7,6 +7,10 @@ import (
 )
 
 func (s *Store) marshal() {
+	if !Persist {
+		return
+	}
+
 	// empty
 	if s.m.IsEmpty() {
 		return
@@ -24,6 +28,10 @@ func (s *Store) marshal() {
 }
 
 func (s *Store) unmarshal() {
+	if !Persist {
+		return
+	}
+
 	src, err := os.ReadFile(s.storePath)
 	if err != nil {
 		return

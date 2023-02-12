@@ -144,13 +144,17 @@ func testCustom() {
 func testStress() {
 	fmt.Println("===== start test Stress =====")
 
-	db := store.DB(0)
+	db := store.DB(5)
+	db.WithExpired(func(s string, a any, t int64) {
+		fmt.Println("exp", s, a, t)
+	})
+
 	defer db.Save()
 
 	a := time.Now()
 	for i := 0; i < 1000000; i++ {
-		db.Set("xgz"+strconv.Itoa(i), i)
-		fmt.Println(i)
+		db.SetWithTTL("xgz"+strconv.Itoa(i), i, time.Second)
+		fmt.Println(i, db.Count())
 	}
 	fmt.Println("set million data cost:", time.Since(a))
 }
@@ -159,6 +163,10 @@ func testTTL() {
 	fmt.Println("===== start test TTL =====")
 
 	db := store.DB(1)
+	db.WithExpired(func(s string, a any, t int64) {
+		fmt.Println("exp", s, a, t)
+	})
+
 	defer db.Save()
 
 	db.Set("xgz", "123")
