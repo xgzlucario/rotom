@@ -43,6 +43,11 @@ func (s *Store) Save() {
 	s.marshal()
 }
 
+// Flush
+func (s *Store) Flush() {
+	s.m.Clear()
+}
+
 // getGenericValue return generic data from store
 func getGenericValue[T base.Marshaler](s *Store, key string, data T) (T, error) {
 	val, ok := s.m.Get(key)

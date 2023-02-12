@@ -157,6 +157,7 @@ func (c *Cache[K, V]) Remove(key K) bool {
 // Clear
 func (c *Cache[K, V]) Clear() {
 	c.m.Clear()
+	c.ls.Clear()
 }
 
 // Count
