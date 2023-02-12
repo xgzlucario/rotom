@@ -6,8 +6,6 @@ import (
 	"time"
 )
 
-var defaultCache = getCache()
-
 func getCache() *Cache[string, int] {
 	s := NewCache[int]()
 	for i := 0; i < million; i++ {
@@ -31,8 +29,10 @@ func BenchmarkCacheSetWithTTL(b *testing.B) {
 }
 
 func BenchmarkCacheGet(b *testing.B) {
+	s := getCache()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		defaultCache.Get(strconv.Itoa(i))
+		s.Get(strconv.Itoa(i))
 	}
 }
 
@@ -41,5 +41,13 @@ func BenchmarkCacheRemove(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Remove(strconv.Itoa(i))
+	}
+}
+
+func BenchmarkCacheCount(b *testing.B) {
+	s := getCache()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		s.Count()
 	}
 }

@@ -34,7 +34,7 @@ func (s *Store) Count() int {
 }
 
 // WithExpired
-func (c *Store) WithExpired(f func(string, any, int64)) {
+func (c *Store) WithExpired(f func(string, any)) {
 	c.m.WithExpired(f)
 }
 

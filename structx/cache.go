@@ -34,7 +34,7 @@ type Cache[K string, V any] struct {
 	_count int64
 
 	// call when key-value expired
-	onExpired func(K, V, int64)
+	onExpired func(K, V)
 
 	// data
 	m *SyncMap[K, *cacheItem[K, V]]
@@ -138,7 +138,7 @@ func (c *Cache[K, V]) Keys() []K {
 }
 
 // WithExpired
-func (c *Cache[K, V]) WithExpired(f func(K, V, int64)) *Cache[K, V] {
+func (c *Cache[K, V]) WithExpired(f func(K, V)) *Cache[K, V] {
 	c.onExpired = f
 	return c
 }
@@ -191,7 +191,7 @@ func (c *Cache[K, V]) eviction() {
 			c.m.Remove(item.K)
 			// on expired
 			if c.onExpired != nil {
-				c.onExpired(item.K, item.V, item.T)
+				c.onExpired(item.K, item.V)
 			}
 		}
 	}

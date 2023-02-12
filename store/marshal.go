@@ -19,7 +19,7 @@ func (s *Store) marshal() {
 	// marshal
 	src, _ := s.m.MarshalJSON()
 
-	// Compress
+	// compress
 	src = s2.EncodeSnappy(nil, src)
 
 	if err := os.WriteFile(s.storePath, src, 0644); err != nil {
@@ -32,12 +32,13 @@ func (s *Store) unmarshal() {
 		return
 	}
 
+	// read file
 	src, err := os.ReadFile(s.storePath)
 	if err != nil {
 		return
 	}
 
-	// Decompress
+	// decompress
 	src, err = s2.Decode(nil, src)
 	if err != nil {
 		panic(err)

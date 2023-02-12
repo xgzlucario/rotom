@@ -23,7 +23,7 @@ func testTrie() {
 		// not exist
 		fmt.Println("get trie error:", err)
 		tree = structx.NewTrie[int]()
-		for i := 0; i < 9999; i++ {
+		for i := 0; i < 99999; i++ {
 			tree.Put(gofakeit.URL(), i)
 		}
 		db.Set("trie", tree)
@@ -145,8 +145,8 @@ func testStress() {
 	fmt.Println("===== start test Stress =====")
 
 	db := store.DB(5)
-	db.WithExpired(func(s string, a any, t int64) {
-		fmt.Println("exp", s, a, t)
+	db.WithExpired(func(s string, a any) {
+		fmt.Println("exp", s, a)
 	})
 
 	defer db.Save()
@@ -163,8 +163,8 @@ func testTTL() {
 	fmt.Println("===== start test TTL =====")
 
 	db := store.DB(1)
-	db.WithExpired(func(s string, a any, t int64) {
-		fmt.Println("exp", s, a, t)
+	db.WithExpired(func(s string, a any) {
+		fmt.Println("exp", s, a)
 	})
 
 	defer db.Save()
@@ -174,7 +174,7 @@ func testTTL() {
 	db.SetWithTTL("xgz-2", "234", time.Second*3)
 	db.SetWithTTL("xgz-3", "234", time.Second*5)
 
-	for i := 0; i < 8; i++ {
+	for i := 0; i < 6; i++ {
 		fmt.Println(db.Keys())
 		time.Sleep(time.Second)
 	}
