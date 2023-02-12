@@ -1,7 +1,8 @@
 package structx
 
-
 import (
+	"unsafe"
+
 	"github.com/xgzlucario/rotom/base"
 	"golang.org/x/exp/maps"
 )
@@ -72,6 +73,13 @@ func (m Map[K, V]) Values() []V {
 // Len
 func (m Map[K, V]) Len() int {
 	return len(m)
+}
+
+// ByteSize
+func (m Map[K, V]) ByteSize() int {
+	var k K
+	var v V
+	return int(unsafe.Sizeof(k)+unsafe.Sizeof(v)) * len(m)
 }
 
 func (m Map[K, V]) MarshalJSON() ([]byte, error) {

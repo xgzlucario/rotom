@@ -24,7 +24,7 @@ func testTrie() {
 		fmt.Println("get trie error:", err)
 		tree = structx.NewTrie[int]()
 		for i := 0; i < 99999; i++ {
-			tree.Put(gofakeit.URL(), i)
+			tree.Put(gofakeit.URL(), gofakeit.NanoSecond())
 		}
 		db.Set("trie", tree)
 	}
@@ -52,13 +52,9 @@ func testList() {
 	if err != nil {
 		// not exist
 		fmt.Println("get list error:", err)
-		list = structx.NewList(1)
+		list = structx.NewList[int]()
 		for i := 0; i < 10; i++ {
-			if i%2 == 0 {
-				list.LPush(i)
-			} else {
-				list.RPush(i)
-			}
+			list.LPush(gofakeit.Day())
 		}
 		db.Set("list", list)
 	}
@@ -139,16 +135,14 @@ func testCustom() {
 	} else {
 		fmt.Println(stu, err)
 	}
+
+	fmt.Println()
 }
 
 func testStress() {
 	fmt.Println("===== start test Stress =====")
 
 	db := store.DB(5)
-	db.WithExpired(func(s string, a any) {
-		fmt.Println("exp", s, a)
-	})
-
 	defer db.Save()
 
 	a := time.Now()
@@ -178,6 +172,8 @@ func testTTL() {
 		fmt.Println(db.Keys())
 		time.Sleep(time.Second)
 	}
+
+	fmt.Println()
 }
 
 func main() {

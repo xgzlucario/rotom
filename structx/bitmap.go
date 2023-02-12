@@ -1,6 +1,8 @@
 package structx
 
 import (
+	"unsafe"
+
 	"github.com/xgzlucario/rotom/base"
 	"golang.org/x/exp/slices"
 )
@@ -110,6 +112,12 @@ func (bm *BitMap) Max() int {
 		}
 	}
 	return -1
+}
+
+// ByteSize
+func (bm *BitMap) ByteSize() int {
+	var a uint64
+	return int(unsafe.Sizeof(a))*len(bm.words) + int(unsafe.Sizeof(bm.len))
 }
 
 // Union

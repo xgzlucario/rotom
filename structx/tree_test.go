@@ -22,18 +22,11 @@ func getBtree() *Btree[string, int] {
 	return tree
 }
 
-// FakeURL
-func BenchmarkFakeURL(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		gofakeit.URL()
-	}
-}
-
 // Put
 func BenchmarkBtreePut(b *testing.B) {
 	tree := NewBtree[string, int]()
 	for i := 0; i < b.N; i++ {
-		tree.Put(gofakeit.URL(), i)
+		tree.Put(getFakeURL(b), i)
 	}
 }
 
@@ -42,7 +35,7 @@ func BenchmarkBtreeGet(b *testing.B) {
 	tree := getBtree()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree.Get(gofakeit.URL())
+		tree.Get(getFakeURL(b))
 	}
 }
 
@@ -51,7 +44,7 @@ func BenchmarkBtreeRemove(b *testing.B) {
 	tree := getBtree()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree.Remove(gofakeit.URL())
+		tree.Remove(getFakeURL(b))
 	}
 }
 
@@ -59,7 +52,7 @@ func BenchmarkBtreeRemove(b *testing.B) {
 func BenchmarkTriePut(b *testing.B) {
 	tree := NewTrie[int]()
 	for i := 0; i < b.N; i++ {
-		tree.Put(gofakeit.URL(), i)
+		tree.Put(getFakeURL(b), i)
 	}
 }
 
@@ -68,7 +61,7 @@ func BenchmarkTrieGet(b *testing.B) {
 	tree := getTrie()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree.Get(gofakeit.URL())
+		tree.Get(getFakeURL(b))
 	}
 }
 
@@ -77,6 +70,6 @@ func BenchmarkTrieRemove(b *testing.B) {
 	tree := getTrie()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree.Remove(gofakeit.URL())
+		tree.Remove(getFakeURL(b))
 	}
 }

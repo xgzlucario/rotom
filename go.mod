@@ -11,7 +11,7 @@ require (
 	github.com/sean-public/fast-skiplist v0.0.0-20200308194023-d7f7945b944e
 	github.com/sourcegraph/conc v0.2.0
 	github.com/zyedidia/generic v1.2.1
-	golang.org/x/exp v0.0.0-20230210204819-062eb4c674ab
+	golang.org/x/exp v0.0.0-20230212135524-a684f29349b6
 )
 
 require (
@@ -27,7 +27,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
-	github.com/sourcegraph/sourcegraph/lib v0.0.0-20230212104910-5362f59ec187 // indirect
+	github.com/sourcegraph/sourcegraph/lib v0.0.0-20230212152140-3acd8f31db54 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	golang.org/x/arch v0.2.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect

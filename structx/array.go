@@ -2,6 +2,7 @@ package structx
 
 import (
 	"fmt"
+	"unsafe"
 
 	"golang.org/x/exp/slices"
 )
@@ -18,6 +19,11 @@ func (s array[T]) Len() int {
 
 func (s array[T]) Capacity() int {
 	return cap(s)
+}
+
+func (s array[T]) ByteSize() int {
+	var a T
+	return int(unsafe.Sizeof(a)) * len(s)
 }
 
 // Top: move value to the top

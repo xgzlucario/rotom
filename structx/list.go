@@ -29,6 +29,15 @@ func (ls *List[T]) Insert(i int, values ...T) {
 	ls.array = slices.Insert(ls.array, i, values...)
 }
 
+// AddToSet
+func (ls *List[T]) AddToSet(value T) bool {
+	if r := ls.Find(value); r < 0 {
+		ls.RPush(value)
+		return true
+	}
+	return false
+}
+
 // LPop
 func (ls *List[T]) LPop() (val T, ok bool) {
 	if len(ls.array) == 0 {

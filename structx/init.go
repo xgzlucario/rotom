@@ -1,5 +1,11 @@
 package structx
 
+import (
+	"testing"
+
+	"github.com/brianvoe/gofakeit/v6"
+)
+
 const (
 	billion      = 100000000      // 10^9
 	_100million  = million * 100  // 10^8
@@ -9,3 +15,10 @@ const (
 	_10thousand  = thousand * 10  // 10^4
 	thousand     = 1000           // 10^3
 )
+
+func getFakeURL(b *testing.B) string {
+	b.StopTimer()
+	url := gofakeit.URL()
+	b.StartTimer()
+	return url
+}

@@ -61,6 +61,11 @@ func (s *LSet[T]) Exist(key T) bool {
 	return ok
 }
 
+// ByteSize
+func (s *LSet[T]) ByteSize() int {
+	return s.m.ByteSize() + s.List.ByteSize()
+}
+
 // Copy
 func (s *LSet[T]) Copy() *LSet[T] {
 	return &LSet[T]{

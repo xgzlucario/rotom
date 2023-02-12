@@ -15,9 +15,6 @@ const (
 var (
 	// duration of update timestamp and expired keys evictions
 	TickDuration = time.Millisecond
-
-	// default expiry time
-	DefaultTTL = time.Minute * 10
 )
 
 type cacheItem[K string, V any] struct {
@@ -104,7 +101,7 @@ func (c *Cache[K, V]) Set(key K, value V) {
 		item.V = value
 
 	} else {
-		item := &cacheItem[K, V]{key, value, NoTTL}
+		item = &cacheItem[K, V]{key, value, NoTTL}
 		c.m.Set(key, item)
 	}
 }
@@ -174,25 +171,19 @@ func (c *Cache[K, V]) eviction() {
 		atomic.SwapInt64(&c._count, 0)
 
 		// search expired keys
-		expiredItems := make([]*cacheItem[K, V], 0)
-
 		for f := c.skl.Front(); f != nil; f = f.Next() {
 			if int64(f.Key()) < c.now() {
-				val := f.Value().(*cacheItem[K, V])
-				expiredItems = append(expiredItems, val)
-				continue
+				item := f.Value().(*cacheItem[K, V])
+
+				// clear
+				c.skl.Remove(float64(item.T))
+				c.m.Remove(item.K)
+				// on expired
+				if c.onExpired != nil {
+					c.onExpired(item.K, item.V)
+				}
 			}
 			break
-		}
-
-		// clear
-		for _, item := range expiredItems {
-			c.skl.Remove(float64(item.T))
-			c.m.Remove(item.K)
-			// on expired
-			if c.onExpired != nil {
-				c.onExpired(item.K, item.V)
-			}
 		}
 	}
 }
