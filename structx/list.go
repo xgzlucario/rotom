@@ -149,11 +149,6 @@ func (ls *List[T]) Filter(filter func(T) bool) *List[T] {
 	return nls
 }
 
-// Clear
-func (ls *List[T]) Clear() {
-	ls.array = ls.array[:0]
-}
-
 func (s *List[T]) MarshalJSON() ([]byte, error) {
 	return base.MarshalJSON(s.array)
 }

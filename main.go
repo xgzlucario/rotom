@@ -177,6 +177,14 @@ func testTTL() {
 }
 
 func main() {
+	b1 := structx.NewBitMap(100, 985, 4567, 234)
+	b2 := structx.NewBitMap(100, 985, 8882, 422)
+
+	// fmt.Println("Union:", b1.Union(b2, true).ToSlice())
+	// fmt.Println("Intersect:", b1.Intersect(b2, true).ToSlice())
+	fmt.Println("Difference:", b1.Difference(b2, true).ToSlice())
+	time.Sleep(time.Hour)
+
 	testValue()
 	testList()
 	testTrie()

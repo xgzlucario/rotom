@@ -1,6 +1,7 @@
 package structx
 
 import (
+	"math/bits"
 	"unsafe"
 
 	"github.com/xgzlucario/rotom/base"
@@ -17,7 +18,7 @@ type BitMap struct {
 	words []uint64
 }
 
-// NewBitMap return bitmap object.
+// NewBitMap for not concurrent safe
 func NewBitMap(nums ...uint32) *BitMap {
 	bm := new(BitMap)
 	for _, num := range nums {
@@ -27,7 +28,6 @@ func NewBitMap(nums ...uint32) *BitMap {
 }
 
 // Add
-// If you use numbers that increment from 0, the bitmap performance will be very good.
 func (bm *BitMap) Add(num uint32) bool {
 	word, bit := num>>log2BitSize, num%bitSize
 
@@ -35,7 +35,7 @@ func (bm *BitMap) Add(num uint32) bool {
 		bm.words = append(bm.words, make([]uint64, n+1)...)
 	}
 
-	// bit and is 0
+	// not exist
 	if bm.words[word]&(1<<bit) == 0 {
 		// SET 1
 		bm.words[word] |= 1 << bit
@@ -60,7 +60,7 @@ func (bm *BitMap) Remove(num uint32) bool {
 		return false
 	}
 
-	// // bit and is not 0
+	// exist
 	if bm.words[word]&(1<<bit) != 0 {
 		// SET 0
 		bm.words[word] &^= 1 << bit
@@ -87,12 +87,7 @@ func (bm *BitMap) Min() int {
 		if v == 0 {
 			continue
 		}
-		for j := 0; j < bitSize; j++ {
-			// bit and is not 0
-			if v&(1<<j) != 0 {
-				return bitSize*i + j
-			}
-		}
+		return bitSize*i + bits.TrailingZeros64(v)
 	}
 	return -1
 }
@@ -104,12 +99,7 @@ func (bm *BitMap) Max() int {
 		if v == 0 {
 			continue
 		}
-		for j := bitSize - 1; j >= 0; j-- {
-			// bit and is not 0
-			if v&(1<<j) != 0 {
-				return bitSize*i + j
-			}
-		}
+		return bitSize*i + bits.TrailingZeros64(v)
 	}
 	return -1
 }
@@ -122,17 +112,20 @@ func (bm *BitMap) ByteSize() int {
 
 // Union
 func (bm *BitMap) Union(t *BitMap, inplace ...bool) *BitMap {
+	var sum int
+	defer func() {
+		bm.len = sum
+	}()
+
 	// modify inplace
 	if len(inplace) > 0 && inplace[0] {
-		// append
-		if n := len(t.words) - len(bm.words); n >= 0 {
-			bm.words = append(bm.words, make([]uint64, n+1)...)
-		}
+		bm.resize(len(t.words))
 
 		for i, v := range t.words {
 			bm.words[i] |= v
+			sum += bits.OnesCount64(bm.words[i])
 		}
-		return nil
+		return bm
 
 	} else {
 		min, max := bm.compareLength(t)
@@ -141,6 +134,7 @@ func (bm *BitMap) Union(t *BitMap, inplace ...bool) *BitMap {
 
 		for i, v := range min.words {
 			max.words[i] |= v
+			sum += bits.OnesCount64(max.words[i])
 		}
 
 		return max
@@ -148,38 +142,33 @@ func (bm *BitMap) Union(t *BitMap, inplace ...bool) *BitMap {
 }
 
 // Intersect
-func (bm *BitMap) Intersect(target *BitMap, inplace ...bool) *BitMap {
+func (bm *BitMap) Intersect(t *BitMap, inplace ...bool) *BitMap {
+	var sum int
+	defer func() {
+		bm.len = sum
+	}()
+
 	// modify inplace
 	if len(inplace) > 0 && inplace[0] {
-		if len(bm.words) < len(target.words) {
-			for i := range bm.words {
-				// AND
-				bm.words[i] &= target.words[i]
-			}
+		bm.resize(len(t.words))
 
-		} else {
-			for i, v := range target.words {
-				// AND
-				bm.words[i] &= v
-			}
-			for i := len(target.words); i < len(bm.words); i++ {
-				// SET 0
-				bm.words[i] &= 0
-			}
+		for i, v := range t.words {
+			// AND
+			bm.words[i] &= v
+			sum += bits.OnesCount64(bm.words[i])
 		}
-		return nil
+		return bm
 
 	} else {
-		min, max := bm.compareLength(target)
+		min, max := bm.compareLength(t)
 		// copy min object
 		min = min.Copy()
+		min.resize(len(max.words))
 
 		for i, v := range max.words {
-			if i >= len(min.words) {
-				break
-			}
 			// AND
 			min.words[i] &= v
+			sum += bits.OnesCount64(min.words[i])
 		}
 		return min
 	}
@@ -187,18 +176,21 @@ func (bm *BitMap) Intersect(target *BitMap, inplace ...bool) *BitMap {
 
 // Difference
 func (bm *BitMap) Difference(t *BitMap, inplace ...bool) *BitMap {
+	var sum int
+	defer func() {
+		bm.len = sum
+	}()
+
 	// modify inplace
 	if len(inplace) > 0 && inplace[0] {
-		// append
-		if n := len(t.words) - len(bm.words); n >= 0 {
-			bm.words = append(bm.words, make([]uint64, n+1)...)
-		}
+		bm.resize(len(t.words))
 
 		for i, v := range t.words {
 			// NOR
 			bm.words[i] ^= v
+			sum += bits.OnesCount64(bm.words[i])
 		}
-		return nil
+		return bm
 
 	} else {
 		min, max := bm.compareLength(t)
@@ -211,6 +203,7 @@ func (bm *BitMap) Difference(t *BitMap, inplace ...bool) *BitMap {
 			}
 			// NOR
 			max.words[i] ^= min.words[i]
+			sum += bits.OnesCount64(max.words[i])
 		}
 		return max
 	}
@@ -221,11 +214,38 @@ func (bm *BitMap) Len() int {
 	return bm.len
 }
 
+// resize
+func (bm *BitMap) resize(cap int) {
+	n := len(bm.words)
+	if cap == n {
+		return
+	}
+	if cap < n {
+		bm.words = bm.words[:cap]
+		return
+	}
+	bm.words = append(bm.words, make([]uint64, cap-len(bm.words))...)
+}
+
 // Copy
 func (bm *BitMap) Copy() *BitMap {
-	return &BitMap{
-		words: slices.Clone(bm.words),
-		len:   bm.len,
+	return &BitMap{bm.len, slices.Clone(bm.words)}
+}
+
+// Range: Not recommended for poor performance
+func (bm *BitMap) Range(f func(uint32) bool) {
+	for i, v := range bm.words {
+		if v == 0 {
+			continue
+		}
+		for j := uint32(0); j < bitSize; j++ {
+			// bit and is not 0
+			if v&(1<<j) != 0 {
+				if f(bitSize*uint32(i) + j) {
+					return
+				}
+			}
+		}
 	}
 }
 
@@ -244,23 +264,6 @@ func (bm *BitMap) ToSlice() (arr []uint32) {
 		}
 	}
 	return
-}
-
-// Range: Not recommended for poor performance
-func (bm *BitMap) Range(f func(uint32) bool) {
-	for i, v := range bm.words {
-		if v == 0 {
-			continue
-		}
-		for j := uint32(0); j < bitSize; j++ {
-			// bit and is not 0
-			if v&(1<<j) != 0 {
-				if f(bitSize*uint32(i) + j) {
-					return
-				}
-			}
-		}
-	}
 }
 
 // RevRange: Not recommended for poor performance
