@@ -111,102 +111,51 @@ func (bm *BitMap) ByteSize() int {
 }
 
 // Union
-func (bm *BitMap) Union(t *BitMap, inplace ...bool) *BitMap {
-	var sum int
-	defer func() {
-		bm.len = sum
-	}()
+// The current object is modified by default.
+// If you need to save the result to a new object, call Copy() before.
+func (bm *BitMap) Union(t *BitMap) *BitMap {
+	bm.len = 0
+	bm.resize(len(t.words))
 
-	// modify inplace
-	if len(inplace) > 0 && inplace[0] {
-		bm.resize(len(t.words))
-
-		for i, v := range t.words {
-			bm.words[i] |= v
-			sum += bits.OnesCount64(bm.words[i])
-		}
-		return bm
-
-	} else {
-		min, max := bm.compareLength(t)
-		// copy max object
-		max = max.Copy()
-
-		for i, v := range min.words {
-			max.words[i] |= v
-			sum += bits.OnesCount64(max.words[i])
-		}
-
-		return max
+	for i, v := range t.words {
+		// OR
+		bm.words[i] |= v
+		bm.len += bits.OnesCount64(bm.words[i])
 	}
+
+	return bm
 }
 
 // Intersect
-func (bm *BitMap) Intersect(t *BitMap, inplace ...bool) *BitMap {
-	var sum int
-	defer func() {
-		bm.len = sum
-	}()
+// The current object is modified by default.
+// If you need to save the result to a new object, call Copy() before.
+func (bm *BitMap) Intersect(t *BitMap) *BitMap {
+	bm.len = 0
+	bm.resize(len(t.words))
 
-	// modify inplace
-	if len(inplace) > 0 && inplace[0] {
-		bm.resize(len(t.words))
-
-		for i, v := range t.words {
-			// AND
-			bm.words[i] &= v
-			sum += bits.OnesCount64(bm.words[i])
-		}
-		return bm
-
-	} else {
-		min, max := bm.compareLength(t)
-		// copy min object
-		min = min.Copy()
-		min.resize(len(max.words))
-
-		for i, v := range max.words {
-			// AND
-			min.words[i] &= v
-			sum += bits.OnesCount64(min.words[i])
-		}
-		return min
+	for i, v := range t.words {
+		// AND
+		bm.words[i] &= v
+		bm.len += bits.OnesCount64(bm.words[i])
 	}
+
+	return bm
 }
 
 // Difference
-func (bm *BitMap) Difference(t *BitMap, inplace ...bool) *BitMap {
-	var sum int
-	defer func() {
-		bm.len = sum
-	}()
+// The current object is modified by default.
+// If you need to save the result to a new object, call Copy() before.
+func (bm *BitMap) Difference(t *BitMap) *BitMap {
+	bm.len = 0
+	bm.resize(len(t.words))
 
-	// modify inplace
-	if len(inplace) > 0 && inplace[0] {
-		bm.resize(len(t.words))
-
-		for i, v := range t.words {
-			// NOR
-			bm.words[i] ^= v
-			sum += bits.OnesCount64(bm.words[i])
-		}
-		return bm
-
-	} else {
-		min, max := bm.compareLength(t)
-		// copy max object
-		max = max.Copy()
-
-		for i := range max.words {
-			if i >= len(min.words) {
-				break
-			}
-			// NOR
-			max.words[i] ^= min.words[i]
-			sum += bits.OnesCount64(max.words[i])
-		}
-		return max
+	for i, v := range t.words {
+		// NOR
+		bm.words[i] ^= v
+		bm.len += bits.OnesCount64(bm.words[i])
 	}
+
+	return bm
 }
 
 // Len
@@ -282,14 +231,6 @@ func (bm *BitMap) RevRange(f func(uint32) bool) {
 			}
 		}
 	}
-}
-
-// Compare two bitmap length and return (*min, *max)
-func (bm1 *BitMap) compareLength(bm2 *BitMap) (*BitMap, *BitMap) {
-	if len(bm1.words) < len(bm2.words) {
-		return bm1, bm2
-	}
-	return bm2, bm1
 }
 
 // marshal type

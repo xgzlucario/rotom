@@ -65,14 +65,6 @@ func BenchmarkBmUnion(b *testing.B) {
 	}
 }
 
-func BenchmarkBmUnionInplace(b *testing.B) {
-	bm, bm1 := getRangeBitMaps()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		bm.Union(bm1, true)
-	}
-}
-
 func BenchmarkBmIntersect(b *testing.B) {
 	bm, bm1 := getRangeBitMaps()
 	b.ResetTimer()
@@ -81,26 +73,10 @@ func BenchmarkBmIntersect(b *testing.B) {
 	}
 }
 
-func BenchmarkBmIntersectInplace(b *testing.B) {
-	bm, bm1 := getRangeBitMaps()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		bm.Intersect(bm1, true)
-	}
-}
-
 func BenchmarkBmDifference(b *testing.B) {
 	bm, bm1 := getRangeBitMaps()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		bm.Difference(bm1)
-	}
-}
-
-func BenchmarkBmDifferenceInplace(b *testing.B) {
-	bm, bm1 := getRangeBitMaps()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		bm.Difference(bm1, true)
 	}
 }
