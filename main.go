@@ -146,7 +146,7 @@ func testStress() {
 	defer db.Save()
 
 	a := time.Now()
-	for i := 0; i < 1000000; i++ {
+	for i := 0; i < 3000000; i++ {
 		db.SetWithTTL("xgz"+strconv.Itoa(i), i, time.Second)
 		fmt.Println(i, db.Count())
 	}

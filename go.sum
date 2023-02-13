@@ -182,8 +182,6 @@ github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/f
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
 github.com/ryanuber/columnize v2.1.0+incompatible/go.mod h1:sm1tb6uqfes/u+d4ooFouqFdy9/2g9QGwK3SQygK0Ts=
 github.com/schollz/closestmatch v2.1.0+incompatible/go.mod h1:RtP1ddjLong6gTkbtmuhtR2uUrrJOpYzYRvbcPAid+g=
-github.com/sean-public/fast-skiplist v0.0.0-20200308194023-d7f7945b944e h1:w2+6sbUoNbKRno+Gb09RWXezAw0m7kzFI1ickiuVLl4=
-github.com/sean-public/fast-skiplist v0.0.0-20200308194023-d7f7945b944e/go.mod h1:sF4pw7fVg/E9T7KYqdJtxcQQnQMef8E2kgZScnDKHTE=
 github.com/segmentio/fasthash v1.0.3 h1:EI9+KE1EwvMLBWwjpRDc+fEM+prwxDYbslddQGtrmhM=
 github.com/segmentio/fasthash v1.0.3/go.mod h1:waKX8l2N8yckOgmSsXJi7x1ZfdKZ4x7KRMzBtS3oedY=
 github.com/sergi/go-diff v1.0.0/go.mod h1:0CfEIISq7TuYL3j771MWULgwwjU+GofnZX9QAmXWZgo=
@@ -192,8 +190,8 @@ github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d/go.mod h1
 github.com/smartystreets/goconvey v1.6.4/go.mod h1:syvi0/a8iFYH4r/RixwvyeAJjdLS9QV7WQ/tjFTllLA=
 github.com/sourcegraph/conc v0.2.0 h1:96VpOCAtXDCQ8Oycz0ftHqdPyMi8w12ltN4L2noYg7s=
 github.com/sourcegraph/conc v0.2.0/go.mod h1:8lmPpTLA0hsWqw4lw7wS1e694U2tMjRrc1Asvupb4QM=
-github.com/sourcegraph/sourcegraph/lib v0.0.0-20230212152140-3acd8f31db54 h1:mhNB/70E+Eo6ezXRepG8MN0OgQ/2KwXdRnICkVtgSms=
-github.com/sourcegraph/sourcegraph/lib v0.0.0-20230212152140-3acd8f31db54/go.mod h1:GwOFTaHnUY4lQ7Y/vw6sARI8SmT4X/dUiQhct/KLoHs=
+github.com/sourcegraph/sourcegraph/lib v0.0.0-20230213155239-6a523f8d7e0a h1:D1b1LdyaTuP3BtbrCMEm0lmjFehH/R+GbmPFpTC6cog=
+github.com/sourcegraph/sourcegraph/lib v0.0.0-20230213155239-6a523f8d7e0a/go.mod h1:GwOFTaHnUY4lQ7Y/vw6sARI8SmT4X/dUiQhct/KLoHs=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
 github.com/spf13/cast v1.3.0/go.mod h1:Qx5cxh0v+4UWYiBimWS+eyWzqEqokIECu5etghLkUJE=
 github.com/spf13/cobra v0.0.5/go.mod h1:3K3wKZymM7VvHMDS9+Akkh4K60UwM26emMESw8tLCHU=

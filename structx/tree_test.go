@@ -1,15 +1,14 @@
 package structx
 
 import (
+	"strconv"
 	"testing"
-
-	"github.com/brianvoe/gofakeit/v6"
 )
 
 func getTrie() *Trie[int] {
 	tree := NewTrie[int]()
 	for i := 0; i < thousand; i++ {
-		tree.Put(gofakeit.URL(), i)
+		tree.Put("xgz"+strconv.Itoa(i), i)
 	}
 	return tree
 }
@@ -17,7 +16,15 @@ func getTrie() *Trie[int] {
 func getBtree() *Btree[string, int] {
 	tree := NewBtree[string, int]()
 	for i := 0; i < thousand; i++ {
-		tree.Put(gofakeit.URL(), i)
+		tree.Put("xgz"+strconv.Itoa(i), i)
+	}
+	return tree
+}
+
+func getAVLTree() *AVLTree[string, int] {
+	tree := NewAVLTree[string, int]()
+	for i := 0; i < thousand; i++ {
+		tree.Put("xgz"+strconv.Itoa(i), i)
 	}
 	return tree
 }
@@ -26,7 +33,23 @@ func getBtree() *Btree[string, int] {
 func BenchmarkBtreePut(b *testing.B) {
 	tree := NewBtree[string, int]()
 	for i := 0; i < b.N; i++ {
-		tree.Put(getFakeURL(b), i)
+		tree.Put("xgz"+strconv.Itoa(i), i)
+	}
+}
+
+// Put
+func BenchmarkAVLPut(b *testing.B) {
+	tree := NewAVLTree[string, int]()
+	for i := 0; i < b.N; i++ {
+		tree.Put("xgz"+strconv.Itoa(i), i)
+	}
+}
+
+// Put
+func BenchmarkTriePut(b *testing.B) {
+	tree := NewTrie[int]()
+	for i := 0; i < b.N; i++ {
+		tree.Put("xgz"+strconv.Itoa(i), i)
 	}
 }
 
@@ -35,24 +58,16 @@ func BenchmarkBtreeGet(b *testing.B) {
 	tree := getBtree()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree.Get(getFakeURL(b))
+		tree.Get("xgz" + strconv.Itoa(i))
 	}
 }
 
-// Remove
-func BenchmarkBtreeRemove(b *testing.B) {
-	tree := getBtree()
+// Get
+func BenchmarkAVLTreeGet(b *testing.B) {
+	tree := getAVLTree()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree.Remove(getFakeURL(b))
-	}
-}
-
-// Put
-func BenchmarkTriePut(b *testing.B) {
-	tree := NewTrie[int]()
-	for i := 0; i < b.N; i++ {
-		tree.Put(getFakeURL(b), i)
+		tree.Get("xgz" + strconv.Itoa(i))
 	}
 }
 
@@ -61,7 +76,25 @@ func BenchmarkTrieGet(b *testing.B) {
 	tree := getTrie()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree.Get(getFakeURL(b))
+		tree.Get("xgz" + strconv.Itoa(i))
+	}
+}
+
+// Remove
+func BenchmarkBtreeRemove(b *testing.B) {
+	tree := getBtree()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tree.Remove("xgz" + strconv.Itoa(i))
+	}
+}
+
+// Remove
+func BenchmarkAVLTreeRemove(b *testing.B) {
+	tree := getAVLTree()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tree.Remove("xgz" + strconv.Itoa(i))
 	}
 }
 
@@ -70,6 +103,6 @@ func BenchmarkTrieRemove(b *testing.B) {
 	tree := getTrie()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		tree.Remove(getFakeURL(b))
+		tree.Remove("xgz" + strconv.Itoa(i))
 	}
 }

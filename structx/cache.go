@@ -3,8 +3,6 @@ package structx
 import (
 	"sync/atomic"
 	"time"
-
-	skiplist "github.com/sean-public/fast-skiplist"
 )
 
 const (
@@ -36,8 +34,8 @@ type Cache[K string, V any] struct {
 	// data
 	m *SyncMap[K, *cacheItem[K, V]]
 
-	// ttl skiplist
-	skl *skiplist.SkipList
+	// ttl tree
+	tl *AVLTree[int64, *cacheItem[K, V]]
 }
 
 func (c *Cache[K, V]) now() int64 {
@@ -53,8 +51,8 @@ func NewCache[V any]() *Cache[string, V] {
 		// current timstamp
 		_now: time.Now().UnixNano(),
 
-		// skiplist
-		skl: skiplist.New(),
+		// ttl tree
+		tl: NewAVLTree[int64, *cacheItem[string, V]](),
 	}
 	go cache.eviction()
 
@@ -112,7 +110,7 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 	// exist
 	if ok {
 		item.V = val
-		c.skl.Remove(float64(item.T))
+		c.tl.Remove(item.T)
 		item.T = c.now() + int64(ttl) + atomic.AddInt64(&c._count, 1)
 
 	} else {
@@ -124,8 +122,8 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 		c.m.Set(key, item)
 	}
 
-	// insert
-	c.skl.Set(float64(item.T), item)
+	// put
+	c.tl.Put(item.T, item)
 	return ok
 }
 
@@ -145,7 +143,7 @@ func (c *Cache[K, V]) Remove(key K) bool {
 	item, ok := c.m.Get(key)
 	if ok {
 		c.m.Remove(key)
-		c.skl.Remove(float64(item.T))
+		c.tl.Remove(item.T)
 	}
 	return ok
 }
@@ -153,7 +151,7 @@ func (c *Cache[K, V]) Remove(key K) bool {
 // Clear
 func (c *Cache[K, V]) Clear() {
 	c.m.Clear()
-	c.skl = skiplist.New()
+	c.tl = NewAVLTree[int64, *cacheItem[K, V]]()
 }
 
 // Count
@@ -170,21 +168,17 @@ func (c *Cache[K, V]) eviction() {
 		atomic.SwapInt64(&c._now, time.Now().UnixNano())
 		atomic.SwapInt64(&c._count, 0)
 
-		// search expired keys
-		for f := c.skl.Front(); f != nil; f = f.Next() {
-			if int64(f.Key()) < c.now() {
-				item := f.Value().(*cacheItem[K, V])
-
-				// clear
-				c.skl.Remove(float64(item.T))
+		// clear expired keys
+		c.tl.Each(func(ttl int64, item *cacheItem[K, V]) {
+			if ttl < c.now() {
+				c.tl.Remove(item.T)
 				c.m.Remove(item.K)
 				// on expired
 				if c.onExpired != nil {
 					c.onExpired(item.K, item.V)
 				}
 			}
-			break
-		}
+		})
 	}
 }
 

@@ -13,9 +13,7 @@ type Btree[K base.Ordered, V any] struct {
 // NewBtree
 func NewBtree[K base.Ordered, V any]() *Btree[K, V] {
 	return &Btree[K, V]{
-		btree.New[K, V](func(a, b K) bool {
-			return a < b
-		}),
+		btree.New[K, V](func(a, b K) bool { return a < b }),
 	}
 }
 
