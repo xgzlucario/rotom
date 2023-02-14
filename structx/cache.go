@@ -3,6 +3,8 @@ package structx
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/xgzlucario/rotom/base"
 )
 
 const (
@@ -31,10 +33,10 @@ type Cache[K string, V any] struct {
 	// call when key-value expired
 	onExpired func(K, V)
 
-	// data
+	// data map
 	m *SyncMap[K, *cacheItem[K, V]]
 
-	// ttl rbtree
+	// expired key-value pairs rbtree
 	rb *RBTree[int64, *cacheItem[K, V]]
 }
 
@@ -45,13 +47,10 @@ func (c *Cache[K, V]) now() int64 {
 // NewCache
 func NewCache[V any]() *Cache[string, V] {
 	cache := &Cache[string, V]{
-		// data map
-		m: NewSyncMap[*cacheItem[string, V]](),
-
-		// current timstamp
 		_now: time.Now().UnixNano(),
 
-		// ttl rbtree
+		m: NewSyncMap[*cacheItem[string, V]](),
+
 		rb: NewRBTree[int64, *cacheItem[string, V]](),
 	}
 	go cache.eviction()
@@ -162,7 +161,7 @@ func (c *Cache[K, V]) Count() int {
 // Scheduled update current timestamp and clear expired keys
 func (c *Cache[K, V]) eviction() {
 	for c != nil {
-		time.Sleep(time.Millisecond)
+		time.Sleep(TickDuration)
 
 		// update current timestamp
 		atomic.SwapInt64(&c._now, time.Now().UnixNano())
@@ -192,9 +191,23 @@ func (c *Cache[K, V]) Print() {
 }
 
 func (c *Cache[K, V]) MarshalJSON() ([]byte, error) {
-	return c.m.MarshalJSON()
+	return base.MarshalJSON(c.m.Items())
 }
 
 func (c *Cache[K, V]) UnmarshalJSON(src []byte) error {
-	return c.m.UnmarshalJSON(src)
+	c.Clear()
+
+	// init map
+	var tmp map[K]*cacheItem[K, V]
+	if err := base.UnmarshalJSON(src, &tmp); err != nil {
+		return err
+	}
+	c.m.MSet(tmp)
+
+	// init rbtree
+	c.rb = NewRBTree[int64, *cacheItem[K, V]]()
+	for _, item := range tmp {
+		c.rb.Insert(item.T, item)
+	}
+	return nil
 }

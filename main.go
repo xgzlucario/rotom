@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"strconv"
+	"math"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
@@ -146,8 +146,9 @@ func testStress() {
 	defer db.Save()
 
 	a := time.Now()
-	for i := 0; i < 3000000; i++ {
-		db.SetWithTTL("xgz"+strconv.Itoa(i), i, time.Second)
+	// Simulate storing mobile sms code of 10 million users
+	for i := 0; i < 1000*10000; i++ {
+		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute*5)
 		fmt.Println(i, db.Count())
 	}
 	fmt.Println("set million data cost:", time.Since(a))
