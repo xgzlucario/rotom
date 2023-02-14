@@ -12,9 +12,7 @@ type RBTree[K base.Ordered, V any] struct {
 
 // NewRBTree
 func NewRBTree[K base.Ordered, V any]() *RBTree[K, V] {
-	return &RBTree[K, V]{
-		Tree: rbtree.NewTree[K, V](),
-	}
+	return &RBTree[K, V]{rbtree.NewTree[K, V]()}
 }
 
 // MarshalJSON
@@ -36,6 +34,7 @@ func (b *RBTree[K, V]) UnmarshalJSON(src []byte) error {
 	if err := base.UnmarshalJSON(src, b); err != nil {
 		return err
 	}
+	b = NewRBTree[K, V]()
 	for i, k := range tmp.K {
 		b.Insert(k, tmp.V[i])
 	}

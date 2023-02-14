@@ -149,7 +149,7 @@ func testStress() {
 	// Simulate storing mobile sms code of 10 million users
 	for i := 0; i < 1000*10000; i++ {
 		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute*5)
-		fmt.Println(i, db.Count())
+		fmt.Println(i, db.ExpiredCount())
 	}
 	fmt.Println("set million data cost:", time.Since(a))
 }

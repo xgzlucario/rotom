@@ -33,9 +33,15 @@ func (s *Store) Count() int {
 	return s.m.Count()
 }
 
+// ExpiredCount
+func (s *Store) ExpiredCount() int {
+	return s.m.ExpiredCount()
+}
+
 // WithExpired
-func (c *Store) WithExpired(f func(string, any)) {
+func (c *Store) WithExpired(f func(string, any)) *Store {
 	c.m.WithExpired(f)
+	return c
 }
 
 // Keys
@@ -107,69 +113,6 @@ func (s *Store) GetString(key string) (val string, err error) {
 	return getValue(s, key, val)
 }
 
-// GetInt
-func (s *Store) GetInt(key string) (val int, err error) {
-	tmp, err := s.GetFloat64(key)
-	if err != nil {
-		return 0, err
-	}
-	return int(tmp), nil
-}
-
-// GetInt32
-func (s *Store) GetInt32(key string) (val int32, err error) {
-	tmp, err := s.GetFloat64(key)
-	if err != nil {
-		return 0, err
-	}
-	return int32(tmp), nil
-}
-
-// GetInt64
-func (s *Store) GetInt64(key string) (val int64, err error) {
-	tmp, err := s.GetFloat64(key)
-	if err != nil {
-		return 0, err
-	}
-	return int64(tmp), nil
-}
-
-// GetUint
-func (s *Store) GetUint(key string) (val uint, err error) {
-	tmp, err := s.GetFloat64(key)
-	if err != nil {
-		return 0, err
-	}
-	return uint(tmp), nil
-}
-
-// GetUint32
-func (s *Store) GetUint32(key string) (val uint32, err error) {
-	tmp, err := s.GetFloat64(key)
-	if err != nil {
-		return 0, err
-	}
-	return uint32(tmp), nil
-}
-
-// GetUint64
-func (s *Store) GetUint64(key string) (val uint64, err error) {
-	tmp, err := s.GetFloat64(key)
-	if err != nil {
-		return 0, err
-	}
-	return uint64(tmp), nil
-}
-
-// GetFloat32
-func (s *Store) GetFloat32(key string) (val float32, err error) {
-	tmp, err := s.GetFloat64(key)
-	if err != nil {
-		return 0, err
-	}
-	return float32(tmp), nil
-}
-
 // GetFloat64
 func (s *Store) GetFloat64(key string) (val float64, err error) {
 	return getValue(s, key, val)
@@ -188,15 +131,6 @@ func (s *Store) GetTime(key string) (val time.Time, err error) {
 		return val, err
 	}
 	return time.Parse(time.RFC3339, str)
-}
-
-// GetDuration
-func (s *Store) GetDuration(key string) (val time.Duration, err error) {
-	tmp, err := s.GetFloat64(key)
-	if err != nil {
-		return 0, err
-	}
-	return time.Duration(tmp), nil
 }
 
 // GetList

@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.20.1
-	github.com/bytedance/sonic v1.7.1
+	github.com/bytedance/sonic v1.8.0
 	github.com/klauspost/compress v1.15.15
 	github.com/liyiheng/zset v0.0.0-20211012035528-6679b37ff27a
 	github.com/orcaman/concurrent-map/v2 v2.0.1
@@ -27,7 +27,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
-	github.com/sourcegraph/sourcegraph/lib v0.0.0-20230214061333-9fba5915932b // indirect
+	github.com/sourcegraph/sourcegraph/lib v0.0.0-20230214143639-83746c1167cb // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	golang.org/x/arch v0.2.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect

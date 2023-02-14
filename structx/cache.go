@@ -158,6 +158,11 @@ func (c *Cache[K, V]) Count() int {
 	return c.m.Count()
 }
 
+// ExpiredCount
+func (c *Cache[K, V]) ExpiredCount() int {
+	return c.rb.Size()
+}
+
 // Scheduled update current timestamp and clear expired keys
 func (c *Cache[K, V]) eviction() {
 	for c != nil {
@@ -204,7 +209,7 @@ func (c *Cache[K, V]) UnmarshalJSON(src []byte) error {
 	}
 	c.m.MSet(tmp)
 
-	// init rbtree
+	// init tree
 	c.rb = NewRBTree[int64, *cacheItem[K, V]]()
 	for _, item := range tmp {
 		c.rb.Insert(item.T, item)
