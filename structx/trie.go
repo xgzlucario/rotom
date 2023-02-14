@@ -253,20 +253,15 @@ func (t *Trie[T]) WalkPath(prefix string, f func(string, T) bool) {
 	}
 }
 
-type trieJSON[T any] struct {
-	K []string
-	V []T
-}
-
 // MarshalJSON
 func (t *Trie[T]) MarshalJSON() ([]byte, error) {
 	keys, vals := t.collect(t.root, nil, nil, nil)
-	return base.MarshalJSON(trieJSON[T]{keys, vals})
+	return base.MarshalJSON(base.GTreeJSON[string, T]{K: keys, V: vals})
 }
 
 // UnmarshalJSON
 func (t *Trie[T]) UnmarshalJSON(src []byte) error {
-	var tree trieJSON[T]
+	var tree base.GTreeJSON[string, T]
 	if err := base.UnmarshalJSON(src, &tree); err != nil {
 		return err
 	}

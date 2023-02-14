@@ -19,7 +19,7 @@ func NewBtree[K base.Ordered, V any]() *Btree[K, V] {
 
 // MarshalJSON
 func (b *Btree[K, V]) MarshalJSON() ([]byte, error) {
-	tmp := gtreeJSON[K, V]{
+	tmp := base.GTreeJSON[K, V]{
 		K: make([]K, 0, b.Size()),
 		V: make([]V, 0, b.Size()),
 	}
@@ -31,8 +31,9 @@ func (b *Btree[K, V]) MarshalJSON() ([]byte, error) {
 	return base.MarshalJSON(tmp)
 }
 
+// UnmarshalJSON
 func (b *Btree[K, V]) UnmarshalJSON(src []byte) error {
-	var tmp gtreeJSON[K, V]
+	var tmp base.GTreeJSON[K, V]
 	if err := base.UnmarshalJSON(src, b); err != nil {
 		return err
 	}

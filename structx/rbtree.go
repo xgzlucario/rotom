@@ -17,18 +17,12 @@ func NewRBTree[K base.Ordered, V any]() *RBTree[K, V] {
 	}
 }
 
-// marshal type
-type gtreeJSON[K base.Ordered, V any] struct {
-	K []K
-	V []V
-}
-
+// MarshalJSON
 func (b *RBTree[K, V]) MarshalJSON() ([]byte, error) {
-	tmp := gtreeJSON[K, V]{
+	tmp := base.GTreeJSON[K, V]{
 		K: make([]K, 0, b.Size()),
 		V: make([]V, 0, b.Size()),
 	}
-
 	for f := b.Iterator(); f != nil; f = f.Next() {
 		tmp.K = append(tmp.K, f.Key)
 		tmp.V = append(tmp.V, f.Value)
@@ -36,12 +30,12 @@ func (b *RBTree[K, V]) MarshalJSON() ([]byte, error) {
 	return base.MarshalJSON(tmp)
 }
 
+// UnmarshalJSON
 func (b *RBTree[K, V]) UnmarshalJSON(src []byte) error {
-	var tmp gtreeJSON[K, V]
+	var tmp base.GTreeJSON[K, V]
 	if err := base.UnmarshalJSON(src, b); err != nil {
 		return err
 	}
-
 	for i, k := range tmp.K {
 		b.Insert(k, tmp.V[i])
 	}
