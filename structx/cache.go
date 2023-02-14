@@ -34,8 +34,8 @@ type Cache[K string, V any] struct {
 	// data
 	m *SyncMap[K, *cacheItem[K, V]]
 
-	// ttl tree
-	tl *AVLTree[int64, *cacheItem[K, V]]
+	// ttl rbtree
+	rb *RBTree[int64, *cacheItem[K, V]]
 }
 
 func (c *Cache[K, V]) now() int64 {
@@ -51,8 +51,8 @@ func NewCache[V any]() *Cache[string, V] {
 		// current timstamp
 		_now: time.Now().UnixNano(),
 
-		// ttl tree
-		tl: NewAVLTree[int64, *cacheItem[string, V]](),
+		// ttl rbtree
+		rb: NewRBTree[int64, *cacheItem[string, V]](),
 	}
 	go cache.eviction()
 
@@ -110,7 +110,7 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 	// exist
 	if ok {
 		item.V = val
-		c.tl.Remove(item.T)
+		c.rb.Delete(item.T)
 		item.T = c.now() + int64(ttl) + atomic.AddInt64(&c._count, 1)
 
 	} else {
@@ -122,8 +122,8 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 		c.m.Set(key, item)
 	}
 
-	// put
-	c.tl.Put(item.T, item)
+	// insert
+	c.rb.Insert(item.T, item)
 	return ok
 }
 
@@ -143,7 +143,7 @@ func (c *Cache[K, V]) Remove(key K) bool {
 	item, ok := c.m.Get(key)
 	if ok {
 		c.m.Remove(key)
-		c.tl.Remove(item.T)
+		c.rb.Delete(item.T)
 	}
 	return ok
 }
@@ -151,7 +151,7 @@ func (c *Cache[K, V]) Remove(key K) bool {
 // Clear
 func (c *Cache[K, V]) Clear() {
 	c.m.Clear()
-	c.tl = NewAVLTree[int64, *cacheItem[K, V]]()
+	c.rb = NewRBTree[int64, *cacheItem[K, V]]()
 }
 
 // Count
@@ -159,26 +159,30 @@ func (c *Cache[K, V]) Count() int {
 	return c.m.Count()
 }
 
-// Scheduled update current ts and clear expired keys
+// Scheduled update current timestamp and clear expired keys
 func (c *Cache[K, V]) eviction() {
 	for c != nil {
 		time.Sleep(time.Millisecond)
 
-		// update current ts
+		// update current timestamp
 		atomic.SwapInt64(&c._now, time.Now().UnixNano())
+		// reset count
 		atomic.SwapInt64(&c._count, 0)
 
 		// clear expired keys
-		c.tl.Each(func(ttl int64, item *cacheItem[K, V]) {
-			if ttl < c.now() {
-				c.tl.Remove(item.T)
-				c.m.Remove(item.K)
-				// on expired
-				if c.onExpired != nil {
-					c.onExpired(item.K, item.V)
-				}
+		for !c.rb.Empty() {
+			f := c.rb.Iterator()
+			if f.Key > c.now() {
+				break
 			}
-		})
+
+			c.rb.Delete(f.Key)
+			c.m.Remove(f.Value.K)
+			// on expired
+			if c.onExpired != nil {
+				c.onExpired(f.Value.K, f.Value.V)
+			}
+		}
 	}
 }
 

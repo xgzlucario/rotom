@@ -181,6 +181,8 @@ github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZV
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
 github.com/ryanuber/columnize v2.1.0+incompatible/go.mod h1:sm1tb6uqfes/u+d4ooFouqFdy9/2g9QGwK3SQygK0Ts=
+github.com/sakeven/RbTree v0.0.0-20220710124251-94e35f9fed6c h1:u+rpw//zQsDgIhULb0RoiGuYMJwwii4pTWszctE+oKw=
+github.com/sakeven/RbTree v0.0.0-20220710124251-94e35f9fed6c/go.mod h1:zwEumjdcK6Q/ky/gFPqMviw1p7ZUb+B3pU4ybgOHvns=
 github.com/schollz/closestmatch v2.1.0+incompatible/go.mod h1:RtP1ddjLong6gTkbtmuhtR2uUrrJOpYzYRvbcPAid+g=
 github.com/segmentio/fasthash v1.0.3 h1:EI9+KE1EwvMLBWwjpRDc+fEM+prwxDYbslddQGtrmhM=
 github.com/segmentio/fasthash v1.0.3/go.mod h1:waKX8l2N8yckOgmSsXJi7x1ZfdKZ4x7KRMzBtS3oedY=
@@ -190,8 +192,8 @@ github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d/go.mod h1
 github.com/smartystreets/goconvey v1.6.4/go.mod h1:syvi0/a8iFYH4r/RixwvyeAJjdLS9QV7WQ/tjFTllLA=
 github.com/sourcegraph/conc v0.2.0 h1:96VpOCAtXDCQ8Oycz0ftHqdPyMi8w12ltN4L2noYg7s=
 github.com/sourcegraph/conc v0.2.0/go.mod h1:8lmPpTLA0hsWqw4lw7wS1e694U2tMjRrc1Asvupb4QM=
-github.com/sourcegraph/sourcegraph/lib v0.0.0-20230213155239-6a523f8d7e0a h1:D1b1LdyaTuP3BtbrCMEm0lmjFehH/R+GbmPFpTC6cog=
-github.com/sourcegraph/sourcegraph/lib v0.0.0-20230213155239-6a523f8d7e0a/go.mod h1:GwOFTaHnUY4lQ7Y/vw6sARI8SmT4X/dUiQhct/KLoHs=
+github.com/sourcegraph/sourcegraph/lib v0.0.0-20230214061333-9fba5915932b h1:eETLRjv+1jACoKEhDap4S9RrRp0TELYAjqwh/XkZ9C0=
+github.com/sourcegraph/sourcegraph/lib v0.0.0-20230214061333-9fba5915932b/go.mod h1:GwOFTaHnUY4lQ7Y/vw6sARI8SmT4X/dUiQhct/KLoHs=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
 github.com/spf13/cast v1.3.0/go.mod h1:Qx5cxh0v+4UWYiBimWS+eyWzqEqokIECu5etghLkUJE=
 github.com/spf13/cobra v0.0.5/go.mod h1:3K3wKZymM7VvHMDS9+Akkh4K60UwM26emMESw8tLCHU=
@@ -247,8 +249,8 @@ golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPh
 golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2/go.mod h1:T9bdIzuCu7OtxOm1hfPfRQxPLYneinmdGuTeoZ9dtd4=
 golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
 golang.org/x/exp v0.0.0-20190121172915-509febef88a4/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
-golang.org/x/exp v0.0.0-20230212135524-a684f29349b6 h1:Ic9KukPQ7PegFzHckNiMTQXGgEszA7mY2Fn4ZMtnMbw=
-golang.org/x/exp v0.0.0-20230212135524-a684f29349b6/go.mod h1:CxIveKay+FTh1D0yPZemJVgC/95VzuuOLq5Qi4xnoYc=
+golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb h1:PaBZQdo+iSDyHT053FjUCgZQ/9uqVwPOcl7KSWhKn6w=
+golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb/go.mod h1:CxIveKay+FTh1D0yPZemJVgC/95VzuuOLq5Qi4xnoYc=
 golang.org/x/lint v0.0.0-20181026193005-c67002cb31c3/go.mod h1:UVdnD1Gm6xHRNCYTkRU2/jEulfH38KcIWyp/GAMgvoE=
 golang.org/x/lint v0.0.0-20190227174305-5b3e6a55c961/go.mod h1:wehouNa3lNwaWXcvxsM5YxQ5yQlVC4a0KAMCusXpPoU=
 golang.org/x/lint v0.0.0-20190313153728-d0100b6bd8b3/go.mod h1:6SW0HCj/g11FgYtHlgUYUwCkIfeOF89ocIRzGO/8vkc=
