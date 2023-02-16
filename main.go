@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/shirou/gopsutil/mem"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 	"github.com/xgzlucario/rotom/structx"
@@ -146,12 +147,17 @@ func testStress() {
 	defer db.Save()
 
 	a := time.Now()
-	// Simulate storing mobile sms code of 10 million users
-	for i := 0; i < 1000*10000; i++ {
+	// Simulate storing mobile sms code of 100 million users
+	for i := 0; i <= 1000*10000; i++ {
 		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute*5)
-		fmt.Println(i, db.ExpiredCount())
+		// stats
+		if i%(10*10000) == 0 {
+			memInfo, _ := mem.VirtualMemory()
+			fmt.Println("num:", i, "count:", db.Count())
+			fmt.Printf("mem usage: %.2f%%\n", memInfo.UsedPercent)
+		}
 	}
-	fmt.Println("set million data cost:", time.Since(a))
+	fmt.Println("total cost:", time.Since(a))
 }
 
 func testTTL() {
