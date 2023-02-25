@@ -13,14 +13,6 @@ func getTrie() *Trie[int] {
 	return tree
 }
 
-func getBtree() *Btree[string, int] {
-	tree := NewBtree[string, int]()
-	for i := 0; i < thousand; i++ {
-		tree.Put("xgz"+strconv.Itoa(i), i)
-	}
-	return tree
-}
-
 func getRBTree() *RBTree[string, int] {
 	tree := NewRBTree[string, int]()
 	for i := 0; i < thousand; i++ {
@@ -30,12 +22,6 @@ func getRBTree() *RBTree[string, int] {
 }
 
 // Put
-func BenchmarkBtreePut(b *testing.B) {
-	tree := NewBtree[string, int]()
-	for i := 0; i < b.N; i++ {
-		tree.Put("xgz"+strconv.Itoa(i), i)
-	}
-}
 func BenchmarkTriePut(b *testing.B) {
 	tree := NewTrie[int]()
 	for i := 0; i < b.N; i++ {
@@ -50,13 +36,6 @@ func BenchmarkRBTreePut(b *testing.B) {
 }
 
 // Get
-func BenchmarkBtreeGet(b *testing.B) {
-	tree := getBtree()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tree.Get("xgz" + strconv.Itoa(i))
-	}
-}
 func BenchmarkTrieGet(b *testing.B) {
 	tree := getTrie()
 	b.ResetTimer()
@@ -73,13 +52,6 @@ func BenchmarkRBTreeGet(b *testing.B) {
 }
 
 // Remove
-func BenchmarkBtreeRemove(b *testing.B) {
-	tree := getBtree()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tree.Remove("xgz" + strconv.Itoa(i))
-	}
-}
 func BenchmarkTrieRemove(b *testing.B) {
 	tree := getTrie()
 	b.ResetTimer()
