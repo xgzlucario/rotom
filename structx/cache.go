@@ -190,11 +190,6 @@ func (c *Cache[K, V]) eviction() {
 	}
 }
 
-// Print
-func (c *Cache[K, V]) Print() {
-	c.m.Print()
-}
-
 func (c *Cache[K, V]) MarshalJSON() ([]byte, error) {
 	return base.MarshalJSON(c.m.Items())
 }

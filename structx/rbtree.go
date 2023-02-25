@@ -6,8 +6,8 @@ import (
 
 // color of node
 const (
-	RED   byte = 0
-	BLACK byte = 1
+	RED   = 0
+	BLACK = 1
 )
 
 type rbnode[K base.Ordered, V any] struct {

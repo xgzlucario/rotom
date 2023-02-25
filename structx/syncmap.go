@@ -1,8 +1,6 @@
 package structx
 
 import (
-	"fmt"
-
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/xgzlucario/rotom/base"
 )
@@ -23,13 +21,6 @@ func NewSyncMap[V any]() *SyncMap[string, V] {
 func NewSyncMapStringer[K cmap.Stringer, V any]() *SyncMap[K, V] {
 	return &SyncMap[K, V]{
 		cmap.NewStringer[K, V](),
-	}
-}
-
-// Print
-func (m *SyncMap[K, V]) Print() {
-	for t := range m.IterBuffered() {
-		fmt.Printf("%+v -> %+v\n", t.Key, t.Val)
 	}
 }
 
