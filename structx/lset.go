@@ -3,7 +3,6 @@ package structx
 import (
 	"github.com/xgzlucario/rotom/base"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 /*
@@ -70,7 +69,7 @@ func (s *LSet[T]) ByteSize() int {
 func (s *LSet[T]) Copy() *LSet[T] {
 	return &LSet[T]{
 		m:    maps.Clone(s.m),
-		List: &List[T]{slices.Clone(s.array)},
+		List: s.List.Copy(),
 	}
 }
 
@@ -85,7 +84,7 @@ func (s *LSet[T]) Union(t *LSet[T]) *LSet[T] {
 	// should copy max object
 	max = max.Copy()
 
-	for _, k := range min.array {
+	for _, k := range *min.List {
 		max.Add(k)
 	}
 	return max
@@ -97,7 +96,7 @@ func (s *LSet[T]) Intersect(t *LSet[T]) *LSet[T] {
 	// should copy min object
 	min = min.Copy()
 
-	for _, k := range min.array {
+	for _, k := range *min.List {
 		if !max.Exist(k) {
 			min.remove(k)
 		}
@@ -109,12 +108,12 @@ func (s *LSet[T]) Intersect(t *LSet[T]) *LSet[T] {
 func (s *LSet[T]) Difference(t *LSet[T]) *LSet[T] {
 	newS := NewLSet[T]()
 
-	for _, key := range s.array {
+	for _, key := range *s.List {
 		if !t.Exist(key) {
 			newS.add(key)
 		}
 	}
-	for _, key := range t.array {
+	for _, key := range *t.List {
 		if !s.Exist(key) {
 			newS.add(key)
 		}
@@ -127,7 +126,7 @@ func (s *LSet[T]) IsSubSet(t *LSet[T]) bool {
 	if t.Len() > s.Len() {
 		return false
 	}
-	for _, v := range t.array {
+	for _, v := range *t.List {
 		if !s.Exist(v) {
 			return false
 		}
@@ -178,9 +177,9 @@ func (s1 *LSet[T]) compareLength(s2 *LSet[T]) (*LSet[T], *LSet[T]) {
 }
 
 func (s *LSet[T]) UnmarshalJSON(src []byte) error {
-	if err := base.UnmarshalJSON(src, &s.array); err != nil {
+	if err := base.UnmarshalJSON(src, &s); err != nil {
 		return err
 	}
-	*s = *NewLSet(s.array...)
+	*s = *NewLSet(*s.List...)
 	return nil
 }

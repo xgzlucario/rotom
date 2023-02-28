@@ -3,7 +3,6 @@ package store
 import (
 	"time"
 
-	"github.com/xgzlucario/rotom/app"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -164,8 +163,8 @@ func (s *Store) GetBitMap(key string) (*structx.BitMap, error) {
 }
 
 // GetSignIn
-func (s *Store) GetSignIn(key string) (*app.SignIn, error) {
-	return getGenericValue(s, key, app.NewSignIn())
+func (s *Store) GetSignIn(key string) (*structx.SignIn, error) {
+	return getGenericValue(s, key, structx.NewSignIn())
 }
 
 // GetCustomStruct

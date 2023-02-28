@@ -1,4 +1,4 @@
-package app
+package structx
 
 import (
 	"errors"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
-	"github.com/xgzlucario/rotom/structx"
 )
 
 // toDateTime: Return time by dateID
@@ -31,15 +30,15 @@ var (
 // SignIn: Threadsafe Sign-In Data Structure
 type SignIn struct {
 	mu      sync.RWMutex
-	dateMap structx.Map[uint32, *structx.BitMap]
-	userMap structx.Map[uint32, *structx.BitMap]
+	dateMap Map[uint32, *BitMap]
+	userMap Map[uint32, *BitMap]
 }
 
 // NewSignIn
 func NewSignIn() *SignIn {
 	return &SignIn{
-		dateMap: structx.NewMap[uint32, *structx.BitMap](),
-		userMap: structx.NewMap[uint32, *structx.BitMap](),
+		dateMap: NewMap[uint32, *BitMap](),
+		userMap: NewMap[uint32, *BitMap](),
 	}
 }
 
@@ -54,7 +53,7 @@ func (s *SignIn) AddRecord(userID uint32, date time.Time) error {
 	// userRecord
 	bm, ok := s.userMap.Get(userID)
 	if !ok {
-		bm = structx.NewBitMap()
+		bm = NewBitMap()
 		s.userMap.Set(userID, bm)
 	}
 	// check if signed in
@@ -65,7 +64,7 @@ func (s *SignIn) AddRecord(userID uint32, date time.Time) error {
 	// dateRecord
 	bm, ok = s.dateMap.Get(dateID)
 	if !ok {
-		bm = structx.NewBitMap()
+		bm = NewBitMap()
 		s.dateMap.Set(dateID, bm)
 	}
 	// check if signed in
@@ -151,8 +150,8 @@ func (s *SignIn) DateCount(date time.Time) (int, error) {
 
 // marshal type
 type signInJSON struct {
-	D structx.Map[uint32, *structx.BitMap]
-	U structx.Map[uint32, *structx.BitMap]
+	D Map[uint32, *BitMap]
+	U Map[uint32, *BitMap]
 }
 
 func (s *SignIn) MarshalJSON() ([]byte, error) {
@@ -164,7 +163,6 @@ func (s *SignIn) UnmarshalJSON(src []byte) error {
 	if err := base.UnmarshalJSON(src, &tmp); err != nil {
 		return err
 	}
-
 	s.dateMap = tmp.D
 	s.userMap = tmp.U
 	return nil
