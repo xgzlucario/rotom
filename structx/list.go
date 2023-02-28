@@ -92,55 +92,55 @@ func (s *List[T]) Range(f func(T) bool) {
 }
 
 // LPush
-func (ls *List[T]) LPush(values ...T) {
-	*ls = append(values, *ls...)
+func (s *List[T]) LPush(values ...T) {
+	*s = append(values, *s...)
 }
 
 // RPush
-func (ls *List[T]) RPush(values ...T) {
-	*ls = append(*ls, values...)
+func (s *List[T]) RPush(values ...T) {
+	*s = append(*s, values...)
 }
 
 // Insert
-func (ls *List[T]) Insert(i int, values ...T) {
-	*ls = slices.Insert(*ls, i, values...)
+func (s *List[T]) Insert(i int, values ...T) {
+	*s = slices.Insert(*s, i, values...)
 }
 
 // AddToSet
-func (ls *List[T]) AddToSet(value T) bool {
-	if r := ls.Find(value); r < 0 {
-		ls.RPush(value)
+func (s *List[T]) AddToSet(value T) bool {
+	if r := s.Find(value); r < 0 {
+		s.RPush(value)
 		return true
 	}
 	return false
 }
 
 // LPop
-func (ls *List[T]) LPop() (val T, ok bool) {
-	if len(*ls) == 0 {
+func (s *List[T]) LPop() (val T, ok bool) {
+	if len(*s) == 0 {
 		return
 	}
-	val = (*ls)[0]
-	(*ls) = (*ls)[1:]
+	val = (*s)[0]
+	(*s) = (*s)[1:]
 	return val, true
 }
 
 // RPop
-func (ls *List[T]) RPop() (val T, ok bool) {
-	n := len(*ls)
+func (s *List[T]) RPop() (val T, ok bool) {
+	n := len(*s)
 	if n == 0 {
 		return
 	}
-	val = (*ls)[n-1]
-	(*ls) = (*ls)[:n-1]
+	val = (*s)[n-1]
+	(*s) = (*s)[:n-1]
 	return val, true
 }
 
 // RemoveFirst remove elem
-func (ls *List[T]) RemoveFirst(elem T) bool {
-	for i, v := range *ls {
+func (s *List[T]) RemoveFirst(elem T) bool {
+	for i, v := range *s {
 		if v == elem {
-			ls.remove(i)
+			s.remove(i)
 			return true
 		}
 	}
@@ -148,30 +148,30 @@ func (ls *List[T]) RemoveFirst(elem T) bool {
 }
 
 // RemoveIndex remove elem by index
-func (ls *List[T]) RemoveIndex(i int) bool {
-	if i > 0 && i < len(*ls) {
-		ls.remove(i)
+func (s *List[T]) RemoveIndex(i int) bool {
+	if i > 0 && i < len(*s) {
+		s.remove(i)
 		return true
 	}
 	return false
 }
 
 // remove with zero memory allocation
-func (ls *List[T]) remove(i int) {
-	if i > len(*ls)/2 {
-		ls.Bottom(i)
-		ls.RPop()
+func (s *List[T]) remove(i int) {
+	if i > len(*s)/2 {
+		s.Bottom(i)
+		s.RPop()
 
 	} else {
-		ls.Top(i)
-		ls.LPop()
+		s.Top(i)
+		s.LPop()
 	}
 }
 
 // Max
-func (ls *List[T]) Max(less func(T, T) bool) T {
-	max := (*ls)[0]
-	for _, v := range *ls {
+func (s *List[T]) Max(less func(T, T) bool) T {
+	max := (*s)[0]
+	for _, v := range *s {
 		if less(max, v) {
 			max = v
 		}
@@ -180,9 +180,9 @@ func (ls *List[T]) Max(less func(T, T) bool) T {
 }
 
 // Min
-func (ls *List[T]) Min(less func(T, T) bool) T {
-	min := (*ls)[0]
-	for _, v := range *ls {
+func (s *List[T]) Min(less func(T, T) bool) T {
+	min := (*s)[0]
+	for _, v := range *s {
 		if less(v, min) {
 			min = v
 		}
@@ -191,9 +191,9 @@ func (ls *List[T]) Min(less func(T, T) bool) T {
 }
 
 // Sort
-func (ls *List[T]) Sort(less func(T, T) bool) *List[T] {
-	slices.SortFunc(*ls, less)
-	return ls
+func (s *List[T]) Sort(less func(T, T) bool) *List[T] {
+	slices.SortFunc(*s, less)
+	return s
 }
 
 // Values
@@ -202,8 +202,8 @@ func (s *List[T]) Values() []T {
 }
 
 // IsSorted
-func (ls *List[T]) IsSorted(less func(T, T) bool) bool {
-	return slices.IsSortedFunc(*ls, less)
+func (s *List[T]) IsSorted(less func(T, T) bool) bool {
+	return slices.IsSortedFunc(*s, less)
 }
 
 func (s *List[T]) MarshalJSON() ([]byte, error) {
