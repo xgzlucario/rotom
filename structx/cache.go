@@ -126,6 +126,20 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 	return ok
 }
 
+// Persist
+func (c *Cache[K, V]) Persist(key K) bool {
+	item, ok := c.m.Get(key)
+	if !ok {
+		return false
+	}
+	// persist
+	if item.T != NoTTL {
+		c.rb.Delete(item.T)
+		item.T = NoTTL
+	}
+	return true
+}
+
 // Keys
 func (c *Cache[K, V]) Keys() []K {
 	return c.m.Keys()
@@ -156,11 +170,6 @@ func (c *Cache[K, V]) Clear() {
 // Count
 func (c *Cache[K, V]) Count() int {
 	return c.m.Count()
-}
-
-// ExpiredCount
-func (c *Cache[K, V]) ExpiredCount() int {
-	return c.rb.Size()
 }
 
 // Scheduled update current timestamp and clear expired keys

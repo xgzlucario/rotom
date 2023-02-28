@@ -33,11 +33,6 @@ func (s *Store) Count() int {
 	return s.m.Count()
 }
 
-// ExpiredCount
-func (s *Store) ExpiredCount() int {
-	return s.m.ExpiredCount()
-}
-
 // WithExpired
 func (c *Store) WithExpired(f func(string, any)) *Store {
 	c.m.WithExpired(f)
