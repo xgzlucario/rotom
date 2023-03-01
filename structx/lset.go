@@ -11,14 +11,14 @@ LSet (ListSet): map + list structure
 LSet has richer api and faster Intersect, Union, Range operations than mapset
 */
 type LSet[T comparable] struct {
-	m Map[T, struct{}]
+	m map[T]struct{}
 	*List[T]
 }
 
 // NewLSet: Create a new LSet
 func NewLSet[T comparable](values ...T) *LSet[T] {
 	ls := &LSet[T]{
-		m:    NewMap[T, struct{}](),
+		m:    map[T]struct{}{},
 		List: NewList[T](),
 	}
 	for _, v := range values {

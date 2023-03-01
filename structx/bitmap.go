@@ -2,7 +2,6 @@ package structx
 
 import (
 	"math/bits"
-	"unsafe"
 
 	"github.com/xgzlucario/rotom/base"
 	"golang.org/x/exp/slices"
@@ -18,7 +17,7 @@ type BitMap struct {
 	words []uint64
 }
 
-// NewBitMap for not concurrent safe
+// NewBitMap
 func NewBitMap(nums ...uint32) *BitMap {
 	bm := new(BitMap)
 	for _, num := range nums {
@@ -27,7 +26,7 @@ func NewBitMap(nums ...uint32) *BitMap {
 	return bm
 }
 
-// Add
+// Add return true if num not set yet
 func (bm *BitMap) Add(num uint32) bool {
 	word, bit := num>>log2BitSize, num%bitSize
 
@@ -53,7 +52,7 @@ func (bm *BitMap) AddRange(start uint32, end uint32) *BitMap {
 	return bm
 }
 
-// Remove
+// Remove return true if num exist
 func (bm *BitMap) Remove(num uint32) bool {
 	word, bit := num>>log2BitSize, num%bitSize
 	if int(word) >= len(bm.words) {
@@ -70,12 +69,12 @@ func (bm *BitMap) Remove(num uint32) bool {
 	return false
 }
 
-// Equal
+// Equal returns whether the two bitmaps are equal
 func (bm *BitMap) Equal(t *BitMap) bool {
 	return slices.Equal(bm.words, t.words)
 }
 
-// Contains
+// Contains check if num exist
 func (bm *BitMap) Contains(num uint32) bool {
 	word, bit := num/bitSize, num%bitSize
 	return int(word) < len(bm.words) && bm.words[word]&(1<<bit) != 0
@@ -99,20 +98,17 @@ func (bm *BitMap) Max() int {
 		if v == 0 {
 			continue
 		}
-		return bitSize*i + bits.TrailingZeros64(v)
+		for j := bitSize - 1; j >= 0; j-- {
+			// bit and is not 0
+			if v&(1<<j) != 0 {
+				return bitSize*i + j
+			}
+		}
 	}
 	return -1
 }
 
-// ByteSize
-func (bm *BitMap) ByteSize() int {
-	var a uint64
-	return int(unsafe.Sizeof(a))*len(bm.words) + int(unsafe.Sizeof(bm.len))
-}
-
-// Union
-// The current object is modified by default.
-// If you need to save the result to a new object, call Copy() before.
+// Union modified current object default.
 func (bm *BitMap) Union(t *BitMap) *BitMap {
 	bm.len = 0
 	bm.resize(len(t.words))
@@ -126,9 +122,7 @@ func (bm *BitMap) Union(t *BitMap) *BitMap {
 	return bm
 }
 
-// Intersect
-// The current object is modified by default.
-// If you need to save the result to a new object, call Copy() before.
+// Intersect modified current object default.
 func (bm *BitMap) Intersect(t *BitMap) *BitMap {
 	bm.len = 0
 	bm.resize(len(t.words))
@@ -142,9 +136,7 @@ func (bm *BitMap) Intersect(t *BitMap) *BitMap {
 	return bm
 }
 
-// Difference
-// The current object is modified by default.
-// If you need to save the result to a new object, call Copy() before.
+// Difference modified current object default.
 func (bm *BitMap) Difference(t *BitMap) *BitMap {
 	bm.len = 0
 	bm.resize(len(t.words))
@@ -181,7 +173,7 @@ func (bm *BitMap) Copy() *BitMap {
 	return &BitMap{bm.len, slices.Clone(bm.words)}
 }
 
-// Range: Not recommended for poor performance
+// Range
 func (bm *BitMap) Range(f func(uint32) bool) {
 	for i, v := range bm.words {
 		if v == 0 {
@@ -198,24 +190,7 @@ func (bm *BitMap) Range(f func(uint32) bool) {
 	}
 }
 
-// ToSlice: Not recommended for poor performance
-func (bm *BitMap) ToSlice() (arr []uint32) {
-	arr = make([]uint32, 0, bm.len)
-	for i, v := range bm.words {
-		if v == 0 {
-			continue
-		}
-		for j := uint32(0); j < bitSize; j++ {
-			// bit and is not 0
-			if v&(1<<j) != 0 {
-				arr = append(arr, bitSize*uint32(i)+j)
-			}
-		}
-	}
-	return
-}
-
-// RevRange: Not recommended for poor performance
+// RevRange
 func (bm *BitMap) RevRange(f func(uint32) bool) {
 	for i := len(bm.words) - 1; i >= 0; i-- {
 		v := bm.words[i]
