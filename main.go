@@ -42,32 +42,6 @@ func testTrie() {
 	fmt.Println()
 }
 
-func testList() {
-	fmt.Println("===== start test List =====")
-	db := store.DB(0)
-	defer db.Save()
-
-	var list *structx.List[int]
-
-	list, err := store.GetList[int](db, "list")
-	if err != nil {
-		// not exist
-		fmt.Println("get list error:", err)
-		list = structx.NewList[int]()
-		for i := 0; i < 10; i++ {
-			list.LPush(gofakeit.Day())
-		}
-		db.Set("list", list)
-	}
-
-	fmt.Println("list:", list.Values())
-	fmt.Println("list sorted:", list.Sort(func(i, j int) bool {
-		return i < j
-	}).Values())
-
-	fmt.Println()
-}
-
 func testValue() {
 	fmt.Println("===== start test Value =====")
 	db := store.DB(0)
@@ -185,7 +159,6 @@ func testTTL() {
 
 func main() {
 	testValue()
-	testList()
 	testTrie()
 	testCustom()
 	testTTL()
