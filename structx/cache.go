@@ -17,8 +17,7 @@ var (
 	TickDuration = time.Millisecond
 )
 
-type cacheItem[K string, V any] struct {
-	K K
+type cacheItem[V any] struct {
 	V V
 	T int64 // TTL
 }
@@ -34,10 +33,10 @@ type Cache[K string, V any] struct {
 	onExpired func(K, V)
 
 	// data map
-	m *SyncMap[K, *cacheItem[K, V]]
+	m *SyncMap[K, *cacheItem[V]]
 
 	// expired key-value pairs rbtree
-	rb *RBTree[int64, *cacheItem[K, V]]
+	rb *RBTree[int64, K]
 }
 
 func (c *Cache[K, V]) now() int64 {
@@ -49,9 +48,9 @@ func NewCache[V any]() *Cache[string, V] {
 	cache := &Cache[string, V]{
 		_now: time.Now().UnixNano(),
 
-		m: NewSyncMap[*cacheItem[string, V]](),
+		m: NewSyncMap[*cacheItem[V]](),
 
-		rb: NewRBTree[int64, *cacheItem[string, V]](),
+		rb: NewRBTree[int64, string](),
 	}
 	go cache.eviction()
 
@@ -98,7 +97,7 @@ func (c *Cache[K, V]) Set(key K, value V) {
 		item.V = value
 
 	} else {
-		item = &cacheItem[K, V]{key, value, NoTTL}
+		item = &cacheItem[V]{value, NoTTL}
 		c.m.Set(key, item)
 	}
 }
@@ -113,8 +112,7 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 		item.T = c.now() + int64(ttl) + atomic.AddInt64(&c._count, 1)
 
 	} else {
-		item = &cacheItem[K, V]{
-			key,
+		item = &cacheItem[V]{
 			val,
 			c.now() + int64(ttl) + atomic.AddInt64(&c._count, 1),
 		}
@@ -122,7 +120,7 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 	}
 
 	// insert
-	c.rb.Insert(item.T, item)
+	c.rb.Insert(item.T, key)
 	return ok
 }
 
@@ -164,7 +162,7 @@ func (c *Cache[K, V]) Remove(key K) bool {
 // Clear
 func (c *Cache[K, V]) Clear() {
 	c.m.Clear()
-	c.rb = NewRBTree[int64, *cacheItem[K, V]]()
+	c.rb = NewRBTree[int64, K]()
 }
 
 // Count
@@ -190,10 +188,13 @@ func (c *Cache[K, V]) eviction() {
 			}
 
 			c.rb.Delete(f.Key)
-			c.m.Remove(f.Value.K)
-			// on expired
-			if c.onExpired != nil {
-				c.onExpired(f.Value.K, f.Value.V)
+			item, ok := c.m.Get(f.Value)
+			if ok {
+				c.m.Remove(f.Value)
+				// on expired
+				if c.onExpired != nil {
+					c.onExpired(f.Value, item.V)
+				}
 			}
 		}
 	}
@@ -207,16 +208,16 @@ func (c *Cache[K, V]) UnmarshalJSON(src []byte) error {
 	c.Clear()
 
 	// init map
-	var tmp map[K]*cacheItem[K, V]
+	var tmp map[K]*cacheItem[V]
 	if err := base.UnmarshalJSON(src, &tmp); err != nil {
 		return err
 	}
 	c.m.MSet(tmp)
 
 	// init tree
-	c.rb = NewRBTree[int64, *cacheItem[K, V]]()
-	for _, item := range tmp {
-		c.rb.Insert(item.T, item)
+	c.rb = NewRBTree[int64, K]()
+	for k, item := range tmp {
+		c.rb.Insert(item.T, k)
 	}
 	return nil
 }
