@@ -5,47 +5,47 @@ import (
 	"testing"
 )
 
-func getTrie() *Trie[int] {
-	tree := NewTrie[int]()
+func getTrie() *Trie[struct{}] {
+	tree := NewTrie[struct{}]()
 	for i := 0; i < 10000; i++ {
-		tree.Put("xgz"+strconv.Itoa(i), i)
+		tree.Put("xgz"+strconv.Itoa(i), struct{}{})
 	}
 	return tree
 }
 
-func getRBTree() *RBTree[string, int] {
-	tree := NewRBTree[string, int]()
+func getRBTree() *RBTree[string, struct{}] {
+	tree := NewRBTree[string, struct{}]()
 	for i := 0; i < 10000; i++ {
-		tree.Insert("xgz"+strconv.Itoa(i), i)
+		tree.Insert("xgz"+strconv.Itoa(i), struct{}{})
 	}
 	return tree
 }
 
-func getMap() map[string]int {
-	tree := map[string]int{}
+func getMap() map[string]struct{} {
+	tree := map[string]struct{}{}
 	for i := 0; i < 10000; i++ {
-		tree["xgz"+strconv.Itoa(i)] = i
+		tree["xgz"+strconv.Itoa(i)] = struct{}{}
 	}
 	return tree
 }
 
 // Put
 func BenchmarkTriePut(b *testing.B) {
-	tree := NewTrie[int]()
-	for i := 0; i < b.N; i++ {
-		tree.Put("xgz"+strconv.Itoa(i), i)
+	tree := NewTrie[struct{}]()
+	for i := 0; i < 3125*10000; i++ {
+		tree.Put("xgz"+strconv.Itoa(i), struct{}{})
 	}
 }
 func BenchmarkRBTreePut(b *testing.B) {
-	tree := NewRBTree[string, int]()
-	for i := 0; i < b.N; i++ {
-		tree.Insert("xgz"+strconv.Itoa(i), i)
+	tree := NewRBTree[string, struct{}]()
+	for i := 0; i < 3125*10000; i++ {
+		tree.Insert("xgz"+strconv.Itoa(i), struct{}{})
 	}
 }
 func BenchmarkMapPut(b *testing.B) {
-	tree := map[string]int{}
-	for i := 0; i < b.N; i++ {
-		tree["xgz"+strconv.Itoa(i)] = i
+	tree := map[string]struct{}{}
+	for i := 0; i < 3125*10000; i++ {
+		tree["xgz"+strconv.Itoa(i)] = struct{}{}
 	}
 }
 
@@ -66,13 +66,13 @@ func BenchmarkRBTreeGet(b *testing.B) {
 }
 func BenchmarkMapGet(b *testing.B) {
 	tree := getMap()
-	var s1 int
+	var s1 struct{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s1 = tree["xgz"+strconv.Itoa(i)]
 	}
-	if s1 > 0 {
-		s1 = 0
+	if s1 == struct{}{} {
+		s1 = struct{}{}
 	}
 }
 

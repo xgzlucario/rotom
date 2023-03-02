@@ -6,25 +6,25 @@ import (
 	"time"
 )
 
-func getCache() *Cache[string, int] {
-	s := NewCache[int]()
+func getCache() *Cache[string, struct{}] {
+	s := NewCache[struct{}]()
 	for i := 0; i < 1000000; i++ {
-		s.Set(strconv.Itoa(i), i)
+		s.Set(strconv.Itoa(i), struct{}{})
 	}
 	return s
 }
 
 func BenchmarkCacheSet(b *testing.B) {
-	s := NewCache[int]()
+	s := NewCache[struct{}]()
 	for i := 0; i < b.N; i++ {
-		s.Set(strconv.Itoa(i), i)
+		s.Set(strconv.Itoa(i), struct{}{})
 	}
 }
 
 func BenchmarkCacheSetWithTTL(b *testing.B) {
-	s := NewCache[int]()
+	s := NewCache[struct{}]()
 	for i := 0; i < b.N; i++ {
-		s.SetWithTTL(strconv.Itoa(i), i, time.Second)
+		s.SetWithTTL(strconv.Itoa(i), struct{}{}, time.Minute)
 	}
 }
 
