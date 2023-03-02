@@ -18,8 +18,8 @@ func NewCTrie[V any]() *CTrie[V] {
 	ct := &CTrie[V]{
 		shards: make([]*CTrieShard[V], 32),
 	}
-	for _, t := range ct.shards {
-		t.tree = NewTrie[V]()
+	for i := range ct.shards {
+		ct.shards[i] = &CTrieShard[V]{tree: NewTrie[V]()}
 	}
 	return ct
 }
