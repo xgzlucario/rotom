@@ -30,13 +30,13 @@ type Cache[K string, V any] struct {
 	_count int64
 
 	// call when key-value expired
-	onExpired func(K, V)
+	onExpired func(string, V)
 
 	// data map
-	m *SyncMap[K, *cacheItem[V]]
+	m *CTrie[*cacheItem[V]]
 
 	// expired key-value pairs rbtree
-	rb *RBTree[int64, K]
+	rb *RBTree[int64, string]
 }
 
 func (c *Cache[K, V]) now() int64 {
@@ -48,7 +48,7 @@ func NewCache[V any]() *Cache[string, V] {
 	cache := &Cache[string, V]{
 		_now: time.Now().UnixNano(),
 
-		m: NewSyncMap[*cacheItem[V]](),
+		m: NewCTrie[*cacheItem[V]](),
 
 		rb: NewRBTree[int64, string](),
 	}
@@ -59,11 +59,11 @@ func NewCache[V any]() *Cache[string, V] {
 
 // IsEmpty
 func (c *Cache[K, V]) IsEmpty() bool {
-	return c.m.IsEmpty()
+	return c.m.Count() == 0
 }
 
 // Get
-func (c *Cache[K, V]) Get(key K) (val V, ok bool) {
+func (c *Cache[K, V]) Get(key string) (val V, ok bool) {
 	item, ok := c.m.Get(key)
 	if !ok {
 		return
@@ -76,7 +76,7 @@ func (c *Cache[K, V]) Get(key K) (val V, ok bool) {
 }
 
 // GetWithTTL
-func (c *Cache[K, V]) GetWithTTL(key K) (v V, ttl int64, ok bool) {
+func (c *Cache[K, V]) GetWithTTL(key string) (v V, ttl int64, ok bool) {
 	item, ok := c.m.Get(key)
 	if !ok {
 		return
@@ -89,7 +89,7 @@ func (c *Cache[K, V]) GetWithTTL(key K) (v V, ttl int64, ok bool) {
 }
 
 // Set
-func (c *Cache[K, V]) Set(key K, value V) {
+func (c *Cache[K, V]) Set(key string, value V) {
 	// if exist
 	item, ok := c.m.Get(key)
 	if ok {
@@ -98,12 +98,12 @@ func (c *Cache[K, V]) Set(key K, value V) {
 
 	} else {
 		item = &cacheItem[V]{value, NoTTL}
-		c.m.Set(key, item)
+		c.m.Put(key, item)
 	}
 }
 
 // SetWithTTL
-func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
+func (c *Cache[K, V]) SetWithTTL(key string, val V, ttl time.Duration) bool {
 	item, ok := c.m.Get(key)
 	// exist
 	if ok {
@@ -116,7 +116,7 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 			val,
 			c.now() + int64(ttl) + atomic.AddInt64(&c._count, 1),
 		}
-		c.m.Set(key, item)
+		c.m.Put(key, item)
 	}
 
 	// insert
@@ -125,7 +125,7 @@ func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
 }
 
 // Persist
-func (c *Cache[K, V]) Persist(key K) bool {
+func (c *Cache[K, V]) Persist(key string) bool {
 	item, ok := c.m.Get(key)
 	if !ok {
 		return false
@@ -139,18 +139,18 @@ func (c *Cache[K, V]) Persist(key K) bool {
 }
 
 // Keys
-func (c *Cache[K, V]) Keys() []K {
+func (c *Cache[K, V]) Keys() []string {
 	return c.m.Keys()
 }
 
 // WithExpired
-func (c *Cache[K, V]) WithExpired(f func(K, V)) *Cache[K, V] {
+func (c *Cache[K, V]) WithExpired(f func(string, V)) *Cache[K, V] {
 	c.onExpired = f
 	return c
 }
 
 // Remove
-func (c *Cache[K, V]) Remove(key K) bool {
+func (c *Cache[K, V]) Remove(key string) bool {
 	item, ok := c.m.Get(key)
 	if ok {
 		c.m.Remove(key)
@@ -161,8 +161,8 @@ func (c *Cache[K, V]) Remove(key K) bool {
 
 // Clear
 func (c *Cache[K, V]) Clear() {
-	c.m.Clear()
-	c.rb = NewRBTree[int64, K]()
+	c.m = NewCTrie[*cacheItem[V]]()
+	c.rb = NewRBTree[int64, string]()
 }
 
 // Count
@@ -201,21 +201,21 @@ func (c *Cache[K, V]) eviction() {
 }
 
 func (c *Cache[K, V]) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(c.m.Items())
+	return nil, nil
 }
 
 func (c *Cache[K, V]) UnmarshalJSON(src []byte) error {
 	c.Clear()
 
 	// init map
-	var tmp map[K]*cacheItem[V]
+	var tmp map[string]*cacheItem[V]
 	if err := base.UnmarshalJSON(src, &tmp); err != nil {
 		return err
 	}
-	c.m.MSet(tmp)
+	// c.m.MSet(tmp)
 
 	// init tree
-	c.rb = NewRBTree[int64, K]()
+	c.rb = NewRBTree[int64, string]()
 	for k, item := range tmp {
 		c.rb.Insert(item.T, k)
 	}
