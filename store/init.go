@@ -2,8 +2,8 @@ package store
 
 import (
 	"fmt"
+	"log"
 	"os"
-	"time"
 
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -15,17 +15,12 @@ const (
 var (
 	// database store path
 	StorePath = "db/"
-
-	// datatbase store duration
-	StoreDuration = time.Second
-
-	// enabled persist
-	Persist = true
 )
 
 type Store struct {
 	id        int
 	storePath string
+	logger    *log.Logger
 	m         *structx.Cache[string, any]
 }
 
@@ -44,19 +39,13 @@ func init() {
 		// init
 		dbs[i] = &Store{
 			id:        i,
-			storePath: fmt.Sprintf("%s%d.bin", StorePath, i),
+			storePath: fmt.Sprintf("%s%d.log", StorePath, i),
 			m:         structx.NewCache[any](),
 		}
 
-		// load
-		dbs[i].unmarshal()
+		dbs[i].logger = NewLogger(dbs[i].storePath)
 
-		// save
-		go func(i int) {
-			for {
-				time.Sleep(StoreDuration)
-				dbs[i].marshal()
-			}
-		}(i)
+		// load
+		dbs[i].load()
 	}
 }

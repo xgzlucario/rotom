@@ -15,7 +15,6 @@ import (
 func testTrie() {
 	fmt.Println("===== start test Trie =====")
 	db := store.DB(0)
-	defer db.Save()
 
 	var tree *structx.Trie[int]
 
@@ -45,7 +44,6 @@ func testTrie() {
 func testValue() {
 	fmt.Println("===== start test Value =====")
 	db := store.DB(0)
-	defer db.Save()
 
 	// incr
 	fmt.Println(db.Incr("incr-test", 2))
@@ -100,7 +98,6 @@ func testCustom() {
 	fmt.Println("===== start test Custom =====")
 
 	db := store.DB(0)
-	defer db.Save()
 
 	stu, err := store.GetCustomStruct(db, "stu", new(Stu))
 	if err != nil {
@@ -118,11 +115,10 @@ func testStress() {
 	fmt.Println("===== start test Stress =====")
 
 	db := store.DB(5)
-	defer db.Save()
 
 	a := time.Now()
 	// Simulate storing mobile sms code of 100 million users
-	for i := 0; i <= 500*10000; i++ {
+	for i := 0; i <= 10000*10000; i++ {
 		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute*5)
 		// stats
 		if i%(10*10000) == 0 {
@@ -141,8 +137,6 @@ func testTTL() {
 	db.WithExpired(func(s string, a any) {
 		fmt.Println("exp", s, a)
 	})
-
-	defer db.Save()
 
 	db.Set("xgz", "123")
 	db.SetWithTTL("xgz-1", "234", time.Second*1)

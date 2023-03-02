@@ -8,7 +8,7 @@ import (
 
 func getZSet1() *ZSet[int64, float64] {
 	s := NewZSet[int64, float64]()
-	for i := 0; i < thousand; i++ {
+	for i := 0; i < 10000; i++ {
 		s.Incr(0, float64(i))
 	}
 	return s
@@ -16,7 +16,7 @@ func getZSet1() *ZSet[int64, float64] {
 
 func getZSet2() *zset.SortedSet {
 	s := zset.New()
-	for i := 0; i < thousand; i++ {
+	for i := 0; i < 10000; i++ {
 		s.Set(float64(i), int64(i), nil)
 	}
 	return s

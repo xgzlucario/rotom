@@ -256,15 +256,27 @@ func (t *Trie[T]) WalkPath(prefix string, f func(string, T) bool) {
 // MarshalJSON
 func (t *Trie[T]) MarshalJSON() ([]byte, error) {
 	keys, vals := t.collect(t.root, nil, nil, nil)
-	return base.MarshalJSON(base.GTreeJSON[string, T]{K: keys, V: vals})
+
+	src, err := base.MarshalJSON(base.GTreeJSON[string, T]{K: keys, V: vals})
+	if err != nil {
+		return nil, err
+	}
+
+	// compress
+	return base.ZstdEncode(src), nil
 }
 
 // UnmarshalJSON
 func (t *Trie[T]) UnmarshalJSON(src []byte) error {
 	var tree base.GTreeJSON[string, T]
+
+	// decompress
+	src = base.ZstdEncode(src)
+
 	if err := base.UnmarshalJSON(src, &tree); err != nil {
 		return err
 	}
+
 	// set
 	for i, k := range tree.K {
 		t.Put(k, tree.V[i])

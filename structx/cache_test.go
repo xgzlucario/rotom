@@ -8,7 +8,7 @@ import (
 
 func getCache() *Cache[string, int] {
 	s := NewCache[int]()
-	for i := 0; i < million; i++ {
+	for i := 0; i < 1000000; i++ {
 		s.Set(strconv.Itoa(i), i)
 	}
 	return s

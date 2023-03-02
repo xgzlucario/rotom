@@ -6,7 +6,7 @@ import (
 
 func getBitMap() *BitMap {
 	bm := NewBitMap()
-	for i := 0; i < billion; i++ {
+	for i := 0; i < 100000000; i++ {
 		bm.Add(uint32(i))
 	}
 	return bm

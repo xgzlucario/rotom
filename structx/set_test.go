@@ -25,7 +25,7 @@ func BenchmarkAdd(b *testing.B) {
 }
 
 func BenchmarkExist(b *testing.B) {
-	s := getListSet(million)
+	s := getListSet(1000000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Exist(1622)
@@ -33,7 +33,7 @@ func BenchmarkExist(b *testing.B) {
 }
 
 func BenchmarkRemove(b *testing.B) {
-	s := getListSet(million)
+	s := getListSet(1000000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Remove(i)
@@ -41,7 +41,7 @@ func BenchmarkRemove(b *testing.B) {
 }
 
 func BenchmarkRandomPop(b *testing.B) {
-	s := getListSet(million)
+	s := getListSet(1000000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.RandomPop()
@@ -49,7 +49,7 @@ func BenchmarkRandomPop(b *testing.B) {
 }
 
 func BenchmarkEqual(b *testing.B) {
-	s := getListSet(thousand)
+	s := getListSet(1000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Equal(s)
@@ -57,7 +57,7 @@ func BenchmarkEqual(b *testing.B) {
 }
 
 func BenchmarkUnion(b *testing.B) {
-	s := getListSet(thousand)
+	s := getListSet(1000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Union(s)
@@ -65,7 +65,7 @@ func BenchmarkUnion(b *testing.B) {
 }
 
 func BenchmarkIntersect(b *testing.B) {
-	s := getListSet(thousand)
+	s := getListSet(1000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Intersect(s)
@@ -73,7 +73,7 @@ func BenchmarkIntersect(b *testing.B) {
 }
 
 func BenchmarkDiff(b *testing.B) {
-	s := getListSet(thousand)
+	s := getListSet(1000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Difference(s)
@@ -81,7 +81,7 @@ func BenchmarkDiff(b *testing.B) {
 }
 
 func BenchmarkRange(b *testing.B) {
-	s := getListSet(thousand)
+	s := getListSet(1000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.Range(func(v int) bool {
@@ -91,7 +91,7 @@ func BenchmarkRange(b *testing.B) {
 }
 
 func BenchmarkIsSubSet(b *testing.B) {
-	s := getListSet(thousand)
+	s := getListSet(1000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		s.IsSubSet(s)

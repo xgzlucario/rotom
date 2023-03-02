@@ -14,16 +14,37 @@ func DB(i int) *Store {
 
 // Set
 func (s *Store) Set(key string, value any) {
-	s.m.Set(key, value)
+	defer s.m.Set(key, value)
+
+	// persist
+	_, ok := value.(base.Marshaler)
+	if ok {
+		src, _ := value.(base.Marshaler).MarshalJSON()
+		s.logger.Printf("%b %s %s -1\n", OP_SET, key, src)
+
+	} else {
+		s.logger.Printf("%b %s %v -1\n", OP_SET, key, value)
+	}
 }
 
 // SetWithTTL
 func (s *Store) SetWithTTL(key string, value any, ttl time.Duration) {
-	s.m.SetWithTTL(key, value, ttl)
+	defer s.m.SetWithTTL(key, value, ttl)
+
+	// persist
+	_, ok := value.(base.Marshaler)
+	if ok {
+		src, _ := value.(base.Marshaler).MarshalJSON()
+		s.logger.Printf("%b %s %v %d\n", OP_SET, key, src, ttl)
+
+	} else {
+		s.logger.Printf("%b %s %v %d\n", OP_SET, key, value, ttl)
+	}
 }
 
 // Remove
 func (s *Store) Remove(key string) bool {
+	s.logger.Printf("%b %s\n", OP_DELETE, key)
 	return s.m.Remove(key)
 }
 
@@ -41,11 +62,6 @@ func (c *Store) WithExpired(f func(string, any)) *Store {
 // Keys
 func (s *Store) Keys() []string {
 	return s.m.Keys()
-}
-
-// Save
-func (s *Store) Save() {
-	s.marshal()
 }
 
 // Flush

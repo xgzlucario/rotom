@@ -10,7 +10,7 @@ var defaultSign = getSignIn()
 func getSignIn() *SignIn {
 	s := NewSignIn()
 	now := time.Now()
-	for i := 0; i < billion; i++ {
+	for i := 0; i < 1000000; i++ {
 		s.AddRecord(1, now)
 		now = now.Add(time.Hour * 24)
 	}
