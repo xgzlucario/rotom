@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	OP_SET byte = iota + 1
-	OP_SET_WITH_TTL
-	OP_DELETE
-	OP_PERSIST
+	OP_SET          = "1"
+	OP_SET_WITH_TTL = "2"
+	OP_REMOVE       = "3"
+	OP_PERSIST      = "4"
 )
 
 func NewLogger(path string) *log.Logger {

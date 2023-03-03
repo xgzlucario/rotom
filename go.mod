@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.20.1
-	github.com/bytedance/sonic v1.8.2
+	github.com/bytedance/sonic v1.8.3
 	github.com/klauspost/compress v1.16.0
 	github.com/liyiheng/zset v0.0.0-20211012035528-6679b37ff27a
 	github.com/orcaman/concurrent-map/v2 v2.0.1

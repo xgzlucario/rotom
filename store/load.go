@@ -1,45 +1,34 @@
 package store
 
-func (s *Store) marshal() {
-	// if !Persist {
-	// 	return
-	// }
-
-	// // empty
-	// if s.m.IsEmpty() {
-	// 	return
-	// }
-
-	// // marshal
-	// src, _ := s.m.MarshalJSON()
-
-	// // compress
-	// src = s2.EncodeSnappy(nil, src)
-
-	// if err := os.WriteFile(s.storePath, src, 0644); err != nil {
-	// 	panic(err)
-	// }
-}
+import (
+	"bufio"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
 
 func (s *Store) load() {
-	// if !Persist {
-	// 	return
-	// }
+	// open file
+	fs, err := os.Open(s.storePath)
+	if err != nil {
+		return
+	}
 
-	// // read file
-	// src, err := os.ReadFile(s.storePath)
-	// if err != nil {
-	// 	return
-	// }
+	// read line
+	for buf := bufio.NewScanner(fs); buf.Scan(); {
+		args := strings.Split(buf.Text(), "|")
 
-	// // decompress
-	// src, err = s2.Decode(nil, src)
-	// if err != nil {
-	// 	panic(err)
-	// }
+		switch args[0] {
+		case OP_SET:
+			s.m.Set(args[1], args[2])
 
-	// // unmarshal
-	// if err := s.m.UnmarshalJSON(src); err != nil {
-	// 	panic(err)
-	// }
+		case OP_SET_WITH_TTL:
+			ttl, _ := strconv.Atoi(args[3])
+			s.m.SetWithTTL(args[1], args[2], time.Duration(ttl))
+
+		case OP_REMOVE:
+			s.m.Remove(args[1])
+		}
+	}
 }

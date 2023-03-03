@@ -14,37 +14,35 @@ func DB(i int) *Store {
 
 // Set
 func (s *Store) Set(key string, value any) {
-	defer s.m.Set(key, value)
-
-	// persist
 	_, ok := value.(base.Marshaler)
 	if ok {
 		src, _ := value.(base.Marshaler).MarshalJSON()
-		s.logger.Printf("%b %s %s -1\n", OP_SET, key, src)
+		s.logger.Printf("%s|%s|%s\n", OP_SET, key, src)
 
 	} else {
-		s.logger.Printf("%b %s %v -1\n", OP_SET, key, value)
+		s.logger.Printf("%s|%s|%v\n", OP_SET, key, value)
 	}
+
+	s.m.Set(key, value)
 }
 
 // SetWithTTL
 func (s *Store) SetWithTTL(key string, value any, ttl time.Duration) {
-	defer s.m.SetWithTTL(key, value, ttl)
-
-	// persist
 	_, ok := value.(base.Marshaler)
 	if ok {
 		src, _ := value.(base.Marshaler).MarshalJSON()
-		s.logger.Printf("%b %s %v %d\n", OP_SET, key, src, ttl)
+		s.logger.Printf("%s|%s|%v|%d\n", OP_SET_WITH_TTL, key, src, ttl)
 
 	} else {
-		s.logger.Printf("%b %s %v %d\n", OP_SET, key, value, ttl)
+		s.logger.Printf("%s|%s|%v|%d\n", OP_SET_WITH_TTL, key, value, ttl)
 	}
+
+	s.m.SetWithTTL(key, value, ttl)
 }
 
 // Remove
 func (s *Store) Remove(key string) bool {
-	s.logger.Printf("%b %s\n", OP_DELETE, key)
+	s.logger.Printf("%s|%s\n", OP_REMOVE, key)
 	return s.m.Remove(key)
 }
 
