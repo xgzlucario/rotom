@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -15,20 +16,41 @@ func (s *Store) load() {
 		return
 	}
 
+	ch := make(chan string, 1024)
+	var finished uint32
+
 	// read line
-	for buf := bufio.NewScanner(fs); buf.Scan(); {
-		args := strings.Split(buf.Text(), "|")
+	go func() {
+		for buf := bufio.NewScanner(fs); buf.Scan(); {
+			ch <- buf.Text()
+		}
+		atomic.StoreUint32(&finished, 1)
+	}()
 
-		switch args[0] {
-		case OP_SET:
-			s.m.Set(args[1], args[2])
+	// operation
+	for {
+		select {
+		case text := <-ch:
+			args := strings.Split(text, "|")
 
-		case OP_SET_WITH_TTL:
-			ttl, _ := strconv.Atoi(args[3])
-			s.m.SetWithTTL(args[1], args[2], time.Duration(ttl))
+			switch args[0] {
+			case OP_SET:
+				s.m.Set(args[1], args[2])
 
-		case OP_REMOVE:
-			s.m.Remove(args[1])
+			case OP_SET_WITH_TTL:
+				ttl, _ := strconv.Atoi(args[3])
+				s.m.SetWithTTL(args[1], args[2], time.Duration(ttl))
+
+			case OP_REMOVE:
+				if len(args) == 2 {
+					s.m.Remove(args[1])
+				}
+			}
+
+		default:
+			if atomic.LoadUint32(&finished) == 1 {
+				return
+			}
 		}
 	}
 }

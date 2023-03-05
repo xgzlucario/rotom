@@ -11,7 +11,7 @@ require (
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2
-	golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2
+	golang.org/x/exp v0.0.0-20230304125523-9ff063c70017
 )
 
 require (
@@ -25,7 +25,7 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
-	golang.org/x/arch v0.2.0 // indirect
-	golang.org/x/sys v0.5.0 // indirect
+	golang.org/x/arch v0.3.0 // indirect
+	golang.org/x/sys v0.6.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
