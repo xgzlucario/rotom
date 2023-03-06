@@ -34,18 +34,22 @@ func init() {
 	}
 
 	dbs = make([]*Store, DB_MAX_COUNT)
+	p := structx.NewPool()
 
 	for i := range dbs {
+		i := i
 		// init
 		dbs[i] = &Store{
 			id:        i,
 			storePath: fmt.Sprintf("%s%d.log", StorePath, i),
 			m:         structx.NewCache[any](),
 		}
-
 		dbs[i].logger = NewLogger(dbs[i].storePath)
 
 		// load
-		dbs[i].load()
+		p.Go(func() {
+			dbs[i].load()
+		})
 	}
+	p.Wait()
 }

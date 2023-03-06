@@ -153,7 +153,7 @@ func GetLSet[T comparable](s *Store, key string) (*structx.LSet[T], error) {
 
 // GetMap
 func GetMap[K comparable, V any](s *Store, key string) (structx.Map[K, V], error) {
-	return getGenericValue(s, key, structx.NewMap[K, V]())
+	return getGenericValue(s, key, structx.Map[K, V]{})
 }
 
 // GetSyncMap

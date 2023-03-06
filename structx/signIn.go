@@ -37,8 +37,8 @@ type SignIn struct {
 // NewSignIn
 func NewSignIn() *SignIn {
 	return &SignIn{
-		dateMap: NewMap[uint32, *BitMap](),
-		userMap: NewMap[uint32, *BitMap](),
+		dateMap: Map[uint32, *BitMap]{},
+		userMap: Map[uint32, *BitMap]{},
 	}
 }
 
@@ -51,10 +51,10 @@ func (s *SignIn) AddRecord(userID uint32, date time.Time) error {
 	fmt.Println(userID, dateID)
 
 	// userRecord
-	bm, ok := s.userMap.Get(userID)
+	bm, ok := s.userMap[userID]
 	if !ok {
 		bm = NewBitMap()
-		s.userMap.Set(userID, bm)
+		s.userMap[userID] = bm
 	}
 	// check if signed in
 	if ok = bm.Add(dateID); !ok {
@@ -62,10 +62,10 @@ func (s *SignIn) AddRecord(userID uint32, date time.Time) error {
 	}
 
 	// dateRecord
-	bm, ok = s.dateMap.Get(dateID)
+	bm, ok = s.dateMap[dateID]
 	if !ok {
 		bm = NewBitMap()
-		s.dateMap.Set(dateID, bm)
+		s.dateMap[dateID] = bm
 	}
 	// check if signed in
 	if ok = bm.Add(userID); !ok {
@@ -81,7 +81,7 @@ func (s *SignIn) UserCount(userId uint32) (int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	bm, ok := s.userMap.Get(userId)
+	bm, ok := s.userMap[userId]
 	if !ok {
 		return 0, errors.New("userId not exist")
 	}
@@ -95,7 +95,7 @@ func (s *SignIn) UserSignDates(userId uint32, limits ...int) []time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	bm, ok := s.userMap.Get(userId)
+	bm, ok := s.userMap[userId]
 	if !ok {
 		return nil
 	}
@@ -125,7 +125,7 @@ func (s *SignIn) UserRecentDate(userId uint32) time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	bm, ok := s.userMap.Get(userId)
+	bm, ok := s.userMap[userId]
 	if !ok {
 		return time.Time{}
 	}
@@ -140,7 +140,7 @@ func (s *SignIn) DateCount(date time.Time) (int, error) {
 	defer s.mu.RUnlock()
 
 	id := s.toDateID(date)
-	bm, ok := s.dateMap.Get(id)
+	bm, ok := s.dateMap[id]
 	if !ok {
 		return -1, base.ErrKeyNotFound(date)
 	}

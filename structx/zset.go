@@ -146,14 +146,13 @@ type zsetJSON[K, V base.Ordered] struct {
 
 func (z *ZSet[K, V]) MarshalJSON() ([]byte, error) {
 	tmp := zsetJSON[K, V]{
-		K: make([]K, 0, z.m.Len()),
-		V: make([]V, 0, z.m.Len()),
+		K: make([]K, 0, len(z.m)),
+		V: make([]V, 0, len(z.m)),
 	}
-	z.m.Range(func(key K, node *zslNode[K, V]) bool {
+	for key, node := range z.m {
 		tmp.K = append(tmp.K, key)
 		tmp.V = append(tmp.V, node.value)
-		return false
-	})
+	}
 	return base.MarshalJSON(tmp)
 }
 

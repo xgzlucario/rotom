@@ -1,7 +1,6 @@
 package structx
 
 import (
-	"fmt"
 	"unsafe"
 
 	"golang.org/x/exp/slices"
@@ -89,9 +88,4 @@ func (s array[T]) Range(f func(T) bool) {
 // Values
 func (s array[T]) Values() []T {
 	return s
-}
-
-// Print
-func (s array[T]) Print() {
-	fmt.Println(s)
 }
