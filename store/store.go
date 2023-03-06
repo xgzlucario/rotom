@@ -14,7 +14,7 @@ func DB() *store {
 
 // Set
 func (s *store) Set(key string, value any) {
-	shard := s.GetShard(key)
+	shard := s.getShard(key)
 
 	_, ok := value.(base.Marshaler)
 	if ok {
@@ -30,7 +30,7 @@ func (s *store) Set(key string, value any) {
 
 // SetWithTTL
 func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
-	shard := s.GetShard(key)
+	shard := s.getShard(key)
 
 	_, ok := value.(base.Marshaler)
 	if ok {
@@ -46,7 +46,7 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 
 // Remove
 func (s *store) Remove(key string) bool {
-	shard := s.GetShard(key)
+	shard := s.getShard(key)
 	shard.logger.Printf("%s|%s\n", OP_REMOVE, key)
 	return shard.Remove(key)
 }
@@ -61,8 +61,8 @@ func (s *store) Count() int {
 }
 
 // GetShard
-func (s *store) GetShard(key string) *storeShard {
-	return s.shards[fnv32(key)%32]
+func (s *store) getShard(key string) *storeShard {
+	return s.shards[fnv32(key)%DB_SHARD_COUNT]
 }
 
 // WithExpired
@@ -84,7 +84,7 @@ func (s *store) Keys() []string {
 
 // getGenericValue return generic data from store
 func getGenericValue[T base.Marshaler](key string, data T) (T, error) {
-	shard := db.GetShard(key)
+	shard := db.getShard(key)
 	val, ok := shard.Get(key)
 	if !ok {
 		return data, base.ErrKeyNotFound(key)
@@ -107,7 +107,7 @@ func getGenericValue[T base.Marshaler](key string, data T) (T, error) {
 
 // getValue return base data from store
 func getValue[T base.Bases](key string, data T) (T, error) {
-	shard := db.GetShard(key)
+	shard := db.getShard(key)
 	val, ok := shard.Get(key)
 	if !ok {
 		return data, base.ErrKeyNotFound(key)

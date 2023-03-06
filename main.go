@@ -12,9 +12,10 @@ import (
 	"github.com/xgzlucario/rotom/structx"
 )
 
+var db = store.DB()
+
 func testTrie() {
 	fmt.Println("===== start test Trie =====")
-	db := store.DB()
 
 	var tree *structx.Trie[int]
 
@@ -43,7 +44,6 @@ func testTrie() {
 
 func testValue() {
 	fmt.Println("===== start test Value =====")
-	db := store.DB()
 
 	// incr
 	fmt.Println(db.Incr("incr-test", 2))
@@ -97,8 +97,6 @@ func (s *Stu) UnmarshalJSON(src []byte) error {
 func testCustom() {
 	fmt.Println("===== start test Custom =====")
 
-	db := store.DB()
-
 	stu, err := store.GetCustomStruct("stu", new(Stu))
 	if err != nil {
 		fmt.Println(err)
@@ -113,8 +111,6 @@ func testCustom() {
 
 func testStress() {
 	fmt.Println("===== start test Stress =====")
-
-	db := store.DB()
 
 	a := time.Now()
 	// Simulate storing mobile sms code of 100 million users
@@ -132,8 +128,6 @@ func testStress() {
 
 func testTTL() {
 	fmt.Println("===== start test TTL =====")
-
-	db := store.DB()
 
 	db.WithExpired(func(s string, a any) {
 		fmt.Println("exp", s, a)

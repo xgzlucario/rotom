@@ -198,9 +198,9 @@ func (c *Cache[K, V]) MarshalJSON() ([]byte, error) {
 }
 
 func (c *Cache[K, V]) UnmarshalJSON(src []byte) error {
-	c.Clear()
-
-	c.m.UnmarshalJSON(src)
+	if err := c.m.UnmarshalJSON(src); err != nil {
+		return err
+	}
 
 	// init tree
 	c.rb = NewRBTree[int64, K]()

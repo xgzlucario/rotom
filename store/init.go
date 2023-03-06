@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -38,7 +39,7 @@ func init() {
 
 	db = &store{shards: make([]*storeShard, DB_SHARD_COUNT)}
 
-	p := structx.NewPool()
+	p := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
 
 	for i := range db.shards {
 		i := i
