@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func (s *Store) load() {
+func (s *storeShard) load() {
 	// open file
 	fs, err := os.Open(s.storePath)
 	if err != nil {
@@ -21,14 +21,14 @@ func (s *Store) load() {
 
 		switch args[0] {
 		case OP_SET:
-			s.m.Set(args[1], args[2])
+			s.Cache.Set(args[1], args[2])
 
 		case OP_SET_WITH_TTL:
 			ttl, _ := strconv.Atoi(args[3])
-			s.m.SetWithTTL(args[1], args[2], time.Duration(ttl))
+			s.Cache.SetWithTTL(args[1], args[2], time.Duration(ttl))
 
 		case OP_REMOVE:
-			s.m.Remove(args[1])
+			s.Cache.Remove(args[1])
 		}
 	}
 }

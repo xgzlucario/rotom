@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DB_MAX_COUNT = 16
+	DB_SHARD_COUNT = 32
 )
 
 var (
@@ -17,15 +17,19 @@ var (
 	StorePath = "db/"
 )
 
-type Store struct {
+type storeShard struct {
 	id        int
 	storePath string
 	logger    *log.Logger
-	m         *structx.Cache[string, any]
+	*structx.Cache[string, any]
 }
 
-// databases
-var dbs []*Store
+type store struct {
+	shards []*storeShard
+}
+
+// database
+var db *store
 
 func init() {
 	// init store dir
@@ -33,23 +37,36 @@ func init() {
 		panic(err)
 	}
 
-	dbs = make([]*Store, DB_MAX_COUNT)
+	db = &store{shards: make([]*storeShard, DB_SHARD_COUNT)}
+
 	p := structx.NewPool()
 
-	for i := range dbs {
+	for i := range db.shards {
 		i := i
-		// init
-		dbs[i] = &Store{
+		db.shards[i] = &storeShard{
 			id:        i,
 			storePath: fmt.Sprintf("%s%d.log", StorePath, i),
-			m:         structx.NewCache[any](),
+			Cache:     structx.NewCache[any](),
 		}
-		dbs[i].logger = NewLogger(dbs[i].storePath)
+
+		db.shards[i].logger = NewLogger(db.shards[i].storePath)
 
 		// load
 		p.Go(func() {
-			dbs[i].load()
+			db.shards[i].load()
 		})
 	}
 	p.Wait()
+}
+
+const prime32 = uint32(16777619)
+
+func fnv32(key string) uint32 {
+	hash := uint32(2166136261)
+	keyLength := len(key)
+	for i := 0; i < keyLength; i++ {
+		hash *= prime32
+		hash ^= uint32(key[i])
+	}
+	return hash
 }

@@ -14,11 +14,11 @@ import (
 
 func testTrie() {
 	fmt.Println("===== start test Trie =====")
-	db := store.DB(0)
+	db := store.DB()
 
 	var tree *structx.Trie[int]
 
-	tree, err := store.GetTrie[int](db, "trie")
+	tree, err := store.GetTrie[int]("trie")
 	if err != nil {
 		// not exist
 		fmt.Println("get trie error:", err)
@@ -43,7 +43,7 @@ func testTrie() {
 
 func testValue() {
 	fmt.Println("===== start test Value =====")
-	db := store.DB(0)
+	db := store.DB()
 
 	// incr
 	fmt.Println(db.Incr("incr-test", 2))
@@ -97,9 +97,9 @@ func (s *Stu) UnmarshalJSON(src []byte) error {
 func testCustom() {
 	fmt.Println("===== start test Custom =====")
 
-	db := store.DB(0)
+	db := store.DB()
 
-	stu, err := store.GetCustomStruct(db, "stu", new(Stu))
+	stu, err := store.GetCustomStruct("stu", new(Stu))
 	if err != nil {
 		fmt.Println(err)
 		db.Set("stu", &Stu{"xgz", 22})
@@ -114,7 +114,7 @@ func testCustom() {
 func testStress() {
 	fmt.Println("===== start test Stress =====")
 
-	db := store.DB(5)
+	db := store.DB()
 
 	a := time.Now()
 	// Simulate storing mobile sms code of 100 million users
@@ -133,7 +133,8 @@ func testStress() {
 func testTTL() {
 	fmt.Println("===== start test TTL =====")
 
-	db := store.DB(1)
+	db := store.DB()
+
 	db.WithExpired(func(s string, a any) {
 		fmt.Println("exp", s, a)
 	})
