@@ -21,14 +21,14 @@ func (s *storeShard) load() {
 
 		switch args[0] {
 		case OP_SET:
-			s.Cache.Set(args[1], args[2])
+			s.Set(args[1], args[2])
 
 		case OP_SET_WITH_TTL:
 			ttl, _ := strconv.Atoi(args[3])
-			s.Cache.SetWithTTL(args[1], args[2], time.Duration(ttl))
+			s.SetWithTTL(args[1], args[2], time.Duration(ttl))
 
 		case OP_REMOVE:
-			s.Cache.Remove(args[1])
+			s.Remove(args[1])
 		}
 	}
 }

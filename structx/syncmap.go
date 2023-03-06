@@ -30,16 +30,16 @@ func (m *SyncMap[K, V]) Get(key K) (V, bool) {
 
 // Set
 func (m *SyncMap[K, V]) Set(key K, val V) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	m.m[key] = val
 }
 
 // Remove
 func (m *SyncMap[K, V]) Remove(key K) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	_, ok := m.m[key]
 	if ok {

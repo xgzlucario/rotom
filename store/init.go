@@ -18,7 +18,6 @@ var (
 )
 
 type storeShard struct {
-	id        int
 	storePath string
 	logger    *log.Logger
 	*structx.Cache[string, any]
@@ -44,7 +43,6 @@ func init() {
 	for i := range db.shards {
 		i := i
 		db.shards[i] = &storeShard{
-			id:        i,
 			storePath: fmt.Sprintf("%s%d.log", StorePath, i),
 			Cache:     structx.NewCache[any](),
 		}
