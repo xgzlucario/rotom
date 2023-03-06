@@ -3,8 +3,6 @@ package structx
 import (
 	"sync/atomic"
 	"time"
-
-	"github.com/xgzlucario/rotom/base"
 )
 
 const (
@@ -48,18 +46,13 @@ func NewCache[V any]() *Cache[string, V] {
 	cache := &Cache[string, V]{
 		_now: time.Now().UnixNano(),
 
-		m: NewSyncMap[*cacheItem[V]](),
+		m: NewSyncMap[string, *cacheItem[V]](),
 
 		rb: NewRBTree[int64, string](),
 	}
 	go cache.eviction()
 
 	return cache
-}
-
-// IsEmpty
-func (c *Cache[K, V]) IsEmpty() bool {
-	return c.m.IsEmpty()
 }
 
 // Get
@@ -201,22 +194,17 @@ func (c *Cache[K, V]) eviction() {
 }
 
 func (c *Cache[K, V]) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(c.m.Items())
+	return c.m.MarshalJSON()
 }
 
 func (c *Cache[K, V]) UnmarshalJSON(src []byte) error {
 	c.Clear()
 
-	// init map
-	var tmp map[K]*cacheItem[V]
-	if err := base.UnmarshalJSON(src, &tmp); err != nil {
-		return err
-	}
-	c.m.MSet(tmp)
+	c.m.UnmarshalJSON(src)
 
 	// init tree
 	c.rb = NewRBTree[int64, K]()
-	for k, item := range tmp {
+	for k, item := range c.m.m {
 		c.rb.Insert(item.T, k)
 	}
 	return nil

@@ -175,7 +175,7 @@ func GetMap[K comparable, V any](key string) (structx.Map[K, V], error) {
 
 // GetSyncMap
 func GetSyncMap[V any](key string) (*structx.SyncMap[string, V], error) {
-	return getGenericValue(key, structx.NewSyncMap[V]())
+	return getGenericValue(key, structx.NewSyncMap[string, V]())
 }
 
 // GetTrie

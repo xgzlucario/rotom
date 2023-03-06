@@ -1,40 +1,93 @@
 package structx
 
 import (
-	cmap "github.com/orcaman/concurrent-map/v2"
+	"sync"
+
 	"github.com/xgzlucario/rotom/base"
 )
 
-// SynMap: use ConcurrentMap
+// SyncMap
 type SyncMap[K comparable, V any] struct {
-	cmap.ConcurrentMap[K, V]
+	m  Map[K, V]
+	mu sync.RWMutex
 }
 
 // NewSyncMap
-func NewSyncMap[V any]() *SyncMap[string, V] {
-	return &SyncMap[string, V]{
-		cmap.New[V](),
+func NewSyncMap[K comparable, V any]() *SyncMap[K, V] {
+	return &SyncMap[K, V]{
+		m: Map[K, V]{},
 	}
 }
 
-// NewSyncMapStringer
-func NewSyncMapStringer[K cmap.Stringer, V any]() *SyncMap[K, V] {
-	return &SyncMap[K, V]{
-		cmap.NewStringer[K, V](),
+// Get
+func (m *SyncMap[K, V]) Get(key K) (V, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	val, ok := m.m[key]
+	return val, ok
+}
+
+// Set
+func (m *SyncMap[K, V]) Set(key K, val V) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	m.m[key] = val
+}
+
+// Remove
+func (m *SyncMap[K, V]) Remove(key K) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	_, ok := m.m[key]
+	if ok {
+		delete(m.m, key)
 	}
+	return ok
+}
+
+// Keys
+func (m *SyncMap[K, V]) Keys() []K {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	keys := make([]K, 0, len(m.m))
+	for k := range m.m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// Count
+func (m *SyncMap[K, V]) Count() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return len(m.m)
+}
+
+// Clear
+func (m *SyncMap[K, V]) Clear() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.m = Map[K, V]{}
 }
 
 // MarshalJSON
 func (m *SyncMap[K, V]) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(m.Items())
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return base.MarshalJSON(m.m)
 }
 
 // UnmarshalJSON
 func (m *SyncMap[K, V]) UnmarshalJSON(src []byte) error {
-	var tmp map[K]V
-	if err := base.UnmarshalJSON(src, &tmp); err != nil {
-		return err
-	}
-	m.MSet(tmp)
-	return nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return base.UnmarshalJSON(src, &m.m)
 }

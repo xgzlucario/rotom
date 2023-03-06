@@ -7,7 +7,6 @@ require (
 	github.com/bytedance/sonic v1.8.3
 	github.com/klauspost/compress v1.16.0
 	github.com/liyiheng/zset v0.0.0-20211012035528-6679b37ff27a
-	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2
