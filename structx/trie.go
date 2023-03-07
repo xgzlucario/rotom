@@ -171,8 +171,6 @@ func (t *Trie[V]) remove(x *node[V], key string, d int) *node[V] {
 		x.mid = t.remove(x.mid, key, d+1)
 
 	} else {
-		var v V
-		x.val = v
 		x.valid = false
 	}
 
@@ -210,54 +208,56 @@ func (t *Trie[V]) LongestPrefix(query string) string {
 	return query[:length]
 }
 
-func (t *Trie[V]) collect(x *node[V], prefix []byte, keys []string, vals []V) ([]string, []V) {
-	if x == nil {
-		return keys, vals
+// collect key-value recursive
+func (x *node[V]) collect(done *bool, prefix []byte, f func(string, V) bool) {
+	if done == nil {
+		done = new(bool)
 	}
-	keys, vals = t.collect(x.left, prefix, keys, vals)
+	if x == nil || *done {
+		return
+	}
+	x.left.collect(done, prefix, f)
 
 	if x.valid {
-		keys = append(keys, string(append(prefix, x.c)))
-		vals = append(vals, x.val)
+		if f(string(append(prefix, x.c)), x.val) {
+			*done = true
+			return
+		}
 	}
-
-	keys, vals = t.collect(x.mid, append(prefix, x.c), keys, vals)
-	return t.collect(x.right, prefix, keys, vals)
+	x.mid.collect(done, append(prefix, x.c), f)
+	x.right.collect(done, prefix, f)
 }
 
 // Keys return all keys.
 func (t *Trie[T]) Keys() []string {
-	keys, _ := t.collect(t.root, nil, nil, nil)
+	keys := make([]string, 0, t.Size())
+	t.root.collect(nil, nil, func(key string, _ T) bool {
+		keys = append(keys, key)
+		return false
+	})
 	return keys
 }
 
-// Walk traverses the entire tree.
-func (t *Trie[T]) Walk(f func(string, T) bool) {
-	keys, vals := t.collect(t.root, nil, nil, nil)
-
-	for i, k := range keys {
-		if f(k, vals[i]) {
-			return
-		}
-	}
-}
-
 // WalkPath traverses the tree based on prefixes.
-func (t *Trie[T]) WalkPath(prefix string, f func(string, T) bool) {
-	keys, vals := t.collect(t.root, []byte(prefix), nil, nil)
+func (t *Trie[T]) WalkPath(f func(string, T) bool, prefix ...string) {
+	if len(prefix) == 0 {
+		t.root.collect(nil, nil, f)
 
-	for i, k := range keys {
-		if f(k, vals[i]) {
-			return
-		}
+	} else {
+		t.root.collect(nil, []byte(prefix[0]), f)
 	}
 }
 
 // MarshalJSON
 func (t *Trie[T]) MarshalJSON() ([]byte, error) {
-	keys, vals := t.collect(t.root, nil, nil, nil)
+	tmp := make(map[string]T, t.Size())
 
-	src, err := base.MarshalJSON(base.GTreeJSON[string, T]{K: keys, V: vals})
+	t.root.collect(nil, nil, func(key string, val T) bool {
+		tmp[key] = val
+		return false
+	})
+
+	src, err := base.MarshalJSON(tmp)
 	if err != nil {
 		return nil, err
 	}
@@ -268,18 +268,18 @@ func (t *Trie[T]) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON
 func (t *Trie[T]) UnmarshalJSON(src []byte) error {
-	var tree base.GTreeJSON[string, T]
+	var tmp map[string]T
 
 	// decompress
 	src = base.ZstdEncode(src)
 
-	if err := base.UnmarshalJSON(src, &tree); err != nil {
+	if err := base.UnmarshalJSON(src, &tmp); err != nil {
 		return err
 	}
 
 	// set
-	for i, k := range tree.K {
-		t.Put(k, tree.V[i])
+	for k, v := range tmp {
+		t.Put(k, v)
 	}
 	return nil
 }

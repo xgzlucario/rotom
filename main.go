@@ -33,7 +33,7 @@ func testTrie() {
 	fmt.Println("size:", tree.Size())
 
 	count := 0
-	tree.Walk(func(s string, i int) bool {
+	tree.WalkPath(func(s string, i int) bool {
 		fmt.Println(s, i)
 		count++
 		return count > 5
