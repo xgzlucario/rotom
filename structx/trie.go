@@ -1,6 +1,8 @@
 package structx
 
 import (
+	"bytes"
+
 	"github.com/xgzlucario/rotom/base"
 )
 
@@ -150,7 +152,6 @@ func (t *Trie[V]) Remove(key string) {
 	if len(key) == 0 {
 		return
 	}
-
 	t.root = t.remove(t.root, key, 0)
 	t.n--
 }
@@ -209,42 +210,34 @@ func (t *Trie[V]) LongestPrefix(query string) string {
 }
 
 // collect key-value recursive
-func (x *node[V]) collect(done *bool, prefix []byte, f func(string, V) bool) {
+func (x *node[V]) collect(done *bool, prefix []byte, match []byte, f func(string, V) bool) {
 	if done == nil {
 		done = new(bool)
 	}
 	if x == nil || *done {
 		return
 	}
-	x.left.collect(done, prefix, f)
+	x.left.collect(done, prefix, match, f)
 
+	k := append(prefix, x.c)
 	if x.valid {
-		if f(string(append(prefix, x.c)), x.val) {
+		// match
+		if bytes.HasPrefix(k, match) && f(string(k), x.val) {
 			*done = true
 			return
 		}
 	}
-	x.mid.collect(done, append(prefix, x.c), f)
-	x.right.collect(done, prefix, f)
-}
-
-// Keys return all keys.
-func (t *Trie[T]) Keys() []string {
-	keys := make([]string, 0, t.Size())
-	t.root.collect(nil, nil, func(key string, _ T) bool {
-		keys = append(keys, key)
-		return false
-	})
-	return keys
+	x.mid.collect(done, k, match, f)
+	x.right.collect(done, prefix, match, f)
 }
 
 // WalkPath traverses the tree based on prefixes.
 func (t *Trie[T]) WalkPath(f func(string, T) bool, prefix ...string) {
 	if len(prefix) == 0 {
-		t.root.collect(nil, nil, f)
+		t.root.collect(nil, nil, nil, f)
 
 	} else {
-		t.root.collect(nil, []byte(prefix[0]), f)
+		t.root.collect(nil, nil, []byte(prefix[0]), f)
 	}
 }
 
@@ -252,7 +245,7 @@ func (t *Trie[T]) WalkPath(f func(string, T) bool, prefix ...string) {
 func (t *Trie[T]) MarshalJSON() ([]byte, error) {
 	tmp := make(map[string]T, t.Size())
 
-	t.root.collect(nil, nil, func(key string, val T) bool {
+	t.root.collect(nil, nil, nil, func(key string, val T) bool {
 		tmp[key] = val
 		return false
 	})

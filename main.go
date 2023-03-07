@@ -37,7 +37,7 @@ func testTrie() {
 		fmt.Println(s, i)
 		count++
 		return count > 5
-	})
+	}, "https")
 
 	fmt.Println()
 }
