@@ -3,14 +3,14 @@ module github.com/xgzlucario/rotom
 go 1.20
 
 require (
-	github.com/brianvoe/gofakeit/v6 v6.20.1
+	github.com/brianvoe/gofakeit/v6 v6.20.2
 	github.com/bytedance/sonic v1.8.3
 	github.com/klauspost/compress v1.16.0
 	github.com/liyiheng/zset v0.0.0-20211012035528-6679b37ff27a
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2
-	golang.org/x/exp v0.0.0-20230306221820-f0f767cdffd6
+	golang.org/x/exp v0.0.0-20230307190834-24139beb5833
 )
 
 require (
