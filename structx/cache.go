@@ -1,6 +1,7 @@
 package structx
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -35,6 +36,8 @@ type Cache[V any] struct {
 
 	// expired key-value pairs
 	ttl *RBTree[int64, string]
+
+	mu sync.RWMutex
 }
 
 // NewCache
@@ -53,6 +56,9 @@ func NewCache[V any]() *Cache[V] {
 
 // Get
 func (c *Cache[V]) Get(key string) (val V, ok bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	item, ok := c.data.Get(key)
 	if !ok {
 		return
@@ -66,6 +72,9 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 
 // GetWithTTL
 func (c *Cache[V]) GetWithTTL(key string) (v V, ttl int64, ok bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	item, ok := c.data.Get(key)
 	if !ok {
 		return
@@ -79,6 +88,9 @@ func (c *Cache[V]) GetWithTTL(key string) (v V, ttl int64, ok bool) {
 
 // Set
 func (c *Cache[V]) Set(key string, value V) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	// if exist
 	item, ok := c.data.Get(key)
 	if ok {
@@ -93,6 +105,9 @@ func (c *Cache[V]) Set(key string, value V) {
 
 // SetWithTTL
 func (c *Cache[V]) SetWithTTL(key string, val V, ttl time.Duration) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	item, ok := c.data.Get(key)
 	// exist
 	if ok {
@@ -115,6 +130,9 @@ func (c *Cache[V]) SetWithTTL(key string, val V, ttl time.Duration) bool {
 
 // Persist
 func (c *Cache[V]) Persist(key string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	item, ok := c.data.Get(key)
 	if !ok {
 		return false
@@ -129,22 +147,33 @@ func (c *Cache[V]) Persist(key string) bool {
 
 // Keys
 func (c *Cache[V]) Keys() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	return c.data.Keys()
 }
 
 // KeysWithPrefix
 func (c *Cache[V]) KeysWithPrefix(prefix string) []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	return c.data.KeysWithPrefix(prefix)
 }
 
 // WithExpired
-func (c *Cache[V]) WithExpired(f func(string, V)) *Cache[V] {
+func (c *Cache[V]) WithExpired(f func(string, V)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.onExpired = f
-	return c
 }
 
 // Remove
 func (c *Cache[V]) Remove(key string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	item, ok := c.data.Get(key)
 	if ok {
 		c.data.Remove(key)
@@ -155,12 +184,18 @@ func (c *Cache[V]) Remove(key string) bool {
 
 // Clear
 func (c *Cache[V]) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.data = NewTrie[*cacheItem[V]]()
 	c.ttl = NewRBTree[int64, string]()
 }
 
 // Count
 func (c *Cache[V]) Count() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	return c.data.Size()
 }
 
@@ -173,6 +208,8 @@ func (c *Cache[V]) eviction() {
 		c.ts = time.Now().UnixNano()
 		// reset count
 		atomic.SwapInt64(&c.count, 0)
+
+		c.mu.Lock()
 
 		// clear expired keys
 		for !c.ttl.Empty() {
@@ -191,23 +228,31 @@ func (c *Cache[V]) eviction() {
 				}
 			}
 		}
+		c.mu.Unlock()
 	}
 }
 
 func (c *Cache[V]) MarshalJSON() ([]byte, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	return c.data.MarshalJSON()
 }
 
 func (c *Cache[V]) UnmarshalJSON(src []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if err := c.data.UnmarshalJSON(src); err != nil {
 		return err
 	}
 
 	// init
-	keys, values := c.data.collectAll(c.data.root, nil, nil, nil)
-	for i, key := range keys {
-		c.ttl.Insert(values[i].T, key)
+	keys, vals := c.data.collectAll(c.data.root, nil, nil, nil)
+	for i, val := range vals {
+		if val.T != NoTTL {
+			c.ttl.Insert(val.T, keys[i])
+		}
 	}
-
 	return nil
 }
