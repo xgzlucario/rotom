@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func getCache() *Cache[string, struct{}] {
+func getCache() *Cache[struct{}] {
 	s := NewCache[struct{}]()
 	for i := 0; i < 1000000; i++ {
 		s.Set(strconv.Itoa(i), struct{}{})

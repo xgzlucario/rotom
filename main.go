@@ -17,54 +17,19 @@ var db = store.DB()
 func testTrie() {
 	fmt.Println("===== start test Trie =====")
 
-	var tree *structx.Trie[int]
-
 	tree, err := store.GetTrie[int]("trie")
 	if err != nil {
 		// not exist
 		fmt.Println("get trie error:", err)
 		tree = structx.NewTrie[int]()
-		for i := 0; i < 99999; i++ {
-			tree.Put(gofakeit.URL(), gofakeit.NanoSecond())
+		for i := 0; i < 100; i++ {
+			tree.Put(gofakeit.Name(), gofakeit.Minute())
 		}
 		db.Set("trie", tree)
 	}
 
 	fmt.Println("size:", tree.Size())
-
-	count := 0
-	tree.WalkPath(func(s string, i int) bool {
-		fmt.Println(s, i)
-		count++
-		return count > 5
-	}, "https")
-
-	fmt.Println()
-}
-
-func testValue() {
-	fmt.Println("===== start test Value =====")
-
-	// incr
-	fmt.Println(db.Incr("incr-test", 2))
-
-	// string
-	str, err := db.GetString("str")
-	if err != nil {
-		fmt.Println(err)
-		db.Set("str", "xgz123")
-	} else {
-		fmt.Println("str:", str)
-	}
-
-	// time.Time
-	t, err := db.GetTime("time")
-	if err != nil {
-		fmt.Println(err)
-		db.Set("time", time.Now())
-	} else {
-		fmt.Println("time:", t)
-	}
+	fmt.Println(tree.Keys())
 
 	fmt.Println()
 }
@@ -113,6 +78,8 @@ func testStress() {
 	fmt.Println("===== start test Stress =====")
 
 	a := time.Now()
+	db.WithExpired(nil)
+
 	// Simulate storing mobile sms code of 100 million users
 	for i := 0; i <= 10000*10000; i++ {
 		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute*5)
@@ -147,7 +114,6 @@ func testTTL() {
 }
 
 func main() {
-	testValue()
 	testTrie()
 	testCustom()
 	testTTL()

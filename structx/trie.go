@@ -1,12 +1,10 @@
 package structx
 
 import (
-	"bytes"
-
 	"github.com/xgzlucario/rotom/base"
 )
 
-// A Trie is a data structure that supports common prefix operations.
+// Trie
 type Trie[V any] struct {
 	n    int
 	root *node[V]
@@ -65,17 +63,17 @@ func (n *node[V]) deleteMinChild() *node[V] {
 	return n
 }
 
-// New returns an empty trie.
+// NewTrie
 func NewTrie[V any]() *Trie[V] {
 	return &Trie[V]{}
 }
 
-// Size returns the size of the trie.
+// Size
 func (t *Trie[V]) Size() int {
 	return t.n
 }
 
-// Contains returns whether this trie contains 'key'.
+// Contains
 func (t *Trie[V]) Contains(key string) bool {
 	if len(key) == 0 {
 		return false
@@ -84,7 +82,7 @@ func (t *Trie[V]) Contains(key string) bool {
 	return ok
 }
 
-// Get returns the value associated with 'key'.
+// Get
 func (t *Trie[V]) Get(key string) (v V, ok bool) {
 	if len(key) == 0 {
 		return v, false
@@ -100,22 +98,19 @@ func (t *Trie[V]) get(x *node[V], key string, d int) *node[V] {
 	if x == nil || len(key) == 0 {
 		return nil
 	}
-
 	c := key[d]
 	if c < x.c {
 		return t.get(x.left, key, d)
-
 	} else if c > x.c {
 		return t.get(x.right, key, d)
-
 	} else if d < len(key)-1 {
 		return t.get(x.mid, key, d+1)
-
+	} else {
+		return x
 	}
-	return x
 }
 
-// Put associates 'val' with 'key'.
+// Put
 func (t *Trie[V]) Put(key string, val V) {
 	if len(key) == 0 {
 		return
@@ -146,8 +141,7 @@ func (t *Trie[V]) put(x *node[V], key string, val V, d int) *node[V] {
 	return x
 }
 
-// Remove removes the value associated with 'key', along with any nodes of the key that are no
-// longer used.
+// Remove
 func (t *Trie[V]) Remove(key string) {
 	if len(key) == 0 {
 		return
@@ -182,97 +176,68 @@ func (t *Trie[V]) remove(x *node[V], key string, d int) *node[V] {
 	return x
 }
 
-// LongestPrefix returns the key that is the longest prefix of 'query'.
-func (t *Trie[V]) LongestPrefix(query string) string {
-	if len(query) == 0 {
-		return ""
+func (t *Trie[V]) collect(x *node[V], prefix []byte, queue []string) []string {
+	if x == nil {
+		return queue
 	}
-	length := 0
-	x := t.root
-	i := 0
-	for x != nil && i < len(query) {
-		c := query[i]
-		if c < x.c {
-			x = x.left
-
-		} else if c > x.c {
-			x = x.right
-
-		} else {
-			i++
-			if x.valid {
-				length = i
-			}
-			x = x.mid
-		}
-	}
-	return query[:length]
-}
-
-// collect key-value recursive
-func (x *node[V]) collect(done *bool, prefix []byte, match []byte, f func(string, V) bool) {
-	if done == nil {
-		done = new(bool)
-	}
-	if x == nil || *done {
-		return
-	}
-	x.left.collect(done, prefix, match, f)
-
-	k := append(prefix, x.c)
+	queue = t.collect(x.left, prefix, queue)
 	if x.valid {
-		// match
-		if bytes.HasPrefix(k, match) && f(string(k), x.val) {
-			*done = true
-			return
-		}
+		queue = append(queue, string(append(prefix, x.c)))
 	}
-	x.mid.collect(done, k, match, f)
-	x.right.collect(done, prefix, match, f)
+	queue = t.collect(x.mid, append(prefix, x.c), queue)
+	return t.collect(x.right, prefix, queue)
 }
 
-// WalkPath traverses the tree based on prefixes.
-func (t *Trie[T]) WalkPath(f func(string, T) bool, prefix ...string) {
-	if len(prefix) == 0 {
-		t.root.collect(nil, nil, nil, f)
-
-	} else {
-		t.root.collect(nil, nil, []byte(prefix[0]), f)
+func (t *Trie[V]) collectAll(x *node[V], prefix []byte, queue []string, value []V) ([]string, []V) {
+	if x == nil {
+		return queue, value
 	}
+	queue, value = t.collectAll(x.left, prefix, queue, value)
+	if x.valid {
+		queue = append(queue, string(append(prefix, x.c)))
+		value = append(value, x.val)
+	}
+	queue, value = t.collectAll(x.mid, append(prefix, x.c), queue, value)
+	return t.collectAll(x.right, prefix, queue, value)
+}
+
+// Keys
+func (t *Trie[V]) Keys() (queue []string) {
+	return t.collect(t.root, nil, queue)
+}
+
+// KeysWithPrefix
+func (t *Trie[V]) KeysWithPrefix(prefix string) (queue []string) {
+	if len(prefix) == 0 {
+		return t.Keys()
+	}
+	x := t.get(t.root, prefix, 0)
+	if x == nil {
+		return nil
+	}
+	if x.valid {
+		queue = []string{prefix}
+	}
+	return t.collect(x.mid, []byte(prefix), queue)
 }
 
 // MarshalJSON
 func (t *Trie[T]) MarshalJSON() ([]byte, error) {
-	tmp := make(map[string]T, t.Size())
-
-	t.root.collect(nil, nil, nil, func(key string, val T) bool {
-		tmp[key] = val
-		return false
-	})
-
-	src, err := base.MarshalJSON(tmp)
-	if err != nil {
-		return nil, err
-	}
-
-	// compress
-	return base.ZstdEncode(src), nil
+	keys, values := t.collectAll(t.root, nil, nil, nil)
+	return base.MarshalJSON(base.GTreeJSON[string, T]{K: keys, V: values})
 }
 
 // UnmarshalJSON
 func (t *Trie[T]) UnmarshalJSON(src []byte) error {
-	var tmp map[string]T
-
-	// decompress
-	src = base.ZstdEncode(src)
-
-	if err := base.UnmarshalJSON(src, &tmp); err != nil {
+	var tmp base.GTreeJSON[string, T]
+	if err := base.UnmarshalJSON(src, tmp); err != nil {
 		return err
 	}
 
 	// set
-	for k, v := range tmp {
-		t.Put(k, v)
+	t = NewTrie[T]()
+	for i, k := range tmp.K {
+		t.Put(k, tmp.V[i])
 	}
 	return nil
 }

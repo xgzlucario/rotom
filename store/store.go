@@ -35,7 +35,7 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 	_, ok := value.(base.Marshaler)
 	if ok {
 		src, _ := value.(base.Marshaler).MarshalJSON()
-		shard.logger.Printf("%s|%s|%v|%d\n", OP_SET_WITH_TTL, key, src, ttl)
+		shard.logger.Printf("%s|%s|%s|%d\n", OP_SET_WITH_TTL, key, src, ttl)
 
 	} else {
 		shard.logger.Printf("%s|%s|%v|%d\n", OP_SET_WITH_TTL, key, value, ttl)
@@ -63,6 +63,16 @@ func (s *store) Count() int {
 // GetShard
 func (s *store) getShard(key string) *storeShard {
 	return s.shards[fnv32(key)%DB_SHARD_COUNT]
+}
+
+// KeysWithPrefix
+func (s *store) KeysWithPrefix(prefix string) []string {
+	keys := make([]string, 0)
+	for _, shard := range s.shards {
+		keys = append(keys, shard.KeysWithPrefix(prefix)...)
+	}
+
+	return keys
 }
 
 // WithExpired
@@ -96,19 +106,20 @@ func getGenericValue[T base.Marshaler](key string, data T) (T, error) {
 		return obj, nil
 	}
 
-	// marshal
-	src, _ := base.MarshalJSON(val)
-	if err := data.UnmarshalJSON(src); err != nil {
+	// unmarshal
+	str := val.(string)
+	if err := data.UnmarshalJSON([]byte(str)); err != nil {
 		return data, base.ErrType(data)
 	}
+
+	shard.Set(key, data)
 
 	return data, nil
 }
 
 // getValue return base data from store
 func getValue[T base.Bases](key string, data T) (T, error) {
-	shard := db.getShard(key)
-	val, ok := shard.Get(key)
+	val, ok := db.getShard(key).Get(key)
 	if !ok {
 		return data, base.ErrKeyNotFound(key)
 	}
@@ -148,16 +159,6 @@ func (s *store) GetBool(key string) (val bool, err error) {
 	return getValue(key, val)
 }
 
-// GetTime
-func (s *store) GetTime(key string) (val time.Time, err error) {
-	var str string
-	str, err = getValue(key, str)
-	if err != nil {
-		return val, err
-	}
-	return time.Parse(time.RFC3339, str)
-}
-
 // GetList
 func GetList[T comparable](key string) (*structx.List[T], error) {
 	return getGenericValue(key, structx.NewList[T]())
@@ -174,8 +175,8 @@ func GetMap[K comparable, V any](key string) (structx.Map[K, V], error) {
 }
 
 // GetSyncMap
-func GetSyncMap[V any](key string) (*structx.SyncMap[string, V], error) {
-	return getGenericValue(key, structx.NewSyncMap[string, V]())
+func GetSyncMap[T any](key string) (*structx.SyncMap[string, T], error) {
+	return getGenericValue(key, structx.NewSyncMap[string, T]())
 }
 
 // GetTrie

@@ -32,19 +32,19 @@ func getMap() map[string]struct{} {
 // Put
 func BenchmarkTriePut(b *testing.B) {
 	tree := NewTrie[struct{}]()
-	for i := 0; i < 3125*10000; i++ {
+	for i := 0; i < b.N; i++ {
 		tree.Put("xgz"+strconv.Itoa(i), struct{}{})
 	}
 }
 func BenchmarkRBTreePut(b *testing.B) {
 	tree := NewRBTree[string, struct{}]()
-	for i := 0; i < 3125*10000; i++ {
+	for i := 0; i < b.N; i++ {
 		tree.Insert("xgz"+strconv.Itoa(i), struct{}{})
 	}
 }
 func BenchmarkMapPut(b *testing.B) {
 	tree := map[string]struct{}{}
-	for i := 0; i < 3125*10000; i++ {
+	for i := 0; i < b.N; i++ {
 		tree["xgz"+strconv.Itoa(i)] = struct{}{}
 	}
 }

@@ -21,7 +21,7 @@ var (
 type storeShard struct {
 	storePath string
 	logger    *log.Logger
-	*structx.Cache[string, any]
+	*structx.Cache[any]
 }
 
 type store struct {

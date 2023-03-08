@@ -12,7 +12,7 @@ const (
 
 var (
 	// duration of update timestamp and expired keys evictions
-	TickDuration = time.Millisecond
+	TickDuration = time.Millisecond * 10
 )
 
 type cacheItem[V any] struct {
@@ -20,35 +20,31 @@ type cacheItem[V any] struct {
 	T int64 // TTL
 }
 
-type Cache[K string, V any] struct {
+type Cache[V any] struct {
 	// current timestamp
-	_now int64
+	ts int64
 
 	// pairs count in duration
-	_count int64
+	count int64
 
 	// call when key-value expired
-	onExpired func(K, V)
+	onExpired func(string, V)
 
-	// data map
-	m *SyncMap[K, *cacheItem[V]]
+	// data trie
+	data *Trie[*cacheItem[V]]
 
-	// expired key-value pairs rbtree
-	rb *RBTree[int64, K]
-}
-
-func (c *Cache[K, V]) now() int64 {
-	return atomic.LoadInt64(&c._now)
+	// expired key-value pairs
+	ttl *RBTree[int64, string]
 }
 
 // NewCache
-func NewCache[V any]() *Cache[string, V] {
-	cache := &Cache[string, V]{
-		_now: time.Now().UnixNano(),
+func NewCache[V any]() *Cache[V] {
+	cache := &Cache[V]{
+		ts: time.Now().UnixNano(),
 
-		m: NewSyncMap[string, *cacheItem[V]](),
+		data: NewTrie[*cacheItem[V]](),
 
-		rb: NewRBTree[int64, string](),
+		ttl: NewRBTree[int64, string](),
 	}
 	go cache.eviction()
 
@@ -56,134 +52,139 @@ func NewCache[V any]() *Cache[string, V] {
 }
 
 // Get
-func (c *Cache[K, V]) Get(key K) (val V, ok bool) {
-	item, ok := c.m.Get(key)
+func (c *Cache[V]) Get(key string) (val V, ok bool) {
+	item, ok := c.data.Get(key)
 	if !ok {
 		return
 	}
 	// check valid
-	if item.T > c.now() || item.T == NoTTL {
+	if item.T > c.ts || item.T == NoTTL {
 		return item.V, true
 	}
 	return
 }
 
 // GetWithTTL
-func (c *Cache[K, V]) GetWithTTL(key K) (v V, ttl int64, ok bool) {
-	item, ok := c.m.Get(key)
+func (c *Cache[V]) GetWithTTL(key string) (v V, ttl int64, ok bool) {
+	item, ok := c.data.Get(key)
 	if !ok {
 		return
 	}
 	// check valid
-	if item.T > c.now() || item.T == NoTTL {
+	if item.T > c.ts || item.T == NoTTL {
 		return item.V, item.T, true
 	}
 	return
 }
 
 // Set
-func (c *Cache[K, V]) Set(key K, value V) {
+func (c *Cache[V]) Set(key string, value V) {
 	// if exist
-	item, ok := c.m.Get(key)
+	item, ok := c.data.Get(key)
 	if ok {
 		item.T = NoTTL
 		item.V = value
 
 	} else {
 		item = &cacheItem[V]{value, NoTTL}
-		c.m.Set(key, item)
+		c.data.Put(key, item)
 	}
 }
 
 // SetWithTTL
-func (c *Cache[K, V]) SetWithTTL(key K, val V, ttl time.Duration) bool {
-	item, ok := c.m.Get(key)
+func (c *Cache[V]) SetWithTTL(key string, val V, ttl time.Duration) bool {
+	item, ok := c.data.Get(key)
 	// exist
 	if ok {
 		item.V = val
-		c.rb.Delete(item.T)
-		item.T = c.now() + int64(ttl) + atomic.AddInt64(&c._count, 1)
+		c.ttl.Delete(item.T)
+		item.T = c.ts + int64(ttl) + atomic.AddInt64(&c.count, 1)
 
 	} else {
 		item = &cacheItem[V]{
 			val,
-			c.now() + int64(ttl) + atomic.AddInt64(&c._count, 1),
+			c.ts + int64(ttl) + atomic.AddInt64(&c.count, 1),
 		}
-		c.m.Set(key, item)
+		c.data.Put(key, item)
 	}
 
 	// insert
-	c.rb.Insert(item.T, key)
+	c.ttl.Insert(item.T, key)
 	return ok
 }
 
 // Persist
-func (c *Cache[K, V]) Persist(key K) bool {
-	item, ok := c.m.Get(key)
+func (c *Cache[V]) Persist(key string) bool {
+	item, ok := c.data.Get(key)
 	if !ok {
 		return false
 	}
 	// persist
 	if item.T != NoTTL {
-		c.rb.Delete(item.T)
+		c.ttl.Delete(item.T)
 		item.T = NoTTL
 	}
 	return true
 }
 
 // Keys
-func (c *Cache[K, V]) Keys() []K {
-	return c.m.Keys()
+func (c *Cache[V]) Keys() []string {
+	return c.data.Keys()
+}
+
+// KeysWithPrefix
+func (c *Cache[V]) KeysWithPrefix(prefix string) []string {
+	return c.data.KeysWithPrefix(prefix)
 }
 
 // WithExpired
-func (c *Cache[K, V]) WithExpired(f func(K, V)) *Cache[K, V] {
+func (c *Cache[V]) WithExpired(f func(string, V)) *Cache[V] {
 	c.onExpired = f
 	return c
 }
 
 // Remove
-func (c *Cache[K, V]) Remove(key K) bool {
-	item, ok := c.m.Get(key)
+func (c *Cache[V]) Remove(key string) bool {
+	item, ok := c.data.Get(key)
 	if ok {
-		c.m.Remove(key)
-		c.rb.Delete(item.T)
+		c.data.Remove(key)
+		c.ttl.Delete(item.T)
 	}
 	return ok
 }
 
 // Clear
-func (c *Cache[K, V]) Clear() {
-	c.m.Clear()
-	c.rb = NewRBTree[int64, K]()
+func (c *Cache[V]) Clear() {
+	c.data = NewTrie[*cacheItem[V]]()
+	c.ttl = NewRBTree[int64, string]()
 }
 
 // Count
-func (c *Cache[K, V]) Count() int {
-	return c.m.Count()
+func (c *Cache[V]) Count() int {
+	return c.data.Size()
 }
 
 // Scheduled update current timestamp and clear expired keys
-func (c *Cache[K, V]) eviction() {
+func (c *Cache[V]) eviction() {
 	for c != nil {
 		time.Sleep(TickDuration)
 
 		// update current timestamp
-		atomic.SwapInt64(&c._now, time.Now().UnixNano())
+		c.ts = time.Now().UnixNano()
 		// reset count
-		atomic.SwapInt64(&c._count, 0)
+		atomic.SwapInt64(&c.count, 0)
 
 		// clear expired keys
-		for !c.rb.Empty() {
-			f := c.rb.Iterator()
-			if f.Key > c.now() {
+		for !c.ttl.Empty() {
+			f := c.ttl.Iterator()
+			if f.Key > c.ts {
 				break
 			}
 
-			c.rb.Delete(f.Key)
-			item, ok := c.m.Get(f.Value)
+			c.ttl.Delete(f.Key)
+			item, ok := c.data.Get(f.Value)
 			if ok {
-				c.m.Remove(f.Value)
+				c.data.Remove(f.Value)
 				// on expired
 				if c.onExpired != nil {
 					c.onExpired(f.Value, item.V)
@@ -193,19 +194,20 @@ func (c *Cache[K, V]) eviction() {
 	}
 }
 
-func (c *Cache[K, V]) MarshalJSON() ([]byte, error) {
-	return c.m.MarshalJSON()
+func (c *Cache[V]) MarshalJSON() ([]byte, error) {
+	return c.data.MarshalJSON()
 }
 
-func (c *Cache[K, V]) UnmarshalJSON(src []byte) error {
-	if err := c.m.UnmarshalJSON(src); err != nil {
+func (c *Cache[V]) UnmarshalJSON(src []byte) error {
+	if err := c.data.UnmarshalJSON(src); err != nil {
 		return err
 	}
 
-	// init tree
-	c.rb = NewRBTree[int64, K]()
-	for k, item := range c.m.m {
-		c.rb.Insert(item.T, k)
+	// init
+	keys, values := c.data.collectAll(c.data.root, nil, nil, nil)
+	for i, key := range keys {
+		c.ttl.Insert(values[i].T, key)
 	}
+
 	return nil
 }
