@@ -111,7 +111,6 @@ func getGenericValue[T base.Marshaler](key string, data T) (T, error) {
 	if err := data.UnmarshalJSON([]byte(str)); err != nil {
 		return data, base.ErrType(data)
 	}
-
 	shard.Set(key, data)
 
 	return data, nil

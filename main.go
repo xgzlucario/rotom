@@ -19,19 +19,16 @@ func testTrie() {
 
 	tree, err := store.GetTrie[int]("trie")
 	if err != nil {
-		// not exist
 		fmt.Println("get trie error:", err)
 		tree = structx.NewTrie[int]()
-		for i := 0; i < 100; i++ {
-			tree.Put(gofakeit.Name(), gofakeit.Minute())
-		}
-		db.Set("trie", tree)
 	}
 
-	fmt.Println("size:", tree.Size())
-	fmt.Println(tree.Keys())
+	for i := 0; i < 5; i++ {
+		tree.Put(gofakeit.Name(), gofakeit.Minute())
+	}
 
-	fmt.Println()
+	fmt.Println(tree.Size(), tree.Keys())
+	db.Set("trie", tree)
 }
 
 // custom struct
@@ -106,7 +103,7 @@ func testTTL() {
 	db.SetWithTTL("xgz-3", "234", time.Second*5)
 
 	for i := 0; i < 6; i++ {
-		fmt.Println(db.Keys())
+		fmt.Println(db.Count())
 		time.Sleep(time.Second)
 	}
 
