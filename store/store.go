@@ -65,16 +65,6 @@ func (s *store) getShard(key string) *storeShard {
 	return s.shards[fnv32(key)%DB_SHARD_COUNT]
 }
 
-// KeysWithPrefix
-func (s *store) KeysWithPrefix(prefix string) []string {
-	keys := make([]string, 0)
-	for _, shard := range s.shards {
-		keys = append(keys, shard.KeysWithPrefix(prefix)...)
-	}
-
-	return keys
-}
-
 // WithExpired
 func (s *store) WithExpired(f func(string, any)) *store {
 	for _, s := range s.shards {
