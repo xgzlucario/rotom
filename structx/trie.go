@@ -230,7 +230,7 @@ func (t *Trie[T]) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON
 func (t *Trie[T]) UnmarshalJSON(src []byte) error {
 	var tmp base.GTreeJSON[string, T]
-	if err := base.UnmarshalJSON(src, tmp); err != nil {
+	if err := base.UnmarshalJSON(src, &tmp); err != nil {
 		return err
 	}
 
