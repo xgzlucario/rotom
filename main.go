@@ -110,7 +110,28 @@ func testTTL() {
 	fmt.Println()
 }
 
+func testBloom() {
+	fmt.Println("===== start test Bloom =====")
+
+	b, err := db.GetBloom("bloom")
+	if err != nil {
+		fmt.Println("get bloom error: ", err)
+
+		b = structx.NewBloom()
+		b.AddString("xgz123").AddString("qwe456")
+
+		fmt.Println(b.TestString("xgz123"), b.TestString("xgz234"))
+		db.Set("bloom", b)
+
+	} else {
+		fmt.Println("read bloom success")
+		fmt.Println(b.TestString("xgz123"), b.TestString("xgz234"))
+	}
+	fmt.Println()
+}
+
 func main() {
+	testBloom()
 	testTrie()
 	testCustom()
 	testTTL()

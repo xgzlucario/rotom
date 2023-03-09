@@ -342,6 +342,7 @@ func (b *RBTree[K, V]) MarshalJSON() ([]byte, error) {
 		tmp.K = append(tmp.K, f.Key)
 		tmp.V = append(tmp.V, f.Value)
 	}
+
 	return base.MarshalJSON(tmp)
 }
 
@@ -355,5 +356,6 @@ func (b *RBTree[K, V]) UnmarshalJSON(src []byte) error {
 	for i, k := range tmp.K {
 		b.Insert(k, tmp.V[i])
 	}
+
 	return nil
 }

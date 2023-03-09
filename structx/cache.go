@@ -31,7 +31,7 @@ type Cache[V any] struct {
 	// call when key-value expired
 	onExpired func(string, V)
 
-	// data trie
+	// data
 	data Map[string, *cacheItem[V]]
 
 	// expired key-value pairs
@@ -238,12 +238,11 @@ func (c *Cache[V]) UnmarshalJSON(src []byte) error {
 	if err := c.data.UnmarshalJSON(src); err != nil {
 		return err
 	}
-
-	// init
 	for key, item := range c.data {
 		if item.T != NoTTL {
 			c.ttl.Insert(item.T, key)
 		}
 	}
+
 	return nil
 }

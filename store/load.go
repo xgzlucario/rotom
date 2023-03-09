@@ -17,7 +17,7 @@ func (s *storeShard) load() {
 
 	// read line
 	for buf := bufio.NewScanner(fs); buf.Scan(); {
-		args := strings.Split(buf.Text(), "|")
+		args := strings.Split(buf.Text(), "||")
 
 		switch args[0] {
 		case OP_SET:

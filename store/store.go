@@ -1,15 +1,23 @@
 package store
 
 import (
+	"strings"
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
+	"github.com/zeebo/xxh3"
 )
 
 // DB
 func DB() *store {
 	return db
+}
+
+func assert(key string) {
+	if strings.ContainsRune(key, '|') {
+		panic("key should not contains char `|`")
+	}
 }
 
 // Set
@@ -18,11 +26,14 @@ func (s *store) Set(key string, value any) {
 
 	_, ok := value.(base.Marshaler)
 	if ok {
-		src, _ := value.(base.Marshaler).MarshalJSON()
-		shard.logger.Printf("%s|%s|%s\n", OP_SET, key, src)
+		src, err := value.(base.Marshaler).MarshalJSON()
+		if err != nil {
+			panic(err)
+		}
+		shard.logger.Printf("%s||%s||%s\n", OP_SET, key, src)
 
 	} else {
-		shard.logger.Printf("%s|%s|%v\n", OP_SET, key, value)
+		shard.logger.Printf("%s||%s||%v\n", OP_SET, key, value)
 	}
 
 	shard.Set(key, value)
@@ -34,11 +45,14 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 
 	_, ok := value.(base.Marshaler)
 	if ok {
-		src, _ := value.(base.Marshaler).MarshalJSON()
-		shard.logger.Printf("%s|%s|%s|%d\n", OP_SET_WITH_TTL, key, src, ttl)
+		src, err := value.(base.Marshaler).MarshalJSON()
+		if err != nil {
+			panic(err)
+		}
+		shard.logger.Printf("%s||%s||%s||%d\n", OP_SET_WITH_TTL, key, src, ttl)
 
 	} else {
-		shard.logger.Printf("%s|%s|%v|%d\n", OP_SET_WITH_TTL, key, value, ttl)
+		shard.logger.Printf("%s||%s||%v||%d\n", OP_SET_WITH_TTL, key, value, ttl)
 	}
 
 	shard.SetWithTTL(key, value, ttl)
@@ -47,7 +61,7 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 // Remove
 func (s *store) Remove(key string) bool {
 	shard := s.getShard(key)
-	shard.logger.Printf("%s|%s\n", OP_REMOVE, key)
+	shard.logger.Printf("%s||%s\n", OP_REMOVE, key)
 	return shard.Remove(key)
 }
 
@@ -62,7 +76,8 @@ func (s *store) Count() int {
 
 // GetShard
 func (s *store) getShard(key string) *storeShard {
-	return s.shards[fnv32(key)%DB_SHARD_COUNT]
+	assert(key)
+	return s.shards[xxh3.HashString(key)%DB_SHARD_COUNT]
 }
 
 // WithExpired
@@ -99,7 +114,7 @@ func getGenericValue[T base.Marshaler](key string, data T) (T, error) {
 	// unmarshal
 	str := val.(string)
 	if err := data.UnmarshalJSON([]byte(str)); err != nil {
-		return data, base.ErrType(data)
+		return data, err
 	}
 	shard.Set(key, data)
 
@@ -181,6 +196,11 @@ func GetZset[K, V base.Ordered](key string) (*structx.ZSet[K, V], error) {
 // GetBitMap
 func (s *store) GetBitMap(key string) (*structx.BitMap, error) {
 	return getGenericValue(key, structx.NewBitMap())
+}
+
+// GetBloom
+func (s *store) GetBloom(key string) (*structx.Bloom, error) {
+	return getGenericValue(key, structx.NewBloom())
 }
 
 // GetSignIn

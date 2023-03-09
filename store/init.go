@@ -37,35 +37,21 @@ func init() {
 		panic(err)
 	}
 
-	db = &store{shards: make([]*storeShard, DB_SHARD_COUNT)}
-
 	p := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
 
+	db = &store{shards: make([]*storeShard, DB_SHARD_COUNT)}
+	// load
 	for i := range db.shards {
 		i := i
-		db.shards[i] = &storeShard{
-			storePath: fmt.Sprintf("%s%d.log", StorePath, i),
-			Cache:     structx.NewCache[any](),
-		}
-
-		db.shards[i].logger = NewLogger(db.shards[i].storePath)
-
-		// load
 		p.Go(func() {
+			db.shards[i] = &storeShard{
+				storePath: fmt.Sprintf("%s%d.log", StorePath, i),
+				Cache:     structx.NewCache[any](),
+			}
+			db.shards[i].logger = NewLogger(db.shards[i].storePath)
 			db.shards[i].load()
 		})
 	}
+
 	p.Wait()
-}
-
-const prime32 = uint32(16777619)
-
-func fnv32(key string) uint32 {
-	hash := uint32(2166136261)
-	keyLength := len(key)
-	for i := 0; i < keyLength; i++ {
-		hash *= prime32
-		hash ^= uint32(key[i])
-	}
-	return hash
 }
