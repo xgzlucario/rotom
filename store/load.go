@@ -60,9 +60,6 @@ func (s *storeShard) load(storePath string) {
 		// PERSIST: {op}{key}
 		case OP_PERSIST:
 			s.Persist(string(bt[1:]))
-
-		default:
-			panic("unsupprt operation type")
 		}
 	}
 }
