@@ -39,7 +39,7 @@ func (s *storeShard) load() {
 						sep1 = i
 
 					} else {
-						ttl, _ := strconv.Atoi(string(bt[sep1:i]))
+						ttl, _ := strconv.Atoi(string(bt[sep1+1 : i]))
 						s.SetWithTTL(string(bt[1:sep1]), bt[i+1:], time.Duration(ttl))
 						break
 					}
