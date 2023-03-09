@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 )
+
+const separate = '|'
 
 func (s *storeShard) load() {
 	// open file
@@ -17,24 +18,41 @@ func (s *storeShard) load() {
 
 	// read line
 	for buf := bufio.NewScanner(fs); buf.Scan(); {
-		args := strings.Split(buf.Text(), "||")
+		bt := buf.Bytes()
 
-		switch args[0] {
+		switch bt[0] {
+		// SET: {op}{key}|{value}
 		case OP_SET:
-			if len(args) == 3 {
-				s.Set(args[1], args[2])
+			for i := range bt {
+				if bt[i] == separate {
+					s.Set(string(bt[1:i]), bt[i+1:])
+					break
+				}
 			}
 
+		// SET_WITH_TTL: {op}{key}|{ttl}|{value}
 		case OP_SET_WITH_TTL:
-			if len(args) == 4 {
-				ttl, _ := strconv.Atoi(args[3])
-				s.SetWithTTL(args[1], args[2], time.Duration(ttl))
+			var sep1 int
+			for i := range bt {
+				if bt[i] == separate {
+					if sep1 == 0 {
+						sep1 = i
+
+					} else {
+						ttl, _ := strconv.Atoi(string(bt[sep1:i]))
+						s.SetWithTTL(string(bt[1:sep1]), bt[i+1:], time.Duration(ttl))
+						break
+					}
+				}
 			}
 
+		// REMOVE: {op}{key}
 		case OP_REMOVE:
-			if len(args) == 2 {
-				s.Remove(args[1])
-			}
+			s.Remove(string(bt[1:]))
+
+		// PERSIST: {op}{key}
+		case OP_PERSIST:
+			s.Persist(string(bt[1:]))
 		}
 	}
 }

@@ -15,7 +15,7 @@ func DB() *store {
 }
 
 func assert(key string) {
-	if strings.ContainsRune(key, '|') {
+	if strings.ContainsRune(key, separate) {
 		panic("key should not contains char `|`")
 	}
 }
@@ -30,10 +30,10 @@ func (s *store) Set(key string, value any) {
 		if err != nil {
 			panic(err)
 		}
-		shard.logger.Printf("%s||%s||%s\n", OP_SET, key, src)
+		shard.logger.Printf("%c%s|%s\n", OP_SET, key, src)
 
 	} else {
-		shard.logger.Printf("%s||%s||%v\n", OP_SET, key, value)
+		shard.logger.Printf("%c%s|%v\n", OP_SET, key, value)
 	}
 
 	shard.Set(key, value)
@@ -49,10 +49,10 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 		if err != nil {
 			panic(err)
 		}
-		shard.logger.Printf("%s||%s||%s||%d\n", OP_SET_WITH_TTL, key, src, ttl)
+		shard.logger.Printf("%c%s|%d|%s\n", OP_SET_WITH_TTL, key, ttl, src)
 
 	} else {
-		shard.logger.Printf("%s||%s||%v||%d\n", OP_SET_WITH_TTL, key, value, ttl)
+		shard.logger.Printf("%c%s|%d|%v\n", OP_SET_WITH_TTL, key, ttl, value)
 	}
 
 	shard.SetWithTTL(key, value, ttl)
@@ -61,7 +61,7 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 // Remove
 func (s *store) Remove(key string) bool {
 	shard := s.getShard(key)
-	shard.logger.Printf("%s||%s\n", OP_REMOVE, key)
+	shard.logger.Printf("%c%s\n", OP_REMOVE, key)
 	return shard.Remove(key)
 }
 
@@ -112,8 +112,8 @@ func getGenericValue[T base.Marshaler](key string, data T) (T, error) {
 	}
 
 	// unmarshal
-	str := val.(string)
-	if err := data.UnmarshalJSON([]byte(str)); err != nil {
+	buf := val.([]byte)
+	if err := data.UnmarshalJSON(buf); err != nil {
 		return data, err
 	}
 	shard.Set(key, data)

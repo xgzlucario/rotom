@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	OP_SET          = "1"
-	OP_SET_WITH_TTL = "2"
-	OP_REMOVE       = "3"
-	OP_PERSIST      = "4"
+	OP_SET          = '1'
+	OP_SET_WITH_TTL = '2'
+	OP_REMOVE       = '3'
+	OP_PERSIST      = '4'
 )
 
 func NewLogger(path string) *log.Logger {
