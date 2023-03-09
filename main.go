@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"runtime"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
@@ -78,23 +77,16 @@ func testStress() {
 	a := time.Now()
 	db.WithExpired(nil)
 
-	p := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
-
 	// Simulate storing mobile sms code of 100 million users
 	for i := 0; i <= 10000*10000; i++ {
-		i := i
-		p.Go(func() {
-			db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute*5)
-			// stats
-			if i%(10*10000) == 0 {
-				memInfo, _ := mem.VirtualMemory()
-				fmt.Println("num:", i, "count:", db.Count())
-				fmt.Printf("mem usage: %.2f%%\n", memInfo.UsedPercent)
-			}
-		})
+		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute*5)
+		// stats
+		if i%(10*10000) == 0 {
+			memInfo, _ := mem.VirtualMemory()
+			fmt.Println("num:", i, "count:", db.Count())
+			fmt.Printf("mem usage: %.2f%%\n", memInfo.UsedPercent)
+		}
 	}
-	p.Wait()
-
 	fmt.Println("total cost:", time.Since(a))
 }
 

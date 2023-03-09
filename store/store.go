@@ -1,7 +1,6 @@
 package store
 
 import (
-	"strings"
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
@@ -12,12 +11,6 @@ import (
 // DB
 func DB() *store {
 	return db
-}
-
-func assert(key string) {
-	if strings.ContainsRune(key, separate) {
-		panic("key should not contains char `|`")
-	}
 }
 
 // Set
@@ -76,7 +69,6 @@ func (s *store) Count() int {
 
 // GetShard
 func (s *store) getShard(key string) *storeShard {
-	assert(key)
 	return s.shards[xxh3.HashString(key)%DB_SHARD_COUNT]
 }
 
