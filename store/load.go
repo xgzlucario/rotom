@@ -7,11 +7,18 @@ import (
 	"time"
 )
 
-const separate = '|'
+const (
+	OP_SET          = '1'
+	OP_SET_WITH_TTL = '2'
+	OP_REMOVE       = '3'
+	OP_PERSIST      = '4'
 
-func (s *storeShard) load() {
+	separate = '|'
+)
+
+func (s *storeShard) load(storePath string) {
 	// open file
-	fs, err := os.Open(s.storePath)
+	fs, err := os.Open(storePath)
 	if err != nil {
 		return
 	}
@@ -23,8 +30,8 @@ func (s *storeShard) load() {
 		switch bt[0] {
 		// SET: {op}{key}|{value}
 		case OP_SET:
-			for i := range bt {
-				if bt[i] == separate {
+			for i, c := range bt {
+				if c == separate {
 					s.Set(string(bt[1:i]), bt[i+1:])
 					break
 				}
@@ -33,8 +40,8 @@ func (s *storeShard) load() {
 		// SET_WITH_TTL: {op}{key}|{ttl}|{value}
 		case OP_SET_WITH_TTL:
 			var sep1 int
-			for i := range bt {
-				if bt[i] == separate {
+			for i, c := range bt {
+				if c == separate {
 					if sep1 == 0 {
 						sep1 = i
 
@@ -53,6 +60,9 @@ func (s *storeShard) load() {
 		// PERSIST: {op}{key}
 		case OP_PERSIST:
 			s.Persist(string(bt[1:]))
+
+		default:
+			panic("unsupprt operation type")
 		}
 	}
 }

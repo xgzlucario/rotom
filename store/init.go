@@ -19,8 +19,7 @@ var (
 )
 
 type storeShard struct {
-	storePath string
-	logger    *log.Logger
+	logger *log.Logger
 	*structx.Cache[any]
 }
 
@@ -44,14 +43,23 @@ func init() {
 	for i := range db.shards {
 		i := i
 		p.Go(func() {
+			storePath := fmt.Sprintf("%s%d.log", StorePath, i)
+
 			db.shards[i] = &storeShard{
-				storePath: fmt.Sprintf("%s%d.log", StorePath, i),
-				Cache:     structx.NewCache[any](),
+				logger: newLogger(storePath),
+				Cache:  structx.NewCache[any](),
 			}
-			db.shards[i].logger = NewLogger(db.shards[i].storePath)
-			db.shards[i].load()
+			db.shards[i].load(storePath)
 		})
 	}
 
 	p.Wait()
+}
+
+func newLogger(path string) *log.Logger {
+	writer, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		panic(err)
+	}
+	return log.New(writer, "", 0)
 }
