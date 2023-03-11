@@ -20,6 +20,8 @@ var (
 
 type storeShard struct {
 	logger *log.Logger
+	buffer []byte
+
 	*structx.Cache[any]
 }
 
@@ -47,8 +49,10 @@ func init() {
 
 			db.shards[i] = &storeShard{
 				logger: newLogger(storePath),
+				buffer: make([]byte, 0, bufferThreshold),
 				Cache:  structx.NewCache[any](),
 			}
+
 			db.shards[i].load(storePath)
 		})
 	}
