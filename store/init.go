@@ -48,7 +48,7 @@ func init() {
 		i := i
 		p.Go(func() {
 			// init
-			storePath := fmt.Sprintf("%s%d.log", StorePath, i)
+			storePath := fmt.Sprintf("%sdat%d", StorePath, i)
 
 			db.shards[i] = &storeShard{
 				rw:     newWriter(storePath),
@@ -59,11 +59,11 @@ func init() {
 			// load
 			db.shards[i].load(storePath)
 
-			// write buffer
+			// write
 			go func() {
 				for {
 					time.Sleep(time.Second)
-					db.shards[i].writeBuffer()
+					db.shards[i].writeBufferBlock()
 				}
 			}()
 		})

@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	endLine = []byte("|||")
+	blkSeperate = []byte("|||")
 )
 
 func (s *storeShard) load(storePath string) {
@@ -31,18 +31,14 @@ func (s *storeShard) load(storePath string) {
 	}
 
 	// read block
-	for i, block := range bytes.Split(fs, endLine) {
+	for _, cpBlk := range bytes.Split(fs, blkSeperate) {
 		// decompress
-		bt, _ := base.ZstdDecode(block)
-		if err != nil {
-			fmt.Printf("read block[%d] error", i)
-			continue
-		}
-		if len(bt) == 0 {
+		blk, _ := base.ZstdDecode(cpBlk)
+		if len(blk) == 0 {
 			continue
 		}
 
-		for _, line := range bytes.Split(bt, []byte{'\n'}) {
+		for _, line := range bytes.Split(blk, []byte{'\n'}) {
 			s.readLine(line)
 		}
 	}
@@ -65,17 +61,22 @@ func (s *storeShard) write(format string, data ...any) {
 	s.buffer = append(s.buffer, base.S2B(&str)...)
 }
 
-// write buffer to log
-func (s *storeShard) writeBuffer() {
+// write buffer block
+func (s *storeShard) writeBufferBlock() {
 	s.Lock()
 	defer s.Unlock()
 
 	if len(s.buffer) == 0 {
 		return
 	}
-	// compress
-	s.rw.Write(base.ZstdEncode(s.buffer))
-	s.rw.Write(endLine)
+	// write
+	s.buffer = append(base.ZstdEncode(s.buffer), blkSeperate...)
+	_, err := s.rw.Write(s.buffer)
+	if err != nil {
+		panic(err)
+	}
+
+	// reset
 	s.buffer = s.buffer[0:0]
 }
 
