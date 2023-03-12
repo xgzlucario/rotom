@@ -2,9 +2,10 @@ package store
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"runtime"
+	"sync"
+	"time"
 
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -19,9 +20,10 @@ var (
 )
 
 type storeShard struct {
-	logger *log.Logger
+	rw     *os.File
 	buffer []byte
 
+	sync.Mutex
 	*structx.Cache[any]
 }
 
@@ -45,25 +47,35 @@ func init() {
 	for i := range db.shards {
 		i := i
 		p.Go(func() {
+			// init
 			storePath := fmt.Sprintf("%s%d.log", StorePath, i)
 
 			db.shards[i] = &storeShard{
-				logger: newLogger(storePath),
-				buffer: make([]byte, 0, bufferThreshold),
+				rw:     newWriter(storePath),
+				buffer: make([]byte, 0),
 				Cache:  structx.NewCache[any](),
 			}
 
+			// load
 			db.shards[i].load(storePath)
+
+			// write buffer
+			go func() {
+				for {
+					time.Sleep(time.Second)
+					db.shards[i].writeBuffer()
+				}
+			}()
 		})
 	}
 
 	p.Wait()
 }
 
-func newLogger(path string) *log.Logger {
+func newWriter(path string) *os.File {
 	writer, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		panic(err)
 	}
-	return log.New(writer, "", 0)
+	return writer
 }

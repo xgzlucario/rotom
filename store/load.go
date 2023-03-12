@@ -17,8 +17,6 @@ const (
 	OP_PERSIST
 
 	separate = '|'
-
-	bufferThreshold = 1024
 )
 
 func (s *storeShard) load(storePath string) {
@@ -69,12 +67,23 @@ func (s *storeShard) load(storePath string) {
 	}
 }
 
-func (s *storeShard) writeBuffer(format string, data ...any) {
+// write data
+func (s *storeShard) write(format string, data ...any) {
 	str := fmt.Sprintf(format, data...)
-	s.buffer = append(s.buffer, base.S2B(&str)...)
+	s.Lock()
+	defer s.Unlock()
 
-	if len(s.buffer) > bufferThreshold {
-		s.logger.Printf("%s", s.buffer)
-		s.buffer = make([]byte, 0, bufferThreshold)
+	s.buffer = append(s.buffer, base.S2B(&str)...)
+}
+
+// write buffer to log
+func (s *storeShard) writeBuffer() {
+	s.Lock()
+	defer s.Unlock()
+
+	if len(s.buffer) == 0 {
+		return
 	}
+	s.rw.Write(s.buffer)
+	s.buffer = make([]byte, 0)
 }
