@@ -32,12 +32,15 @@ func (s *storeShard) load(storePath string) {
 		return
 	}
 
+	var blk []byte
 	// read block
 	for _, cpBlk := range bytes.Split(fs, blkSpr) {
 		// decompress
-		blk, _ := base.ZstdDecode(cpBlk)
-		if len(blk) == 0 {
-			continue
+		if EnabledCompress {
+			blk, _ = base.ZstdDecode(cpBlk)
+
+		} else {
+			blk = cpBlk
 		}
 
 		for _, line := range bytes.Split(blk, lineSpr) {
@@ -71,8 +74,12 @@ func (s *storeShard) writeBufferBlock() {
 	if len(s.buffer) == 0 {
 		return
 	}
+	if EnabledCompress {
+		s.buffer = base.ZstdEncode(s.buffer)
+	}
+
 	// write
-	s.buffer = append(base.ZstdEncode(s.buffer), blkSpr...)
+	s.buffer = append(s.buffer, blkSpr...)
 	_, err := s.rw.Write(s.buffer)
 	if err != nil {
 		panic(err)

@@ -69,7 +69,7 @@ func (s *store) Count() int {
 
 // GetShard
 func (s *store) getShard(key string) *storeShard {
-	return s.shards[xxh3.HashString(key)%DB_SHARD_COUNT]
+	return s.shards[xxh3.HashString(key)%ShardCount]
 }
 
 // WithExpired
@@ -131,7 +131,7 @@ func getValue[T base.Bases](key string, data T) (T, error) {
 // Incr
 func (s *store) Incr(key string, increment float64) (val float64, err error) {
 	tmp, err := s.GetFloat64(key)
-	if err != nil && err.Error() != base.ErrKeyNotFound(key).Error() {
+	if err != nil {
 		return -1, err
 	}
 

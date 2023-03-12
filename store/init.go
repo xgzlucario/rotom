@@ -10,13 +10,18 @@ import (
 	"github.com/xgzlucario/rotom/structx"
 )
 
-const (
-	DB_SHARD_COUNT = 32
-)
-
 var (
-	// database store path
+	// StorePath Of DB File
 	StorePath = "db/"
+
+	// ShardCount
+	ShardCount uint64 = 32
+
+	// Enabled Zstd Compressor
+	EnabledCompress = true
+
+	// AOF duration
+	AOFDuration = time.Second
 )
 
 type storeShard struct {
@@ -42,7 +47,7 @@ func init() {
 
 	p := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
 
-	db = &store{shards: make([]*storeShard, DB_SHARD_COUNT)}
+	db = &store{shards: make([]*storeShard, ShardCount)}
 	// load
 	for i := range db.shards {
 		i := i
@@ -51,9 +56,8 @@ func init() {
 			storePath := fmt.Sprintf("%sdat%d", StorePath, i)
 
 			db.shards[i] = &storeShard{
-				rw:     newWriter(storePath),
-				buffer: make([]byte, 0),
-				Cache:  structx.NewCache[any](),
+				rw:    newWriter(storePath),
+				Cache: structx.NewCache[any](),
 			}
 
 			// load
@@ -62,7 +66,7 @@ func init() {
 			// write
 			go func() {
 				for {
-					time.Sleep(time.Second)
+					time.Sleep(AOFDuration)
 					db.shards[i].writeBufferBlock()
 				}
 			}()
