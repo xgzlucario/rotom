@@ -23,10 +23,10 @@ func (s *store) Set(key string, value any) {
 		if err != nil {
 			panic(err)
 		}
-		shard.write("%c%s|%s\n", OP_SET, key, src)
+		shard.write("%c%s|%s%s", OP_SET, key, src, lineSpr)
 
 	} else {
-		shard.write("%c%s|%v\n", OP_SET, key, value)
+		shard.write("%c%s|%v%s", OP_SET, key, value, lineSpr)
 	}
 
 	shard.Set(key, value)
@@ -42,10 +42,10 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 		if err != nil {
 			panic(err)
 		}
-		shard.write("%c%s|%d|%s\n", OP_SET_WITH_TTL, key, ttl, src)
+		shard.write("%c%s|%d|%s%s", OP_SET_WITH_TTL, key, ttl, src, lineSpr)
 
 	} else {
-		shard.write("%c%s|%d|%v\n", OP_SET_WITH_TTL, key, ttl, value)
+		shard.write("%c%s|%d|%v%s", OP_SET_WITH_TTL, key, ttl, value, lineSpr)
 	}
 
 	shard.SetWithTTL(key, value, ttl)
@@ -54,7 +54,7 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 // Remove
 func (s *store) Remove(key string) bool {
 	shard := s.getShard(key)
-	shard.write("%c%s\n", OP_REMOVE, key)
+	shard.write("%c%s%s", OP_REMOVE, key, lineSpr)
 	return shard.Remove(key)
 }
 

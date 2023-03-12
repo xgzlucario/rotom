@@ -31,7 +31,7 @@ func B2S(buf []byte) *string {
 
 // zstd compress
 var (
-	encoder, _ = zstd.NewWriter(nil)
+	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderLevel(1))
 	decoder, _ = zstd.NewReader(nil)
 )
 

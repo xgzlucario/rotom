@@ -20,7 +20,9 @@ const (
 )
 
 var (
-	blkSeperate = []byte("|||")
+	// seperate char
+	lineSpr = []byte("///")
+	blkSpr  = []byte("|||")
 )
 
 func (s *storeShard) load(storePath string) {
@@ -31,14 +33,14 @@ func (s *storeShard) load(storePath string) {
 	}
 
 	// read block
-	for _, cpBlk := range bytes.Split(fs, blkSeperate) {
+	for _, cpBlk := range bytes.Split(fs, blkSpr) {
 		// decompress
 		blk, _ := base.ZstdDecode(cpBlk)
 		if len(blk) == 0 {
 			continue
 		}
 
-		for _, line := range bytes.Split(blk, []byte{'\n'}) {
+		for _, line := range bytes.Split(blk, lineSpr) {
 			s.readLine(line)
 		}
 	}
@@ -70,7 +72,7 @@ func (s *storeShard) writeBufferBlock() {
 		return
 	}
 	// write
-	s.buffer = append(base.ZstdEncode(s.buffer), blkSeperate...)
+	s.buffer = append(base.ZstdEncode(s.buffer), blkSpr...)
 	_, err := s.rw.Write(s.buffer)
 	if err != nil {
 		panic(err)

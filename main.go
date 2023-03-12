@@ -23,7 +23,7 @@ func testTrie() {
 		tree = structx.NewTrie[int]()
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 10; i++ {
 		tree.Put(gofakeit.Name(), gofakeit.Minute())
 	}
 
@@ -80,7 +80,7 @@ func testStress() {
 	fmt.Println("db count is", db.Count())
 
 	// Simulate storing mobile sms code of 100 million users
-	for i := 0; i <= 1000*10000; i++ {
+	for i := 0; i <= 10000*10000; i++ {
 		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute*5)
 		// stats
 		if i%(10*10000) == 0 {
@@ -136,6 +136,6 @@ func main() {
 	testBloom()
 	testTrie()
 	testCustom()
-	testTTL()
+	// testTTL()
 	testStress()
 }
