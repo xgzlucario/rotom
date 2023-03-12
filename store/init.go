@@ -68,14 +68,5 @@ func init() {
 			}()
 		})
 	}
-
 	p.Wait()
-}
-
-func newWriter(path string) *os.File {
-	writer, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		panic(err)
-	}
-	return writer
 }

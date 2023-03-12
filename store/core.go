@@ -67,6 +67,14 @@ func (s *storeShard) load(storePath string) {
 	}
 }
 
+func newWriter(path string) *os.File {
+	writer, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		panic(err)
+	}
+	return writer
+}
+
 // write data
 func (s *storeShard) write(format string, data ...any) {
 	str := fmt.Sprintf(format, data...)
@@ -85,5 +93,5 @@ func (s *storeShard) writeBuffer() {
 		return
 	}
 	s.rw.Write(s.buffer)
-	s.buffer = make([]byte, 0)
+	s.buffer = s.buffer[0:0]
 }
