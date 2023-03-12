@@ -225,23 +225,11 @@ func (t *Trie[V]) KeysWithPrefix(prefix string) (queue []string) {
 func (t *Trie[T]) MarshalJSON() ([]byte, error) {
 	keys, values := t.collectAll(t.root, nil, nil, nil)
 
-	src, err := base.MarshalJSON(base.GTreeJSON[string, T]{K: keys, V: values})
-	if err != nil {
-		return nil, err
-	}
-
-	// compress
-	return base.ZstdEncode(src), nil
+	return base.MarshalJSON(base.GTreeJSON[string, T]{K: keys, V: values})
 }
 
 // UnmarshalJSON
 func (t *Trie[T]) UnmarshalJSON(src []byte) error {
-	// decompress
-	src, err := base.ZstdDecode(src)
-	if err != nil {
-		return err
-	}
-
 	var tmp base.GTreeJSON[string, T]
 	if err := base.UnmarshalJSON(src, &tmp); err != nil {
 		return err
