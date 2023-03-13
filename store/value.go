@@ -96,31 +96,9 @@ func (s *store) Keys() []string {
 	return arr
 }
 
-func getGenericValue[T base.Marshaler](key string, data T) (T, error) {
+func getValue[T any](key string, data T) (T, error) {
 	shard := db.getShard(key)
-	val, ok := shard.Get(key)
-	if !ok {
-		return data, base.ErrKeyNotFound(key)
-	}
-
-	// type assertion
-	obj, ok := val.(T)
-	if ok {
-		return obj, nil
-	}
-
-	// unmarshal
-	buf := val.([]byte)
-	if err := data.UnmarshalJSON(buf); err != nil {
-		return data, err
-	}
-	shard.Set(key, data)
-
-	return data, nil
-}
-
-func getValue[T base.Bases](key string, data T) (T, error) {
-	shard := db.getShard(key)
+	// get
 	val, ok := shard.Get(key)
 	if !ok {
 		return data, base.ErrKeyNotFound(key)
@@ -168,50 +146,50 @@ func (s *store) GetBool(key string) (val bool, err error) { return getValue(key,
 
 // GetList
 func GetList[T comparable](key string) (*structx.List[T], error) {
-	return getGenericValue(key, structx.NewList[T]())
+	return getValue(key, structx.NewList[T]())
 }
 
 // GetLSet
 func GetLSet[T comparable](s *store, key string) (*structx.LSet[T], error) {
-	return getGenericValue(key, structx.NewLSet[T]())
+	return getValue(key, structx.NewLSet[T]())
 }
 
 // GetMap
 func GetMap[K comparable, V any](key string) (structx.Map[K, V], error) {
-	return getGenericValue(key, structx.Map[K, V]{})
+	return getValue(key, structx.Map[K, V]{})
 }
 
 // GetSyncMap
 func GetSyncMap[T any](key string) (*structx.SyncMap[string, T], error) {
-	return getGenericValue(key, structx.NewSyncMap[string, T]())
+	return getValue(key, structx.NewSyncMap[string, T]())
 }
 
 // GetTrie
 func GetTrie[T any](key string) (*structx.Trie[T], error) {
-	return getGenericValue(key, structx.NewTrie[T]())
+	return getValue(key, structx.NewTrie[T]())
 }
 
 // GetZset
 func GetZset[K, V base.Ordered](key string) (*structx.ZSet[K, V], error) {
-	return getGenericValue(key, structx.NewZSet[K, V]())
+	return getValue(key, structx.NewZSet[K, V]())
 }
 
 // GetBitMap
 func (s *store) GetBitMap(key string) (*structx.BitMap, error) {
-	return getGenericValue(key, structx.NewBitMap())
+	return getValue(key, structx.NewBitMap())
 }
 
 // GetBloom
 func (s *store) GetBloom(key string) (*structx.Bloom, error) {
-	return getGenericValue(key, structx.NewBloom())
+	return getValue(key, structx.NewBloom())
 }
 
 // GetSignIn
 func (s *store) GetSignIn(key string) (*structx.SignIn, error) {
-	return getGenericValue(key, structx.NewSignIn())
+	return getValue(key, structx.NewSignIn())
 }
 
 // GetCustomType
 func GetCustomType[T base.Marshaler](key string, data T) (T, error) {
-	return getGenericValue(key, data)
+	return getValue(key, data)
 }

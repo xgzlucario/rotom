@@ -9,10 +9,16 @@ import (
 
 // marshal
 func MarshalJSON(data any) ([]byte, error) {
+	if _, ok := data.(Marshaler); ok {
+		return data.(Marshaler).MarshalJSON()
+	}
 	return sonic.Marshal(data)
 }
 
 func UnmarshalJSON(src []byte, data any) error {
+	if _, ok := data.(Marshaler); ok {
+		return data.(Marshaler).UnmarshalJSON(src)
+	}
 	return sonic.Unmarshal(src, data)
 }
 
