@@ -17,14 +17,17 @@ var (
 	// ShardCount
 	ShardCount uint64 = 32
 
-	// Enabled Zstd Compressor
-	EnabledCompress = true
+	// PersistDuration
+	PersistDuration = time.Second
 
-	// AOF duration
-	AOFDuration = time.Second
+	// RewriteDuration
+	RewriteDuration = time.Minute
 )
 
 type storeShard struct {
+	alive     bool
+	storePath string
+
 	rw     *os.File
 	buffer []byte
 
@@ -53,21 +56,32 @@ func init() {
 		i := i
 		p.Go(func() {
 			// init
-			storePath := fmt.Sprintf("%sdat%d", StorePath, i)
-
+			path := fmt.Sprintf("%sdat%d", StorePath, i)
 			db.shards[i] = &storeShard{
-				rw:    newWriter(storePath),
-				Cache: structx.NewCache[any](),
+				storePath: path,
+				rw:        newWriter(path),
+				Cache:     structx.NewCache[any](),
 			}
 
+			shard := db.shards[i]
+
 			// load
-			db.shards[i].load(storePath)
+			shard.load()
+			shard.alive = true
 
 			// write
 			go func() {
-				for {
-					time.Sleep(AOFDuration)
-					db.shards[i].writeBufferBlock()
+				for shard.alive {
+					time.Sleep(PersistDuration)
+					shard.writeBufferBlock()
+				}
+			}()
+
+			// rewrite
+			go func() {
+				for shard.alive {
+					time.Sleep(RewriteDuration)
+					shard.rewrite()
 				}
 			}()
 		})

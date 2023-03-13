@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
+	"github.com/xgzlucario/rotom/structx"
 )
 
 const (
@@ -16,7 +17,7 @@ const (
 	OP_REMOVE       = '3'
 	OP_PERSIST      = '4'
 
-	separate = '|'
+	spr = '|'
 )
 
 var (
@@ -25,23 +26,17 @@ var (
 	blkSpr  = []byte("|||")
 )
 
-func (s *storeShard) load(storePath string) {
+func (s *storeShard) load() {
 	// open file
-	fs, err := os.ReadFile(storePath)
+	fs, err := os.ReadFile(s.storePath)
 	if err != nil {
 		return
 	}
 
-	var blk []byte
 	// read block
-	for _, cpBlk := range bytes.Split(fs, blkSpr) {
+	for _, blk := range bytes.Split(fs, blkSpr) {
 		// decompress
-		if EnabledCompress {
-			blk, _ = base.ZstdDecode(cpBlk)
-
-		} else {
-			blk = cpBlk
-		}
+		blk, _ = base.ZstdDecode(blk)
 
 		for _, line := range bytes.Split(blk, lineSpr) {
 			s.readLine(line)
@@ -74,12 +69,8 @@ func (s *storeShard) writeBufferBlock() {
 	if len(s.buffer) == 0 {
 		return
 	}
-	if EnabledCompress {
-		s.buffer = base.ZstdEncode(s.buffer)
-	}
-
 	// write
-	s.buffer = append(s.buffer, blkSpr...)
+	s.buffer = append(base.ZstdEncode(s.buffer), blkSpr...)
 	_, err := s.rw.Write(s.buffer)
 	if err != nil {
 		panic(err)
@@ -99,7 +90,7 @@ func (s *storeShard) readLine(line []byte) {
 	// SET: {op}{key}|{value}
 	case OP_SET:
 		for i, c := range line {
-			if c == separate {
+			if c == spr {
 				s.Set(*base.B2S(line[1:i]), line[i+1:])
 				break
 			}
@@ -107,15 +98,15 @@ func (s *storeShard) readLine(line []byte) {
 
 	// SET_WITH_TTL: {op}{key}|{ttl}|{value}
 	case OP_SET_WITH_TTL:
-		var sep1 int
+		var sp1 int
 		for i, c := range line {
-			if c == separate {
-				if sep1 == 0 {
-					sep1 = i
+			if c == spr {
+				if sp1 == 0 {
+					sp1 = i
 
 				} else {
-					ttl, _ := strconv.Atoi(*base.B2S(line[sep1+1 : i]))
-					s.SetWithTTL(*base.B2S(line[1:sep1]), line[i+1:], time.Duration(ttl))
+					ttl, _ := strconv.Atoi(*base.B2S(line[sp1+1 : i]))
+					s.SetWithTTL(*base.B2S(line[1:sp1]), line[i+1:], time.Duration(ttl))
 					break
 				}
 			}
@@ -128,5 +119,38 @@ func (s *storeShard) readLine(line []byte) {
 	// PERSIST: {op}{key}
 	case OP_PERSIST:
 		s.Persist(*base.B2S(line[1:]))
+	}
+}
+
+// rewrite
+func (s *storeShard) rewrite() {
+	s.Lock()
+	defer s.Unlock()
+
+	// open file
+	fs, err := os.ReadFile(s.storePath)
+	if err != nil {
+		return
+	}
+
+	// bloom filter
+	filter := structx.NewBloom()
+
+	// read from tail
+	blks := bytes.Split(fs, blkSpr)
+	for i := len(blks) - 1; i >= 0; i-- {
+		blk := blks[i]
+
+		for _, line := range bytes.Split(blk, lineSpr) {
+			for i, r := range line {
+				// seperate op and key
+				if r == spr {
+					if filter.TestAndAdd(line[:i]) {
+						// TODO: rewrite
+						filter.Cap()
+					}
+				}
+			}
+		}
 	}
 }
