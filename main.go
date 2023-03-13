@@ -59,7 +59,7 @@ func (s *Stu) UnmarshalJSON(src []byte) error {
 func testCustom() {
 	fmt.Println("===== start test Custom =====")
 
-	stu, err := store.GetCustomStruct("stu", new(Stu))
+	stu, err := store.GetCustomType("stu", new(Stu))
 	if err != nil {
 		fmt.Println(err)
 		db.Set("stu", &Stu{"xgz", 22})

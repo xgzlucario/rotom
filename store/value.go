@@ -96,7 +96,6 @@ func (s *store) Keys() []string {
 	return arr
 }
 
-// getGenericValue return generic data from store
 func getGenericValue[T base.Marshaler](key string, data T) (T, error) {
 	shard := db.getShard(key)
 	val, ok := shard.Get(key)
@@ -120,9 +119,9 @@ func getGenericValue[T base.Marshaler](key string, data T) (T, error) {
 	return data, nil
 }
 
-// getValue return base data from store
 func getValue[T base.Bases](key string, data T) (T, error) {
-	val, ok := db.getShard(key).Get(key)
+	shard := db.getShard(key)
+	val, ok := shard.Get(key)
 	if !ok {
 		return data, base.ErrKeyNotFound(key)
 	}
@@ -132,7 +131,15 @@ func getValue[T base.Bases](key string, data T) (T, error) {
 	if ok {
 		return obj, nil
 	}
-	return data, base.ErrType(obj)
+
+	// unmarshal
+	buf := val.([]byte)
+	if err := base.UnmarshalJSON(buf, &data); err != nil {
+		return data, err
+	}
+	shard.Set(key, data)
+
+	return data, nil
 }
 
 // Incr
@@ -148,19 +155,16 @@ func (s *store) Incr(key string, increment float64) (val float64, err error) {
 }
 
 // GetString
-func (s *store) GetString(key string) (val string, err error) {
-	return getValue(key, val)
-}
+func (s *store) GetString(key string) (val string, err error) { return getValue(key, val) }
+
+// GetInt
+func (s *store) GetInt(key string) (val int, err error) { return getValue(key, val) }
 
 // GetFloat64
-func (s *store) GetFloat64(key string) (val float64, err error) {
-	return getValue(key, val)
-}
+func (s *store) GetFloat64(key string) (val float64, err error) { return getValue(key, val) }
 
 // GetBool
-func (s *store) GetBool(key string) (val bool, err error) {
-	return getValue(key, val)
-}
+func (s *store) GetBool(key string) (val bool, err error) { return getValue(key, val) }
 
 // GetList
 func GetList[T comparable](key string) (*structx.List[T], error) {
@@ -207,7 +211,7 @@ func (s *store) GetSignIn(key string) (*structx.SignIn, error) {
 	return getGenericValue(key, structx.NewSignIn())
 }
 
-// GetCustomStruct
-func GetCustomStruct[T base.Marshaler](key string, data T) (T, error) {
+// GetCustomType
+func GetCustomType[T base.Marshaler](key string, data T) (T, error) {
 	return getGenericValue(key, data)
 }
