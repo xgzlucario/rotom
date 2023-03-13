@@ -4,7 +4,6 @@ import (
 	"unsafe"
 
 	"github.com/bytedance/sonic"
-	"github.com/klauspost/compress/zstd"
 )
 
 // marshal
@@ -33,18 +32,4 @@ func S2B(str *string) []byte {
 
 func B2S(buf []byte) *string {
 	return (*string)(unsafe.Pointer(&buf))
-}
-
-// zstd compress
-var (
-	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderLevel(1))
-	decoder, _ = zstd.NewReader(nil)
-)
-
-func ZstdEncode(src []byte) []byte {
-	return encoder.EncodeAll(src, nil)
-}
-
-func ZstdDecode(src []byte) ([]byte, error) {
-	return decoder.DecodeAll(src, nil)
 }
