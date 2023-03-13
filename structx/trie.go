@@ -12,9 +12,9 @@ type Trie[V any] struct {
 
 type node[V any] struct {
 	c                byte
-	left, mid, right *node[V]
-	val              V
 	valid            bool
+	val              V
+	left, mid, right *node[V]
 }
 
 func (n *node[V]) isUnused() bool {

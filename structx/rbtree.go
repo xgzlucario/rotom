@@ -11,16 +11,16 @@ const (
 )
 
 type rbnode[K base.Ordered, V any] struct {
-	left, right, parent *rbnode[K, V]
 	color               byte
 	Key                 K
 	Value               V
+	left, right, parent *rbnode[K, V]
 }
 
 // Tree is a struct of red-black tree.
 type RBTree[K base.Ordered, V any] struct {
-	root *rbnode[K, V]
 	size int
+	root *rbnode[K, V]
 }
 
 // NewRBTree
