@@ -76,7 +76,7 @@ func (s *store) Count() int {
 
 // GetShard
 func (s *store) getShard(key string) *storeShard {
-	return s.shards[xxh3.HashString(key)%ShardCount]
+	return s.shards[xxh3.HashString(key)&(ShardCount-1)]
 }
 
 // WithExpired
