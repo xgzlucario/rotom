@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/klauspost/compress/s2"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -37,7 +36,7 @@ func (s *storeShard) load() {
 	// read block
 	for _, blk := range bytes.Split(fs, blkSpr) {
 		// decompress
-		blk, _ = s2.Decode(nil, blk)
+		blk, _ = base.ZstdDecode(blk)
 
 		for _, line := range bytes.Split(blk, lineSpr) {
 			s.readLine(line)
@@ -71,7 +70,7 @@ func (s *storeShard) writeBufferBlock() {
 		return
 	}
 	// write
-	s.buffer = append(s2.EncodeSnappy(nil, s.buffer), blkSpr...)
+	s.buffer = append(base.ZstdEncode(s.buffer), blkSpr...)
 	_, err := s.rw.Write(s.buffer)
 	if err != nil {
 		panic(err)
