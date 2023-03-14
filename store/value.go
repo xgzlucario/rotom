@@ -23,10 +23,10 @@ func (s *store) Set(key string, value any) {
 		if err != nil {
 			panic(err)
 		}
-		shard.write("1%s|%s///", key, src)
+		shard.write("1%s|%s\n", key, src)
 
 	} else {
-		shard.write("1%s|%v///", key, value)
+		shard.write("1%s|%v\n", key, value)
 	}
 
 	shard.Set(key, value)
@@ -42,10 +42,10 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 		if err != nil {
 			panic(err)
 		}
-		shard.write("2%s|%d|%s///", key, ttl, src)
+		shard.write("2%s|%d|%s\n", key, ttl, src)
 
 	} else {
-		shard.write("2%s|%d|%v///", key, ttl, value)
+		shard.write("2%s|%d|%v\n", key, ttl, value)
 	}
 
 	shard.SetWithTTL(key, value, ttl)
@@ -54,14 +54,14 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 // Remove
 func (s *store) Remove(key string) bool {
 	shard := s.getShard(key)
-	shard.write("3%s///", key)
+	shard.write("3%s\n", key)
 	return shard.Remove(key)
 }
 
 // Persist
 func (s *store) Persist(key string) bool {
 	shard := s.getShard(key)
-	shard.write("4%s///", key)
+	shard.write("4%s\n", key)
 	return shard.Persist(key)
 }
 

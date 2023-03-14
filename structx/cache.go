@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/xgzlucario/rotom/base"
 )
 
 const (
@@ -32,7 +34,7 @@ type Cache[V any] struct {
 	onExpired func(string, V)
 
 	// data
-	data Map[string, *cacheItem[V]]
+	data map[string]*cacheItem[V]
 
 	// expired key-value pairs
 	ttl *RBTree[int64, string]
@@ -228,14 +230,14 @@ func (c *Cache[V]) MarshalJSON() ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.data.MarshalJSON()
+	return base.MarshalJSON(c.data)
 }
 
 func (c *Cache[V]) UnmarshalJSON(src []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if err := c.data.UnmarshalJSON(src); err != nil {
+	if err := base.UnmarshalJSON(src, c.data); err != nil {
 		return err
 	}
 	for key, item := range c.data {

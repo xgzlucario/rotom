@@ -23,8 +23,8 @@ const (
 
 var (
 	// seperate char
-	lineSpr = []byte("///")
-	blkSpr  = []byte("|||")
+	lineSpr = []byte("\n")
+	blkSpr  = []byte("[BLK]")
 )
 
 func (s *storeShard) load() {
