@@ -34,7 +34,7 @@ type Cache[V any] struct {
 	onExpired func(string, V)
 
 	// data
-	data map[string]*cacheItem[V]
+	data Map[string, *cacheItem[V]]
 
 	// expired key-value pairs
 	ttl *RBTree[int64, string]
