@@ -10,7 +10,7 @@ import (
 const TEST_CASES = "Write a complete test code for Skiplist, with 100% coverage"
 
 func ChatTest() {
-	client := openai.NewClient("your token")
+	client := openai.NewClient("")
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{

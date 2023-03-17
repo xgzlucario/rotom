@@ -1,13 +1,15 @@
-package structx
+package test
 
 import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/xgzlucario/rotom/structx"
 )
 
-func getCache() *Cache[struct{}] {
-	s := NewCache[struct{}]()
+func getCache() *structx.Cache[struct{}] {
+	s := structx.NewCache[struct{}]()
 	for i := 0; i < 1000000; i++ {
 		s.Set(strconv.Itoa(i), struct{}{})
 	}
@@ -15,14 +17,14 @@ func getCache() *Cache[struct{}] {
 }
 
 func BenchmarkCacheSet(b *testing.B) {
-	s := NewCache[struct{}]()
+	s := structx.NewCache[struct{}]()
 	for i := 0; i < b.N; i++ {
 		s.Set(strconv.Itoa(i), struct{}{})
 	}
 }
 
 func BenchmarkCacheSetWithTTL(b *testing.B) {
-	s := NewCache[struct{}]()
+	s := structx.NewCache[struct{}]()
 	for i := 0; i < b.N; i++ {
 		s.SetWithTTL(strconv.Itoa(i), struct{}{}, time.Minute)
 	}

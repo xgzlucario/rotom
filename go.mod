@@ -6,7 +6,6 @@ require (
 	github.com/bits-and-blooms/bloom v2.0.3+incompatible
 	github.com/brianvoe/gofakeit/v6 v6.20.2
 	github.com/bytedance/sonic v1.8.5
-	github.com/cespare/xxhash v1.1.0
 	github.com/klauspost/compress v1.16.3
 	github.com/liyiheng/zset v0.0.0-20211012035528-6679b37ff27a
 	github.com/sashabaranov/go-openai v1.5.2

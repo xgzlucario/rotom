@@ -1,17 +1,18 @@
-package structx
+package test
 
 import (
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/xgzlucario/rotom/structx"
 )
 
 // CREATE BY CHATGPT
 
 func TestList(t *testing.T) {
 	// Test NewList
-	l := NewList(1, 2, 3, 4, 5)
+	l := structx.NewList(1, 2, 3, 4, 5)
 
 	assert.Equal(t, []int{1, 2, 3, 4, 5}, l.Values())
 

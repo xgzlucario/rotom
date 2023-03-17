@@ -1,13 +1,14 @@
-package structx
+package test
 
 import (
 	"testing"
 
 	"github.com/liyiheng/zset"
+	"github.com/xgzlucario/rotom/structx"
 )
 
-func getZSet1() *ZSet[int64, float64] {
-	s := NewZSet[int64, float64]()
+func getZSet1() *structx.ZSet[int64, float64] {
+	s := structx.NewZSet[int64, float64]()
 	for i := 0; i < 10000; i++ {
 		s.Incr(0, float64(i))
 	}
@@ -24,7 +25,7 @@ func getZSet2() *zset.SortedSet {
 
 // ========= Add =========
 func Benchmark_ZSetAdd1(b *testing.B) {
-	s := NewZSet[int64, float64]()
+	s := structx.NewZSet[int64, float64]()
 	for i := 0; i < b.N; i++ {
 		s.Incr(0, float64(i))
 	}

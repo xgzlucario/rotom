@@ -133,6 +133,7 @@ func testBloom() {
 }
 
 func main() {
+	base.ChatTest()
 	testBloom()
 	testTrie()
 	testCustom()

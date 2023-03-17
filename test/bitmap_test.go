@@ -1,15 +1,16 @@
-package structx
+package test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/xgzlucario/rotom/structx"
 )
 
 // CREATE BY CHATGPT
 
 func TestBitMap_Add(t *testing.T) {
-	bm := NewBitMap()
+	bm := structx.NewBitMap()
 
 	// Add new numbers
 	assert.True(t, bm.Add(10))
@@ -27,7 +28,7 @@ func TestBitMap_Add(t *testing.T) {
 }
 
 func TestBitMap_AddRange(t *testing.T) {
-	bm := NewBitMap()
+	bm := structx.NewBitMap()
 
 	// Add range of numbers
 	bm.AddRange(10, 20)
@@ -40,7 +41,7 @@ func TestBitMap_AddRange(t *testing.T) {
 }
 
 func TestBitMap_Remove(t *testing.T) {
-	bm := NewBitMap(10, 20, 30)
+	bm := structx.NewBitMap(10, 20, 30)
 
 	// Remove existing numbers
 	assert.True(t, bm.Remove(10))
@@ -55,8 +56,8 @@ func TestBitMap_Remove(t *testing.T) {
 }
 
 func TestBitMap_Equal(t *testing.T) {
-	bm1 := NewBitMap(10, 20, 30)
-	bm2 := NewBitMap(10, 30, 20)
+	bm1 := structx.NewBitMap(10, 20, 30)
+	bm2 := structx.NewBitMap(10, 30, 20)
 
 	if !bm1.Equal(bm2) {
 		t.Errorf("Expected bitmaps to be equal, but they were not")
@@ -64,22 +65,22 @@ func TestBitMap_Equal(t *testing.T) {
 }
 
 func TestBitMap_Min(t *testing.T) {
-	bm := NewBitMap(10, 20, 30)
+	bm := structx.NewBitMap(10, 20, 30)
 
 	// Check minimum value
 	assert.Equal(t, 10, bm.Min())
 }
 
 func TestBitMap_Max(t *testing.T) {
-	bm := NewBitMap(10, 20, 30)
+	bm := structx.NewBitMap(10, 20, 30)
 
 	// Check maximum value
 	assert.Equal(t, 30, bm.Max())
 }
 
 func TestBitMap_Union(t *testing.T) {
-	bm1 := NewBitMap(10, 20, 30)
-	bm2 := NewBitMap(20, 30, 40)
+	bm1 := structx.NewBitMap(10, 20, 30)
+	bm2 := structx.NewBitMap(20, 30, 40)
 
 	// Union
 	bm1.Union(bm2)
