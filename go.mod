@@ -13,6 +13,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2
 	github.com/zeebo/xxh3 v1.0.2
+	github.com/zyedidia/generic v1.2.1
 	golang.org/x/exp v0.0.0-20230315142452-642cacee5cc0
 )
 
@@ -23,6 +24,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/segmentio/fasthash v1.0.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/willf/bitset v1.1.11 // indirect

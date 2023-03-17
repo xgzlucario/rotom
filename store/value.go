@@ -164,9 +164,9 @@ func GetList[T comparable](key string) (*structx.List[T], error) {
 	return getValue(key, structx.NewList[T]())
 }
 
-// GetLSet
-func GetLSet[T comparable](s *store, key string) (*structx.LSet[T], error) {
-	return getValue(key, structx.NewLSet[T]())
+// GetSet
+func GetLSet[T comparable](s *store, key string) (structx.Set[T], error) {
+	return getValue(key, structx.NewMapSet[T]())
 }
 
 // GetMap
