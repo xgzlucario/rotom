@@ -1,7 +1,6 @@
 package structx
 
 import (
-	"fmt"
 	"math/rand"
 
 	"github.com/xgzlucario/rotom/base"
@@ -10,23 +9,23 @@ import (
 const maxLevel = 32
 const pFactor = 0.25
 
-type skiplistNode[K, V base.Ordered] struct {
+type sklNode[K base.Ordered, V any] struct {
 	key   K
 	value V
-	next  []*skiplistNode[K, V]
+	next  []*sklNode[K, V]
 }
 
-type Skiplist[K, V base.Ordered] struct {
+type Skiplist[K base.Ordered, V any] struct {
 	level int
 	len   int
-	head  *skiplistNode[K, V]
+	head  *sklNode[K, V]
 }
 
 // NewSkipList
-func NewSkipList[K, V base.Ordered]() *Skiplist[K, V] {
+func NewSkipList[K base.Ordered, V any]() *Skiplist[K, V] {
 	return &Skiplist[K, V]{
-		head: &skiplistNode[K, V]{
-			next: make([]*skiplistNode[K, V], maxLevel),
+		head: &sklNode[K, V]{
+			next: make([]*sklNode[K, V], maxLevel),
 		},
 	}
 }
@@ -46,35 +45,12 @@ func (s *Skiplist[K, V]) Len() int {
 	return s.len
 }
 
-// GetByRank: Get the element by rank
-func (s *Skiplist[K, V]) GetByRank(rank int) (k K, v V, err error) {
-	p := s.head
-	for i := 0; p != nil; i++ {
-		if rank == i {
-			return p.key, p.value, nil
-		}
-		p = p.next[0]
-	}
-	return k, v, base.ErrOutOfBounds(rank)
-}
-
-// GetScoreWithRank: Get the score and rank by key
-func (s *Skiplist[K, V]) GetScoreWithRank(key K) (v V, rank int, err error) {
-	p := s.head
-	for i := 0; p != nil; i++ {
-		if p.key == key {
-			return p.value, i, nil
-		}
-		p = p.next[0]
-	}
-	return v, -1, base.ErrOutOfBounds(rank)
-}
-
-func (s *Skiplist[K, V]) findClosestNode(key K, value V, update []*skiplistNode[K, V]) *skiplistNode[K, V] {
+// find the closest node by key
+func (s *Skiplist[K, V]) findClosestNode(key K, update []*sklNode[K, V]) *sklNode[K, V] {
 	p := s.head
 	for i := s.level - 1; i >= 0; i-- {
 		// Find the elem at level[i] that closest to value and key
-		for p.next[i] != nil && (p.next[i].value < value || (p.next[i].value == value && p.next[i].key < key)) {
+		for p.next[i] != nil && p.next[i].key < key {
 			p = p.next[i]
 		}
 		update[i] = p
@@ -82,26 +58,19 @@ func (s *Skiplist[K, V]) findClosestNode(key K, value V, update []*skiplistNode[
 	return p
 }
 
-// Find
-func (s *Skiplist[K, V]) Find(value V) bool {
-	p := s.head
-	for i := s.level - 1; i >= 0; i-- {
-		for p.next[i] != nil && p.next[i].value < value {
-			p = p.next[i]
-		}
-	}
-	p = p.next[0]
-	return p != nil && p.value == value
-}
-
-// Add
-func (s *Skiplist[K, V]) Add(key K, value V) *skiplistNode[K, V] {
-	update := make([]*skiplistNode[K, V], maxLevel)
+// Insert key not exist or update value when key exist
+func (s *Skiplist[K, V]) Insert(key K, value V) *sklNode[K, V] {
+	update := make([]*sklNode[K, V], maxLevel)
 	for i := range update {
 		update[i] = s.head
 	}
 
-	s.findClosestNode(key, value, update)
+	p := s.findClosestNode(key, update).next[0]
+	// key exist
+	if p != nil && p.key == key {
+		p.value = value
+		return p
+	}
 
 	lv := randomLevel()
 	if lv > s.level {
@@ -109,8 +78,8 @@ func (s *Skiplist[K, V]) Add(key K, value V) *skiplistNode[K, V] {
 	}
 
 	// create node
-	newNode := &skiplistNode[K, V]{
-		key: key, value: value, next: make([]*skiplistNode[K, V], lv),
+	newNode := &sklNode[K, V]{
+		key: key, value: value, next: make([]*sklNode[K, V], lv),
 	}
 
 	for i, node := range update[:lv] {
@@ -123,14 +92,12 @@ func (s *Skiplist[K, V]) Add(key K, value V) *skiplistNode[K, V] {
 	return newNode
 }
 
-// Delete
-func (s *Skiplist[K, V]) Delete(key K, value V) bool {
-	update := make([]*skiplistNode[K, V], maxLevel)
+// Delete return true when key exist
+func (s *Skiplist[K, V]) Delete(key K) bool {
+	update := make([]*sklNode[K, V], maxLevel)
 
-	p := s.findClosestNode(key, value, update)
-
-	p = p.next[0]
-	if p == nil || p.value != value {
+	p := s.findClosestNode(key, update).next[0]
+	if p == nil || p.key != key {
 		return false
 	}
 
@@ -148,40 +115,49 @@ func (s *Skiplist[K, V]) Delete(key K, value V) bool {
 	return true
 }
 
-// Range
-func (s *Skiplist[K, V]) Range(start, end int, f func(K, V) bool) {
-	if end == -1 {
-		end = s.Len()
-	}
-	p := s.head.next[0]
-	for i := 0; p != nil; i++ {
-		// index
-		if start <= i && i <= end {
-			if f(p.key, p.value) {
-				return
-			}
-		}
-		p = p.next[0]
-	}
+// Iter return an iterator
+func (s *Skiplist[K, V]) Iter() *sklNode[K, V] {
+	return s.head.next[0]
 }
 
-// RangeByScores
-func (s *Skiplist[K, V]) RangeByScores(min, max V, f func(K, V) bool) {
-	p := s.head.next[0]
-	for p != nil {
-		if min <= p.value && p.value <= max {
-			if f(p.key, p.value) {
-				return
-			}
-		}
-		p = p.next[0]
-	}
+// Next return next node
+func (s *sklNode[K, V]) Next() *sklNode[K, V] {
+	return s.next[0]
 }
 
-// Print
-func (s *Skiplist[K, V]) Print() {
-	s.Range(0, -1, func(key K, value V) bool {
-		fmt.Printf("%+v -> %+v\n", key, value)
-		return false
-	})
+// Key return key of node
+func (s *sklNode[K, V]) Key() K {
+	return s.key
+}
+
+// Value return value of node
+func (s *sklNode[K, V]) Value() V {
+	return s.value
+}
+
+// MarshalJSON
+func (s *Skiplist[K, V]) MarshalJSON() ([]byte, error) {
+	tmp := base.GTreeJSON[K, V]{
+		K: make([]K, 0, s.len),
+		V: make([]V, 0, s.len),
+	}
+	for it := s.Iter(); it != nil; it = it.Next() {
+		tmp.K = append(tmp.K, it.key)
+		tmp.V = append(tmp.V, it.value)
+	}
+
+	return base.MarshalJSON(tmp)
+}
+
+// UnmarshalJSON
+func (s *Skiplist[K, V]) UnmarshalJSON(src []byte) error {
+	var tmp base.GTreeJSON[K, V]
+	if err := base.UnmarshalJSON(src, &tmp); err != nil {
+		return err
+	}
+	for i, k := range tmp.K {
+		s.Insert(k, tmp.V[i])
+	}
+
+	return nil
 }

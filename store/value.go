@@ -9,9 +9,7 @@ import (
 )
 
 // DB
-func DB() *store {
-	return db
-}
+func DB() *store { return db }
 
 // Set
 func (s *store) Set(key string, value any) {
@@ -121,28 +119,45 @@ func getValue[T any](key string, data T) (T, error) {
 }
 
 // Incr
-func (s *store) Incr(key string, increment float64) (val float64, err error) {
-	tmp, err := s.GetFloat64(key)
+func (s *store) Incr(key string, incr float64) (val float64, err error) {
+	val, err = s.GetFloat64(key)
 	if err != nil {
 		return -1, err
 	}
-
-	val = tmp + increment
+	val += incr
 	s.Set(key, val)
-	return val, nil
+	return
 }
 
 // GetString
-func (s *store) GetString(key string) (val string, err error) { return getValue(key, val) }
+func (s *store) GetString(k string) (v string, err error) { return getValue(k, v) }
 
 // GetInt
-func (s *store) GetInt(key string) (val int, err error) { return getValue(key, val) }
+func (s *store) GetInt(k string) (v int, err error) { return getValue(k, v) }
+
+// GetInt32
+func (s *store) GetInt32(k string) (v int32, err error) { return getValue(k, v) }
+
+// GetInt64
+func (s *store) GetInt64(k string) (v int64, err error) { return getValue(k, v) }
+
+// GetUint
+func (s *store) GetUint(k string) (v uint, err error) { return getValue(k, v) }
+
+// GetUint32
+func (s *store) GetUint32(k string) (v uint32, err error) { return getValue(k, v) }
+
+// GetUint64
+func (s *store) GetUint64(k string) (v uint64, err error) { return getValue(k, v) }
+
+// GetFloat32
+func (s *store) GetFloat32(k string) (v float32, err error) { return getValue(k, v) }
 
 // GetFloat64
-func (s *store) GetFloat64(key string) (val float64, err error) { return getValue(key, val) }
+func (s *store) GetFloat64(k string) (v float64, err error) { return getValue(k, v) }
 
 // GetBool
-func (s *store) GetBool(key string) (val bool, err error) { return getValue(key, val) }
+func (s *store) GetBool(k string) (v bool, err error) { return getValue(k, v) }
 
 // GetList
 func GetList[T comparable](key string) (*structx.List[T], error) {
@@ -182,11 +197,6 @@ func (s *store) GetBitMap(key string) (*structx.BitMap, error) {
 // GetBloom
 func (s *store) GetBloom(key string) (*structx.Bloom, error) {
 	return getValue(key, structx.NewBloom())
-}
-
-// GetSignIn
-func (s *store) GetSignIn(key string) (*structx.SignIn, error) {
-	return getValue(key, structx.NewSignIn())
 }
 
 // GetCustomType

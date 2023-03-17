@@ -137,7 +137,7 @@ func (s *LSet[T]) LPop() (key T, ok bool) {
 		return
 	}
 	delete(s.m, key)
-	return key, true
+	return
 }
 
 // RPop: Pop a elem from right
@@ -147,7 +147,7 @@ func (s *LSet[T]) RPop() (key T, ok bool) {
 		return
 	}
 	delete(s.m, key)
-	return key, true
+	return
 }
 
 // RandomPop: Pop a random elem
