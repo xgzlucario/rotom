@@ -136,6 +136,6 @@ func main() {
 	testBloom()
 	testTrie()
 	testCustom()
-	// testTTL()
+	testTTL()
 	testStress()
 }

@@ -4,5 +4,5 @@ build:
 upx-build:
 	go build -ldflags="-s -w" -o rotom && upx -9 rotom
 
-test:
+testa:
 	rm -rf db && go run *.go

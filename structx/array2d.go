@@ -1,4 +1,3 @@
-// Package array2d contains an implementation of a 2D array.
 package structx
 
 import (
@@ -6,8 +5,8 @@ import (
 	"strings"
 )
 
-// New initializes a 2-dimensional array with all zero values.
-func New[T any](width, height int) Array2D[T] {
+// NewArray2D init a 2d array with all zero values.
+func NewArray2D[T any](width, height int) Array2D[T] {
 	return Array2D[T]{
 		width:  width,
 		height: height,
@@ -15,8 +14,8 @@ func New[T any](width, height int) Array2D[T] {
 	}
 }
 
-// NewFilled initializes a 2-dimensional array with a value.
-func NewFilled[T any](width, height int, value T) Array2D[T] {
+// NewArray2DFilled init a 2d array with a value.
+func NewArray2DFilled[T any](width, height int, value T) Array2D[T] {
 	slice := make([]T, width*height)
 	fill(slice, value)
 	return Array2D[T]{
@@ -30,7 +29,7 @@ func NewFilled[T any](width, height int, value T) Array2D[T] {
 // slice of rows of values. Values from the jagged slice that are out of bounds
 // are ignored.
 func OfJagged[J ~[]S, S ~[]E, E any](width, height int, jagged J) Array2D[E] {
-	arr := New[E](width, height)
+	arr := NewArray2D[E](width, height)
 	for y, row := range jagged {
 		copy(arr.Row(y), row)
 	}
