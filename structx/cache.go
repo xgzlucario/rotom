@@ -77,29 +77,15 @@ func (c *Cache[V]) Set(key string, value V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// if exist
-	node, ok := c.data.getNode(key)
-	if ok {
-		node.V = value
-
-	} else {
-		c.data.Set(key, 0, value)
-	}
+	c.data.Set(key, value)
 }
 
 // SetWithTTL
-func (c *Cache[V]) SetWithTTL(key string, val V, ttl time.Duration) {
+func (c *Cache[V]) SetWithTTL(key string, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// if exist
-	_, ok := c.data.getNode(key)
-	if ok {
-		c.data.Delete(key)
-
-	} else {
-		c.data.Set(key, int64(ttl), val)
-	}
+	c.data.SetWithScore(key, int64(ttl), value)
 }
 
 // Persist
@@ -107,16 +93,11 @@ func (c *Cache[V]) Persist(key string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// item, ok := c.data[key]
-	// if !ok {
-	// 	return false
-	// }
-	// // persist
-	// if item.T != NoTTL {
-	// 	c.ttl.Delete(item.T)
-	// 	item.T = NoTTL
-	// }
-	return true
+	_, ttl, ok := c.data.Get(key)
+	if ok {
+		c.data.tree.Delete(ttl)
+	}
+	return ok
 }
 
 // Keys
@@ -148,8 +129,7 @@ func (c *Cache[V]) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// c.data = Map[string, *cacheItem[V]]{}
-	// c.ttl = NewRBTree[int64, string]()
+	c.data = NewZSet[string, int64, V]()
 }
 
 // Count
@@ -157,7 +137,7 @@ func (c *Cache[V]) Count() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.data.Len()
+	return c.data.Size()
 }
 
 // Scheduled update current timestamp and clear expired keys

@@ -27,13 +27,13 @@ func getZSet2() *zset.SortedSet {
 func Benchmark_ZSetAdd1(b *testing.B) {
 	s := structx.NewZSet[int64, float64, any]()
 	for i := 0; i < b.N; i++ {
-		s.Set(int64(i), float64(i), "a")
+		s.SetWithScore(int64(i)/2, float64(i), "a")
 	}
 }
 func Benchmark_ZSetAdd2(b *testing.B) {
 	s := zset.New()
 	for i := 0; i < b.N; i++ {
-		s.Set(float64(i), int64(i), "a")
+		s.Set(float64(i), int64(i)/2, "a")
 	}
 }
 
