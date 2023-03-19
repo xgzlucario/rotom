@@ -54,7 +54,7 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 
 	v, ttl, ok := c.data.Get(key)
 	// check valid
-	if ttl > c.ts || ttl == NoTTL {
+	if ok && (ttl > c.ts || ttl == NoTTL) {
 		return v, true
 	}
 	return
