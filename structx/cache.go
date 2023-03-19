@@ -15,7 +15,7 @@ const (
 
 var (
 	// duration of update timestamp and expired keys evictions
-	TickDuration = time.Second
+	TickDuration = time.Second / 10
 )
 
 type Cache[V any] struct {
@@ -85,7 +85,7 @@ func (c *Cache[V]) SetWithTTL(key string, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data.SetWithScore(key, c.ts+int64(ttl), value)
+	c.data.SetWithScore(key, c.ts+int64(ttl)+atomic.AddInt64(&c.count, 1), value)
 }
 
 // Persist
