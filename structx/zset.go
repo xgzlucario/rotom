@@ -133,6 +133,11 @@ func (z *zsIter[S, K]) Key() K {
 	return z.n.Value
 }
 
+// HasNext
+func (z *zsIter[S, K]) HasNext() bool {
+	return z.n != nil
+}
+
 // Next
 func (z *zsIter[S, K]) Next() *zsIter[S, K] {
 	return &zsIter[S, K]{z.n.Next()}

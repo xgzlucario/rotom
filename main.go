@@ -81,9 +81,9 @@ func testStress() {
 
 	// Simulate storing mobile sms code of 100 million users
 	for i := 0; i <= 10000*10000; i++ {
-		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute*5)
+		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Second*5)
 		// stats
-		if i%(10*10000) == 0 {
+		if i%(10000) == 0 {
 			memInfo, _ := mem.VirtualMemory()
 			fmt.Println("num:", i, "count:", db.Count())
 			fmt.Printf("mem usage: %.2f%%\n", memInfo.UsedPercent)

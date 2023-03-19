@@ -15,7 +15,7 @@ const (
 
 var (
 	// duration of update timestamp and expired keys evictions
-	TickDuration = time.Millisecond * 10
+	TickDuration = time.Second
 )
 
 type Cache[V any] struct {
@@ -85,7 +85,7 @@ func (c *Cache[V]) SetWithTTL(key string, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data.SetWithScore(key, int64(ttl), value)
+	c.data.SetWithScore(key, c.ts+int64(ttl), value)
 }
 
 // Persist
@@ -154,7 +154,10 @@ func (c *Cache[V]) eviction() {
 
 		// clear expired keys
 		if c.data.Size() > 0 {
-			for f := c.data.Iter(); f != nil; f = f.Next() {
+			for f := c.data.Iter(); f.HasNext(); f = f.Next() {
+				if f.Score() == NoTTL {
+					continue
+				}
 				if f.Score() > c.ts {
 					break
 				}

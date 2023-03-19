@@ -7,8 +7,6 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
-const TEST_CASES = "Write a complete test code for Skiplist, with 100% coverage"
-
 func ChatTest() {
 	client := openai.NewClient("")
 	resp, err := client.CreateChatCompletion(
