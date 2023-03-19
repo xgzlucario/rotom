@@ -33,6 +33,11 @@ func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
 // Get return value and score by key
 func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
 	item, ok := z.data[key]
+	if !ok {
+		var v V
+		var s S
+		return v, s, false
+	}
 	return item.V, item.S, ok
 }
 

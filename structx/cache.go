@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
+	"golang.org/x/exp/maps"
 )
 
 const (
 	// NoTTL
-	NoTTL = -1
+	NoTTL = 0
 )
 
 var (
@@ -105,7 +106,7 @@ func (c *Cache[V]) Keys() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return nil
+	return maps.Keys(c.data.data)
 }
 
 // WithExpired
