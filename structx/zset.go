@@ -3,11 +3,9 @@ package structx
 import "github.com/xgzlucario/rotom/base"
 
 // ZSet structure: K key, S score, V value
-type ZSet[K, S base.Ordered, V any] struct {
-	zero S
-
+type ZSet[K comparable, S base.Ordered, V any] struct {
 	// based on map
-	data Map[K, *zsNode[S, V]]
+	Map[K, *zsNode[S, V]]
 
 	// based on red-black tree
 	tree *RBTree[S, K]
@@ -23,16 +21,16 @@ type zsIter[S base.Ordered, V any] struct {
 }
 
 // NewZSet return zset with specific types of [key, score, value]
-func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
+func NewZSet[K comparable, S base.Ordered, V any]() *ZSet[K, S, V] {
 	return &ZSet[K, S, V]{
 		tree: NewRBTree[S, K](),
-		data: Map[K, *zsNode[S, V]]{},
+		Map:  Map[K, *zsNode[S, V]]{},
 	}
 }
 
 // Get return value and score by key
 func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
-	item, ok := z.data[key]
+	item, ok := z.Map[key]
 	if !ok {
 		var v V
 		var s S
@@ -43,88 +41,74 @@ func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
 
 // Set upsert value by key
 func (z *ZSet[K, S, V]) Set(key K, value V) {
-	item, ok := z.data[key]
+	item, ok := z.Map[key]
 	if ok {
 		item.V = value
 
 	} else {
-		z.data[key] = &zsNode[S, V]{V: value}
+		item = &zsNode[S, V]{V: value}
+		z.Map[key] = item
+		z.tree.Insert(item.S, key)
 	}
 }
 
 // SetScore upsert score by key
 func (z *ZSet[K, S, V]) SetScore(key K, score S) {
-	item, ok := z.data[key]
+	item, ok := z.Map[key]
 	if ok {
 		z.updateScore(item, key, score)
 
 	} else {
-		z.data[key] = &zsNode[S, V]{S: score}
-		// score is not zero
-		if score != z.zero {
-			z.tree.Insert(score, key)
-		}
+		z.Map[key] = &zsNode[S, V]{S: score}
+		z.tree.Insert(score, key)
 	}
 }
 
+// update score of key
 func (z *ZSet[K, S, V]) updateScore(node *zsNode[S, V], key K, score S) {
 	// score no change
 	if node.S == score {
 		return
 	}
-	// score is not zero value
-	if node.S != z.zero {
-		z.tree.Delete(node.S)
-	}
+	z.tree.Delete(node.S)
 	node.S = score
-	if score != z.zero {
-		z.tree.Insert(score, key)
-	}
+	z.tree.Insert(score, key)
 }
 
 // SetWithScore upsert value and score by key
 func (z *ZSet[K, S, V]) SetWithScore(key K, score S, value V) {
-	item, ok := z.data[key]
+	item, ok := z.Map[key]
 	if ok {
 		item.V = value
 		z.updateScore(item, key, score)
 
 	} else {
-		z.data[key] = &zsNode[S, V]{S: score, V: value}
-		// score is not zero
-		if score != z.zero {
-			z.tree.Insert(score, key)
-		}
+		z.Map[key] = &zsNode[S, V]{S: score, V: value}
+		z.tree.Insert(score, key)
 	}
 }
 
 // Incr: Increment key by score
 func (z *ZSet[K, S, V]) Incr(key K, score S) S {
-	item, ok := z.data[key]
+	item, ok := z.Map[key]
 	if ok {
 		z.updateScore(item, key, item.S+score)
-		return item.S + score
+		return item.S
 
 	} else {
-		z.data[key] = &zsNode[S, V]{S: score}
-		// score is not zero
-		if score != z.zero {
-			z.tree.Insert(score, key)
-		}
+		z.Map[key] = &zsNode[S, V]{S: score}
+		z.tree.Insert(score, key)
 		return score
 	}
 }
 
 // Delete
 func (z *ZSet[K, S, V]) Delete(key K) (v V, ok bool) {
-	item, ok := z.data[key]
+	item, ok := z.Map[key]
 	if ok {
-		delete(z.data, key)
-		// score is not zero
-		if item.S != z.zero {
-			z.tree.Delete(item.S)
-		}
-		return v, ok
+		delete(z.Map, key)
+		z.tree.Delete(item.S)
+		return item.V, ok
 	}
 	return
 }
@@ -136,9 +120,7 @@ func (z *ZSet[K, S, V]) Size() int {
 
 // Iter return an iterator
 func (z *ZSet[K, S, V]) Iter() *zsIter[S, K] {
-	return &zsIter[S, K]{
-		z.tree.Iterator(),
-	}
+	return &zsIter[S, K]{z.tree.Iterator()}
 }
 
 // Score
@@ -153,14 +135,17 @@ func (z *zsIter[S, K]) Key() K {
 
 // Next
 func (z *zsIter[S, K]) Next() *zsIter[S, K] {
-	z.n = z.n.Next()
-	return z
+	return &zsIter[S, K]{z.n.Next()}
 }
 
-func (z *ZSet[K, S, V]) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(nil)
-}
-
+// UnmarshalJSON
 func (z *ZSet[K, S, V]) UnmarshalJSON(src []byte) error {
+	if err := z.Map.UnmarshalJSON(src); err != nil {
+		return err
+	}
+	for k, item := range z.Map {
+		z.tree.Insert(item.S, k)
+	}
+
 	return nil
 }

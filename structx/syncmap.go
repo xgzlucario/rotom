@@ -2,8 +2,6 @@ package structx
 
 import (
 	"sync"
-
-	"github.com/xgzlucario/rotom/base"
 )
 
 // SyncMap
@@ -53,11 +51,7 @@ func (m *SyncMap[K, V]) Keys() []K {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	keys := make([]K, 0, len(m.m))
-	for k := range m.m {
-		keys = append(keys, k)
-	}
-	return keys
+	return m.m.Keys()
 }
 
 // Count
@@ -81,7 +75,7 @@ func (m *SyncMap[K, V]) MarshalJSON() ([]byte, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return base.MarshalJSON(m.m)
+	return m.m.MarshalJSON()
 }
 
 // UnmarshalJSON
@@ -89,5 +83,5 @@ func (m *SyncMap[K, V]) UnmarshalJSON(src []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return base.UnmarshalJSON(src, &m.m)
+	return m.m.UnmarshalJSON(src)
 }

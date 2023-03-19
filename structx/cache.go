@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
-	"golang.org/x/exp/maps"
 )
 
 const (
@@ -67,7 +66,7 @@ func (c *Cache[V]) GetWithTTL(key string) (v V, ttl int64, ok bool) {
 
 	v, ttl, ok = c.data.Get(key)
 	// check valid
-	if ttl > c.ts || ttl == NoTTL {
+	if ok && (ttl > c.ts || ttl == NoTTL) {
 		return v, ttl, true
 	}
 	return
@@ -94,9 +93,9 @@ func (c *Cache[V]) Persist(key string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	_, ttl, ok := c.data.Get(key)
+	item, ok := c.data.Map[key]
 	if ok {
-		c.data.tree.Delete(ttl)
+		c.data.updateScore(item, key, NoTTL)
 	}
 	return ok
 }
@@ -106,7 +105,7 @@ func (c *Cache[V]) Keys() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return maps.Keys(c.data.data)
+	return c.data.Keys()
 }
 
 // WithExpired
@@ -151,26 +150,25 @@ func (c *Cache[V]) eviction() {
 		// reset count
 		atomic.SwapInt64(&c.count, 0)
 
-		// c.mu.Lock()
+		c.mu.Lock()
 
-		// // clear expired keys
-		// for !c.ttl.Empty() {
-		// 	f := c.ttl.Iterator()
-		// 	if f.Key > c.ts {
-		// 		break
-		// 	}
+		// clear expired keys
+		if c.data.Size() > 0 {
+			for f := c.data.Iter(); f != nil; f = f.Next() {
+				if f.Score() > c.ts {
+					break
+				}
 
-		// 	c.ttl.Delete(f.Key)
-		// 	item, ok := c.data[f.Value]
-		// 	if ok {
-		// 		delete(c.data, f.Value)
-		// 		// on expired
-		// 		if c.onExpired != nil {
-		// 			c.onExpired(f.Value, item.V)
-		// 		}
-		// 	}
-		// }
-		// c.mu.Unlock()
+				v, ok := c.data.Delete(f.Key())
+				if ok {
+					// on expired
+					if c.onExpired != nil {
+						c.onExpired(f.Key(), v)
+					}
+				}
+			}
+		}
+		c.mu.Unlock()
 	}
 }
 
@@ -185,14 +183,5 @@ func (c *Cache[V]) UnmarshalJSON(src []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if err := base.UnmarshalJSON(src, c.data); err != nil {
-		return err
-	}
-	// for key, item := range c.data {
-	// 	if item.T != NoTTL {
-	// 		c.ttl.Insert(item.T, key)
-	// 	}
-	// }
-
-	return nil
+	return c.data.UnmarshalJSON(src)
 }
