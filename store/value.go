@@ -50,7 +50,7 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 }
 
 // Remove
-func (s *store) Remove(key string) bool {
+func (s *store) Remove(key string) (any, bool) {
 	shard := s.getShard(key)
 	shard.write("3%s\n", key)
 	return shard.Remove(key)
@@ -185,8 +185,8 @@ func GetTrie[T any](key string) (*structx.Trie[T], error) {
 }
 
 // GetZset
-func GetZset[K, V base.Ordered](key string) (*structx.ZSet[K, V], error) {
-	return getValue(key, structx.NewZSet[K, V]())
+func GetZset[K base.Ordered, S base.Number, V any](key string) (*structx.ZSet[K, S, V], error) {
+	return getValue(key, structx.NewZSet[K, S, V]())
 }
 
 // GetBitMap

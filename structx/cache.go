@@ -18,11 +18,6 @@ var (
 	TickDuration = time.Millisecond * 10
 )
 
-type cacheItem[V any] struct {
-	V V
-	T int64 // TTL
-}
-
 type Cache[V any] struct {
 	// current timestamp
 	ts int64
@@ -33,11 +28,8 @@ type Cache[V any] struct {
 	// call when key-value expired
 	onExpired func(string, V)
 
-	// data
-	data Map[string, *cacheItem[V]]
-
-	// expired key-value pairs
-	ttl *RBTree[int64, string]
+	// data based on ZSet
+	data *ZSet[string, int64, V]
 
 	mu sync.RWMutex
 }
@@ -47,9 +39,7 @@ func NewCache[V any]() *Cache[V] {
 	cache := &Cache[V]{
 		ts: time.Now().UnixNano(),
 
-		data: Map[string, *cacheItem[V]]{},
-
-		ttl: NewRBTree[int64, string](),
+		data: NewZSet[string, int64, V](),
 	}
 	go cache.eviction()
 
@@ -61,13 +51,10 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	item, ok := c.data[key]
-	if !ok {
-		return
-	}
+	v, ttl, ok := c.data.Get(key)
 	// check valid
-	if item.T > c.ts || item.T == NoTTL {
-		return item.V, true
+	if ttl > c.ts || ttl == NoTTL {
+		return v, true
 	}
 	return
 }
@@ -77,13 +64,10 @@ func (c *Cache[V]) GetWithTTL(key string) (v V, ttl int64, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	item, ok := c.data[key]
-	if !ok {
-		return
-	}
+	v, ttl, ok = c.data.Get(key)
 	// check valid
-	if item.T > c.ts || item.T == NoTTL {
-		return item.V, item.T, true
+	if ttl > c.ts || ttl == NoTTL {
+		return v, ttl, true
 	}
 	return
 }
@@ -94,40 +78,28 @@ func (c *Cache[V]) Set(key string, value V) {
 	defer c.mu.Unlock()
 
 	// if exist
-	item, ok := c.data[key]
+	node, ok := c.data.getNode(key)
 	if ok {
-		item.T = NoTTL
-		item.V = value
+		node.V = value
 
 	} else {
-		item = &cacheItem[V]{value, NoTTL}
-		c.data[key] = item
+		c.data.Set(key, 0, value)
 	}
 }
 
 // SetWithTTL
-func (c *Cache[V]) SetWithTTL(key string, val V, ttl time.Duration) bool {
+func (c *Cache[V]) SetWithTTL(key string, val V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	item, ok := c.data[key]
-	// exist
+	// if exist
+	_, ok := c.data.getNode(key)
 	if ok {
-		item.V = val
-		c.ttl.Delete(item.T)
-		item.T = c.ts + int64(ttl) + atomic.AddInt64(&c.count, 1)
+		c.data.Delete(key)
 
 	} else {
-		item = &cacheItem[V]{
-			val,
-			c.ts + int64(ttl) + atomic.AddInt64(&c.count, 1),
-		}
-		c.data[key] = item
+		c.data.Set(key, int64(ttl), val)
 	}
-
-	// insert
-	c.ttl.Insert(item.T, key)
-	return ok
 }
 
 // Persist
@@ -135,15 +107,15 @@ func (c *Cache[V]) Persist(key string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	item, ok := c.data[key]
-	if !ok {
-		return false
-	}
-	// persist
-	if item.T != NoTTL {
-		c.ttl.Delete(item.T)
-		item.T = NoTTL
-	}
+	// item, ok := c.data[key]
+	// if !ok {
+	// 	return false
+	// }
+	// // persist
+	// if item.T != NoTTL {
+	// 	c.ttl.Delete(item.T)
+	// 	item.T = NoTTL
+	// }
 	return true
 }
 
@@ -164,16 +136,11 @@ func (c *Cache[V]) WithExpired(f func(string, V)) {
 }
 
 // Remove
-func (c *Cache[V]) Remove(key string) bool {
+func (c *Cache[V]) Remove(key string) (V, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	item, ok := c.data[key]
-	if ok {
-		delete(c.data, key)
-		c.ttl.Delete(item.T)
-	}
-	return ok
+	return c.data.Delete(key)
 }
 
 // Clear
@@ -181,8 +148,8 @@ func (c *Cache[V]) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data = Map[string, *cacheItem[V]]{}
-	c.ttl = NewRBTree[int64, string]()
+	// c.data = Map[string, *cacheItem[V]]{}
+	// c.ttl = NewRBTree[int64, string]()
 }
 
 // Count
@@ -190,7 +157,7 @@ func (c *Cache[V]) Count() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return len(c.data)
+	return c.data.Len()
 }
 
 // Scheduled update current timestamp and clear expired keys
@@ -203,26 +170,26 @@ func (c *Cache[V]) eviction() {
 		// reset count
 		atomic.SwapInt64(&c.count, 0)
 
-		c.mu.Lock()
+		// c.mu.Lock()
 
-		// clear expired keys
-		for !c.ttl.Empty() {
-			f := c.ttl.Iterator()
-			if f.Key > c.ts {
-				break
-			}
+		// // clear expired keys
+		// for !c.ttl.Empty() {
+		// 	f := c.ttl.Iterator()
+		// 	if f.Key > c.ts {
+		// 		break
+		// 	}
 
-			c.ttl.Delete(f.Key)
-			item, ok := c.data[f.Value]
-			if ok {
-				delete(c.data, f.Value)
-				// on expired
-				if c.onExpired != nil {
-					c.onExpired(f.Value, item.V)
-				}
-			}
-		}
-		c.mu.Unlock()
+		// 	c.ttl.Delete(f.Key)
+		// 	item, ok := c.data[f.Value]
+		// 	if ok {
+		// 		delete(c.data, f.Value)
+		// 		// on expired
+		// 		if c.onExpired != nil {
+		// 			c.onExpired(f.Value, item.V)
+		// 		}
+		// 	}
+		// }
+		// c.mu.Unlock()
 	}
 }
 
@@ -240,11 +207,11 @@ func (c *Cache[V]) UnmarshalJSON(src []byte) error {
 	if err := base.UnmarshalJSON(src, c.data); err != nil {
 		return err
 	}
-	for key, item := range c.data {
-		if item.T != NoTTL {
-			c.ttl.Insert(item.T, key)
-		}
-	}
+	// for key, item := range c.data {
+	// 	if item.T != NoTTL {
+	// 		c.ttl.Insert(item.T, key)
+	// 	}
+	// }
 
 	return nil
 }

@@ -2,145 +2,116 @@ package structx
 
 import "github.com/xgzlucario/rotom/base"
 
-type zslNode[K, V base.Ordered] struct {
-	key   K
-	value V
+// ZSet structure: K key, S score, V value
+type ZSet[K, S base.Ordered, V any] struct {
+	// data based on map
+	data Map[K, *zslNode[S, V]]
+
+	// score based on red-black tree
+	tree *RBTree[S, K]
 }
 
-type ZSet[K, V base.Ordered] struct {
-	zsl *Skiplist[K, V]
-	m   Map[K, *zslNode[K, V]]
+type zslNode[S base.Ordered, V any] struct {
+	S S
+	V V
 }
 
-// NewZSet
-func NewZSet[K, V base.Ordered]() *ZSet[K, V] {
-	return &ZSet[K, V]{
-		zsl: NewSkipList[K, V](),
-		m:   Map[K, *zslNode[K, V]]{},
+type zslIter[S base.Ordered, V any] struct {
+	n *rbnode[S, V]
+}
+
+// NewZSet with specific types of key, score, value
+func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
+	return &ZSet[K, S, V]{
+		tree: NewRBTree[S, K](),
+		data: Map[K, *zslNode[S, V]]{},
 	}
 }
 
-// Set: set key and value
-func (z *ZSet[K, V]) Set(key K, value V) {
-	n, ok := z.m[key]
+// Get return value and score by key
+func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
+	item, ok := z.data[key]
+	return item.V, item.S, ok
+}
+
+// get zslNode
+func (z *ZSet[K, S, V]) getNode(key K) (*zslNode[S, V], bool) {
+	item, ok := z.data[key]
+	return item, ok
+}
+
+// Set update or upsert value by key
+func (z *ZSet[K, S, V]) Set(key K, score S, value V) {
+	item, ok := z.data[key]
 	if ok {
-		// value not change
-		if value == n.value {
-			return
-		}
-		n.value = value
-		z.zsl.Delete(key)
-		z.zsl.Insert(key, n.value)
+		item.V = value
+
 	} else {
-		z.insert(key, value)
+		item = &zslNode[S, V]{S: score, V: value}
+		z.data[key] = item
+		z.tree.Insert(item.S, key)
 	}
 }
 
-// Incr: Increment value by key
-func (z *ZSet[K, V]) Incr(key K, value V) V {
-	n, ok := z.m[key]
-	// not exist
-	if !ok {
-		z.insert(key, value)
-		return value
-	}
-	// exist
-	z.zsl.Delete(key)
-	n.value += value
-	z.zsl.Insert(key, n.value)
+// Incr: Increment key by score
+func (z *ZSet[K, S, V]) Incr(key K, score S) S {
+	item, ok := z.data[key]
+	if ok {
+		z.tree.Delete(item.S)
+		item.S += score
 
-	return n.value
+	} else {
+		item = &zslNode[S, V]{S: score}
+		z.data[key] = item
+	}
+	// insert
+	z.tree.Insert(item.S, key)
+	return score
 }
 
-// Delete: delete keys
-func (z *ZSet[K, V]) Delete(keys ...K) error {
-	for _, key := range keys {
-		n, ok := z.m[key]
-		if !ok {
-			return base.ErrKeyNotFound(key)
-		}
-		z.delete(n.key)
+// Delete: delete key-value
+func (z *ZSet[K, S, V]) Delete(key K) (v V, ok bool) {
+	item, ok := z.data[key]
+	if ok {
+		delete(z.data, key)
+		z.tree.Delete(item.S)
+		return v, ok
 	}
-	return nil
+	return
 }
 
-// GetScore
-func (z *ZSet[K, V]) GetScore(key K) (v V, err error) {
-	node, ok := z.m[key]
-	if !ok {
-		return v, base.ErrKeyNotFound(key)
-	}
-	return node.value, nil
+// Len
+func (z *ZSet[K, S, V]) Len() int {
+	return z.tree.size
 }
 
-// Copy
-// func (z *ZSet[K, V]) Copy() *ZSet[K, V] {
-// 	newZSet := NewZSet[K, V]()
-// 	z.Range(0, -1, func(key K, value V) bool {
-// 		newZSet.Set(key, value)
-// 		return false
-// 	})
-// 	return z
-// }
-
-// Union
-// func (z *ZSet[K, V]) Union(target *ZSet[K, V]) {
-// 	target.Range(0, -1, func(key K, value V) bool {
-// 		z.Incr(key, value)
-// 		return false
-// 	})
-// }
-
-// Range
-// func (z *ZSet[K, V]) Range(start, end int, f func(K, V) bool) {
-// 	z.zsl.Range(start, end, f)
-// }
-
-func (z *ZSet[K, V]) Len() int {
-	return len(z.m)
+// Iter return an iterator
+func (z *ZSet[K, S, V]) Iter() *zslIter[S, K] {
+	return &zslIter[S, K]{
+		z.tree.Iterator(),
+	}
 }
 
-// make sure that key is not exist!
-func (z *ZSet[K, V]) insert(key K, value V) *sklNode[K, V] {
-	z.m[key] = &zslNode[K, V]{
-		key:   key,
-		value: value,
-	}
-	return z.zsl.Insert(key, value)
+// Score
+func (z *zslIter[S, K]) Score() S {
+	return z.n.Key
 }
 
-// make sure that key exist!
-func (z *ZSet[K, V]) delete(key K) {
-	delete(z.m, key)
-	z.zsl.Delete(key)
+// Key
+func (z *zslIter[S, K]) Key() K {
+	return z.n.Value
 }
 
-// marshal type
-type zsetJSON[K, V base.Ordered] struct {
-	K []K
-	V []V
+// Next
+func (z *zslIter[S, K]) Next() *zslIter[S, K] {
+	z.n = z.n.Next()
+	return z
 }
 
-func (z *ZSet[K, V]) MarshalJSON() ([]byte, error) {
-	tmp := zsetJSON[K, V]{
-		K: make([]K, 0, len(z.m)),
-		V: make([]V, 0, len(z.m)),
-	}
-	for key, node := range z.m {
-		tmp.K = append(tmp.K, key)
-		tmp.V = append(tmp.V, node.value)
-	}
-	return base.MarshalJSON(tmp)
+func (z *ZSet[K, S, V]) MarshalJSON() ([]byte, error) {
+	return base.MarshalJSON(nil)
 }
 
-func (z *ZSet[K, V]) UnmarshalJSON(src []byte) error {
-	var tmp zsetJSON[K, V]
-	if err := base.UnmarshalJSON(src, &tmp); err != nil {
-		return err
-	}
-
-	for i, k := range tmp.K {
-		z.insert(k, tmp.V[i])
-	}
+func (z *ZSet[K, S, V]) UnmarshalJSON(src []byte) error {
 	return nil
 }

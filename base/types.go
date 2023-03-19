@@ -6,6 +6,10 @@ import (
 
 type Ordered constraints.Ordered
 
+type Number interface {
+	constraints.Integer | constraints.Float
+}
+
 type Stringer interface {
 	any
 	String() string
