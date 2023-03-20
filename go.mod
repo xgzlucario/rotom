@@ -8,7 +8,7 @@ require (
 	github.com/bytedance/sonic v1.8.5
 	github.com/klauspost/compress v1.16.3
 	github.com/liyiheng/zset v0.0.0-20211012035528-6679b37ff27a
-	github.com/sashabaranov/go-openai v1.5.2
+	github.com/sashabaranov/go-openai v1.5.4
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2

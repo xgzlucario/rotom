@@ -133,6 +133,9 @@ func testBloom() {
 }
 
 func main() {
+	store.Init()
+	// structx.InitAI()
+
 	testBloom()
 	testTrie()
 	testCustom()

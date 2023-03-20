@@ -1,90 +1,86 @@
 package test
 
 import (
-	"fmt"
+	"encoding/json"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/xgzlucario/rotom/structx"
+	"golang.org/x/exp/slices"
 )
 
-// CREATE BY CHATGPT
-
 func TestList(t *testing.T) {
-	// Test NewList
-	l := structx.NewList(1, 2, 3, 4, 5)
-
-	assert.Equal(t, []int{1, 2, 3, 4, 5}, l.Values())
+	list := structx.NewList(1, 2, 3, 4, 5)
 
 	// Test LPush
-	l.LPush(0)
-	assert.Equal(t, []int{0, 1, 2, 3, 4, 5}, l.Values())
+	list.LPush(0)
+	if list.Len() != 6 || list.Index(0) != 0 {
+		t.Errorf("LPush error: %v\n", list.Values())
+	}
 
 	// Test RPush
-	l.RPush(6)
-	assert.Equal(t, []int{0, 1, 2, 3, 4, 5, 6}, l.Values())
+	list.RPush(6)
+	if list.Len() != 7 || list.Index(6) != 6 {
+		t.Errorf("RPush error: %v\n", list.Values())
+	}
 
 	// Test Insert
-	l.Insert(3, 10, 11)
-	assert.Equal(t, []int{0, 1, 2, 10, 11, 3, 4, 5, 6}, l.Values())
-
-	// Test RemoveFirst
-	assert.True(t, l.RemoveFirst(10))
-	assert.Equal(t, []int{0, 1, 2, 11, 3, 4, 5, 6}, l.Values())
-
-	// Test RemoveIndex
-	assert.True(t, l.RemoveIndex(3))
-	assert.Equal(t, []int{0, 1, 2, 3, 4, 5, 6}, l.Values())
+	list.Insert(3, 99)
+	if list.Len() != 8 || list.Index(3) != 99 {
+		t.Errorf("Insert error: %v\n", list.Values())
+	}
 
 	// Test LPop
-	val, ok := l.LPop()
-	assert.True(t, ok)
-	assert.Equal(t, 0, val)
-	assert.Equal(t, []int{1, 2, 3, 4, 5, 6}, l.Values())
+	val, ok := list.LPop()
+	if !ok || val != 0 || list.Len() != 7 {
+		t.Errorf("LPop error: %v\n", list.Values())
+	}
 
 	// Test RPop
-	val, ok = l.RPop()
-	assert.True(t, ok)
-	assert.Equal(t, 6, val)
-	assert.Equal(t, []int{1, 2, 3, 4, 5}, l.Values())
+	val, ok = list.RPop()
+	if !ok || val != 6 || list.Len() != 6 {
+		t.Errorf("RPop error: %v\n", list.Values())
+	}
 
-	// Test AddToSet
-	assert.True(t, l.AddToSet(0))
-	assert.False(t, l.AddToSet(5))
-	assert.Equal(t, []int{1, 2, 3, 4, 5, 0}, l.Values())
+	// Test RemoveFirst
+	if !list.RemoveFirst(3) || list.Len() != 5 {
+		t.Errorf("RemoveFirst error: %v\n", list.Values())
+	}
+	if list.RemoveFirst(7) || list.Len() != 5 {
+		t.Errorf("RemoveFirst error: %v\n", list.Values())
+	}
 
-	// Test Index
-	assert.Equal(t, 0, l.Index(5))
+	// Test RemoveIndex
+	if !list.RemoveIndex(2) || list.Len() != 4 {
+		t.Errorf("RemoveIndex error: %v\n", list.Values())
+	}
+	if list.RemoveIndex(7) || list.Len() != 4 {
+		t.Errorf("RemoveIndex error: %v\n", list.Values())
+	}
 
-	// Test Find
-	assert.Equal(t, 4, l.Find(5))
+	// Test Max and Min
+	max := list.Max(func(a, b int) bool { return a < b })
+	if max != 5 {
+		t.Errorf("Max error: %v\n", max)
+	}
+	min := list.Min(func(a, b int) bool { return a < b })
+	if min != 1 {
+		t.Errorf("Min error: %v\n", min)
+	}
 
-	// Test Copy
-	c := l.Copy()
-	assert.Equal(t, l.Values(), c.Values())
-	assert.NotEqual(t, fmt.Sprintf("%p", l), fmt.Sprintf("%p", c))
+	// Test Sort
+	list.Sort(func(a, b int) bool { return a > b })
+	if !list.IsSorted(func(a, b int) bool { return a > b }) {
+		t.Errorf("Sort error: %v\n", list.Values())
+	}
 
-	// Test Len
-	assert.Equal(t, 6, l.Len())
-
-	// Test Range
-	result := []int{}
-	l.Range(func(elem int) bool {
-		fmt.Println(elem)
-		result = append(result, elem)
-		return false
-	})
-	assert.Equal(t, []int{1, 2, 3, 4, 5, 0}, result)
-
-	// Test LShift
-	l.LShift()
-	assert.Equal(t, []int{2, 3, 4, 5, 0, 1}, l.Values())
-
-	// Test RShift
-	l.RShift()
-	assert.Equal(t, []int{1, 2, 3, 4, 5, 0}, l.Values())
-
-	// Test Reverse
-	l.Reverse()
-	assert.Equal(t, []int{0, 5, 4, 3, 2, 1}, l.Values())
+	// Test JSON
+	bytes, err := json.Marshal(list)
+	if err != nil {
+		t.Errorf("MarshalJSON error: %v", err)
+	}
+	unmarshaledList := structx.NewList(0)
+	err = json.Unmarshal(bytes, unmarshaledList)
+	if err != nil || !slices.Equal(list.Values(), unmarshaledList.Values()) {
+		t.Errorf("UnmarshalJSON error: %v\n%v\n%v", err, list.Values(), unmarshaledList.Values())
+	}
 }

@@ -25,11 +25,9 @@ var (
 )
 
 type storeShard struct {
-	alive     bool
 	storePath string
-
-	rw     *os.File
-	buffer []byte
+	buffer    []byte
+	rw        *os.File
 
 	sync.Mutex
 	*structx.Cache[any]
@@ -42,7 +40,7 @@ type store struct {
 // database
 var db *store
 
-func init() {
+func Init() {
 	// init store dir
 	if err := os.MkdirAll(StorePath, os.ModeDir); err != nil {
 		panic(err)
@@ -67,11 +65,10 @@ func init() {
 
 			// load
 			shard.load()
-			shard.alive = true
 
 			// write
 			go func() {
-				for shard.alive {
+				for {
 					time.Sleep(PersistDuration)
 					shard.writeBufferBlock()
 				}
@@ -79,7 +76,7 @@ func init() {
 
 			// rewrite
 			go func() {
-				for shard.alive {
+				for {
 					time.Sleep(RewriteDuration)
 					shard.rewrite()
 				}

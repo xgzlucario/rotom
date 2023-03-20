@@ -93,7 +93,7 @@ func (c *Cache[V]) Persist(key string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	item, ok := c.data.Map[key]
+	item, ok := c.data.data[key]
 	if ok {
 		c.data.updateScore(item, key, NoTTL)
 	}
@@ -105,7 +105,7 @@ func (c *Cache[V]) Keys() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.data.Keys()
+	return c.data.data.Keys()
 }
 
 // WithExpired
@@ -154,7 +154,7 @@ func (c *Cache[V]) eviction() {
 
 		// clear expired keys
 		if c.data.Size() > 0 {
-			for f := c.data.Iter(); f.HasNext(); f = f.Next() {
+			for f := c.data.Iter(); f.HasNext(); f.Next() {
 				if f.Score() == NoTTL {
 					continue
 				}

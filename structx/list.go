@@ -29,15 +29,6 @@ func (ls *List[T]) Insert(i int, values ...T) {
 	ls.array = slices.Insert(ls.array, i, values...)
 }
 
-// AddToSet
-func (ls *List[T]) AddToSet(value T) bool {
-	if r := ls.Find(value); r < 0 {
-		ls.RPush(value)
-		return true
-	}
-	return false
-}
-
 // LPop
 func (ls *List[T]) LPop() (val T, ok bool) {
 	if len(ls.array) == 0 {
@@ -91,8 +82,8 @@ func (ls *List[T]) remove(i int) {
 	}
 }
 
-// Max
-func (ls *List[T]) Max(less func(T, T) bool) T {
+// Max return max with less return t1 < t2
+func (ls *List[T]) Max(less func(t1, t2 T) bool) T {
 	max := ls.array[0]
 	for _, v := range ls.array {
 		if less(max, v) {
@@ -102,8 +93,8 @@ func (ls *List[T]) Max(less func(T, T) bool) T {
 	return max
 }
 
-// Min
-func (ls *List[T]) Min(less func(T, T) bool) T {
+// Min return min with less return t1 < t2
+func (ls *List[T]) Min(less func(t1, t2 T) bool) T {
 	min := ls.array[0]
 	for _, v := range ls.array {
 		if less(v, min) {
@@ -113,40 +104,94 @@ func (ls *List[T]) Min(less func(T, T) bool) T {
 	return min
 }
 
-// Sum
-func (ls *List[T]) Sum(f func(T) float64) float64 {
-	var sum float64
-	for _, v := range ls.array {
-		sum += f(v)
-	}
-	return sum
-}
-
-// Mean
-func (ls *List[T]) Mean(f func(T) float64) float64 {
-	return ls.Sum(f) / float64(ls.Len())
-}
-
 // Sort
-func (ls *List[T]) Sort(less func(T, T) bool) *List[T] {
-	slices.SortFunc(ls.array, less)
+func (ls *List[T]) Sort(f func(T, T) bool) *List[T] {
+	slices.SortFunc(ls.array, f)
 	return ls
 }
 
 // IsSorted
-func (ls *List[T]) IsSorted(less func(T, T) bool) bool {
-	return slices.IsSortedFunc(ls.array, less)
+func (ls *List[T]) IsSorted(f func(T, T) bool) bool {
+	return slices.IsSortedFunc(ls.array, f)
 }
 
-// Filter
-func (ls *List[T]) Filter(filter func(T) bool) *List[T] {
-	nls := NewList[T]()
-	for _, v := range ls.array {
-		if filter(v) {
-			nls.RPush(v)
+type array[T comparable] []T
+
+func (s array[T]) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s array[T]) Len() int {
+	return len(s)
+}
+
+func (s array[T]) Capacity() int {
+	return cap(s)
+}
+
+// Top: move value to the top
+func (s array[T]) Top(i int) {
+	for j := i; j > 0; j-- {
+		s.Swap(j, j-1)
+	}
+}
+
+// Bottom: move value to the bottom
+func (s array[T]) Bottom(i int) {
+	for j := i; j < s.Len()-1; j++ {
+		s.Swap(j, j+1)
+	}
+}
+
+// Index: return the element of index
+func (s array[T]) Index(i int) T {
+	return s[i]
+}
+
+// Find: return the index of element
+func (s array[T]) Find(elem T) int {
+	return slices.Index(s, elem)
+}
+
+// LShift: Shift all elements of the array left
+// exp: [1, 2, 3] => [2, 3, 1]
+func (s array[T]) LShift() {
+	s.Bottom(0)
+}
+
+// RShift: Shift all elements of the array right
+// exp: [1, 2, 3] => [3, 1, 2]
+func (s array[T]) RShift() {
+	s.Top(s.Len() - 1)
+}
+
+// Reverse
+func (s array[T]) Reverse() {
+	l, r := 0, s.Len()-1
+	for l < r {
+		s.Swap(l, r)
+		l++
+		r--
+	}
+}
+
+// Copy
+func (s array[T]) Copy() array[T] {
+	return slices.Clone(s)
+}
+
+// Range
+func (s array[T]) Range(f func(T) bool) {
+	for _, v := range s {
+		if f(v) {
+			return
 		}
 	}
-	return nls
+}
+
+// Values
+func (s array[T]) Values() []T {
+	return s
 }
 
 func (s *List[T]) MarshalJSON() ([]byte, error) {
