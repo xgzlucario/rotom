@@ -9,7 +9,7 @@ import (
 var client *openai.Client
 
 func init() {
-	client = openai.NewClient("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")
+	client = openai.NewClient("")
 }
 
 func Chat(content string) (string, error) {

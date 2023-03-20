@@ -12,9 +12,9 @@ const output = "structx/test"
 // GenType
 type GenType string
 
-func (g GenType) genTest() string {
+func (g GenType) testNotes() string {
 	return fmt.Sprintf(`
-	This is the implementation of %v, please help me write test code:
+	This is the implementation of %v, please write test code:
 	1. Pakage name is "test", and call the initial method on package "structx".
 	2. Use wrapperd methods preffered.
 	3. Special cases should be taken into consideration.
@@ -22,28 +22,28 @@ func (g GenType) genTest() string {
 	`, g)
 }
 
-func (g GenType) genBench() string {
+func (g GenType) benchNotes() string {
 	return fmt.Sprintf(`
-	This is the implementation of %v, please help me write benchmark code:
+	This is the implementation of %v, please write benchmark code:
 	1. Pakage name is "test", and call the initial method on package "structx".
 	2. Use wrapperd methods preffered.
 	3. Only code without notes.
 	`, g)
 }
 
-func (g GenType) genFilePath() string {
+func (g GenType) filePath() string {
 	return fmt.Sprintf("structx/%s.go", g)
 }
 
-func (g GenType) genTestFilePath() string {
+func (g GenType) testFilePath() string {
 	return fmt.Sprintf("%s/%s_test.go", output, g)
 }
 
-func (g GenType) genBenchFilePath() string {
+func (g GenType) benchFilePath() string {
 	return fmt.Sprintf("%s/%s_bench_test.go", output, g)
 }
 
-var GenTypes = []GenType{"list", "set", "bitmap", "rbtree", "trie", "array2d", "zset"}
+var GenTypes = []GenType{"list", "bitmap", "rbtree", "trie", "array2d", "zset"}
 
 // InitAI
 func InitAI() {
@@ -53,30 +53,30 @@ func InitAI() {
 	}
 
 	for _, g := range GenTypes {
-		fmt.Println("init [", g, "] test file...")
-		fs, err := os.ReadFile(g.genFilePath())
+		fmt.Println("init [", g, "] test files...")
+		fs, err := os.ReadFile(g.filePath())
 		if err != nil {
 			panic(err)
 		}
 
 		// write test file
-		content, err := base.Chat(fmt.Sprintf("%s\n%s", fs, g.genTest()))
+		content, err := base.Chat(fmt.Sprintf("%s\n%s", fs, g.testNotes()))
 		if err != nil {
 			fmt.Println(err)
 
 		} else {
-			if err := os.WriteFile(g.genTestFilePath(), base.S2B(&content), 0644); err != nil {
+			if err := os.WriteFile(g.testFilePath(), base.S2B(&content), 0644); err != nil {
 				panic(err)
 			}
 		}
 
 		// write benchmark file
-		content, err = base.Chat(fmt.Sprintf("%s\n%s", fs, g.genBench()))
+		content, err = base.Chat(fmt.Sprintf("%s\n%s", fs, g.benchNotes()))
 		if err != nil {
 			fmt.Println(err)
 
 		} else {
-			if err := os.WriteFile(g.genBenchFilePath(), base.S2B(&content), 0644); err != nil {
+			if err := os.WriteFile(g.benchFilePath(), base.S2B(&content), 0644); err != nil {
 				panic(err)
 			}
 		}

@@ -134,7 +134,7 @@ func testBloom() {
 
 func main() {
 	store.Init()
-	// structx.InitAI()
+	structx.InitAI()
 
 	testBloom()
 	testTrie()
