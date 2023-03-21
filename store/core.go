@@ -27,19 +27,30 @@ var (
 )
 
 func (s *storeShard) load() {
+	s.Lock()
+	defer s.Unlock()
+
 	// open file
 	fs, err := os.ReadFile(s.storePath)
 	if err != nil {
 		return
 	}
 
-	// read block
-	for _, blk := range bytes.Split(fs, blkSpr) {
-		// decompress
-		blk, _ = base.ZstdDecode(blk)
+	// reset filter
+	s.filter = structx.NewBloom()
 
-		for _, line := range bytes.Split(blk, lineSpr) {
-			s.readLine(line)
+	blks := bytes.Split(fs, blkSpr)
+
+	// read block from tail
+	for i := len(blks) - 1; i >= 0; i-- {
+		// decompress
+		blks[i], _ = base.ZstdDecode(blks[i])
+
+		lines := bytes.Split(blks[i], lineSpr)
+
+		// read line from tail
+		for j := len(lines) - 1; j >= 0; j-- {
+			s.readLine(lines[j])
 		}
 	}
 }
@@ -89,68 +100,70 @@ func (s *storeShard) readLine(line []byte) {
 	switch line[0] {
 	// SET: {op}{key}|{value}
 	case OP_SET:
-		for i, c := range line {
-			if c == spr {
-				s.Set(*base.B2S(line[1:i]), line[i+1:])
-				break
+		i := bytes.IndexByte(line, spr)
+
+		// test
+		if s.filter.TestAndAdd(line[:i]) {
+			goto END
+		}
+		for _, b := range []byte{OP_SET_WITH_TTL, OP_REMOVE} {
+			line[0] = b
+			if s.filter.Test(line[:i]) {
+				goto END
 			}
 		}
+
+		s.Set(*base.B2S(line[1:i]), line[i+1:])
 
 	// SET_WITH_TTL: {op}{key}|{ttl}|{value}
 	case OP_SET_WITH_TTL:
-		var sp1 int
-		for i, c := range line {
-			if c == spr {
-				if sp1 == 0 {
-					sp1 = i
+		sp1 := bytes.IndexByte(line, spr)
+		sp2 := bytes.IndexByte(line[sp1:], spr)
 
-				} else {
-					ttl, _ := strconv.Atoi(*base.B2S(line[sp1+1 : i]))
-					s.SetWithTTL(*base.B2S(line[1:sp1]), line[i+1:], time.Duration(ttl))
-					break
-				}
+		// test
+		if s.filter.TestAndAdd(line[:sp1]) {
+			goto END
+		}
+		for _, b := range []byte{OP_SET, OP_REMOVE} {
+			line[0] = b
+			if s.filter.Test(line[:sp1]) {
+				goto END
 			}
 		}
 
+		ttl, _ := strconv.Atoi(*base.B2S(line[sp1+1 : sp2]))
+		s.SetWithTTL(*base.B2S(line[1:sp1]), line[sp1+1:], time.Duration(ttl))
+
 	// REMOVE: {op}{key}
 	case OP_REMOVE:
+		// test
+		if s.filter.TestAndAdd(line) {
+			goto END
+		}
+		for _, b := range []byte{OP_SET, OP_SET_WITH_TTL} {
+			line[0] = b
+			if s.filter.Test(line) {
+				goto END
+			}
+		}
+
 		s.Remove(*base.B2S(line[1:]))
 
 	// PERSIST: {op}{key}
 	case OP_PERSIST:
-		s.Persist(*base.B2S(line[1:]))
-	}
-}
-
-// rewrite
-func (s *storeShard) rewrite() {
-	s.Lock()
-	defer s.Unlock()
-
-	// open file
-	fs, err := os.ReadFile(s.storePath)
-	if err != nil {
-		return
-	}
-
-	// bloom filter
-	filter := structx.NewBloom()
-
-	// read from tail
-	blks := bytes.Split(fs, blkSpr)
-	for i := len(blks) - 1; i >= 0; i-- {
-		blk := blks[i]
-
-		for _, line := range bytes.Split(blk, lineSpr) {
-			for i, r := range line {
-				// seperate op and key
-				if r == spr {
-					if filter.TestAndAdd(line[:i]) {
-						// TODO: rewrite
-						filter.Cap()
-					}
-				}
+		// test
+		if s.filter.TestAndAdd(line) {
+			goto END
+		}
+		for _, b := range []byte{OP_SET, OP_REMOVE} {
+			line[0] = b
+			if s.filter.Test(line) {
+				goto END
 			}
 		}
+
+		s.Persist(*base.B2S(line[1:]))
 	}
+
+END:
 }

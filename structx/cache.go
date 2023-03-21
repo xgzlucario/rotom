@@ -154,7 +154,7 @@ func (c *Cache[V]) eviction() {
 
 		// clear expired keys
 		if c.data.Size() > 0 {
-			for f := c.data.Iter(); f.HasNext(); f.Next() {
+			for f := c.data.Iter(); f.Valid(); f.Next() {
 				if f.Score() == NoTTL {
 					continue
 				}

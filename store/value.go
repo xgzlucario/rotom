@@ -185,7 +185,7 @@ func GetTrie[T any](key string) (*structx.Trie[T], error) {
 }
 
 // GetZset
-func GetZset[K base.Ordered, S base.Number, V any](key string) (*structx.ZSet[K, S, V], error) {
+func GetZset[K, S base.Ordered, V any](key string) (*structx.ZSet[K, S, V], error) {
 	return getValue(key, structx.NewZSet[K, S, V]())
 }
 

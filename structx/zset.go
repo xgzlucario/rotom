@@ -133,9 +133,9 @@ func (z *zsIter[S, K]) Key() K {
 	return z.n.Value
 }
 
-// HasNext
-func (z *zsIter[S, K]) HasNext() bool {
-	return z.n.Next() != nil
+// Valid
+func (z *zsIter[S, K]) Valid() bool {
+	return z.n != nil
 }
 
 // Next

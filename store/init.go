@@ -26,11 +26,17 @@ var (
 
 type storeShard struct {
 	storePath string
-	buffer    []byte
-	rw        *os.File
 
+	// buffer
+	buffer []byte
+	rw     *os.File
+
+	// data
 	sync.Mutex
 	*structx.Cache[any]
+
+	// bloom filter
+	filter *structx.Bloom
 }
 
 type store struct {
@@ -40,7 +46,7 @@ type store struct {
 // database
 var db *store
 
-func Init() {
+func init() {
 	// init store dir
 	if err := os.MkdirAll(StorePath, os.ModeDir); err != nil {
 		panic(err)
@@ -71,14 +77,6 @@ func Init() {
 				for {
 					time.Sleep(PersistDuration)
 					shard.writeBufferBlock()
-				}
-			}()
-
-			// rewrite
-			go func() {
-				for {
-					time.Sleep(RewriteDuration)
-					shard.rewrite()
 				}
 			}()
 		})

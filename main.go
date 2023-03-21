@@ -132,13 +132,23 @@ func testBloom() {
 	fmt.Println()
 }
 
-func main() {
-	store.Init()
-	structx.InitAI()
+func testStore() {
+	db.Set("abc", 123)
+	db.Set("abc", 234)
+	db.Set("abc", 345)
+	db.Remove("abcd")
+	db.Set("abcd", 1)
+	time.Sleep(time.Second)
+}
 
-	testBloom()
-	testTrie()
-	testCustom()
-	testTTL()
-	testStress()
+func main() {
+	// structx.InitAI()
+
+	// testBloom()
+	// testTrie()
+	// testCustom()
+	// testTTL()
+	// testStress()
+
+	testStore()
 }

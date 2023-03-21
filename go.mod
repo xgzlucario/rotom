@@ -14,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.8.2
 	github.com/zeebo/xxh3 v1.0.2
 	github.com/zyedidia/generic v1.2.1
-	golang.org/x/exp v0.0.0-20230315142452-642cacee5cc0
+	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
 )
 
 require (
