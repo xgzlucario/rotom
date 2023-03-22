@@ -144,11 +144,11 @@ func testStore() {
 func main() {
 	// structx.InitAI()
 
-	// testBloom()
-	// testTrie()
-	// testCustom()
-	// testTTL()
-	// testStress()
+	testBloom()
+	testTrie()
+	testCustom()
+	testTTL()
+	testStress()
 
 	testStore()
 }

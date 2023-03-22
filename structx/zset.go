@@ -4,10 +4,7 @@ import "github.com/xgzlucario/rotom/base"
 
 // ZSet structure: K key, S score, V value
 type ZSet[K, S base.Ordered, V any] struct {
-	// based on map
 	data Map[K, *zsNode[S, V]]
-
-	// based on red-black tree
 	tree *RBTree[S, K]
 }
 
@@ -20,7 +17,7 @@ type zsIter[S base.Ordered, V any] struct {
 	n *rbnode[S, V]
 }
 
-// NewZSet return zset with specific types of [key, score, value]
+// NewZSet return new zset instance
 func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
 	return &ZSet[K, S, V]{
 		tree: NewRBTree[S, K](),
@@ -28,7 +25,7 @@ func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
 	}
 }
 
-// Get returns value, score, ok by key
+// Get returns value, score, ok
 func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
 	item, ok := z.data[key]
 	if !ok {

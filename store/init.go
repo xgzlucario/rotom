@@ -5,13 +5,14 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xgzlucario/rotom/structx"
 )
 
 var (
-	// StorePath Of DB File
+	// StorePath for db file
 	StorePath = "db/"
 
 	// ShardCount
@@ -22,6 +23,10 @@ var (
 
 	// RewriteDuration
 	RewriteDuration = time.Minute
+)
+
+var (
+	globalTime int64
 )
 
 type storeShard struct {
@@ -55,6 +60,15 @@ func init() {
 	p := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
 
 	db = &store{shards: make([]*storeShard, ShardCount)}
+
+	// init globalTime
+	go func() {
+		ticker := time.NewTicker(time.Second / 10)
+		for t := range ticker.C {
+			atomic.SwapInt64(&globalTime, t.UnixNano())
+		}
+	}()
+
 	// load
 	for i := range db.shards {
 		i := i

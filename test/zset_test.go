@@ -1,131 +1,65 @@
 package test
 
 import (
-	"strconv"
 	"testing"
 
 	"github.com/xgzlucario/rotom/structx"
 )
 
-func BenchmarkZSet(b *testing.B) {
-	// initialize zset
-	zset := structx.NewZSet[string, int64, int]()
+func TestZSet(t *testing.T) {
+	z := structx.NewZSet[string, int, string]()
 
-	// insert data
-	for i := 0; i < 1000; i++ {
-		key := strconv.Itoa(i)
-		score := int64(i)
-		value := i
-		zset.SetWithScore(key, score, value)
+	// Test Set
+	z.Set("a", "1")
+	z.Set("b", "2")
+	z.Set("c", "3")
+	if z.Size() != 3 {
+		t.Errorf("Size() = %d; want 3", z.Size())
 	}
 
-	// benchmark Get
-	b.Run("Get", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			key := strconv.Itoa(i % 1000)
-			zset.Get(key)
-		}
-	})
-
-	// benchmark Set
-	b.Run("Set", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			key := strconv.Itoa(i % 1000)
-			value := i
-			zset.Set(key, value)
-		}
-	})
-
-	// benchmark SetScore
-	b.Run("SetScore", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			key := strconv.Itoa(i % 1000)
-			score := int64(i)
-			zset.SetScore(key, score)
-		}
-	})
-
-	// benchmark SetWithScore
-	b.Run("SetWithScore", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			key := strconv.Itoa(i % 1000)
-			score := int64(i)
-			value := i
-			zset.SetWithScore(key, score, value)
-		}
-	})
-
-	// benchmark Incr
-	b.Run("Incr", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			key := strconv.Itoa(i % 1000)
-			score := int64(i)
-			zset.Incr(key, score)
-		}
-	})
-
-	// benchmark Delete
-	b.Run("Delete", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			key := strconv.Itoa(i % 1000)
-			zset.Delete(key)
-		}
-	})
-
-	// benchmark Iter
-	b.Run("Iter", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			iter := zset.Iter()
-			for iter.Valid() {
-				iter.Next()
-			}
-		}
-	})
-}
-
-func BenchmarkRBTree(b *testing.B) {
-	// initialize rbtree
-	rbt := structx.NewRBTree[int64, string]()
-
-	// insert data
-	for i := 0; i < 1000; i++ {
-		key := int64(i)
-		value := strconv.Itoa(i)
-		rbt.Insert(key, value)
+	// Test SetScore
+	z.SetScore("d", 4)
+	z.SetScore("e", 5)
+	z.SetScore("f", 6)
+	if z.Size() != 6 {
+		t.Errorf("Size() = %d; want 6", z.Size())
 	}
 
-	// benchmark Get
-	b.Run("Get", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			key := int64(i % 1000)
-			rbt.Find(key)
-		}
-	})
+	// Test SetWithScore
+	z.SetWithScore("g", 7, "7")
+	z.SetWithScore("h", 8, "8")
+	z.SetWithScore("i", 9, "9")
+	if z.Size() != 9 {
+		t.Errorf("Size() = %d; want 9", z.Size())
+	}
 
-	// benchmark Insert
-	b.Run("Insert", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			key := int64(i % 1000)
-			value := strconv.Itoa(i)
-			rbt.Insert(key, value)
-		}
-	})
+	// Test Incr
+	z.Incr("a", 1)
+	z.Incr("b", 2)
+	z.Incr("c", 3)
+	if z.Size() != 9 {
+		t.Errorf("Size() = %d; want 9", z.Size())
+	}
 
-	// benchmark Delete
-	b.Run("Delete", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			key := int64(i % 1000)
-			rbt.Delete(key)
-		}
-	})
+	// Test Get
+	v, s, ok := z.Get("a")
+	if !ok || v != "1" || s != 1 {
+		t.Errorf("Get() = (%v, %v, %v); want (%v, %v, %v)", v, s, ok, "1", 2, true)
+	}
 
-	// benchmark Iterator
-	b.Run("Iterator", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			iter := rbt.Iterator()
-			for iter.Next() != nil {
-				iter.Next()
-			}
-		}
-	})
+	// Test Delete
+	v, ok = z.Delete("a")
+	if !ok || v != "1" || z.Size() != 8 {
+		t.Errorf("Delete() = (%v, %v); want (%v, %v)", v, ok, "1", true)
+	}
+
+	// Test Iter
+	iter := z.Iter()
+	for iter.Valid() {
+		k := iter.Key()
+		s := iter.Score()
+		v, _, _ := z.Get(k)
+		t.Logf("key=%v, score=%v, value=%v", k, s, v)
+		iter.Next()
+	}
 }

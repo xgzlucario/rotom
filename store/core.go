@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -73,22 +74,23 @@ func (s *storeShard) write(format string, data ...any) {
 }
 
 // write buffer block
-func (s *storeShard) writeBufferBlock() {
+func (s *storeShard) writeBufferBlock() error {
 	s.Lock()
 	defer s.Unlock()
 
 	if len(s.buffer) == 0 {
-		return
+		return nil
 	}
+
 	// write
 	s.buffer = append(base.ZstdEncode(s.buffer), blkSpr...)
-	_, err := s.rw.Write(s.buffer)
-	if err != nil {
-		panic(err)
+	if _, err := s.rw.Write(s.buffer); err != nil {
+		return err
 	}
 
 	// reset
 	s.buffer = s.buffer[0:0]
+	return nil
 }
 
 // read line
@@ -104,12 +106,12 @@ func (s *storeShard) readLine(line []byte) {
 
 		// test
 		if s.filter.TestAndAdd(line[:i]) {
-			goto END
+			return
 		}
 		for _, b := range []byte{OP_SET_WITH_TTL, OP_REMOVE} {
 			line[0] = b
 			if s.filter.Test(line[:i]) {
-				goto END
+				return
 			}
 		}
 
@@ -117,33 +119,49 @@ func (s *storeShard) readLine(line []byte) {
 
 	// SET_WITH_TTL: {op}{key}|{ttl}|{value}
 	case OP_SET_WITH_TTL:
-		sp1 := bytes.IndexByte(line, spr)
-		sp2 := bytes.IndexByte(line[sp1:], spr)
+		var sp1, sp2 int
+		for i, c := range line {
+			if c == spr {
+				if sp1 == 0 {
+					sp1 = i
+
+				} else {
+					sp2 = i
+					break
+				}
+			}
+		}
+		if sp2 <= sp1 {
+			panic(errors.New("sp2 < sp1"))
+		}
 
 		// test
 		if s.filter.TestAndAdd(line[:sp1]) {
-			goto END
+			return
 		}
 		for _, b := range []byte{OP_SET, OP_REMOVE} {
 			line[0] = b
 			if s.filter.Test(line[:sp1]) {
-				goto END
+				return
 			}
 		}
 
-		ttl, _ := strconv.Atoi(*base.B2S(line[sp1+1 : sp2]))
-		s.SetWithTTL(*base.B2S(line[1:sp1]), line[sp1+1:], time.Duration(ttl))
+		ttl, _ := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), 10, 0)
+		// not expired
+		if ttl > globalTime {
+			s.SetWithTTL(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), time.Duration(ttl))
+		}
 
 	// REMOVE: {op}{key}
 	case OP_REMOVE:
 		// test
 		if s.filter.TestAndAdd(line) {
-			goto END
+			return
 		}
 		for _, b := range []byte{OP_SET, OP_SET_WITH_TTL} {
 			line[0] = b
 			if s.filter.Test(line) {
-				goto END
+				return
 			}
 		}
 
@@ -153,17 +171,15 @@ func (s *storeShard) readLine(line []byte) {
 	case OP_PERSIST:
 		// test
 		if s.filter.TestAndAdd(line) {
-			goto END
+			return
 		}
 		for _, b := range []byte{OP_SET, OP_REMOVE} {
 			line[0] = b
 			if s.filter.Test(line) {
-				goto END
+				return
 			}
 		}
 
 		s.Persist(*base.B2S(line[1:]))
 	}
-
-END:
 }

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"reflect"
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
@@ -40,10 +41,10 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 		if err != nil {
 			panic(err)
 		}
-		shard.write("2%s|%d|%s\n", key, ttl, src)
+		shard.write("2%s|%d|%s\n", key, globalTime+int64(ttl), src)
 
 	} else {
-		shard.write("2%s|%d|%v\n", key, ttl, value)
+		shard.write("2%s|%d|%v\n", key, globalTime+int64(ttl), value)
 	}
 
 	shard.SetWithTTL(key, value, ttl)
@@ -61,6 +62,26 @@ func (s *store) Persist(key string) bool {
 	shard := s.getShard(key)
 	shard.write("4%s\n", key)
 	return shard.Persist(key)
+}
+
+// Type
+func (s *store) Type(key string) reflect.Type {
+	shard := s.getShard(key)
+	v, ok := shard.Get(key)
+	if ok {
+		return reflect.TypeOf(v)
+	}
+	return nil
+}
+
+// Commit commits all changes and persist to disk immediately
+func (s *store) Commit() error {
+	for _, shard := range s.shards {
+		if err := shard.writeBufferBlock(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Count
