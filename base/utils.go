@@ -1,26 +1,11 @@
 package base
 
 import (
+	"time"
 	"unsafe"
 
-	"github.com/bytedance/sonic"
 	"github.com/klauspost/compress/zstd"
 )
-
-// marshal
-func MarshalJSON(data any) ([]byte, error) {
-	if _, ok := data.(Marshaler); ok {
-		return data.(Marshaler).MarshalJSON()
-	}
-	return sonic.Marshal(data)
-}
-
-func UnmarshalJSON(src []byte, data any) error {
-	if _, ok := data.(Marshaler); ok {
-		return data.(Marshaler).UnmarshalJSON(src)
-	}
-	return sonic.Unmarshal(src, data)
-}
 
 // string and bytes convert unsafe
 func S2B(str *string) []byte {
@@ -47,4 +32,15 @@ func ZstdEncode(src []byte) []byte {
 
 func ZstdDecode(src []byte) ([]byte, error) {
 	return decoder.DecodeAll(src, nil)
+}
+
+// NewBackWorker
+func NewBackWorker(dur time.Duration, f func(t time.Time)) {
+	go func() {
+		tk := time.NewTicker(dur)
+		defer tk.Stop()
+		for t := range tk.C {
+			f(t)
+		}
+	}()
 }

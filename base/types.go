@@ -6,17 +6,11 @@ import (
 
 type Ordered constraints.Ordered
 
-type Number interface {
-	constraints.Integer | constraints.Float
-}
-
 type Stringer interface {
-	any
 	String() string
 }
 
 type Marshaler interface {
-	any
 	MarshalJSON() ([]byte, error)
 	UnmarshalJSON([]byte) error
 }

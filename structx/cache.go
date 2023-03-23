@@ -4,8 +4,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/xgzlucario/rotom/base"
 )
 
 const (
@@ -179,7 +177,7 @@ func (c *Cache[V]) MarshalJSON() ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return base.MarshalJSON(c.data)
+	return c.data.MarshalJSON()
 }
 
 func (c *Cache[V]) UnmarshalJSON(src []byte) error {

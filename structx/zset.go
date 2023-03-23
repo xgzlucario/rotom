@@ -140,6 +140,11 @@ func (z *zsIter[S, K]) Next() {
 	z.n = z.n.Next()
 }
 
+// MarshalJSON
+func (z *ZSet[K, S, V]) MarshalJSON() ([]byte, error) {
+	return z.data.MarshalJSON()
+}
+
 // UnmarshalJSON
 func (z *ZSet[K, S, V]) UnmarshalJSON(src []byte) error {
 	if err := z.data.UnmarshalJSON(src); err != nil {

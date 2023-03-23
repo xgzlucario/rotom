@@ -3,7 +3,7 @@ package structx
 import (
 	"math/bits"
 
-	"github.com/xgzlucario/rotom/base"
+	"github.com/bytedance/sonic"
 	"golang.org/x/exp/slices"
 )
 
@@ -215,12 +215,12 @@ type bitmapJSON struct {
 }
 
 func (bm *BitMap) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(bitmapJSON{bm.len, bm.words})
+	return sonic.Marshal(bitmapJSON{bm.len, bm.words})
 }
 
 func (bm *BitMap) UnmarshalJSON(src []byte) error {
 	var bmJSON bitmapJSON
-	if err := base.UnmarshalJSON(src, &bmJSON); err != nil {
+	if err := sonic.Unmarshal(src, &bmJSON); err != nil {
 		return err
 	}
 

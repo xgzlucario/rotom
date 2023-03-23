@@ -1,7 +1,7 @@
 package structx
 
 import (
-	"github.com/xgzlucario/rotom/base"
+	"github.com/bytedance/sonic"
 	"github.com/zyedidia/generic"
 	"github.com/zyedidia/generic/set"
 )
@@ -21,14 +21,14 @@ func NewHashSet[K comparable](cap uint64, equals generic.EqualsFn[K], hash gener
 }
 
 // MarshalJSON
-func (s *Set[K]) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(s.Set.Keys())
+func (s Set[K]) MarshalJSON() ([]byte, error) {
+	return sonic.Marshal(s.Set.Keys())
 }
 
 // UnmarshalJSON
-func (s *Set[K]) UnmarshalJSON(src []byte) error {
+func (s Set[K]) UnmarshalJSON(src []byte) error {
 	var keys []K
-	if err := base.UnmarshalJSON(src, &keys); err != nil {
+	if err := sonic.Unmarshal(src, &keys); err != nil {
 		return err
 	}
 	for _, k := range keys {

@@ -1,6 +1,7 @@
 package structx
 
 import (
+	"github.com/bytedance/sonic"
 	"github.com/xgzlucario/rotom/base"
 )
 
@@ -225,13 +226,13 @@ func (t *Trie[V]) KeysWithPrefix(prefix string) (queue []string) {
 func (t *Trie[T]) MarshalJSON() ([]byte, error) {
 	keys, values := t.collectAll(t.root, nil, nil, nil)
 
-	return base.MarshalJSON(base.GTreeJSON[string, T]{K: keys, V: values})
+	return sonic.Marshal(base.GTreeJSON[string, T]{K: keys, V: values})
 }
 
 // UnmarshalJSON
 func (t *Trie[T]) UnmarshalJSON(src []byte) error {
 	var tmp base.GTreeJSON[string, T]
-	if err := base.UnmarshalJSON(src, &tmp); err != nil {
+	if err := sonic.Unmarshal(src, &tmp); err != nil {
 		return err
 	}
 

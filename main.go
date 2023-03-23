@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/bytedance/sonic"
 	"github.com/shirou/gopsutil/mem"
-	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -29,6 +29,8 @@ func testTrie() {
 
 	fmt.Println(tree.Size(), tree.Keys())
 	db.Set("trie", tree)
+
+	fmt.Println()
 }
 
 // custom struct
@@ -43,12 +45,12 @@ type stuJSON struct {
 }
 
 func (s *Stu) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(stuJSON{s.Name, s.Age})
+	return sonic.Marshal(stuJSON{s.Name, s.Age})
 }
 
 func (s *Stu) UnmarshalJSON(src []byte) error {
 	var stu stuJSON
-	if err := base.UnmarshalJSON(src, &stu); err != nil {
+	if err := sonic.Unmarshal(src, &stu); err != nil {
 		return err
 	}
 	s.Name = stu.N
@@ -61,7 +63,7 @@ func testCustom() {
 
 	stu, err := store.GetCustomType("stu", new(Stu))
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("error:", err)
 		db.Set("stu", &Stu{"xgz", 22})
 
 	} else {
@@ -132,23 +134,47 @@ func testBloom() {
 	fmt.Println()
 }
 
+func testUint() {
+	fmt.Println(db.GetUint("uint"))
+	fmt.Println(db.GetUint64("uint64"))
+
+	db.Set("uint", uint(123))
+	db.Set("uint8", uint8(123))
+	db.Set("uint16", uint16(123))
+	db.Set("uint32", uint32(123))
+	db.Set("uint64", uint64(123))
+	db.Set("int", int(123))
+	db.Set("int8", int8(123))
+	db.Set("int16", int16(123))
+	db.Set("int32", int32(123))
+	db.Set("int64", int64(123))
+	db.Set("float32", float32(123))
+	db.Set("float64", float64(123))
+	db.Set("string", "123")
+	db.Set("bool", true)
+
+	// fmt.Println(db.GetUint8("uint8"))
+}
+
 func testStore() {
 	db.Set("abc", 123)
 	db.Set("abc", 234)
 	db.Set("abc", 345)
 	db.Remove("abcd")
 	db.Set("abcd", 1)
-	time.Sleep(time.Second)
+	db.SetWithTTL("exp-no", 234, time.Hour)
+	db.Remove("exp")
+	db.SetWithTTL("exp", 234, time.Second*5)
+	time.Sleep(time.Second * 2)
 }
 
 func main() {
 	// structx.InitAI()
-
+	testUint()
 	testBloom()
 	testTrie()
 	testCustom()
 	testTTL()
-	testStress()
-
 	testStore()
+	testStress()
 }

@@ -26,7 +26,7 @@ var (
 )
 
 var (
-	globalTime int64
+	globalTime = time.Now().UnixNano()
 )
 
 type storeShard struct {
@@ -63,8 +63,9 @@ func init() {
 
 	// init globalTime
 	go func() {
-		ticker := time.NewTicker(time.Second / 10)
-		for t := range ticker.C {
+		tk := time.NewTicker(time.Millisecond)
+		defer tk.Stop()
+		for t := range tk.C {
 			atomic.SwapInt64(&globalTime, t.UnixNano())
 		}
 	}()
@@ -90,10 +91,14 @@ func init() {
 			go func() {
 				for {
 					time.Sleep(PersistDuration)
-					shard.writeBufferBlock()
+					shard.writeBuffer()
 				}
 			}()
 		})
 	}
 	p.Wait()
+}
+
+func GlobalTime() int64 {
+	return atomic.LoadInt64(&globalTime)
 }

@@ -3,8 +3,8 @@ package store
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -45,7 +45,11 @@ func (s *storeShard) load() {
 	// read block from tail
 	for i := len(blks) - 1; i >= 0; i-- {
 		// decompress
-		blks[i], _ = base.ZstdDecode(blks[i])
+		// blks[i], err = base.ZstdDecode(blks[i])
+		// if err != nil {
+		// 	fmt.Println("=====================")
+		// 	continue
+		// }
 
 		lines := bytes.Split(blks[i], lineSpr)
 
@@ -64,17 +68,8 @@ func newWriter(path string) *os.File {
 	return writer
 }
 
-// write data
-func (s *storeShard) write(format string, data ...any) {
-	str := fmt.Sprintf(format, data...)
-	s.Lock()
-	defer s.Unlock()
-
-	s.buffer = append(s.buffer, base.S2B(&str)...)
-}
-
 // write buffer block
-func (s *storeShard) writeBufferBlock() error {
+func (s *storeShard) writeBuffer() error {
 	s.Lock()
 	defer s.Unlock()
 
@@ -83,7 +78,7 @@ func (s *storeShard) writeBufferBlock() error {
 	}
 
 	// write
-	s.buffer = append(base.ZstdEncode(s.buffer), blkSpr...)
+	s.buffer = append(s.buffer, blkSpr...)
 	if _, err := s.rw.Write(s.buffer); err != nil {
 		return err
 	}
@@ -105,16 +100,9 @@ func (s *storeShard) readLine(line []byte) {
 		i := bytes.IndexByte(line, spr)
 
 		// test
-		if s.filter.TestAndAdd(line[:i]) {
+		if !s.testAndAdd(line[:i], []byte{OP_SET_WITH_TTL, OP_REMOVE}) {
 			return
 		}
-		for _, b := range []byte{OP_SET_WITH_TTL, OP_REMOVE} {
-			line[0] = b
-			if s.filter.Test(line[:i]) {
-				return
-			}
-		}
-
 		s.Set(*base.B2S(line[1:i]), line[i+1:])
 
 	// SET_WITH_TTL: {op}{key}|{ttl}|{value}
@@ -136,14 +124,8 @@ func (s *storeShard) readLine(line []byte) {
 		}
 
 		// test
-		if s.filter.TestAndAdd(line[:sp1]) {
+		if !s.testAndAdd(line[:sp1], []byte{OP_SET, OP_REMOVE}) {
 			return
-		}
-		for _, b := range []byte{OP_SET, OP_REMOVE} {
-			line[0] = b
-			if s.filter.Test(line[:sp1]) {
-				return
-			}
 		}
 
 		ttl, _ := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), 10, 0)
@@ -155,31 +137,227 @@ func (s *storeShard) readLine(line []byte) {
 	// REMOVE: {op}{key}
 	case OP_REMOVE:
 		// test
-		if s.filter.TestAndAdd(line) {
+		if !s.testAndAdd(line, []byte{OP_SET, OP_SET_WITH_TTL}) {
 			return
 		}
-		for _, b := range []byte{OP_SET, OP_SET_WITH_TTL} {
-			line[0] = b
-			if s.filter.Test(line) {
-				return
-			}
-		}
-
 		s.Remove(*base.B2S(line[1:]))
 
 	// PERSIST: {op}{key}
 	case OP_PERSIST:
 		// test
-		if s.filter.TestAndAdd(line) {
+		if !s.testAndAdd(line, []byte{OP_SET, OP_REMOVE}) {
 			return
 		}
-		for _, b := range []byte{OP_SET, OP_REMOVE} {
-			line[0] = b
-			if s.filter.Test(line) {
-				return
-			}
-		}
-
 		s.Persist(*base.B2S(line[1:]))
 	}
+}
+
+// testAndAdd check if a given line already exists in a bloom filter and if not, to add it to the filter.
+// The method also checks if any of the ops can be applied to the line without causing a match in the filter.
+func (s *storeShard) testAndAdd(line []byte, ops []byte) bool {
+	if s.filter.TestAndAdd(line) {
+		return false
+	}
+	for _, b := range ops {
+		line[0] = b
+		if s.filter.Test(line) {
+			return false
+		}
+	}
+
+	return true
+}
+
+const carry = 36
+
+// EncodeValue
+func (s *storeShard) EncodeValue(v any) ([]byte, error) {
+	switch v := v.(type) {
+	case base.Marshaler:
+		return v.MarshalJSON()
+
+	case base.Stringer:
+		str := v.String()
+		return base.S2B(&str), nil
+
+	case []byte:
+		return v, nil
+
+	case string:
+		return base.S2B(&v), nil
+
+	case uint:
+		str := strconv.FormatUint(uint64(v), carry)
+		return base.S2B(&str), nil
+
+	case uint8:
+		str := strconv.FormatUint(uint64(v), carry)
+		return base.S2B(&str), nil
+
+	case uint16:
+		str := strconv.FormatUint(uint64(v), carry)
+		return base.S2B(&str), nil
+
+	case uint32:
+		str := strconv.FormatUint(uint64(v), carry)
+		return base.S2B(&str), nil
+
+	case uint64:
+		str := strconv.FormatUint(v, carry)
+		return base.S2B(&str), nil
+
+	case int:
+		str := strconv.FormatInt(int64(v), carry)
+		return base.S2B(&str), nil
+
+	case int8:
+		str := strconv.FormatInt(int64(v), carry)
+		return base.S2B(&str), nil
+
+	case int16:
+		str := strconv.FormatInt(int64(v), carry)
+		return base.S2B(&str), nil
+
+	case int32:
+		str := strconv.FormatInt(int64(v), carry)
+		return base.S2B(&str), nil
+
+	case int64:
+		str := strconv.FormatInt(v, carry)
+		return base.S2B(&str), nil
+
+	case float32:
+		str := strconv.FormatFloat(float64(v), 'f', -1, 64)
+		return base.S2B(&str), nil
+
+	case float64:
+		str := strconv.FormatFloat(v, 'f', -1, 64)
+		return base.S2B(&str), nil
+
+	case bool:
+		str := strconv.FormatBool(v)
+		return base.S2B(&str), nil
+
+	default:
+		return nil, errors.New("unsupported type: " + reflect.TypeOf(v).String())
+	}
+}
+
+// DecodeValue
+func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
+	switch v := vptr.(type) {
+	case base.Marshaler:
+		return v.UnmarshalJSON(src)
+
+	case *string:
+		*v = *base.B2S(src)
+		return nil
+
+	case *[]byte:
+		*v = src
+		return nil
+
+	case *uint:
+		num, err := strconv.ParseUint(*base.B2S(src), carry, 64)
+		if err != nil {
+			return err
+		}
+		*v = uint(num)
+		return nil
+
+	case *uint8:
+		num, err := strconv.ParseUint(*base.B2S(src), carry, 8)
+		if err != nil {
+			return err
+		}
+		*v = uint8(num)
+		return nil
+
+	case *uint16:
+		num, err := strconv.ParseUint(*base.B2S(src), carry, 16)
+		if err != nil {
+			return err
+		}
+		*v = uint16(num)
+		return nil
+
+	case *uint32:
+		num, err := strconv.ParseUint(*base.B2S(src), carry, 32)
+		if err != nil {
+			return err
+		}
+		*v = uint32(num)
+		return nil
+
+	case *uint64:
+		num, err := strconv.ParseUint(*base.B2S(src), carry, 64)
+		if err != nil {
+			return err
+		}
+		*v = num
+		return nil
+
+	case *int:
+		num, err := strconv.ParseInt(*base.B2S(src), carry, 64)
+		if err != nil {
+			return err
+		}
+		*v = int(num)
+		return nil
+
+	case *int8:
+		num, err := strconv.ParseInt(*base.B2S(src), carry, 8)
+		if err != nil {
+			return err
+		}
+		*v = int8(num)
+		return nil
+
+	case *int16:
+		num, err := strconv.ParseInt(*base.B2S(src), carry, 16)
+		if err != nil {
+			return err
+		}
+		*v = int16(num)
+		return nil
+
+	case *int32:
+		num, err := strconv.ParseInt(*base.B2S(src), carry, 32)
+		if err != nil {
+			return err
+		}
+		*v = int32(num)
+
+	case *int64:
+		num, err := strconv.ParseInt(*base.B2S(src), carry, 32)
+		if err != nil {
+			return err
+		}
+		*v = num
+
+	case *float32:
+		num, err := strconv.ParseFloat(*base.B2S(src), 32)
+		if err != nil {
+			return err
+		}
+		*v = float32(num)
+
+	case *float64:
+		num, err := strconv.ParseFloat(*base.B2S(src), 64)
+		if err != nil {
+			return err
+		}
+		*v = num
+
+	case *bool:
+		val, err := strconv.ParseBool(*base.B2S(src))
+		if err != nil {
+			return err
+		}
+		*v = val
+
+	default:
+		return errors.New("unsupported type: " + reflect.TypeOf(v).String())
+	}
+	return nil
 }

@@ -1,7 +1,7 @@
 package structx
 
 import (
-	"github.com/xgzlucario/rotom/base"
+	"github.com/bytedance/sonic"
 	"golang.org/x/exp/maps"
 )
 
@@ -12,9 +12,9 @@ func (m Map[K, V]) Keys() []K {
 }
 
 func (m Map[K, V]) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(m)
+	return sonic.Marshal(m)
 }
 
 func (m Map[K, V]) UnmarshalJSON(src []byte) error {
-	return base.UnmarshalJSON(src, m)
+	return sonic.Unmarshal(src, m)
 }

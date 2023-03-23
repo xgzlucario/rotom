@@ -1,6 +1,7 @@
 package structx
 
 import (
+	"github.com/bytedance/sonic"
 	"github.com/xgzlucario/rotom/base"
 )
 
@@ -343,13 +344,13 @@ func (b *RBTree[K, V]) MarshalJSON() ([]byte, error) {
 		tmp.V = append(tmp.V, f.Value)
 	}
 
-	return base.MarshalJSON(tmp)
+	return sonic.Marshal(tmp)
 }
 
 // UnmarshalJSON
 func (b *RBTree[K, V]) UnmarshalJSON(src []byte) error {
 	var tmp base.GTreeJSON[K, V]
-	if err := base.UnmarshalJSON(src, b); err != nil {
+	if err := sonic.Unmarshal(src, b); err != nil {
 		return err
 	}
 	b = NewRBTree[K, V]()

@@ -1,7 +1,7 @@
 package structx
 
 import (
-	"github.com/xgzlucario/rotom/base"
+	"github.com/bytedance/sonic"
 	"golang.org/x/exp/slices"
 )
 
@@ -200,9 +200,9 @@ func (s array[T]) Values() []T {
 }
 
 func (s *List[T]) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(s.array)
+	return sonic.Marshal(s.array)
 }
 
 func (s *List[T]) UnmarshalJSON(src []byte) error {
-	return base.UnmarshalJSON(src, &s.array)
+	return sonic.Unmarshal(src, &s.array)
 }

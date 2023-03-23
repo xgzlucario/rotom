@@ -16,17 +16,16 @@ func DB() *store { return db }
 func (s *store) Set(key string, value any) {
 	shard := s.getShard(key)
 
-	_, ok := value.(base.Marshaler)
-	if ok {
-		src, err := value.(base.Marshaler).MarshalJSON()
-		if err != nil {
-			panic(err)
-		}
-		shard.write("1%s|%s\n", key, src)
+	src, _ := shard.EncodeValue(value)
 
-	} else {
-		shard.write("1%s|%v\n", key, value)
-	}
+	// 1{key}|{value}\n
+	shard.Lock()
+	shard.buffer = append(shard.buffer, OP_SET)
+	shard.buffer = append(shard.buffer, base.S2B(&key)...)
+	shard.buffer = append(shard.buffer, spr)
+	shard.buffer = append(shard.buffer, src...)
+	shard.buffer = append(shard.buffer, '\n')
+	shard.Unlock()
 
 	shard.Set(key, value)
 }
@@ -34,18 +33,21 @@ func (s *store) Set(key string, value any) {
 // SetWithTTL
 func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 	shard := s.getShard(key)
+	ts := GlobalTime() + int64(ttl)
 
-	_, ok := value.(base.Marshaler)
-	if ok {
-		src, err := value.(base.Marshaler).MarshalJSON()
-		if err != nil {
-			panic(err)
-		}
-		shard.write("2%s|%d|%s\n", key, globalTime+int64(ttl), src)
+	src, _ := shard.EncodeValue(value)
+	ttlStr, _ := shard.EncodeValue(ts)
 
-	} else {
-		shard.write("2%s|%d|%v\n", key, globalTime+int64(ttl), value)
-	}
+	// 2{key}|{ttl}|{value}\n
+	shard.Lock()
+	shard.buffer = append(shard.buffer, OP_SET_WITH_TTL)
+	shard.buffer = append(shard.buffer, base.S2B(&key)...)
+	shard.buffer = append(shard.buffer, spr)
+	shard.buffer = append(shard.buffer, ttlStr...)
+	shard.buffer = append(shard.buffer, spr)
+	shard.buffer = append(shard.buffer, src...)
+	shard.buffer = append(shard.buffer, '\n')
+	shard.Unlock()
 
 	shard.SetWithTTL(key, value, ttl)
 }
@@ -53,18 +55,32 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 // Remove
 func (s *store) Remove(key string) (any, bool) {
 	shard := s.getShard(key)
-	shard.write("3%s\n", key)
+
+	// 3{key}\n
+	shard.Lock()
+	shard.buffer = append(shard.buffer, OP_REMOVE)
+	shard.buffer = append(shard.buffer, base.S2B(&key)...)
+	shard.buffer = append(shard.buffer, '\n')
+	shard.Unlock()
+
 	return shard.Remove(key)
 }
 
-// Persist
+// Persist removes the expiration from a key
 func (s *store) Persist(key string) bool {
 	shard := s.getShard(key)
-	shard.write("4%s\n", key)
+
+	// 4{key}\n
+	shard.Lock()
+	shard.buffer = append(shard.buffer, OP_PERSIST)
+	shard.buffer = append(shard.buffer, base.S2B(&key)...)
+	shard.buffer = append(shard.buffer, '\n')
+	shard.Unlock()
+
 	return shard.Persist(key)
 }
 
-// Type
+// Type returns the type of the value stored at key
 func (s *store) Type(key string) reflect.Type {
 	shard := s.getShard(key)
 	v, ok := shard.Get(key)
@@ -77,7 +93,7 @@ func (s *store) Type(key string) reflect.Type {
 // Commit commits all changes and persist to disk immediately
 func (s *store) Commit() error {
 	for _, shard := range s.shards {
-		if err := shard.writeBufferBlock(); err != nil {
+		if err := shard.writeBuffer(); err != nil {
 			return err
 		}
 	}
@@ -93,8 +109,11 @@ func (s *store) Count() int {
 	return sum
 }
 
-// GetShard
 func (s *store) getShard(key string) *storeShard {
+	return s.shards[xxh3.HashString(key)&(ShardCount-1)]
+}
+
+func (s *store) DEBUGgetShard(key string) *storeShard {
 	return s.shards[xxh3.HashString(key)&(ShardCount-1)]
 }
 
@@ -131,7 +150,7 @@ func getValue[T any](key string, data T) (T, error) {
 
 	// unmarshal
 	buf := val.([]byte)
-	if err := base.UnmarshalJSON(buf, &data); err != nil {
+	if err := shard.DecodeValue(buf, data); err != nil {
 		return data, err
 	}
 	shard.Set(key, data)
@@ -151,34 +170,37 @@ func (s *store) Incr(key string, incr float64) (val float64, err error) {
 }
 
 // GetString
-func (s *store) GetString(k string) (v string, err error) { return getValue(k, v) }
+func (s *store) GetString(k string) (v string, err error) { getValue(k, &v); return }
 
 // GetInt
-func (s *store) GetInt(k string) (v int, err error) { return getValue(k, v) }
+func (s *store) GetInt(k string) (v int, err error) { getValue(k, &v); return }
 
 // GetInt32
-func (s *store) GetInt32(k string) (v int32, err error) { return getValue(k, v) }
+func (s *store) GetInt32(k string) (v int32, err error) { getValue(k, &v); return }
 
 // GetInt64
-func (s *store) GetInt64(k string) (v int64, err error) { return getValue(k, v) }
+func (s *store) GetInt64(k string) (v int64, err error) { getValue(k, &v); return }
 
 // GetUint
-func (s *store) GetUint(k string) (v uint, err error) { return getValue(k, v) }
+func (s *store) GetUint(k string) (v uint, err error) { getValue(k, &v); return }
 
 // GetUint32
-func (s *store) GetUint32(k string) (v uint32, err error) { return getValue(k, v) }
+func (s *store) GetUint32(k string) (v uint32, err error) { getValue(k, &v); return }
 
 // GetUint64
-func (s *store) GetUint64(k string) (v uint64, err error) { return getValue(k, v) }
+func (s *store) GetUint64(k string) (v uint64, err error) { getValue(k, &v); return }
 
 // GetFloat32
-func (s *store) GetFloat32(k string) (v float32, err error) { return getValue(k, v) }
+func (s *store) GetFloat32(k string) (v float32, err error) { getValue(k, &v); return }
 
 // GetFloat64
-func (s *store) GetFloat64(k string) (v float64, err error) { return getValue(k, v) }
+func (s *store) GetFloat64(k string) (v float64, err error) { getValue(k, &v); return }
 
 // GetBool
-func (s *store) GetBool(k string) (v bool, err error) { return getValue(k, v) }
+func (s *store) GetBool(k string) (v bool, err error) { getValue(k, &v); return }
+
+// GetTime
+func (s *store) GetTime(k string) (v time.Time, err error) { getValue(k, &v); return }
 
 // GetList
 func GetList[T comparable](key string) (*structx.List[T], error) {
@@ -186,7 +208,7 @@ func GetList[T comparable](key string) (*structx.List[T], error) {
 }
 
 // GetSet
-func GetLSet[T comparable](s *store, key string) (structx.Set[T], error) {
+func GetSet[T comparable](s *store, key string) (structx.Set[T], error) {
 	return getValue(key, structx.NewMapSet[T]())
 }
 
