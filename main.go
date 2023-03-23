@@ -147,6 +147,7 @@ func testUint() {
 	fmt.Println(db.GetFloat64("float64"))
 	fmt.Println(db.GetString("string"))
 	fmt.Println(db.GetBool("bool"))
+	fmt.Println(db.GetStringSlice("stringSlice"))
 
 	db.Set("uint", uint(123))
 	db.Set("uint8", uint8(123))
@@ -162,6 +163,7 @@ func testUint() {
 	db.Set("float64", float64(123))
 	db.Set("string", "123")
 	db.Set("bool", true)
+	db.Set("stringSlice", []string{"123", "456"})
 	fmt.Println()
 }
 

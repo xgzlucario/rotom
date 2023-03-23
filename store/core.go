@@ -6,6 +6,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
@@ -235,7 +236,13 @@ func (s *storeShard) EncodeValue(v any) ([]byte, error) {
 		return base.S2B(&str), nil
 
 	case bool:
-		str := strconv.FormatBool(v)
+		if v {
+			return []byte{'T'}, nil
+		}
+		return []byte{'F'}, nil
+
+	case []string:
+		str := strings.Join(v, ",")
 		return base.S2B(&str), nil
 
 	default:
@@ -251,11 +258,9 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 
 	case *string:
 		*v = *base.B2S(src)
-		return nil
 
 	case *[]byte:
 		*v = src
-		return nil
 
 	case *uint:
 		num, err := strconv.ParseUint(*base.B2S(src), carry, 64)
@@ -263,7 +268,6 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 			return err
 		}
 		*v = uint(num)
-		return nil
 
 	case *uint8:
 		num, err := strconv.ParseUint(*base.B2S(src), carry, 8)
@@ -271,7 +275,6 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 			return err
 		}
 		*v = uint8(num)
-		return nil
 
 	case *uint16:
 		num, err := strconv.ParseUint(*base.B2S(src), carry, 16)
@@ -279,7 +282,6 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 			return err
 		}
 		*v = uint16(num)
-		return nil
 
 	case *uint32:
 		num, err := strconv.ParseUint(*base.B2S(src), carry, 32)
@@ -287,7 +289,6 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 			return err
 		}
 		*v = uint32(num)
-		return nil
 
 	case *uint64:
 		num, err := strconv.ParseUint(*base.B2S(src), carry, 64)
@@ -295,7 +296,6 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 			return err
 		}
 		*v = num
-		return nil
 
 	case *int:
 		num, err := strconv.ParseInt(*base.B2S(src), carry, 64)
@@ -303,7 +303,6 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 			return err
 		}
 		*v = int(num)
-		return nil
 
 	case *int8:
 		num, err := strconv.ParseInt(*base.B2S(src), carry, 8)
@@ -311,7 +310,6 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 			return err
 		}
 		*v = int8(num)
-		return nil
 
 	case *int16:
 		num, err := strconv.ParseInt(*base.B2S(src), carry, 16)
@@ -319,7 +317,6 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 			return err
 		}
 		*v = int16(num)
-		return nil
 
 	case *int32:
 		num, err := strconv.ParseInt(*base.B2S(src), carry, 32)
@@ -355,6 +352,9 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 			return err
 		}
 		*v = val
+
+	case *[]string:
+		*v = strings.Split(*base.B2S(src), ",")
 
 	default:
 		return errors.New("unsupported type: " + reflect.TypeOf(v).String())

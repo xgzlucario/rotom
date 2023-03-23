@@ -202,6 +202,9 @@ func (s *store) GetBool(k string) (v bool, err error) { getValue(k, &v); return 
 // GetTime
 func (s *store) GetTime(k string) (v time.Time, err error) { getValue(k, &v); return }
 
+// GetStringSlice
+func (s *store) GetStringSlice(k string) (v []string, err error) { getValue(k, &v); return }
+
 // GetList
 func GetList[T comparable](key string) (*structx.List[T], error) {
 	return getValue(key, structx.NewList[T]())
