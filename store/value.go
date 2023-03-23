@@ -134,12 +134,12 @@ func (s *store) Keys() []string {
 	return arr
 }
 
-func getValue[T any](key string, data T) (T, error) {
+func getValue[T any](key string, vptr T) (T, error) {
 	shard := db.getShard(key)
 	// get
 	val, ok := shard.Get(key)
 	if !ok {
-		return data, base.ErrKeyNotFound(key)
+		return vptr, base.ErrKeyNotFound(key)
 	}
 
 	// type assertion
@@ -150,12 +150,12 @@ func getValue[T any](key string, data T) (T, error) {
 
 	// unmarshal
 	buf := val.([]byte)
-	if err := shard.DecodeValue(buf, data); err != nil {
-		return data, err
+	if err := shard.DecodeValue(buf, vptr); err != nil {
+		return vptr, err
 	}
-	shard.Set(key, data)
+	shard.Set(key, vptr)
 
-	return data, nil
+	return vptr, nil
 }
 
 // Incr

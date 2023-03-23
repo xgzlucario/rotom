@@ -135,8 +135,18 @@ func testBloom() {
 }
 
 func testUint() {
+	fmt.Println("===== start test Uint =====")
+
 	fmt.Println(db.GetUint("uint"))
 	fmt.Println(db.GetUint64("uint64"))
+	fmt.Println(db.GetUint32("uint32"))
+	fmt.Println(db.GetInt("int"))
+	fmt.Println(db.GetInt32("int32"))
+	fmt.Println(db.GetInt64("int64"))
+	fmt.Println(db.GetFloat32("float32"))
+	fmt.Println(db.GetFloat64("float64"))
+	fmt.Println(db.GetString("string"))
+	fmt.Println(db.GetBool("bool"))
 
 	db.Set("uint", uint(123))
 	db.Set("uint8", uint8(123))
@@ -152,8 +162,7 @@ func testUint() {
 	db.Set("float64", float64(123))
 	db.Set("string", "123")
 	db.Set("bool", true)
-
-	// fmt.Println(db.GetUint8("uint8"))
+	fmt.Println()
 }
 
 func testStore() {
@@ -169,7 +178,6 @@ func testStore() {
 }
 
 func main() {
-	// structx.InitAI()
 	testUint()
 	testBloom()
 	testTrie()
