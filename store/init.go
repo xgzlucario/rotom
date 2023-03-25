@@ -3,14 +3,13 @@ package store
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/xgzlucario/rotom/base"
+	"github.com/sourcegraph/conc/pool"
 	"github.com/xgzlucario/rotom/structx"
 )
 
@@ -33,8 +32,8 @@ var (
 )
 
 type storeShard struct {
-	storePath   string
-	rewritePath string
+	storePath string
+	rwPath    string
 
 	// buffer
 	buffer   *bytes.Buffer
@@ -46,12 +45,15 @@ type storeShard struct {
 
 	// bloom filter
 	filter *structx.Bloom
-
-	logger *log.Logger
 }
 
 type store struct {
 	shards []*storeShard
+
+	pool *pool.Pool
+
+	// bloom filter
+	filter *structx.Bloom
 }
 
 // database
@@ -63,56 +65,70 @@ func init() {
 		panic(err)
 	}
 
-	p := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
-
 	db = &store{
 		shards: make([]*storeShard, ShardCount),
+		filter: structx.NewBloom(),
+		pool:   structx.NewPool().WithMaxGoroutines(runtime.NumCPU()),
 	}
-	logger := log.New(os.Stdout, "[store] ", log.LstdFlags)
 
-	// init globalTime
-	base.NewBackWorker(time.Millisecond, func(t time.Time) {
-		atomic.SwapInt64(&globalTime, t.UnixNano())
-	})
+	// init global time
+	go func() {
+		for {
+			time.Sleep(time.Millisecond)
+			atomic.SwapInt64(&globalTime, time.Now().UnixNano())
+		}
+	}()
 
 	// load
 	for i := range db.shards {
-		i := i
-		p.Go(func() {
-			// init
-			db.shards[i] = &storeShard{
-				storePath:   fmt.Sprintf("%sdat%d", StorePath, i),
-				rewritePath: fmt.Sprintf("%sdat%d.rw", StorePath, i),
-				buffer:      bytes.NewBuffer(nil),
-				rwBuffer:    bytes.NewBuffer(nil),
-				logger:      logger,
-				Cache:       structx.NewCache[any](),
+		// init
+		db.shards[i] = &storeShard{
+			storePath: fmt.Sprintf("%sdat%d", StorePath, i),
+			rwPath:    fmt.Sprintf("%sdat%d.rw", StorePath, i),
+			buffer:    bytes.NewBuffer(nil),
+			rwBuffer:  bytes.NewBuffer(nil),
+			Cache:     structx.NewCache[any](),
+			filter:    db.filter,
+		}
+		sd := db.shards[i]
+
+		// write buffer
+		go func() {
+			for {
+				time.Sleep(time.Second)
+				sd.WriteBuffer()
 			}
-			shard := db.shards[i]
+		}()
 
-			// rewrite buffer
-			base.NewBackWorker(time.Second, func(t time.Time) {
-				shard.ReWriteBuffer()
-			})
+		// rewrite buffer
+		go func() {
+			for {
+				time.Sleep(time.Second)
+				sd.ReWriteBuffer()
+			}
+		}()
 
-			// load
-			shard.load()
-
-			// write buffer
-			base.NewBackWorker(time.Second, func(t time.Time) {
-				shard.WriteBuffer()
-			})
-		})
+		db.pool.Go(func() { sd.load() })
 	}
-	p.Wait()
+	db.pool.Wait()
+
+	// reinit
+	db.pool = structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
 
 	// rewriter
-	base.NewBackWorker(RewriteDuration, func(t time.Time) {
-		for _, sd := range db.shards {
-			sd.WriteBuffer()
-			sd.load()
+	go func() {
+		for {
+			time.Sleep(RewriteDuration)
+			db.filter.ClearAll()
+			for _, sd := range db.shards {
+				db.pool.Go(func() {
+					sd := sd
+					sd.WriteBuffer()
+					sd.load()
+				})
+			}
 		}
-	})
+	}()
 }
 
 func GlobalTime() int64 {

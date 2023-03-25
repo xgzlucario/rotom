@@ -82,8 +82,8 @@ func testStress() {
 	fmt.Println("db count is", db.Count())
 
 	// Simulate storing mobile sms code of 100 million users
-	for i := 0; i <= 1000*100000; i++ {
-		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute)
+	for i := 0; i <= 10000*100000; i++ {
+		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Second*10)
 		// stats
 		if i%(10*10000) == 0 {
 			memInfo, _ := mem.VirtualMemory()
@@ -134,8 +134,8 @@ func testBloom() {
 	fmt.Println()
 }
 
-func testUint() {
-	fmt.Println("===== start test Uint =====")
+func testValue() {
+	fmt.Println("===== start test Value =====")
 
 	fmt.Println(db.GetUint("uint"))
 	fmt.Println(db.GetUint64("uint64"))
@@ -167,23 +167,12 @@ func testUint() {
 	fmt.Println()
 }
 
-func testStore() {
-	db.Set("abc", 4)
-	db.Set("abc", 1)
-	db.Set("abc", 3)
-	db.Set("abc", 2)
-	db.Set("abc", 5)
-	db.Set("abc", 6)
-	db.Set("abc", 8)
-	db.Commit()
-}
-
 func main() {
-	testUint()
+	testValue()
 	testBloom()
 	testTrie()
 	testCustom()
 	testTTL()
-	testStore()
 	testStress()
+	db.Commit()
 }

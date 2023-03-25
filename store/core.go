@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
-	"github.com/xgzlucario/rotom/structx"
 )
 
 const (
@@ -41,9 +40,6 @@ func (s *storeShard) load() {
 		return
 	}
 
-	// reset filter
-	s.filter = structx.NewBloom()
-
 	lines := bytes.Split(data, []byte{'\n'})
 	// read line from tail
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -51,27 +47,16 @@ func (s *storeShard) load() {
 	}
 
 	// rewrite
-	if s.rwBuffer.Len() > 0 {
-		fs, err := os.OpenFile(s.rewritePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-		if err != nil {
-			return
-		}
-		defer fs.Close()
-
-		s.rwBuffer.WriteTo(fs)
-
-		// rename dat.rw to dat
-		if err := os.Rename(s.storePath, s.storePath+".bak"); err != nil {
-			panic(err)
-		}
-		if err := os.Rename(s.rewritePath, s.storePath); err != nil {
-			panic(err)
-		}
-		if err := os.Remove(s.storePath + ".bak"); err != nil {
-			panic(err)
-		}
-		os.Remove(s.rewritePath)
+	fs, err := os.OpenFile(s.rwPath, os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		panic(err)
 	}
+
+	s.rwBuffer.WriteTo(fs)
+	fs.Close()
+
+	// rename dat.rw to dat
+	os.Rename(s.rwPath, s.storePath)
 }
 
 // WriteBuffer
@@ -85,10 +70,8 @@ func (s *storeShard) WriteBuffer() (int64, error) {
 
 	fs, err := os.OpenFile(s.storePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
-		s.logger.Println("WriteBuffer", err)
-		return -1, err
+		panic(err)
 	}
-
 	defer fs.Close()
 
 	return s.buffer.WriteTo(fs)
@@ -103,12 +86,10 @@ func (s *storeShard) ReWriteBuffer() (int64, error) {
 		return 0, nil
 	}
 
-	fs, err := os.OpenFile(s.rewritePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	fs, err := os.OpenFile(s.rwPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
-		s.logger.Println("ReWriteBuffer", err)
-		return -1, err
+		panic(err)
 	}
-
 	defer fs.Close()
 
 	return s.rwBuffer.WriteTo(fs)
@@ -162,9 +143,9 @@ func (s *storeShard) readLine(line []byte) {
 			return
 		}
 
-		ttl, _ := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), 10, 0)
+		ttl, _ := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), carry, 64)
 		// not expired
-		if ttl > globalTime {
+		if ttl > GlobalTime() {
 			line[0] = OP_SET_WITH_TTL
 			s.rwBuffer.Write(line)
 			s.rwBuffer.Write(lineSpr)
