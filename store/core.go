@@ -44,11 +44,16 @@ func (s *storeShard) load() {
 	// reset filter
 	s.filter = structx.NewBloom()
 
-	lines := bytes.Split(data, []byte{'\n'})
+	start := len(data) - 2
+	end := start + 1
 	// read line from tail
-	for i := len(lines) - 1; i >= 0; i-- {
-		s.readLine(lines[i])
+	for ; start >= 0; start-- {
+		if data[start] == '\n' {
+			s.readLine(data[start+1 : end])
+			end = start
+		}
 	}
+	s.readLine(data[start+1 : end])
 
 	// rewrite
 	fs, err := os.OpenFile(s.rwPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -61,7 +66,6 @@ func (s *storeShard) load() {
 
 	// rename dat.rw to dat
 	os.Rename(s.rwPath, s.storePath)
-	os.Remove(s.rwPath)
 }
 
 // WriteBuffer
