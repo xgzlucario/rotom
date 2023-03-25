@@ -78,6 +78,14 @@ func (c *Cache[V]) Set(key string, value V) {
 	c.data.Set(key, value)
 }
 
+// SetWithDeadLine
+func (c *Cache[V]) SetWithDeadLine(key string, value V, ts int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.data.SetWithScore(key, ts+atomic.AddInt64(&c.count, 1), value)
+}
+
 // SetWithTTL
 func (c *Cache[V]) SetWithTTL(key string, value V, ttl time.Duration) {
 	c.mu.Lock()

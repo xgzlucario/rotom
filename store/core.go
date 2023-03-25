@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
@@ -155,14 +154,15 @@ func (s *storeShard) readLine(line []byte) {
 			return
 		}
 
-		ttl, _ := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), carry, 64)
+		ts, _ := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), carry, 64)
+		ts *= timeCarry
 		// not expired
-		if ttl*timeCarry > GlobalTime() {
+		if ts > GlobalTime() {
 			line[0] = OP_SET_WITH_TTL
 			s.rwBuffer.Write(line)
 			s.rwBuffer.Write(lineSpr)
 
-			s.SetWithTTL(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), time.Duration(ttl))
+			s.SetWithDeadLine(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), ts)
 		}
 
 	// REMOVE: {op}{key}
