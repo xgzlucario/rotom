@@ -36,7 +36,7 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 	ts := GlobalTime() + int64(ttl)
 
 	src, _ := shard.EncodeValue(value)
-	ttlStr, _ := shard.EncodeValue(ts)
+	ttlStr, _ := shard.EncodeValue(ts / timeCarry)
 
 	// 2{key}|{ttl}|{value}\n
 	shard.Lock()

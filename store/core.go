@@ -25,6 +25,9 @@ const (
 
 	// integer carry
 	carry = 36
+
+	// timestamp carry
+	timeCarry = 1000 * 1000 * 1000
 )
 
 var (
@@ -154,7 +157,7 @@ func (s *storeShard) readLine(line []byte) {
 
 		ttl, _ := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), carry, 64)
 		// not expired
-		if ttl > GlobalTime() {
+		if ttl*timeCarry > GlobalTime() {
 			line[0] = OP_SET_WITH_TTL
 			s.rwBuffer.Write(line)
 			s.rwBuffer.Write(lineSpr)
