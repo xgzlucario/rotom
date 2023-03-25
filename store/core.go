@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
+	"github.com/xgzlucario/rotom/structx"
 )
 
 const (
@@ -40,6 +41,9 @@ func (s *storeShard) load() {
 		return
 	}
 
+	// reset filter
+	s.filter = structx.NewBloom()
+
 	lines := bytes.Split(data, []byte{'\n'})
 	// read line from tail
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -47,7 +51,7 @@ func (s *storeShard) load() {
 	}
 
 	// rewrite
-	fs, err := os.OpenFile(s.rwPath, os.O_APPEND|os.O_CREATE, 0644)
+	fs, err := os.OpenFile(s.rwPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -57,6 +61,7 @@ func (s *storeShard) load() {
 
 	// rename dat.rw to dat
 	os.Rename(s.rwPath, s.storePath)
+	os.Remove(s.rwPath)
 }
 
 // WriteBuffer

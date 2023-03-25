@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sourcegraph/conc/pool"
 	"github.com/xgzlucario/rotom/structx"
 )
 
@@ -49,11 +48,6 @@ type storeShard struct {
 
 type store struct {
 	shards []*storeShard
-
-	pool *pool.Pool
-
-	// bloom filter
-	filter *structx.Bloom
 }
 
 // database
@@ -67,9 +61,8 @@ func init() {
 
 	db = &store{
 		shards: make([]*storeShard, ShardCount),
-		filter: structx.NewBloom(),
-		pool:   structx.NewPool().WithMaxGoroutines(runtime.NumCPU()),
 	}
+	pool := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
 
 	// init global time
 	go func() {
@@ -88,7 +81,6 @@ func init() {
 			buffer:    bytes.NewBuffer(nil),
 			rwBuffer:  bytes.NewBuffer(nil),
 			Cache:     structx.NewCache[any](),
-			filter:    db.filter,
 		}
 		sd := db.shards[i]
 
@@ -108,27 +100,18 @@ func init() {
 			}
 		}()
 
-		db.pool.Go(func() { sd.load() })
-	}
-	db.pool.Wait()
-
-	// reinit
-	db.pool = structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
-
-	// rewriter
-	go func() {
-		for {
-			time.Sleep(RewriteDuration)
-			db.filter.ClearAll()
-			for _, sd := range db.shards {
-				db.pool.Go(func() {
-					sd := sd
-					sd.WriteBuffer()
-					sd.load()
-				})
+		// rewrite
+		go func() {
+			for {
+				time.Sleep(RewriteDuration)
+				sd.WriteBuffer()
+				sd.load()
 			}
-		}
-	}()
+		}()
+
+		pool.Go(func() { sd.load() })
+	}
+	pool.Wait()
 }
 
 func GlobalTime() int64 {
