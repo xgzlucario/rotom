@@ -13,25 +13,35 @@ import (
 )
 
 const (
-	// start with `1`
+	// 操作码
+	// 从 `1` 开始, 以便于在文件中直接使用 `1` 表示 `OP_SET`
+	// 数据行: 代表一条数据, 如 `1xgz|22#\n` 代表 `SET xgz 22`
 	OP_SET byte = iota + 49
 	OP_SET_WITH_TTL
 	OP_REMOVE
 	OP_PERSIST
 
-	spr     = '|'
-	endChar = '#'
+	// 分隔符, 用于分隔数据行中的不同字段
+	sprChar = '|'
 
-	// integer carry
+	// 校验符, 用于校验数据行是否完整
+	// 判断一条数据是否完整, 只需判断最后一个字符是否为 `#` 即可
+	validChar = '#'
+
+	// 换行符, 用于表示数据行的结尾
+	endChar = '\n'
+
+	// 进制, 用于将数字转换为字符串
 	carry = 36
 
-	// timestamp carry
+	// 时间戳换算
 	timeCarry = 1000 * 1000 * 1000
 )
 
 var (
-	// seperate char
-	lineSpr = []byte("#\n")
+	// 行尾, 起到换行及校验的作用
+	// 不同数据行通过行尾分隔
+	lineSpr = []byte{validChar, endChar}
 )
 
 func (s *storeShard) load() {
@@ -43,11 +53,12 @@ func (s *storeShard) load() {
 		return
 	}
 
-	// reset filter
+	// init filter
 	s.filter = structx.NewBloom()
 
 	start := len(data) - 2
 	end := start + 1
+
 	// read line from tail
 	for ; start >= 0; start-- {
 		if data[start] == '\n' {
@@ -66,7 +77,7 @@ func (s *storeShard) load() {
 	s.rwBuffer.WriteTo(fs)
 	fs.Close()
 
-	// rename dat.rw to dat
+	// rename rwFile to storeFile
 	os.Rename(s.rwPath, s.storePath)
 }
 
@@ -109,10 +120,7 @@ func (s *storeShard) ReWriteBuffer() (int64, error) {
 // read line
 func (s *storeShard) readLine(line []byte) {
 	// line valid
-	if len(line) == 0 {
-		return
-	}
-	if line[len(line)-1] != endChar {
+	if !bytes.HasSuffix(line, []byte{validChar}) {
 		return
 	}
 	line = line[:len(line)-1]
@@ -120,11 +128,10 @@ func (s *storeShard) readLine(line []byte) {
 	switch line[0] {
 	// SET: {op}{key}|{value}
 	case OP_SET:
-		i := bytes.IndexByte(line, spr)
+		i := bytes.IndexByte(line, sprChar)
 		if i <= 0 {
 			return
 		}
-
 		if !s.testAndAdd(line[:i], []byte{OP_SET_WITH_TTL, OP_REMOVE}) {
 			return
 		}
@@ -139,7 +146,7 @@ func (s *storeShard) readLine(line []byte) {
 	case OP_SET_WITH_TTL:
 		var sp1, sp2 int
 		for i, c := range line {
-			if c == spr {
+			if c == sprChar {
 				if sp1 == 0 {
 					sp1 = i
 
@@ -149,7 +156,6 @@ func (s *storeShard) readLine(line []byte) {
 				}
 			}
 		}
-
 		if !s.testAndAdd(line[:sp1], []byte{OP_SET, OP_REMOVE}) {
 			return
 		}
@@ -166,7 +172,7 @@ func (s *storeShard) readLine(line []byte) {
 		}
 
 	// REMOVE: {op}{key}
-	// 删除操作不需要重写，重写后的日志中应仅包含 Set, SetWithTTL, Persist 操作
+	// 删除操作不需要重写，重写日志中应仅包含 Set, SetWithTTL, Persist 操作
 	case OP_REMOVE:
 		if !s.filter.TestAndAdd(line) {
 			return

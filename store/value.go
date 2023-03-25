@@ -22,7 +22,7 @@ func (s *store) Set(key string, value any) {
 	shard.Lock()
 	shard.buffer.WriteByte(OP_SET)
 	shard.buffer.Write(base.S2B(&key))
-	shard.buffer.WriteByte(spr)
+	shard.buffer.WriteByte(sprChar)
 	shard.buffer.Write(src)
 	shard.buffer.Write(lineSpr)
 	shard.Unlock()
@@ -42,9 +42,9 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 	shard.Lock()
 	shard.buffer.WriteByte(OP_SET_WITH_TTL)
 	shard.buffer.Write(base.S2B(&key))
-	shard.buffer.WriteByte(spr)
+	shard.buffer.WriteByte(sprChar)
 	shard.buffer.Write(ttlStr)
-	shard.buffer.WriteByte(spr)
+	shard.buffer.WriteByte(sprChar)
 	shard.buffer.Write(src)
 	shard.buffer.Write(lineSpr)
 	shard.Unlock()
@@ -242,6 +242,6 @@ func (s *store) GetBloom(key string) (*structx.Bloom, error) {
 }
 
 // GetCustomType
-func GetCustomType[T base.Marshaler](key string, data T) (T, error) {
+func GetCustomType[T any](key string, data T) (T, error) {
 	return getValue(key, data)
 }

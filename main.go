@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
-	"math"
+	"os/exec"
+	"strconv"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/bytedance/sonic"
 	"github.com/shirou/gopsutil/mem"
+	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -79,39 +82,21 @@ func testStress() {
 	a := time.Now()
 	db.WithExpired(nil)
 
-	fmt.Println("db count is", db.Count())
+	fmt.Println("db count:", db.Count())
 
 	// Simulate storing mobile sms code of 100 million users
 	for i := 0; i <= 10000*10000; i++ {
-		db.SetWithTTL(gofakeit.Phone(), uint16(gofakeit.Number(10000, math.MaxUint16)), time.Minute)
+		time.Sleep(time.Microsecond / 10)
+		db.SetWithTTL(gofakeit.Phone(), gofakeit.Uint16(), time.Second*45)
 		// stats
-		if i%(10*10000) == 0 {
+		if i%(10000) == 0 {
 			memInfo, _ := mem.VirtualMemory()
-			fmt.Println("num:", i, "count:", db.Count())
-			fmt.Printf("mem usage: %.2f%%\n", memInfo.UsedPercent)
+			dbsize := getDBFileSize()
+			fmt.Printf("time: %.1fs, num: %d, count: %d\n", time.Since(a).Seconds(), i, db.Count())
+			fmt.Printf("mem use: %.2f%%, db size: %.1fM\n", memInfo.UsedPercent, float64(dbsize)/1024/1024)
 		}
 	}
 	fmt.Println("total cost:", time.Since(a))
-}
-
-func testTTL() {
-	fmt.Println("===== start test TTL =====")
-
-	db.WithExpired(func(s string, a any) {
-		fmt.Println("exp", s, a)
-	})
-
-	db.Set("xgz", "123")
-	db.SetWithTTL("xgz-1", "234", time.Second*1)
-	db.SetWithTTL("xgz-2", "234", time.Second*3)
-	db.SetWithTTL("xgz-3", "234", time.Second*5)
-
-	for i := 0; i < 6; i++ {
-		fmt.Println(db.Count())
-		time.Sleep(time.Second)
-	}
-
-	fmt.Println()
 }
 
 func testBloom() {
@@ -132,6 +117,21 @@ func testBloom() {
 		fmt.Println(b.TestString("xgz123"), b.TestString("xgz234"))
 	}
 	fmt.Println()
+}
+
+func getDBFileSize() int64 {
+	res, err := exec.Command("du", "-s", "db").Output()
+	if err != nil {
+		return -1
+	}
+	spr := bytes.IndexByte(res, '\t')
+	res = res[:spr]
+
+	num, err := strconv.ParseInt(*base.B2S(res), 10, 64)
+	if err != nil {
+		return -1
+	}
+	return num * 1000
 }
 
 func testValue() {
@@ -168,11 +168,11 @@ func testValue() {
 }
 
 func main() {
+	time.Sleep(time.Second * 2)
 	testValue()
 	testBloom()
 	testTrie()
 	testCustom()
-	testTTL()
 	testStress()
 	db.Commit()
 }

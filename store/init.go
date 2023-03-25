@@ -23,7 +23,17 @@ var (
 	PersistDuration = time.Second
 
 	// RewriteDuration
-	RewriteDuration = time.Minute
+	RewriteDuration = time.Minute / 2
+)
+
+// Status for runtime
+type Status byte
+
+const (
+	ERR Status = iota
+	START
+	READY
+	REWRITE
 )
 
 var (
@@ -31,6 +41,7 @@ var (
 )
 
 type storeShard struct {
+	status    Status
 	storePath string
 	rwPath    string
 
@@ -63,6 +74,7 @@ func init() {
 		shards: make([]*storeShard, ShardCount),
 	}
 	pool := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
+	rwPool := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
 
 	// init global time
 	go func() {
@@ -76,6 +88,7 @@ func init() {
 	for i := range db.shards {
 		// init
 		db.shards[i] = &storeShard{
+			status:    START,
 			storePath: fmt.Sprintf("%sdat%d", StorePath, i),
 			rwPath:    fmt.Sprintf("%sdat%d.rw", StorePath, i),
 			buffer:    bytes.NewBuffer(nil),
@@ -104,12 +117,19 @@ func init() {
 		go func() {
 			for {
 				time.Sleep(RewriteDuration)
-				sd.WriteBuffer()
-				sd.load()
+				sd.status = REWRITE
+				rwPool.Go(func() {
+					sd.WriteBuffer()
+					sd.load()
+				})
+				sd.status = READY
 			}
 		}()
 
-		pool.Go(func() { sd.load() })
+		pool.Go(func() {
+			sd.load()
+			sd.status = READY
+		})
 	}
 	pool.Wait()
 }
