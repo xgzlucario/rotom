@@ -14,26 +14,29 @@ import (
 )
 
 const (
-	OP_SET          = '1'
-	OP_SET_WITH_TTL = '2'
-	OP_REMOVE       = '3'
-	OP_PERSIST      = '4'
+	// start with `1`
+	OP_SET byte = iota + 49
+	OP_SET_WITH_TTL
+	OP_REMOVE
+	OP_PERSIST
 
-	spr = '|'
+	spr     = '|'
+	endChar = '#'
+
+	// integer carry
+	carry = 36
 )
 
 var (
 	// seperate char
-	lineSpr = []byte("\n")
-	blkSpr  = []byte("[BLK]")
+	lineSpr = []byte("#\n")
 )
 
 func (s *storeShard) load() {
 	s.Lock()
 	defer s.Unlock()
 
-	// open file
-	fs, err := os.ReadFile(s.storePath)
+	data, err := os.ReadFile(s.storePath)
 	if err != nil {
 		return
 	}
@@ -41,69 +44,103 @@ func (s *storeShard) load() {
 	// reset filter
 	s.filter = structx.NewBloom()
 
-	blks := bytes.Split(fs, blkSpr)
+	lines := bytes.Split(data, []byte{'\n'})
+	// read line from tail
+	for i := len(lines) - 1; i >= 0; i-- {
+		s.readLine(lines[i])
+	}
 
-	// read block from tail
-	for i := len(blks) - 1; i >= 0; i-- {
-		// decompress
-		// blks[i], err = base.ZstdDecode(blks[i])
-		// if err != nil {
-		// 	fmt.Println("=====================")
-		// 	continue
-		// }
-
-		lines := bytes.Split(blks[i], lineSpr)
-
-		// read line from tail
-		for j := len(lines) - 1; j >= 0; j-- {
-			s.readLine(lines[j])
+	// rewrite
+	if s.rwBuffer.Len() > 0 {
+		fs, err := os.OpenFile(s.rewritePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+		if err != nil {
+			return
 		}
+		defer fs.Close()
+
+		s.rwBuffer.WriteTo(fs)
+
+		// rename dat.rw to dat
+		if err := os.Rename(s.storePath, s.storePath+".bak"); err != nil {
+			panic(err)
+		}
+		if err := os.Rename(s.rewritePath, s.storePath); err != nil {
+			panic(err)
+		}
+		if err := os.Remove(s.storePath + ".bak"); err != nil {
+			panic(err)
+		}
+		os.Remove(s.rewritePath)
 	}
 }
 
-func newWriter(path string) *os.File {
-	writer, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
-	if err != nil {
-		panic(err)
-	}
-	return writer
-}
-
-// write buffer block
-func (s *storeShard) writeBuffer() error {
+// WriteBuffer
+func (s *storeShard) WriteBuffer() (int64, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	if len(s.buffer) == 0 {
-		return nil
+	if s.buffer.Len() == 0 {
+		return 0, nil
 	}
 
-	// write
-	s.buffer = append(s.buffer, blkSpr...)
-	if _, err := s.rw.Write(s.buffer); err != nil {
-		return err
+	fs, err := os.OpenFile(s.storePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		s.logger.Println("WriteBuffer", err)
+		return -1, err
 	}
 
-	// reset
-	s.buffer = s.buffer[0:0]
-	return nil
+	defer fs.Close()
+
+	return s.buffer.WriteTo(fs)
+}
+
+// ReWriteBuffer
+func (s *storeShard) ReWriteBuffer() (int64, error) {
+	s.Lock()
+	defer s.Unlock()
+
+	if s.rwBuffer.Len() == 0 {
+		return 0, nil
+	}
+
+	fs, err := os.OpenFile(s.rewritePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		s.logger.Println("ReWriteBuffer", err)
+		return -1, err
+	}
+
+	defer fs.Close()
+
+	return s.rwBuffer.WriteTo(fs)
 }
 
 // read line
 func (s *storeShard) readLine(line []byte) {
+	// line valid
 	if len(line) == 0 {
 		return
 	}
+	if line[len(line)-1] != endChar {
+		return
+	}
+	line = line[:len(line)-1]
 
 	switch line[0] {
 	// SET: {op}{key}|{value}
 	case OP_SET:
 		i := bytes.IndexByte(line, spr)
+		if i <= 0 {
+			return
+		}
 
-		// test
 		if !s.testAndAdd(line[:i], []byte{OP_SET_WITH_TTL, OP_REMOVE}) {
 			return
 		}
+
+		line[0] = OP_SET
+		s.rwBuffer.Write(line)
+		s.rwBuffer.Write(lineSpr)
+
 		s.Set(*base.B2S(line[1:i]), line[i+1:])
 
 	// SET_WITH_TTL: {op}{key}|{ttl}|{value}
@@ -120,11 +157,7 @@ func (s *storeShard) readLine(line []byte) {
 				}
 			}
 		}
-		if sp2 <= sp1 {
-			panic(errors.New("sp2 < sp1"))
-		}
 
-		// test
 		if !s.testAndAdd(line[:sp1], []byte{OP_SET, OP_REMOVE}) {
 			return
 		}
@@ -132,23 +165,30 @@ func (s *storeShard) readLine(line []byte) {
 		ttl, _ := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), 10, 0)
 		// not expired
 		if ttl > globalTime {
+			line[0] = OP_SET_WITH_TTL
+			s.rwBuffer.Write(line)
+			s.rwBuffer.Write(lineSpr)
+
 			s.SetWithTTL(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), time.Duration(ttl))
 		}
 
 	// REMOVE: {op}{key}
+	// 删除操作不需要重写，重写后的日志中应仅包含 Set, SetWithTTL, Persist 操作
 	case OP_REMOVE:
-		// test
-		if !s.testAndAdd(line, []byte{OP_SET, OP_SET_WITH_TTL}) {
+		if !s.filter.TestAndAdd(line) {
 			return
 		}
 		s.Remove(*base.B2S(line[1:]))
 
 	// PERSIST: {op}{key}
 	case OP_PERSIST:
-		// test
 		if !s.testAndAdd(line, []byte{OP_SET, OP_REMOVE}) {
 			return
 		}
+		line[0] = OP_PERSIST
+		s.rwBuffer.Write(line)
+		s.rwBuffer.Write(lineSpr)
+
 		s.Persist(*base.B2S(line[1:]))
 	}
 }
@@ -168,8 +208,6 @@ func (s *storeShard) testAndAdd(line []byte, ops []byte) bool {
 
 	return true
 }
-
-const carry = 36
 
 // EncodeValue
 func (s *storeShard) EncodeValue(v any) ([]byte, error) {

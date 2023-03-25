@@ -20,11 +20,11 @@ func (s *store) Set(key string, value any) {
 
 	// 1{key}|{value}\n
 	shard.Lock()
-	shard.buffer = append(shard.buffer, OP_SET)
-	shard.buffer = append(shard.buffer, base.S2B(&key)...)
-	shard.buffer = append(shard.buffer, spr)
-	shard.buffer = append(shard.buffer, src...)
-	shard.buffer = append(shard.buffer, '\n')
+	shard.buffer.WriteByte(OP_SET)
+	shard.buffer.Write(base.S2B(&key))
+	shard.buffer.WriteByte(spr)
+	shard.buffer.Write(src)
+	shard.buffer.Write(lineSpr)
 	shard.Unlock()
 
 	shard.Set(key, value)
@@ -40,13 +40,13 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 
 	// 2{key}|{ttl}|{value}\n
 	shard.Lock()
-	shard.buffer = append(shard.buffer, OP_SET_WITH_TTL)
-	shard.buffer = append(shard.buffer, base.S2B(&key)...)
-	shard.buffer = append(shard.buffer, spr)
-	shard.buffer = append(shard.buffer, ttlStr...)
-	shard.buffer = append(shard.buffer, spr)
-	shard.buffer = append(shard.buffer, src...)
-	shard.buffer = append(shard.buffer, '\n')
+	shard.buffer.WriteByte(OP_SET_WITH_TTL)
+	shard.buffer.Write(base.S2B(&key))
+	shard.buffer.WriteByte(spr)
+	shard.buffer.Write(ttlStr)
+	shard.buffer.WriteByte(spr)
+	shard.buffer.Write(src)
+	shard.buffer.Write(lineSpr)
 	shard.Unlock()
 
 	shard.SetWithTTL(key, value, ttl)
@@ -58,9 +58,9 @@ func (s *store) Remove(key string) (any, bool) {
 
 	// 3{key}\n
 	shard.Lock()
-	shard.buffer = append(shard.buffer, OP_REMOVE)
-	shard.buffer = append(shard.buffer, base.S2B(&key)...)
-	shard.buffer = append(shard.buffer, '\n')
+	shard.buffer.WriteByte(OP_REMOVE)
+	shard.buffer.Write(base.S2B(&key))
+	shard.buffer.Write(lineSpr)
 	shard.Unlock()
 
 	return shard.Remove(key)
@@ -72,9 +72,9 @@ func (s *store) Persist(key string) bool {
 
 	// 4{key}\n
 	shard.Lock()
-	shard.buffer = append(shard.buffer, OP_PERSIST)
-	shard.buffer = append(shard.buffer, base.S2B(&key)...)
-	shard.buffer = append(shard.buffer, '\n')
+	shard.buffer.WriteByte(OP_PERSIST)
+	shard.buffer.Write(base.S2B(&key))
+	shard.buffer.Write(lineSpr)
 	shard.Unlock()
 
 	return shard.Persist(key)
@@ -93,7 +93,7 @@ func (s *store) Type(key string) reflect.Type {
 // Commit commits all changes and persist to disk immediately
 func (s *store) Commit() error {
 	for _, shard := range s.shards {
-		if err := shard.writeBuffer(); err != nil {
+		if _, err := shard.WriteBuffer(); err != nil {
 			return err
 		}
 	}
