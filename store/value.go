@@ -113,10 +113,6 @@ func (s *store) getShard(key string) *storeShard {
 	return s.shards[xxh3.HashString(key)&(ShardCount-1)]
 }
 
-func (s *store) DEBUGgetShard(key string) *storeShard {
-	return s.shards[xxh3.HashString(key)&(ShardCount-1)]
-}
-
 // WithExpired
 func (s *store) WithExpired(f func(string, any)) *store {
 	for _, s := range s.shards {
