@@ -23,7 +23,7 @@ var (
 	PersistDuration = time.Second
 
 	// RewriteDuration
-	RewriteDuration = time.Minute
+	RewriteDuration = time.Second * 10
 )
 
 // Status for runtime
@@ -46,8 +46,7 @@ type storeShard struct {
 	rwPath    string
 
 	// buffer
-	buffer   *bytes.Buffer
-	rwBuffer *bytes.Buffer
+	buffer *bytes.Buffer
 
 	// data
 	sync.Mutex
@@ -92,10 +91,10 @@ func init() {
 			storePath: fmt.Sprintf("%sdat%d", StorePath, i),
 			rwPath:    fmt.Sprintf("%sdat%d.rw", StorePath, i),
 			buffer:    bytes.NewBuffer(nil),
-			rwBuffer:  bytes.NewBuffer(nil),
 			Cache:     structx.NewCache[any](),
 		}
 		sd := db.shards[i]
+		sd.setStatus(START)
 
 		// write buffer
 		go func() {
@@ -109,7 +108,12 @@ func init() {
 		go func() {
 			for {
 				time.Sleep(time.Second)
-				sd.ReWriteBuffer()
+
+				if sd.getStatus() == REWRITE {
+					sd.ReWriteBuffer()
+				} else {
+					sd.WriteBuffer()
+				}
 			}
 		}()
 
@@ -117,18 +121,19 @@ func init() {
 		go func() {
 			for {
 				time.Sleep(RewriteDuration)
-				sd.status = REWRITE
+				sd.setStatus(REWRITE)
+
 				rwPool.Go(func() {
 					sd.WriteBuffer()
 					sd.load()
-					sd.status = READY
+					sd.setStatus(READY)
 				})
 			}
 		}()
 
 		pool.Go(func() {
 			sd.load()
-			sd.status = READY
+			sd.setStatus(READY)
 		})
 	}
 	pool.Wait()

@@ -24,6 +24,8 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/segmentio/fasthash v1.0.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
+	github.com/tklauser/go-sysconf v0.3.11 // indirect
+	github.com/tklauser/numcpus v0.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/willf/bitset v1.1.11 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect

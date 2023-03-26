@@ -74,7 +74,7 @@ func (s *storeShard) load() {
 		panic(err)
 	}
 
-	s.rwBuffer.WriteTo(fs)
+	s.buffer.WriteTo(fs)
 	fs.Close()
 
 	// rename rwFile to storeFile
@@ -104,7 +104,7 @@ func (s *storeShard) ReWriteBuffer() (int64, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	if s.rwBuffer.Len() == 0 {
+	if s.buffer.Len() == 0 {
 		return 0, nil
 	}
 
@@ -114,7 +114,7 @@ func (s *storeShard) ReWriteBuffer() (int64, error) {
 	}
 	defer fs.Close()
 
-	return s.rwBuffer.WriteTo(fs)
+	return s.buffer.WriteTo(fs)
 }
 
 // read line
@@ -138,8 +138,8 @@ func (s *storeShard) readLine(line []byte) {
 			return
 		}
 
-		s.rwBuffer.Write(line)
-		s.rwBuffer.Write(lineSpr)
+		s.buffer.Write(line)
+		s.buffer.Write(lineSpr)
 
 		s.Set(*base.B2S(line[1:i]), line[i+1:])
 
@@ -166,8 +166,8 @@ func (s *storeShard) readLine(line []byte) {
 		ts *= timeCarry
 		// not expired
 		if ts > GlobalTime() {
-			s.rwBuffer.Write(line)
-			s.rwBuffer.Write(lineSpr)
+			s.buffer.Write(line)
+			s.buffer.Write(lineSpr)
 
 			s.SetWithDeadLine(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), ts)
 		}
@@ -188,8 +188,8 @@ func (s *storeShard) readLine(line []byte) {
 			return
 		}
 
-		s.rwBuffer.Write(line)
-		s.rwBuffer.Write(lineSpr)
+		s.buffer.Write(line)
+		s.buffer.Write(lineSpr)
 
 		s.Persist(*base.B2S(line[1:]))
 	}
@@ -200,10 +200,9 @@ func (s *storeShard) testAndAdd(line []byte) bool {
 	if s.filter.Test(line) {
 		return false
 
-	} else {
-		s.filter.Add(line)
-		return true
 	}
+	s.filter.Add(line)
+	return true
 }
 
 // EncodeValue
@@ -395,4 +394,18 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 		return errors.New("unsupported type: " + reflect.TypeOf(v).String())
 	}
 	return nil
+}
+
+func (s *storeShard) getStatus() Status {
+	s.Lock()
+	defer s.Unlock()
+
+	return s.status
+}
+
+func (s *storeShard) setStatus(status Status) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.status = status
 }

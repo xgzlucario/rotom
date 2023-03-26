@@ -9,6 +9,7 @@ import (
 
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/bytedance/sonic"
+	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
@@ -82,21 +83,24 @@ func testStress() {
 	a := time.Now()
 	db.WithExpired(nil)
 
-	fmt.Println("db count:", db.Count())
-
-	// Simulate storing mobile sms code of 100 million users
-	for i := 0; i <= 10000*10000; i++ {
-		// time.Sleep(time.Microsecond / 10)
-		db.SetWithTTL(gofakeit.IPv4Address(), gofakeit.Uint16(), time.Second*45)
-		// stats
-		if i%(2*10000) == 0 {
+	// monitor
+	var count int64
+	go func() {
+		for {
 			memInfo, _ := mem.VirtualMemory()
+			cpuInfo, _ := cpu.Percent(time.Second/8, false)
 			dbsize := getDBFileSize()
-			fmt.Printf("time: %.1fs, num: %d, count: %d\n", time.Since(a).Seconds(), i, db.Count())
-			fmt.Printf("mem use: %.2f%%, db size: %.1fM\n", memInfo.UsedPercent, float64(dbsize)/1024/1024)
+			fmt.Println("---------------------------------------")
+			fmt.Printf("time: %.1fs, count: %d, num: %d\n", time.Since(a).Seconds(), count, db.Count())
+			fmt.Printf("mem: %.1f%%, cpu: %.1f%%, db: %.1fM\n", memInfo.UsedPercent, cpuInfo[0], float64(dbsize)/1024/1024)
 		}
+	}()
+
+	// Simulate testing
+	for {
+		count++
+		db.SetWithTTL(gofakeit.IPv6Address(), gofakeit.Uint32(), time.Second*5)
 	}
-	fmt.Println("total cost:", time.Since(a))
 }
 
 func testBloom() {
@@ -129,7 +133,7 @@ func getDBFileSize() int64 {
 
 	num, err := strconv.ParseInt(*base.B2S(res), 10, 64)
 	if err != nil {
-		return -1
+		return 0
 	}
 	return num * 1000
 }
