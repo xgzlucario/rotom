@@ -23,7 +23,7 @@ var (
 	PersistDuration = time.Second
 
 	// RewriteDuration
-	RewriteDuration = time.Minute / 2
+	RewriteDuration = time.Minute
 )
 
 // Status for runtime
@@ -121,8 +121,8 @@ func init() {
 				rwPool.Go(func() {
 					sd.WriteBuffer()
 					sd.load()
+					sd.status = READY
 				})
-				sd.status = READY
 			}
 		}()
 

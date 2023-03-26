@@ -132,11 +132,12 @@ func (s *storeShard) readLine(line []byte) {
 		if i <= 0 {
 			return
 		}
-		if !s.testAndAdd(line[:i], []byte{OP_SET_WITH_TTL, OP_REMOVE}) {
+
+		// 当 key 存在时，表示该 key 在未来被 SET, SET_WITH_TTL, REMOVE 过, 不需要重演
+		if !s.testAndAdd(line[1:i]) {
 			return
 		}
 
-		line[0] = OP_SET
 		s.rwBuffer.Write(line)
 		s.rwBuffer.Write(lineSpr)
 
@@ -156,7 +157,8 @@ func (s *storeShard) readLine(line []byte) {
 				}
 			}
 		}
-		if !s.testAndAdd(line[:sp1], []byte{OP_SET, OP_REMOVE}) {
+
+		if !s.testAndAdd(line[1:sp1]) {
 			return
 		}
 
@@ -164,7 +166,6 @@ func (s *storeShard) readLine(line []byte) {
 		ts *= timeCarry
 		// not expired
 		if ts > GlobalTime() {
-			line[0] = OP_SET_WITH_TTL
 			s.rwBuffer.Write(line)
 			s.rwBuffer.Write(lineSpr)
 
@@ -172,19 +173,21 @@ func (s *storeShard) readLine(line []byte) {
 		}
 
 	// REMOVE: {op}{key}
-	// 删除操作不需要重写，重写日志中应仅包含 Set, SetWithTTL, Persist 操作
 	case OP_REMOVE:
-		if !s.filter.TestAndAdd(line) {
+		if !s.testAndAdd(line[1:]) {
 			return
 		}
+
+		// REMOVE 不需要重写，重写日志中应仅包含 SET, SET_WITH_TTL, PERWSIST 操作
 		s.Remove(*base.B2S(line[1:]))
 
 	// PERSIST: {op}{key}
 	case OP_PERSIST:
-		if !s.testAndAdd(line, []byte{OP_SET, OP_REMOVE}) {
+		// 当 {op}{key} 存在时，表示该 key 未来被 PERSIST 过, 不需要重演
+		if !s.testAndAdd(line) {
 			return
 		}
-		line[0] = OP_PERSIST
+
 		s.rwBuffer.Write(line)
 		s.rwBuffer.Write(lineSpr)
 
@@ -192,20 +195,15 @@ func (s *storeShard) readLine(line []byte) {
 	}
 }
 
-// testAndAdd check if a given line already exists in a bloom filter and if not, to add it to the filter.
-// The method also checks if any of the ops can be applied to the line without causing a match in the filter.
-func (s *storeShard) testAndAdd(line []byte, ops []byte) bool {
-	if s.filter.TestAndAdd(line) {
+func (s *storeShard) testAndAdd(line []byte) bool {
+	// 仅当 filter.Test() 为 false 时返回 true
+	if s.filter.Test(line) {
 		return false
-	}
-	for _, b := range ops {
-		line[0] = b
-		if s.filter.Test(line) {
-			return false
-		}
-	}
 
-	return true
+	} else {
+		s.filter.Add(line)
+		return true
+	}
 }
 
 // EncodeValue
