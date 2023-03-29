@@ -85,7 +85,7 @@ func (s *store) Type(key string) reflect.Type {
 }
 
 // Commit commits all changes and persist to disk immediately
-func (s *store) Commit() error {
+func (s *store) CommitAll() error {
 	for _, sd := range s.shards {
 		if _, err := sd.WriteBuffer(); err != nil {
 			return err
