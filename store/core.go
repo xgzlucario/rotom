@@ -16,26 +16,24 @@ import (
 const (
 	// 操作码
 	// 从 `1` 开始, 以便于在文件中直接使用 `1` 表示 `OP_SET`
-	// 数据行: 代表一条数据, 如 `1xgz|22#\n` 代表 `SET xgz 22`
 	OP_SET byte = iota + 49
 	OP_SET_WITH_TTL
 	OP_REMOVE
 	OP_PERSIST
 
-	// 分隔符, 用于分隔数据行中的不同字段
+	// 分隔符, 分隔数据行中的不同字段
 	sprChar = byte(0)
 
-	// 校验符, 用于校验数据行是否完整
+	// 校验符, 校验数据行是否完整
 	// 判断一条数据是否完整, 只需判断最后一个字符是否为 validChar 即可
 	validChar = byte(0)
 
-	// 换行符, 用于表示数据行的结尾
+	// 换行符, 表示数据行的结尾
 	endChar = '\n'
 )
 
 var (
 	// 行尾, 起到换行及校验的作用
-	// 不同数据行通过行尾分隔
 	lineSpr = []byte{validChar, validChar, endChar}
 )
 
@@ -82,20 +80,7 @@ func (s *storeShard) WriteBuffer() (int, error) {
 		return 0, nil
 	}
 
-	fs, err := os.OpenFile(s.storePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		panic(err)
-	}
-	defer fs.Close()
-
-	// write file
-	n, err := fs.Write(s.buf)
-	if err != nil {
-		return 0, err
-	}
-
-	s.buf = s.buf[0:0]
-	return n, nil
+	return s.flush(s.storePath)
 }
 
 // ReWriteBuffer
@@ -107,20 +92,25 @@ func (s *storeShard) ReWriteBuffer() (int, error) {
 		return 0, nil
 	}
 
-	fs, err := os.OpenFile(s.rwPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	return s.flush(s.rwPath)
+}
+
+// flush buffer to file
+func (s *storeShard) flush(path string) (int, error) {
+	fs, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		panic(err)
 	}
 	defer fs.Close()
 
 	// write file
-	n, err := fs.Write(s.buf)
-	if err != nil {
+	if n, err := fs.Write(s.buf); err != nil {
 		return 0, err
-	}
 
-	s.buf = s.buf[0:0]
-	return n, nil
+	} else {
+		s.buf = s.buf[0:0]
+		return n, nil
+	}
 }
 
 // read line
@@ -205,7 +195,7 @@ func (s *storeShard) encodeBytes(v ...byte) {
 	s.buf = append(s.buf, v...)
 }
 
-// EncodeValue encode value to store shard buffer
+// EncodeValue
 func (s *storeShard) EncodeValue(v any) error {
 	switch v := v.(type) {
 	case base.Marshaler:
