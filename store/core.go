@@ -31,9 +31,6 @@ const (
 
 	// 换行符, 用于表示数据行的结尾
 	endChar = '\n'
-
-	// 时间戳换算
-	timeCarry = 1000 * 1000 * 1000
 )
 
 var (
@@ -163,7 +160,6 @@ func (s *storeShard) readLine(line []byte) {
 		}
 
 		ts, _ := binary.Varint(line[sp1+1 : sp2])
-		ts *= timeCarry
 		// not expired
 		if ts > GlobalTime() {
 			s.buf = append(s.buf, line...)

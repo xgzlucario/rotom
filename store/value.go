@@ -19,7 +19,7 @@ func (s *store) Set(key string, value any) {
 	// 1{key}|{value}\n
 	shard.Lock()
 	shard.encodeBytes(OP_SET)
-	shard.EncodeValue(key)
+	shard.EncodeValue(base.S2B(&key))
 	shard.encodeBytes(sprChar)
 	shard.EncodeValue(value)
 	shard.encodeBytes(lineSpr...)
@@ -36,9 +36,9 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 	// 2{key}|{ttl}|{value}\n
 	shard.Lock()
 	shard.encodeBytes(OP_SET_WITH_TTL)
-	shard.EncodeValue(key)
+	shard.EncodeValue(base.S2B(&key))
 	shard.encodeBytes(sprChar)
-	shard.EncodeValue(ts / timeCarry)
+	shard.EncodeValue(ts)
 	shard.encodeBytes(sprChar)
 	shard.EncodeValue(value)
 	shard.encodeBytes(lineSpr...)
@@ -54,7 +54,7 @@ func (s *store) Remove(key string) (any, bool) {
 	// 3{key}\n
 	shard.Lock()
 	shard.encodeBytes(OP_REMOVE)
-	shard.EncodeValue(key)
+	shard.EncodeValue(base.S2B(&key))
 	shard.encodeBytes(lineSpr...)
 	shard.Unlock()
 
@@ -68,7 +68,7 @@ func (s *store) Persist(key string) bool {
 	// 4{key}\n
 	shard.Lock()
 	shard.encodeBytes(OP_PERSIST)
-	shard.EncodeValue(key)
+	shard.EncodeValue(base.S2B(&key))
 	shard.encodeBytes(lineSpr...)
 	shard.Unlock()
 

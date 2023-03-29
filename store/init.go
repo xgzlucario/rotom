@@ -15,15 +15,16 @@ var (
 	// StorePath for db file
 	StorePath = "db/"
 
-	// ShardCount
+	// ShardCount for db
 	ShardCount uint64 = 32
 
-	// PersistDuration
-	PersistDuration = time.Second
+	// FlushDuration is the time interval for flushing data to disk
+	FlushDuration = time.Second
 
-	// RewriteDuration
-	RewriteDuration = time.Second * 10
+	// RewriteDuration is the time interval for rewriting data to disk
+	RewriteDuration = time.Minute
 
+	// default buffer size
 	defaultBufSize = 4096
 )
 
@@ -84,14 +85,6 @@ func init() {
 		}
 	}()
 
-	// GC
-	go func() {
-		for {
-			time.Sleep(RewriteDuration)
-			runtime.GC()
-		}
-	}()
-
 	// load
 	for i := range db.shards {
 		// init
@@ -106,14 +99,6 @@ func init() {
 		sd.setStatus(START)
 
 		// write buffer
-		go func() {
-			for {
-				time.Sleep(time.Second)
-				sd.WriteBuffer()
-			}
-		}()
-
-		// rewrite buffer
 		go func() {
 			for {
 				time.Sleep(time.Second)
