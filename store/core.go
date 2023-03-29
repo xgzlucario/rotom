@@ -11,6 +11,7 @@ import (
 
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
+	"github.com/zeebo/xxh3"
 )
 
 const (
@@ -22,19 +23,17 @@ const (
 	OP_PERSIST
 
 	// 分隔符, 分隔数据行中的不同字段
+	// 同时也是校验符, 校验数据行是否完整
+	// 判断一条数据是否完整, 只需判断最后一个字符是否为 sprChar 即可
 	sprChar = byte(0)
 
-	// 校验符, 校验数据行是否完整
-	// 判断一条数据是否完整, 只需判断最后一个字符是否为 validChar 即可
-	validChar = byte(0)
-
 	// 换行符, 表示数据行的结尾
-	endChar = '\n'
+	endChar = byte('\n')
 )
 
 var (
 	// 行尾, 起到换行及校验的作用
-	lineSpr = []byte{validChar, validChar, endChar}
+	lineSpr = []byte{sprChar, sprChar, endChar}
 )
 
 func (s *storeShard) load() {
@@ -50,7 +49,7 @@ func (s *storeShard) load() {
 	s.filter = structx.NewBloom()
 
 	// read line from tail
-	lines := bytes.Split(data, []byte{validChar, endChar})
+	lines := bytes.Split(data, []byte{sprChar, endChar})
 	for i := len(lines) - 1; i >= 0; i-- {
 		s.readLine(lines[i])
 	}
@@ -108,6 +107,7 @@ func (s *storeShard) flush(path string) (int, error) {
 		return 0, err
 
 	} else {
+		// reset buf
 		s.buf = s.buf[0:0]
 		return n, nil
 	}
@@ -116,7 +116,7 @@ func (s *storeShard) flush(path string) (int, error) {
 // read line
 func (s *storeShard) readLine(line []byte) {
 	// line valid
-	if !bytes.HasSuffix(line, []byte{validChar}) {
+	if !bytes.HasSuffix(line, []byte{sprChar}) {
 		return
 	}
 	line = line[:len(line)-1]
@@ -190,13 +190,42 @@ func (s *storeShard) testAndAdd(line []byte) bool {
 	return true
 }
 
-// encodeByte without asserting
+func (s *store) getShard(key string) *storeShard {
+	return s.shards[xxh3.HashString(key)&(ShardCount-1)]
+}
+
+// getValue
+func getValue[T any](key string, vptr T) (T, error) {
+	shard := db.getShard(key)
+	// get
+	val, ok := shard.Get(key)
+	if !ok {
+		return vptr, base.ErrKeyNotFound(key)
+	}
+
+	// type assertion
+	obj, ok := val.(T)
+	if ok {
+		return obj, nil
+	}
+
+	// unmarshal
+	buf := val.([]byte)
+	if err := shard.Decode(buf, vptr); err != nil {
+		return vptr, err
+	}
+	shard.Set(key, vptr)
+
+	return vptr, nil
+}
+
+// encodeBytes
 func (s *storeShard) encodeBytes(v ...byte) {
 	s.buf = append(s.buf, v...)
 }
 
-// EncodeValue
-func (s *storeShard) EncodeValue(v any) error {
+// Encode
+func (s *storeShard) Encode(v any) error {
 	switch v := v.(type) {
 	case base.Marshaler:
 		src, err := v.MarshalJSON()
@@ -268,8 +297,8 @@ func (s *storeShard) EncodeValue(v any) error {
 	return errors.New("unsupported type: " + reflect.TypeOf(v).String())
 }
 
-// DecodeValue
-func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
+// Decode
+func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 	switch v := vptr.(type) {
 	case base.Marshaler:
 		return v.UnmarshalJSON(src)

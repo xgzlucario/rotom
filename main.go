@@ -173,11 +173,19 @@ func testValue() {
 }
 
 func main() {
-	time.Sleep(time.Second * 2)
-	testValue()
-	testBloom()
-	testTrie()
-	testCustom()
-	testStress()
-	db.Commit()
+	// time.Sleep(time.Second * 2)
+	// testValue()
+	// testBloom()
+	// testTrie()
+	// testCustom()
+	// testStress()
+	// db.Commit()
+
+	ss := store.NewSession()
+	ss.Set("asd", 123)
+	ss.Set("asd1", 123)
+	ss.Set("asd2", 123)
+	ss.Set("asd3", 123)
+	ss.Set("asd4", 123)
+	ss.Commit()
 }

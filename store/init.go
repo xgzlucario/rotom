@@ -3,7 +3,6 @@ package store
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,6 +25,12 @@ var (
 
 	// default buffer size
 	defaultBufSize = 4096
+
+	// global time
+	globalTime = time.Now().UnixNano()
+
+	// database
+	db *store
 )
 
 // Status for runtime
@@ -38,9 +43,9 @@ const (
 	REWRITE
 )
 
-var (
-	globalTime = time.Now().UnixNano()
-)
+type store struct {
+	shards []*storeShard
+}
 
 type storeShard struct {
 	status    Status
@@ -58,13 +63,6 @@ type storeShard struct {
 	filter *structx.Bloom
 }
 
-type store struct {
-	shards []*storeShard
-}
-
-// database
-var db *store
-
 func init() {
 	// init store dir
 	if err := os.MkdirAll(StorePath, os.ModeDir); err != nil {
@@ -74,8 +72,9 @@ func init() {
 	db = &store{
 		shards: make([]*storeShard, ShardCount),
 	}
-	pool := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
-	rwPool := structx.NewPool().WithMaxGoroutines(runtime.NumCPU())
+
+	pool := structx.NewDefaultPool()
+	rwPool := structx.NewDefaultPool()
 
 	// init global time
 	go func() {

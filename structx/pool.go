@@ -1,7 +1,8 @@
 package structx
 
-
 import (
+	"runtime"
+
 	"github.com/sourcegraph/conc/pool"
 )
 
@@ -13,4 +14,9 @@ type Pool struct {
 // NewPool
 func NewPool() *Pool {
 	return &Pool{pool.New()}
+}
+
+// NewDefaultPool
+func NewDefaultPool() *Pool {
+	return &Pool{pool.New().WithMaxGoroutines(runtime.NumCPU())}
 }

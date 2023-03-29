@@ -6,7 +6,6 @@ import (
 
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
-	"github.com/zeebo/xxh3"
 )
 
 // DB
@@ -14,71 +13,71 @@ func DB() *store { return db }
 
 // Set
 func (s *store) Set(key string, value any) {
-	shard := s.getShard(key)
+	sd := s.getShard(key)
 
 	// 1{key}|{value}\n
-	shard.Lock()
-	shard.encodeBytes(OP_SET)
-	shard.EncodeValue(base.S2B(&key))
-	shard.encodeBytes(sprChar)
-	shard.EncodeValue(value)
-	shard.encodeBytes(lineSpr...)
-	shard.Unlock()
+	sd.Lock()
+	sd.encodeBytes(OP_SET)
+	sd.Encode(base.S2B(&key))
+	sd.encodeBytes(sprChar)
+	sd.Encode(value)
+	sd.encodeBytes(lineSpr...)
+	sd.Unlock()
 
-	shard.Set(key, value)
+	sd.Set(key, value)
 }
 
 // SetWithTTL
 func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
-	shard := s.getShard(key)
+	sd := s.getShard(key)
 	ts := GlobalTime() + int64(ttl)
 
 	// 2{key}|{ttl}|{value}\n
-	shard.Lock()
-	shard.encodeBytes(OP_SET_WITH_TTL)
-	shard.EncodeValue(base.S2B(&key))
-	shard.encodeBytes(sprChar)
-	shard.EncodeValue(ts)
-	shard.encodeBytes(sprChar)
-	shard.EncodeValue(value)
-	shard.encodeBytes(lineSpr...)
-	shard.Unlock()
+	sd.Lock()
+	sd.encodeBytes(OP_SET_WITH_TTL)
+	sd.Encode(base.S2B(&key))
+	sd.encodeBytes(sprChar)
+	sd.Encode(ts)
+	sd.encodeBytes(sprChar)
+	sd.Encode(value)
+	sd.encodeBytes(lineSpr...)
+	sd.Unlock()
 
-	shard.SetWithTTL(key, value, ttl)
+	sd.SetWithTTL(key, value, ttl)
 }
 
 // Remove
 func (s *store) Remove(key string) (any, bool) {
-	shard := s.getShard(key)
+	sd := s.getShard(key)
 
 	// 3{key}\n
-	shard.Lock()
-	shard.encodeBytes(OP_REMOVE)
-	shard.EncodeValue(base.S2B(&key))
-	shard.encodeBytes(lineSpr...)
-	shard.Unlock()
+	sd.Lock()
+	sd.encodeBytes(OP_REMOVE)
+	sd.Encode(base.S2B(&key))
+	sd.encodeBytes(lineSpr...)
+	sd.Unlock()
 
-	return shard.Remove(key)
+	return sd.Remove(key)
 }
 
 // Persist removes the expiration from a key
 func (s *store) Persist(key string) bool {
-	shard := s.getShard(key)
+	sd := s.getShard(key)
 
 	// 4{key}\n
-	shard.Lock()
-	shard.encodeBytes(OP_PERSIST)
-	shard.EncodeValue(base.S2B(&key))
-	shard.encodeBytes(lineSpr...)
-	shard.Unlock()
+	sd.Lock()
+	sd.encodeBytes(OP_PERSIST)
+	sd.Encode(base.S2B(&key))
+	sd.encodeBytes(lineSpr...)
+	sd.Unlock()
 
-	return shard.Persist(key)
+	return sd.Persist(key)
 }
 
 // Type returns the type of the value stored at key
 func (s *store) Type(key string) reflect.Type {
-	shard := s.getShard(key)
-	v, ok := shard.Get(key)
+	sd := s.getShard(key)
+	v, ok := sd.Get(key)
 	if ok {
 		return reflect.TypeOf(v)
 	}
@@ -87,8 +86,8 @@ func (s *store) Type(key string) reflect.Type {
 
 // Commit commits all changes and persist to disk immediately
 func (s *store) Commit() error {
-	for _, shard := range s.shards {
-		if _, err := shard.WriteBuffer(); err != nil {
+	for _, sd := range s.shards {
+		if _, err := sd.WriteBuffer(); err != nil {
 			return err
 		}
 	}
@@ -102,10 +101,6 @@ func (s *store) Count() int {
 		sum += s.Count()
 	}
 	return sum
-}
-
-func (s *store) getShard(key string) *storeShard {
-	return s.shards[xxh3.HashString(key)&(ShardCount-1)]
 }
 
 // WithExpired
@@ -123,30 +118,6 @@ func (s *store) Keys() []string {
 		arr = append(arr, s.Keys()...)
 	}
 	return arr
-}
-
-func getValue[T any](key string, vptr T) (T, error) {
-	shard := db.getShard(key)
-	// get
-	val, ok := shard.Get(key)
-	if !ok {
-		return vptr, base.ErrKeyNotFound(key)
-	}
-
-	// type assertion
-	obj, ok := val.(T)
-	if ok {
-		return obj, nil
-	}
-
-	// unmarshal
-	buf := val.([]byte)
-	if err := shard.DecodeValue(buf, vptr); err != nil {
-		return vptr, err
-	}
-	shard.Set(key, vptr)
-
-	return vptr, nil
 }
 
 // Incr
