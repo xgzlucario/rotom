@@ -97,10 +97,11 @@ func testStress() {
 	}()
 
 	// Simulate testing
-	for {
+	for i := 0; i < 10000*10000; i++ {
 		count++
-		db.SetWithTTL(gofakeit.IPv6Address(), gofakeit.Uint32(), time.Second*5)
+		db.SetWithTTL(gofakeit.Phone(), gofakeit.Uint32(), time.Second*5)
 	}
+	fmt.Println("total cost:", time.Since(a))
 }
 
 func testBloom() {

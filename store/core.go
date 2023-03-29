@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"os"
 	"reflect"
@@ -22,17 +23,14 @@ const (
 	OP_PERSIST
 
 	// 分隔符, 用于分隔数据行中的不同字段
-	sprChar = '|'
+	sprChar = byte(0)
 
 	// 校验符, 用于校验数据行是否完整
-	// 判断一条数据是否完整, 只需判断最后一个字符是否为 `#` 即可
-	validChar = '#'
+	// 判断一条数据是否完整, 只需判断最后一个字符是否为 validChar 即可
+	validChar = byte(0)
 
 	// 换行符, 用于表示数据行的结尾
 	endChar = '\n'
-
-	// 进制, 用于将数字转换为字符串
-	carry = 36
 
 	// 时间戳换算
 	timeCarry = 1000 * 1000 * 1000
@@ -41,7 +39,7 @@ const (
 var (
 	// 行尾, 起到换行及校验的作用
 	// 不同数据行通过行尾分隔
-	lineSpr = []byte{validChar, endChar}
+	lineSpr = []byte{validChar, validChar, endChar}
 )
 
 func (s *storeShard) load() {
@@ -56,17 +54,11 @@ func (s *storeShard) load() {
 	// init filter
 	s.filter = structx.NewBloom()
 
-	start := len(data) - 2
-	end := start + 1
-
 	// read line from tail
-	for ; start >= 0; start-- {
-		if data[start] == '\n' {
-			s.readLine(data[start+1 : end])
-			end = start
-		}
+	lines := bytes.Split(data, []byte{validChar, endChar})
+	for i := len(lines) - 1; i >= 0; i-- {
+		s.readLine(lines[i])
 	}
-	s.readLine(data[start+1 : end])
 
 	// rewrite
 	fs, err := os.OpenFile(s.rwPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
@@ -74,19 +66,22 @@ func (s *storeShard) load() {
 		panic(err)
 	}
 
-	s.buffer.WriteTo(fs)
+	fs.Write(s.buf)
+	s.buf = s.buf[0:0]
 	fs.Close()
 
 	// rename rwFile to storeFile
-	os.Rename(s.rwPath, s.storePath)
+	if err := os.Rename(s.rwPath, s.storePath); err != nil {
+		panic(err)
+	}
 }
 
 // WriteBuffer
-func (s *storeShard) WriteBuffer() (int64, error) {
+func (s *storeShard) WriteBuffer() (int, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	if s.buffer.Len() == 0 {
+	if len(s.buf) == 0 {
 		return 0, nil
 	}
 
@@ -96,15 +91,22 @@ func (s *storeShard) WriteBuffer() (int64, error) {
 	}
 	defer fs.Close()
 
-	return s.buffer.WriteTo(fs)
+	// write file
+	n, err := fs.Write(s.buf)
+	if err != nil {
+		return 0, err
+	}
+
+	s.buf = s.buf[0:0]
+	return n, nil
 }
 
 // ReWriteBuffer
-func (s *storeShard) ReWriteBuffer() (int64, error) {
+func (s *storeShard) ReWriteBuffer() (int, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	if s.buffer.Len() == 0 {
+	if len(s.buf) == 0 {
 		return 0, nil
 	}
 
@@ -114,7 +116,14 @@ func (s *storeShard) ReWriteBuffer() (int64, error) {
 	}
 	defer fs.Close()
 
-	return s.buffer.WriteTo(fs)
+	// write file
+	n, err := fs.Write(s.buf)
+	if err != nil {
+		return 0, err
+	}
+
+	s.buf = s.buf[0:0]
+	return n, nil
 }
 
 // read line
@@ -138,36 +147,27 @@ func (s *storeShard) readLine(line []byte) {
 			return
 		}
 
-		s.buffer.Write(line)
-		s.buffer.Write(lineSpr)
+		s.buf = append(s.buf, line...)
+		s.buf = append(s.buf, lineSpr...)
 
 		s.Set(*base.B2S(line[1:i]), line[i+1:])
 
 	// SET_WITH_TTL: {op}{key}|{ttl}|{value}
 	case OP_SET_WITH_TTL:
-		var sp1, sp2 int
-		for i, c := range line {
-			if c == sprChar {
-				if sp1 == 0 {
-					sp1 = i
-
-				} else {
-					sp2 = i
-					break
-				}
-			}
-		}
+		sp1 := bytes.IndexByte(line, sprChar)
+		sp2 := bytes.IndexByte(line[sp1+1:], sprChar)
+		sp2 += sp1 + 1
 
 		if !s.testAndAdd(line[1:sp1]) {
 			return
 		}
 
-		ts, _ := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), carry, 64)
+		ts, _ := binary.Varint(line[sp1+1 : sp2])
 		ts *= timeCarry
 		// not expired
 		if ts > GlobalTime() {
-			s.buffer.Write(line)
-			s.buffer.Write(lineSpr)
+			s.buf = append(s.buf, line...)
+			s.buf = append(s.buf, lineSpr...)
 
 			s.SetWithDeadLine(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), ts)
 		}
@@ -188,8 +188,8 @@ func (s *storeShard) readLine(line []byte) {
 			return
 		}
 
-		s.buffer.Write(line)
-		s.buffer.Write(lineSpr)
+		s.buf = append(s.buf, line...)
+		s.buf = append(s.buf, lineSpr...)
 
 		s.Persist(*base.B2S(line[1:]))
 	}
@@ -199,89 +199,87 @@ func (s *storeShard) testAndAdd(line []byte) bool {
 	// 仅当 filter.Test() 为 false 时返回 true
 	if s.filter.Test(line) {
 		return false
-
 	}
 	s.filter.Add(line)
 	return true
 }
 
-// EncodeValue
-func (s *storeShard) EncodeValue(v any) ([]byte, error) {
+// encodeByte without asserting
+func (s *storeShard) encodeBytes(v ...byte) {
+	s.buf = append(s.buf, v...)
+}
+
+// EncodeValue encode value to store shard buffer
+func (s *storeShard) EncodeValue(v any) error {
 	switch v := v.(type) {
 	case base.Marshaler:
-		return v.MarshalJSON()
+		src, err := v.MarshalJSON()
+		if err != nil {
+			return err
+		}
+		s.buf = append(s.buf, src...)
 
 	case base.Stringer:
 		str := v.String()
-		return base.S2B(&str), nil
+		s.buf = append(s.buf, base.S2B(&str)...)
 
 	case []byte:
-		return v, nil
+		s.buf = append(s.buf, v...)
 
 	case string:
-		return base.S2B(&v), nil
+		s.buf = append(s.buf, base.S2B(&v)...)
 
 	case uint:
-		str := strconv.FormatUint(uint64(v), carry)
-		return base.S2B(&str), nil
+		s.buf = binary.AppendUvarint(s.buf, uint64(v))
 
 	case uint8:
-		str := strconv.FormatUint(uint64(v), carry)
-		return base.S2B(&str), nil
+		s.buf = append(s.buf, v)
 
 	case uint16:
-		str := strconv.FormatUint(uint64(v), carry)
-		return base.S2B(&str), nil
+		s.buf = binary.AppendUvarint(s.buf, uint64(v))
 
 	case uint32:
-		str := strconv.FormatUint(uint64(v), carry)
-		return base.S2B(&str), nil
+		s.buf = binary.AppendUvarint(s.buf, uint64(v))
 
 	case uint64:
-		str := strconv.FormatUint(v, carry)
-		return base.S2B(&str), nil
+		s.buf = binary.AppendUvarint(s.buf, v)
 
 	case int:
-		str := strconv.FormatInt(int64(v), carry)
-		return base.S2B(&str), nil
+		s.buf = binary.AppendVarint(s.buf, int64(v))
 
 	case int8:
-		str := strconv.FormatInt(int64(v), carry)
-		return base.S2B(&str), nil
+		s.buf = binary.AppendVarint(s.buf, int64(v))
 
 	case int16:
-		str := strconv.FormatInt(int64(v), carry)
-		return base.S2B(&str), nil
+		s.buf = binary.AppendVarint(s.buf, int64(v))
 
 	case int32:
-		str := strconv.FormatInt(int64(v), carry)
-		return base.S2B(&str), nil
+		s.buf = binary.AppendVarint(s.buf, int64(v))
 
 	case int64:
-		str := strconv.FormatInt(v, carry)
-		return base.S2B(&str), nil
+		s.buf = binary.AppendVarint(s.buf, v)
 
 	case float32:
 		str := strconv.FormatFloat(float64(v), 'f', -1, 64)
-		return base.S2B(&str), nil
+		s.buf = append(s.buf, base.S2B(&str)...)
 
 	case float64:
 		str := strconv.FormatFloat(v, 'f', -1, 64)
-		return base.S2B(&str), nil
+		s.buf = append(s.buf, base.S2B(&str)...)
 
 	case bool:
 		if v {
-			return []byte{'T'}, nil
+			s.buf = append(s.buf, 'T')
+		} else {
+			s.buf = append(s.buf, 'F')
 		}
-		return []byte{'F'}, nil
 
 	case []string:
 		str := strings.Join(v, ",")
-		return base.S2B(&str), nil
-
-	default:
-		return nil, errors.New("unsupported type: " + reflect.TypeOf(v).String())
+		s.buf = append(s.buf, base.S2B(&str)...)
 	}
+
+	return errors.New("unsupported type: " + reflect.TypeOf(v).String())
 }
 
 // DecodeValue
@@ -297,74 +295,42 @@ func (s *storeShard) DecodeValue(src []byte, vptr interface{}) error {
 		*v = src
 
 	case *uint:
-		num, err := strconv.ParseUint(*base.B2S(src), carry, 64)
-		if err != nil {
-			return err
-		}
+		num, _ := binary.Uvarint(src)
 		*v = uint(num)
 
 	case *uint8:
-		num, err := strconv.ParseUint(*base.B2S(src), carry, 8)
-		if err != nil {
-			return err
-		}
-		*v = uint8(num)
+		*v = src[0]
 
 	case *uint16:
-		num, err := strconv.ParseUint(*base.B2S(src), carry, 16)
-		if err != nil {
-			return err
-		}
+		num, _ := binary.Uvarint(src)
 		*v = uint16(num)
 
 	case *uint32:
-		num, err := strconv.ParseUint(*base.B2S(src), carry, 32)
-		if err != nil {
-			return err
-		}
+		num, _ := binary.Uvarint(src)
 		*v = uint32(num)
 
 	case *uint64:
-		num, err := strconv.ParseUint(*base.B2S(src), carry, 64)
-		if err != nil {
-			return err
-		}
+		num, _ := binary.Uvarint(src)
 		*v = num
 
 	case *int:
-		num, err := strconv.ParseInt(*base.B2S(src), carry, 64)
-		if err != nil {
-			return err
-		}
+		num, _ := binary.Varint(src)
 		*v = int(num)
 
 	case *int8:
-		num, err := strconv.ParseInt(*base.B2S(src), carry, 8)
-		if err != nil {
-			return err
-		}
+		num, _ := binary.Varint(src)
 		*v = int8(num)
 
 	case *int16:
-		num, err := strconv.ParseInt(*base.B2S(src), carry, 16)
-		if err != nil {
-			return err
-		}
+		num, _ := binary.Varint(src)
 		*v = int16(num)
 
 	case *int32:
-		num, err := strconv.ParseInt(*base.B2S(src), carry, 32)
-		if err != nil {
-			return err
-		}
+		num, _ := binary.Varint(src)
 		*v = int32(num)
 
 	case *int64:
-		num, err := strconv.ParseInt(*base.B2S(src), carry, 32)
-		if err != nil {
-			return err
-		}
-		*v = num
+		*v, _ = binary.Varint(src)
 
 	case *float32:
 		num, err := strconv.ParseFloat(*base.B2S(src), 32)

@@ -1,7 +1,6 @@
 package store
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"runtime"
@@ -24,6 +23,8 @@ var (
 
 	// RewriteDuration
 	RewriteDuration = time.Second * 10
+
+	defaultBufSize = 4096
 )
 
 // Status for runtime
@@ -46,7 +47,7 @@ type storeShard struct {
 	rwPath    string
 
 	// buffer
-	buffer *bytes.Buffer
+	buf []byte
 
 	// data
 	sync.Mutex
@@ -83,6 +84,14 @@ func init() {
 		}
 	}()
 
+	// GC
+	go func() {
+		for {
+			time.Sleep(RewriteDuration)
+			runtime.GC()
+		}
+	}()
+
 	// load
 	for i := range db.shards {
 		// init
@@ -90,7 +99,7 @@ func init() {
 			status:    START,
 			storePath: fmt.Sprintf("%sdat%d", StorePath, i),
 			rwPath:    fmt.Sprintf("%sdat%d.rw", StorePath, i),
-			buffer:    bytes.NewBuffer(nil),
+			buf:       make([]byte, 0, defaultBufSize),
 			Cache:     structx.NewCache[any](),
 		}
 		sd := db.shards[i]

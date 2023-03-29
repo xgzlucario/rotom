@@ -16,15 +16,13 @@ func DB() *store { return db }
 func (s *store) Set(key string, value any) {
 	shard := s.getShard(key)
 
-	src, _ := shard.EncodeValue(value)
-
 	// 1{key}|{value}\n
 	shard.Lock()
-	shard.buffer.WriteByte(OP_SET)
-	shard.buffer.Write(base.S2B(&key))
-	shard.buffer.WriteByte(sprChar)
-	shard.buffer.Write(src)
-	shard.buffer.Write(lineSpr)
+	shard.encodeBytes(OP_SET)
+	shard.EncodeValue(key)
+	shard.encodeBytes(sprChar)
+	shard.EncodeValue(value)
+	shard.encodeBytes(lineSpr...)
 	shard.Unlock()
 
 	shard.Set(key, value)
@@ -35,18 +33,15 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 	shard := s.getShard(key)
 	ts := GlobalTime() + int64(ttl)
 
-	src, _ := shard.EncodeValue(value)
-	ttlStr, _ := shard.EncodeValue(ts / timeCarry)
-
 	// 2{key}|{ttl}|{value}\n
 	shard.Lock()
-	shard.buffer.WriteByte(OP_SET_WITH_TTL)
-	shard.buffer.Write(base.S2B(&key))
-	shard.buffer.WriteByte(sprChar)
-	shard.buffer.Write(ttlStr)
-	shard.buffer.WriteByte(sprChar)
-	shard.buffer.Write(src)
-	shard.buffer.Write(lineSpr)
+	shard.encodeBytes(OP_SET_WITH_TTL)
+	shard.EncodeValue(key)
+	shard.encodeBytes(sprChar)
+	shard.EncodeValue(ts / timeCarry)
+	shard.encodeBytes(sprChar)
+	shard.EncodeValue(value)
+	shard.encodeBytes(lineSpr...)
 	shard.Unlock()
 
 	shard.SetWithTTL(key, value, ttl)
@@ -58,9 +53,9 @@ func (s *store) Remove(key string) (any, bool) {
 
 	// 3{key}\n
 	shard.Lock()
-	shard.buffer.WriteByte(OP_REMOVE)
-	shard.buffer.Write(base.S2B(&key))
-	shard.buffer.Write(lineSpr)
+	shard.encodeBytes(OP_REMOVE)
+	shard.EncodeValue(key)
+	shard.encodeBytes(lineSpr...)
 	shard.Unlock()
 
 	return shard.Remove(key)
@@ -72,9 +67,9 @@ func (s *store) Persist(key string) bool {
 
 	// 4{key}\n
 	shard.Lock()
-	shard.buffer.WriteByte(OP_PERSIST)
-	shard.buffer.Write(base.S2B(&key))
-	shard.buffer.Write(lineSpr)
+	shard.encodeBytes(OP_PERSIST)
+	shard.EncodeValue(key)
+	shard.encodeBytes(lineSpr...)
 	shard.Unlock()
 
 	return shard.Persist(key)
