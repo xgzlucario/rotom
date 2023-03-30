@@ -56,7 +56,7 @@ type storeShard struct {
 	buf []byte
 
 	// data
-	sync.Mutex
+	sync.RWMutex
 	*structx.Cache[any]
 
 	// bloom filter

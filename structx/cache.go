@@ -29,7 +29,7 @@ type Cache[V any] struct {
 	// data based on ZSet
 	data *ZSet[string, int64, V]
 
-	sync.RWMutex
+	mu sync.RWMutex
 }
 
 // NewCache
@@ -46,8 +46,8 @@ func NewCache[V any]() *Cache[V] {
 
 // Get
 func (c *Cache[V]) Get(key string) (val V, ok bool) {
-	c.RLock()
-	defer c.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	v, ttl, ok := c.data.Get(key)
 	// check valid
@@ -59,8 +59,8 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 
 // GetWithTTL
 func (c *Cache[V]) GetWithTTL(key string) (v V, ttl int64, ok bool) {
-	c.RLock()
-	defer c.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	v, ttl, ok = c.data.Get(key)
 	// check valid
@@ -72,32 +72,32 @@ func (c *Cache[V]) GetWithTTL(key string) (v V, ttl int64, ok bool) {
 
 // Set
 func (c *Cache[V]) Set(key string, value V) {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.data.Set(key, value)
 }
 
 // SetWithDeadLine
 func (c *Cache[V]) SetWithDeadLine(key string, value V, ts int64) {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.data.SetWithScore(key, ts+atomic.AddInt64(&c.count, 1), value)
 }
 
 // SetWithTTL
 func (c *Cache[V]) SetWithTTL(key string, value V, ttl time.Duration) {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.data.SetWithScore(key, c.ts+int64(ttl)+atomic.AddInt64(&c.count, 1), value)
 }
 
 // Persist
 func (c *Cache[V]) Persist(key string) bool {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	item, ok := c.data.data[key]
 	if ok {
@@ -108,40 +108,40 @@ func (c *Cache[V]) Persist(key string) bool {
 
 // Keys
 func (c *Cache[V]) Keys() []string {
-	c.RLock()
-	defer c.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	return c.data.data.Keys()
 }
 
 // WithExpired
 func (c *Cache[V]) WithExpired(f func(string, V)) {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.onExpired = f
 }
 
 // Remove
 func (c *Cache[V]) Remove(key string) (V, bool) {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	return c.data.Delete(key)
 }
 
 // Clear
 func (c *Cache[V]) Clear() {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.data = NewZSet[string, int64, V]()
 }
 
 // Count
 func (c *Cache[V]) Count() int {
-	c.RLock()
-	defer c.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	return c.data.Size()
 }
@@ -156,7 +156,7 @@ func (c *Cache[V]) eviction() {
 		// reset count
 		atomic.SwapInt64(&c.count, 0)
 
-		c.Lock()
+		c.mu.Lock()
 
 		// clear expired keys
 		if c.data.Size() > 0 {
@@ -177,20 +177,20 @@ func (c *Cache[V]) eviction() {
 				}
 			}
 		}
-		c.Unlock()
+		c.mu.Unlock()
 	}
 }
 
 func (c *Cache[V]) MarshalJSON() ([]byte, error) {
-	c.RLock()
-	defer c.RUnlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	return c.data.MarshalJSON()
 }
 
 func (c *Cache[V]) UnmarshalJSON(src []byte) error {
-	c.Lock()
-	defer c.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	return c.data.UnmarshalJSON(src)
 }

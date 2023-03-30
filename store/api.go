@@ -11,17 +11,23 @@ import (
 // DB
 func DB() *store { return db }
 
+// Get
+func (s *store) Get(key string) (any, bool) {
+	sd := s.getShard(key)
+
+	sd.RLock()
+	defer sd.RUnlock()
+
+	return sd.Get(key)
+}
+
 // Set
 func (s *store) Set(key string, value any) {
 	sd := s.getShard(key)
 
 	// 1{key}|{value}\n
 	sd.Lock()
-	sd.encodeBytes(OP_SET)
-	sd.Encode(base.S2B(&key))
-	sd.encodeBytes(sprChar)
-	sd.Encode(value)
-	sd.encodeBytes(lineSpr...)
+	sd.Encodes(OP_SET, base.S2B(&key), sprChar, value, lineSpr)
 	sd.Unlock()
 
 	sd.Set(key, value)
@@ -34,13 +40,7 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 
 	// 2{key}|{ttl}|{value}\n
 	sd.Lock()
-	sd.encodeBytes(OP_SET_WITH_TTL)
-	sd.Encode(base.S2B(&key))
-	sd.encodeBytes(sprChar)
-	sd.Encode(ts)
-	sd.encodeBytes(sprChar)
-	sd.Encode(value)
-	sd.encodeBytes(lineSpr...)
+	sd.Encodes(OP_SET_WITH_TTL, base.S2B(&key), sprChar, ts, sprChar, value, lineSpr)
 	sd.Unlock()
 
 	sd.SetWithTTL(key, value, ttl)
@@ -52,9 +52,7 @@ func (s *store) Remove(key string) (any, bool) {
 
 	// 3{key}\n
 	sd.Lock()
-	sd.encodeBytes(OP_REMOVE)
-	sd.Encode(base.S2B(&key))
-	sd.encodeBytes(lineSpr...)
+	sd.Encodes(OP_REMOVE, base.S2B(&key), lineSpr)
 	sd.Unlock()
 
 	return sd.Remove(key)
@@ -66,12 +64,81 @@ func (s *store) Persist(key string) bool {
 
 	// 4{key}\n
 	sd.Lock()
-	sd.encodeBytes(OP_PERSIST)
-	sd.Encode(base.S2B(&key))
-	sd.encodeBytes(lineSpr...)
+	sd.Encodes(OP_PERSIST, base.S2B(&key), lineSpr)
 	sd.Unlock()
 
 	return sd.Persist(key)
+}
+
+// HGet
+func (s *store) HGet(key, field string) (any, bool) {
+	sd := s.getShard(key)
+
+	sd.RLock()
+	defer sd.RUnlock()
+
+	m, ok := sd.Cache.Get(key)
+	if ok {
+		if m, ok := m.(structx.Map[string, any]); ok {
+			return m.Get(field)
+		}
+	}
+	return nil, false
+}
+
+// HSet
+func (s *store) HSet(key, field string, value any) {
+	sd := s.getShard(key)
+
+	sd.Lock()
+	defer sd.Unlock()
+
+	// 5{key}|{field}|{value}\n
+	sd.Encodes(OP_HSET, base.S2B(&key), sprChar, base.S2B(&field), sprChar, value, lineSpr)
+
+	m, ok := sd.Cache.Get(key)
+	if ok {
+		if m, ok := m.(structx.Map[string, any]); ok {
+			m.Set(field, value)
+		}
+	} else {
+		sd.Cache.Set(key, structx.Map[string, any]{field: value})
+	}
+}
+
+// HKeys
+func (s *store) HKeys(key string) []string {
+	sd := s.getShard(key)
+
+	sd.RLock()
+	defer sd.RUnlock()
+
+	m, ok := sd.Cache.Get(key)
+	if ok {
+		if m, ok := m.(structx.Map[string, any]); ok {
+			return m.Keys()
+		}
+	}
+	return nil
+}
+
+// HRemove
+func (s *store) HRemove(key, field string) (any, bool) {
+	sd := s.getShard(key)
+
+	sd.Lock()
+	defer sd.Unlock()
+
+	// 6{key}|{field}\n
+	sd.Encodes(OP_HREMOVE, base.S2B(&key), sprChar, base.S2B(&field), lineSpr)
+
+	m, ok := sd.Cache.Get(key)
+	if ok {
+		if m, ok := m.(structx.Map[string, any]); ok {
+			return m.Remove(field)
+		}
+	}
+	return nil, false
 }
 
 // Type returns the type of the value stored at key
@@ -84,8 +151,8 @@ func (s *store) Type(key string) reflect.Type {
 	return nil
 }
 
-// Commit commits all changes and persist to disk immediately
-func (s *store) CommitAll() error {
+// Flush writes all the buf data to disk
+func (s *store) Flush() error {
 	for _, sd := range s.shards {
 		if _, err := sd.WriteBuffer(); err != nil {
 			return err
@@ -160,9 +227,6 @@ func (s *store) GetFloat64(k string) (v float64, err error) { getValue(k, &v); r
 
 // GetBool
 func (s *store) GetBool(k string) (v bool, err error) { getValue(k, &v); return }
-
-// GetTime
-func (s *store) GetTime(k string) (v time.Time, err error) { getValue(k, &v); return }
 
 // GetStringSlice
 func (s *store) GetStringSlice(k string) (v []string, err error) { getValue(k, &v); return }

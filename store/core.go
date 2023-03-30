@@ -17,10 +17,12 @@ import (
 const (
 	// 操作码
 	// 从 `1` 开始, 以便于在文件中直接使用 `1` 表示 `OP_SET`
-	OP_SET byte = iota + 49
+	OP_SET byte = iota + '1'
 	OP_SET_WITH_TTL
 	OP_REMOVE
 	OP_PERSIST
+	OP_HSET
+	OP_HREMOVE
 
 	// 分隔符, 分隔数据行中的不同字段
 	// 同时也是校验符, 校验数据行是否完整
@@ -137,7 +139,7 @@ func (s *storeShard) readLine(line []byte) {
 		s.buf = append(s.buf, line...)
 		s.buf = append(s.buf, lineSpr...)
 
-		s.Set(*base.B2S(line[1:i]), line[i+1:])
+		s.Set(*base.B2S(line[1:i]), base.Raw(line[i+1:]))
 
 	// SET_WITH_TTL: {op}{key}|{ttl}|{value}
 	case OP_SET_WITH_TTL:
@@ -155,7 +157,7 @@ func (s *storeShard) readLine(line []byte) {
 			s.buf = append(s.buf, line...)
 			s.buf = append(s.buf, lineSpr...)
 
-			s.SetWithDeadLine(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), ts)
+			s.SetWithDeadLine(*base.B2S(line[1:sp1]), base.Raw(*base.B2S(line[sp2+1:])), ts)
 		}
 
 	// REMOVE: {op}{key}
@@ -196,9 +198,9 @@ func (s *store) getShard(key string) *storeShard {
 
 // getValue
 func getValue[T any](key string, vptr T) (T, error) {
-	shard := db.getShard(key)
+	sd := db.getShard(key)
 	// get
-	val, ok := shard.Get(key)
+	val, ok := sd.Get(key)
 	if !ok {
 		return vptr, base.ErrKeyNotFound(key)
 	}
@@ -210,18 +212,27 @@ func getValue[T any](key string, vptr T) (T, error) {
 	}
 
 	// unmarshal
-	buf := val.([]byte)
-	if err := shard.Decode(buf, vptr); err != nil {
+	raw, ok := val.(base.Raw)
+	if !ok {
+		return vptr, base.ErrType(key)
+	}
+
+	if err := sd.Decode(raw, vptr); err != nil {
 		return vptr, err
 	}
-	shard.Set(key, vptr)
+	sd.Set(key, vptr)
 
 	return vptr, nil
 }
 
-// encodeBytes
-func (s *storeShard) encodeBytes(v ...byte) {
-	s.buf = append(s.buf, v...)
+// Encodes
+func (s *storeShard) Encodes(v ...any) error {
+	for _, v := range v {
+		if err := s.Encode(v); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Encode
@@ -229,6 +240,13 @@ func (s *storeShard) Encode(v any) error {
 	switch v := v.(type) {
 	case base.Marshaler:
 		src, err := v.MarshalJSON()
+		if err != nil {
+			return err
+		}
+		s.buf = append(s.buf, src...)
+
+	case base.Texter:
+		src, err := v.MarshalText()
 		if err != nil {
 			return err
 		}
@@ -298,7 +316,7 @@ func (s *storeShard) Encode(v any) error {
 }
 
 // Decode
-func (s *storeShard) Decode(src []byte, vptr interface{}) error {
+func (s *storeShard) Decode(src base.Raw, vptr interface{}) error {
 	switch v := vptr.(type) {
 	case base.Marshaler:
 		return v.UnmarshalJSON(src)

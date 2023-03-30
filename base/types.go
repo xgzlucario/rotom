@@ -15,7 +15,14 @@ type Marshaler interface {
 	UnmarshalJSON([]byte) error
 }
 
-type GTreeJSON[K Ordered, V any] struct {
+type Texter interface {
+	MarshalText() ([]byte, error)
+	UnmarshalText([]byte) error
+}
+
+type GTreeJSON[K, V any] struct {
 	K []K
 	V []V
 }
+
+type Raw []byte

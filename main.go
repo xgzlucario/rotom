@@ -154,6 +154,8 @@ func testValue() {
 	fmt.Println(db.GetBool("bool"))
 	fmt.Println(db.GetStringSlice("stringSlice"))
 
+	fmt.Println(db.HGet("xgz", "1"))
+
 	db.Set("uint", uint(123))
 	db.Set("uint8", uint8(123))
 	db.Set("uint16", uint16(123))
@@ -169,6 +171,12 @@ func testValue() {
 	db.Set("string", "123")
 	db.Set("bool", true)
 	db.Set("stringSlice", []string{"123", "456"})
+
+	db.HSet("xgz", "1", 123)
+	db.HSet("xgz", "2", 456)
+	fmt.Println(db.HGet("xgz", "1"))
+	fmt.Println(db.HGet("xgz", "2"))
+
 	fmt.Println()
 }
 
@@ -179,5 +187,5 @@ func main() {
 	testTrie()
 	testCustom()
 	testStress()
-	db.CommitAll()
+	db.Flush()
 }
