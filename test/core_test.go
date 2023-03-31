@@ -52,3 +52,53 @@ func BenchmarkDecodeString(b *testing.B) {
 		n = 0
 	}
 }
+
+func test1(src []byte) {
+	if len(src) == 2 {
+		src = nil
+	}
+}
+
+func test2(src any) {
+	switch src := src.(type) {
+	case []byte:
+		if len(src) == 2 {
+			src = nil
+		}
+	case int:
+	case int32:
+	case int64:
+	default:
+	}
+}
+
+func test3(src any) {
+	switch src := src.(type) {
+	case int:
+	case int32:
+	case int64:
+	case []byte:
+		if len(src) == 2 {
+			src = nil
+		}
+	default:
+	}
+}
+
+func BenchmarkTest1(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		test1(src)
+	}
+}
+
+func BenchmarkTest2(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		test2(src)
+	}
+}
+
+func BenchmarkTest3(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		test3(src)
+	}
+}

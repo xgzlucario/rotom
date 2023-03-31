@@ -11,23 +11,17 @@ import (
 // DB
 func DB() *store { return db }
 
-// Get
-func (s *store) Get(key string) (any, bool) {
-	sd := s.getShard(key)
-
-	sd.RLock()
-	defer sd.RUnlock()
-
-	return sd.Get(key)
-}
-
 // Set
 func (s *store) Set(key string, value any) {
 	sd := s.getShard(key)
 
 	// 1{key}|{value}\n
 	sd.Lock()
-	sd.Encodes(OP_SET, base.S2B(&key), sprChar, value, lineSpr)
+	sd.encodeBytes(OP_SET)
+	sd.encodeBytes(base.S2B(&key)...)
+	sd.encodeBytes(sprChar)
+	sd.Encode(value)
+	sd.encodeBytes(lineSpr...)
 	sd.Unlock()
 
 	sd.Set(key, value)
@@ -40,7 +34,13 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 
 	// 2{key}|{ttl}|{value}\n
 	sd.Lock()
-	sd.Encodes(OP_SET_WITH_TTL, base.S2B(&key), sprChar, ts, sprChar, value, lineSpr)
+	sd.encodeBytes(OP_SET_WITH_TTL)
+	sd.encodeBytes(base.S2B(&key)...)
+	sd.encodeBytes(sprChar)
+	sd.encodeInt64(ts)
+	sd.encodeBytes(sprChar)
+	sd.Encode(value)
+	sd.encodeBytes(lineSpr...)
 	sd.Unlock()
 
 	sd.SetWithTTL(key, value, ttl)
@@ -52,7 +52,9 @@ func (s *store) Remove(key string) (any, bool) {
 
 	// 3{key}\n
 	sd.Lock()
-	sd.Encodes(OP_REMOVE, base.S2B(&key), lineSpr)
+	sd.encodeBytes(OP_REMOVE)
+	sd.encodeBytes(base.S2B(&key)...)
+	sd.encodeBytes(lineSpr...)
 	sd.Unlock()
 
 	return sd.Remove(key)
@@ -64,7 +66,9 @@ func (s *store) Persist(key string) bool {
 
 	// 4{key}\n
 	sd.Lock()
-	sd.Encodes(OP_PERSIST, base.S2B(&key), lineSpr)
+	sd.encodeBytes(OP_PERSIST)
+	sd.encodeBytes(base.S2B(&key)...)
+	sd.encodeBytes(lineSpr...)
 	sd.Unlock()
 
 	return sd.Persist(key)
@@ -94,7 +98,13 @@ func (s *store) HSet(key, field string, value any) {
 	defer sd.Unlock()
 
 	// 5{key}|{field}|{value}\n
-	sd.Encodes(OP_HSET, base.S2B(&key), sprChar, base.S2B(&field), sprChar, value, lineSpr)
+	sd.encodeBytes(OP_HSET)
+	sd.encodeBytes(base.S2B(&key)...)
+	sd.encodeBytes(sprChar)
+	sd.encodeBytes(base.S2B(&field)...)
+	sd.encodeBytes(sprChar)
+	sd.Encode(value)
+	sd.encodeBytes(lineSpr...)
 
 	m, ok := sd.Cache.Get(key)
 	if ok {
@@ -130,7 +140,11 @@ func (s *store) HRemove(key, field string) (any, bool) {
 	defer sd.Unlock()
 
 	// 6{key}|{field}\n
-	sd.Encodes(OP_HREMOVE, base.S2B(&key), sprChar, base.S2B(&field), lineSpr)
+	sd.encodeBytes(OP_HREMOVE)
+	sd.encodeBytes(base.S2B(&key)...)
+	sd.encodeBytes(sprChar)
+	sd.encodeBytes(base.S2B(&field)...)
+	sd.encodeBytes(lineSpr...)
 
 	m, ok := sd.Cache.Get(key)
 	if ok {

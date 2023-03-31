@@ -21,7 +21,7 @@ var (
 	FlushDuration = time.Second
 
 	// RewriteDuration is the time interval for rewriting data to disk
-	RewriteDuration = time.Minute
+	RewriteDuration = time.Second * 10
 
 	// default buffer size
 	defaultBufSize = 4096

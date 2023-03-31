@@ -139,7 +139,7 @@ func (s *storeShard) readLine(line []byte) {
 		s.buf = append(s.buf, line...)
 		s.buf = append(s.buf, lineSpr...)
 
-		s.Set(*base.B2S(line[1:i]), base.Raw(line[i+1:]))
+		s.Set(*base.B2S(line[1:i]), line[i+1:])
 
 	// SET_WITH_TTL: {op}{key}|{ttl}|{value}
 	case OP_SET_WITH_TTL:
@@ -157,7 +157,7 @@ func (s *storeShard) readLine(line []byte) {
 			s.buf = append(s.buf, line...)
 			s.buf = append(s.buf, lineSpr...)
 
-			s.SetWithDeadLine(*base.B2S(line[1:sp1]), base.Raw(*base.B2S(line[sp2+1:])), ts)
+			s.SetWithDeadLine(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), ts)
 		}
 
 	// REMOVE: {op}{key}
@@ -212,7 +212,7 @@ func getValue[T any](key string, vptr T) (T, error) {
 	}
 
 	// unmarshal
-	raw, ok := val.(base.Raw)
+	raw, ok := val.([]byte)
 	if !ok {
 		return vptr, base.ErrType(key)
 	}
@@ -225,54 +225,27 @@ func getValue[T any](key string, vptr T) (T, error) {
 	return vptr, nil
 }
 
-// Encodes
-func (s *storeShard) Encodes(v ...any) error {
-	for _, v := range v {
-		if err := s.Encode(v); err != nil {
-			return err
-		}
-	}
-	return nil
+// encodeBytes without assert
+func (s *storeShard) encodeBytes(v ...byte) {
+	s.buf = append(s.buf, v...)
+}
+
+// encodeInt64 without assert
+func (s *storeShard) encodeInt64(v int64) {
+	s.buf = binary.AppendVarint(s.buf, v)
 }
 
 // Encode
 func (s *storeShard) Encode(v any) error {
 	switch v := v.(type) {
-	case base.Marshaler:
-		src, err := v.MarshalJSON()
-		if err != nil {
-			return err
-		}
-		s.buf = append(s.buf, src...)
-
-	case base.Texter:
-		src, err := v.MarshalText()
-		if err != nil {
-			return err
-		}
-		s.buf = append(s.buf, src...)
-
-	case base.Stringer:
-		str := v.String()
-		s.buf = append(s.buf, base.S2B(&str)...)
+	case string:
+		s.buf = append(s.buf, base.S2B(&v)...)
 
 	case []byte:
 		s.buf = append(s.buf, v...)
 
-	case string:
-		s.buf = append(s.buf, base.S2B(&v)...)
-
-	case uint:
-		s.buf = binary.AppendUvarint(s.buf, uint64(v))
-
-	case uint8:
-		s.buf = append(s.buf, v)
-
-	case uint16:
-		s.buf = binary.AppendUvarint(s.buf, uint64(v))
-
-	case uint32:
-		s.buf = binary.AppendUvarint(s.buf, uint64(v))
+	case int64:
+		s.buf = binary.AppendVarint(s.buf, v)
 
 	case uint64:
 		s.buf = binary.AppendUvarint(s.buf, v)
@@ -280,25 +253,14 @@ func (s *storeShard) Encode(v any) error {
 	case int:
 		s.buf = binary.AppendVarint(s.buf, int64(v))
 
-	case int8:
-		s.buf = binary.AppendVarint(s.buf, int64(v))
-
-	case int16:
-		s.buf = binary.AppendVarint(s.buf, int64(v))
+	case uint:
+		s.buf = binary.AppendUvarint(s.buf, uint64(v))
 
 	case int32:
 		s.buf = binary.AppendVarint(s.buf, int64(v))
 
-	case int64:
-		s.buf = binary.AppendVarint(s.buf, v)
-
-	case float32:
-		str := strconv.FormatFloat(float64(v), 'f', -1, 64)
-		s.buf = append(s.buf, base.S2B(&str)...)
-
-	case float64:
-		str := strconv.FormatFloat(v, 'f', -1, 64)
-		s.buf = append(s.buf, base.S2B(&str)...)
+	case uint32:
+		s.buf = binary.AppendUvarint(s.buf, uint64(v))
 
 	case bool:
 		if v {
@@ -307,70 +269,63 @@ func (s *storeShard) Encode(v any) error {
 			s.buf = append(s.buf, 'F')
 		}
 
+	case float64:
+		str := strconv.FormatFloat(v, 'f', -1, 64)
+		s.buf = append(s.buf, base.S2B(&str)...)
+
+	case uint8:
+		s.buf = append(s.buf, v)
+
+	case int8:
+		s.buf = binary.AppendVarint(s.buf, int64(v))
+
+	case uint16:
+		s.buf = binary.AppendUvarint(s.buf, uint64(v))
+
+	case int16:
+		s.buf = binary.AppendVarint(s.buf, int64(v))
+
+	case float32:
+		str := strconv.FormatFloat(float64(v), 'f', -1, 64)
+		s.buf = append(s.buf, base.S2B(&str)...)
+
 	case []string:
 		str := strings.Join(v, ",")
 		s.buf = append(s.buf, base.S2B(&str)...)
+
+	case base.Marshaler:
+		src, err := v.MarshalJSON()
+		if err != nil {
+			return err
+		}
+		s.buf = append(s.buf, src...)
 	}
 
 	return errors.New("unsupported type: " + reflect.TypeOf(v).String())
 }
 
 // Decode
-func (s *storeShard) Decode(src base.Raw, vptr interface{}) error {
+func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 	switch v := vptr.(type) {
-	case base.Marshaler:
-		return v.UnmarshalJSON(src)
+	case *[]byte:
+		*v = src
 
 	case *string:
 		*v = *base.B2S(src)
 
-	case *[]byte:
-		*v = src
-
-	case *uint:
-		num, _ := binary.Uvarint(src)
-		*v = uint(num)
-
-	case *uint8:
-		*v = src[0]
-
-	case *uint16:
-		num, _ := binary.Uvarint(src)
-		*v = uint16(num)
-
-	case *uint32:
-		num, _ := binary.Uvarint(src)
-		*v = uint32(num)
+	case *int64:
+		*v, _ = binary.Varint(src)
 
 	case *uint64:
-		num, _ := binary.Uvarint(src)
-		*v = num
-
-	case *int:
-		num, _ := binary.Varint(src)
-		*v = int(num)
-
-	case *int8:
-		num, _ := binary.Varint(src)
-		*v = int8(num)
-
-	case *int16:
-		num, _ := binary.Varint(src)
-		*v = int16(num)
+		*v, _ = binary.Uvarint(src)
 
 	case *int32:
 		num, _ := binary.Varint(src)
 		*v = int32(num)
 
-	case *int64:
-		*v, _ = binary.Varint(src)
-
-	case *float32:
-		num, err := strconv.ParseFloat(*base.B2S(src), 32)
-		if err != nil {
-			return err
-		}
-		*v = float32(num)
+	case *uint32:
+		num, _ := binary.Uvarint(src)
+		*v = uint32(num)
 
 	case *float64:
 		num, err := strconv.ParseFloat(*base.B2S(src), 64)
@@ -386,8 +341,41 @@ func (s *storeShard) Decode(src base.Raw, vptr interface{}) error {
 		}
 		*v = val
 
+	case *uint:
+		num, _ := binary.Uvarint(src)
+		*v = uint(num)
+
+	case *int:
+		num, _ := binary.Varint(src)
+		*v = int(num)
+
+	case *uint8:
+		*v = src[0]
+
+	case *int8:
+		num, _ := binary.Varint(src)
+		*v = int8(num)
+
+	case *uint16:
+		num, _ := binary.Uvarint(src)
+		*v = uint16(num)
+
+	case *int16:
+		num, _ := binary.Varint(src)
+		*v = int16(num)
+
+	case *float32:
+		num, err := strconv.ParseFloat(*base.B2S(src), 32)
+		if err != nil {
+			return err
+		}
+		*v = float32(num)
+
 	case *[]string:
 		*v = strings.Split(*base.B2S(src), ",")
+
+	case base.Marshaler:
+		return v.UnmarshalJSON(src)
 
 	default:
 		return errors.New("unsupported type: " + reflect.TypeOf(v).String())
