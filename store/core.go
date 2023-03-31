@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"math"
 	"os"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/xgzlucario/rotom/base"
@@ -36,6 +36,8 @@ const (
 var (
 	// 行尾, 起到换行及校验的作用
 	lineSpr = []byte{sprChar, sprChar, endChar}
+
+	order = binary.BigEndian
 )
 
 func (s *storeShard) load() {
@@ -264,14 +266,13 @@ func (s *storeShard) Encode(v any) error {
 
 	case bool:
 		if v {
-			s.buf = append(s.buf, 'T')
+			s.buf = append(s.buf, 1)
 		} else {
-			s.buf = append(s.buf, 'F')
+			s.buf = append(s.buf, 0)
 		}
 
 	case float64:
-		str := strconv.FormatFloat(v, 'f', -1, 64)
-		s.buf = append(s.buf, base.S2B(&str)...)
+		s.buf = order.AppendUint64(s.buf, math.Float64bits(v))
 
 	case uint8:
 		s.buf = append(s.buf, v)
@@ -286,8 +287,7 @@ func (s *storeShard) Encode(v any) error {
 		s.buf = binary.AppendVarint(s.buf, int64(v))
 
 	case float32:
-		str := strconv.FormatFloat(float64(v), 'f', -1, 64)
-		s.buf = append(s.buf, base.S2B(&str)...)
+		s.buf = order.AppendUint32(s.buf, math.Float32bits(v))
 
 	case []string:
 		str := strings.Join(v, ",")
@@ -328,18 +328,10 @@ func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 		*v = uint32(num)
 
 	case *float64:
-		num, err := strconv.ParseFloat(*base.B2S(src), 64)
-		if err != nil {
-			return err
-		}
-		*v = num
+		*v = math.Float64frombits(order.Uint64(src))
 
 	case *bool:
-		val, err := strconv.ParseBool(*base.B2S(src))
-		if err != nil {
-			return err
-		}
-		*v = val
+		*v = src[0] != 0
 
 	case *uint:
 		num, _ := binary.Uvarint(src)
@@ -365,11 +357,7 @@ func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 		*v = int16(num)
 
 	case *float32:
-		num, err := strconv.ParseFloat(*base.B2S(src), 32)
-		if err != nil {
-			return err
-		}
-		*v = float32(num)
+		*v = math.Float32frombits(order.Uint32(src))
 
 	case *[]string:
 		*v = strings.Split(*base.B2S(src), ",")
