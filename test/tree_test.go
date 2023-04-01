@@ -77,26 +77,3 @@ func Benchmark_MapGet(b *testing.B) {
 		s1 = struct{}{}
 	}
 }
-
-// Remove
-func Benchmark_TrieRemove(b *testing.B) {
-	tree := getTrie()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tree.Remove("xgz" + strconv.Itoa(i))
-	}
-}
-func Benchmark_RBTreeRemove(b *testing.B) {
-	tree := getRBTree()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tree.Delete("xgz" + strconv.Itoa(i))
-	}
-}
-func Benchmark_MapRemove(b *testing.B) {
-	tree := getMap()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		delete(tree, "xgz"+strconv.Itoa(i))
-	}
-}
