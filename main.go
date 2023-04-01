@@ -152,6 +152,7 @@ func testValue() {
 	fmt.Println(db.GetFloat64("float64"))
 	fmt.Println(db.GetString("string"))
 	fmt.Println(db.GetBool("bool"))
+	fmt.Println(db.GetTime("time"))
 	fmt.Println(db.GetStringSlice("stringSlice"))
 
 	fmt.Println(db.HGet("xgz", "1"))
@@ -170,6 +171,7 @@ func testValue() {
 	db.Set("float64", float64(123.123))
 	db.Set("string", "123")
 	db.Set("bool", true)
+	db.Set("time", time.Now())
 	db.Set("stringSlice", []string{"123", "456"})
 
 	db.HSet("xgz", "1", 123)

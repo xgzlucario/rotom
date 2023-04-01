@@ -20,7 +20,9 @@ func (s *store) Set(key string, value any) {
 	sd.encodeBytes(OP_SET)
 	sd.encodeBytes(base.S2B(&key)...)
 	sd.encodeBytes(sprChar)
-	sd.Encode(value)
+	if err := sd.Encode(value); err != nil {
+		panic(err)
+	}
 	sd.encodeBytes(lineSpr...)
 	sd.Unlock()
 
@@ -39,7 +41,9 @@ func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
 	sd.encodeBytes(sprChar)
 	sd.encodeInt64(ts)
 	sd.encodeBytes(sprChar)
-	sd.Encode(value)
+	if err := sd.Encode(value); err != nil {
+		panic(err)
+	}
 	sd.encodeBytes(lineSpr...)
 	sd.Unlock()
 
@@ -83,9 +87,7 @@ func (s *store) HGet(key, field string) (any, bool) {
 
 	m, ok := sd.Cache.Get(key)
 	if ok {
-		if m, ok := m.(structx.Map[string, any]); ok {
-			return m.Get(field)
-		}
+		return m.(structx.Map[string, any]).Get(field)
 	}
 	return nil, false
 }
@@ -103,14 +105,14 @@ func (s *store) HSet(key, field string, value any) {
 	sd.encodeBytes(sprChar)
 	sd.encodeBytes(base.S2B(&field)...)
 	sd.encodeBytes(sprChar)
-	sd.Encode(value)
+	if err := sd.Encode(value); err != nil {
+		panic(err)
+	}
 	sd.encodeBytes(lineSpr...)
 
 	m, ok := sd.Cache.Get(key)
 	if ok {
-		if m, ok := m.(structx.Map[string, any]); ok {
-			m.Set(field, value)
-		}
+		m.(structx.Map[string, any]).Set(field, value)
 	} else {
 		sd.Cache.Set(key, structx.Map[string, any]{field: value})
 	}
@@ -125,9 +127,7 @@ func (s *store) HKeys(key string) []string {
 
 	m, ok := sd.Cache.Get(key)
 	if ok {
-		if m, ok := m.(structx.Map[string, any]); ok {
-			return m.Keys()
-		}
+		return m.(structx.Map[string, any]).Keys()
 	}
 	return nil
 }
@@ -244,6 +244,9 @@ func (s *store) GetBool(k string) (v bool, err error) { getValue(k, &v); return 
 
 // GetStringSlice
 func (s *store) GetStringSlice(k string) (v []string, err error) { getValue(k, &v); return }
+
+// GetTime
+func (s *store) GetTime(k string) (v time.Time, err error) { getValue(k, &v); return }
 
 // GetList
 func GetList[T comparable](key string) (*structx.List[T], error) {

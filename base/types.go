@@ -11,6 +11,11 @@ type Marshaler interface {
 	UnmarshalJSON([]byte) error
 }
 
+type Binarier interface {
+	MarshalBinary() ([]byte, error)
+	UnmarshalBinary([]byte) error
+}
+
 type GTreeJSON[K, V any] struct {
 	K []K
 	V []V
