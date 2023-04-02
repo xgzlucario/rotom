@@ -312,9 +312,11 @@ func (s *storeShard) Encode(v any) error {
 			return err
 		}
 		s.buf = append(s.buf, src...)
-	}
 
-	return errors.New("unsupported type: " + reflect.TypeOf(v).String())
+	default:
+		return errors.New("encode unsupported type: " + reflect.TypeOf(v).String())
+	}
+	return nil
 }
 
 // Decode
@@ -393,7 +395,7 @@ func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 		return v.UnmarshalJSON(src)
 
 	default:
-		return errors.New("unsupported type: " + reflect.TypeOf(v).String())
+		return errors.New("decode unsupported type: " + reflect.TypeOf(v).String())
 	}
 
 	return nil
