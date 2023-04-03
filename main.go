@@ -65,7 +65,7 @@ func (s *Stu) UnmarshalJSON(src []byte) error {
 func testCustom() {
 	fmt.Println("===== start test Custom =====")
 
-	stu, err := store.GetCustomType("stu", new(Stu))
+	stu, err := store.Get("stu", new(Stu))
 	if err != nil {
 		fmt.Println("error:", err)
 		db.Set("stu", &Stu{"xgz", 22})
@@ -88,7 +88,7 @@ func testStress() {
 	go func() {
 		for {
 			memInfo, _ := mem.VirtualMemory()
-			cpuInfo, _ := cpu.Percent(time.Second/8, false)
+			cpuInfo, _ := cpu.Percent(time.Second/5, false)
 			dbsize := getDBFileSize()
 			fmt.Println("---------------------------------------")
 			fmt.Printf("time: %.1fs, count: %d, num: %d\n", time.Since(a).Seconds(), count, db.Count())
@@ -154,6 +154,7 @@ func testValue() {
 	fmt.Println(db.GetBool("bool"))
 	fmt.Println(db.GetTime("time"))
 	fmt.Println(db.GetStringSlice("stringSlice"))
+	fmt.Println(db.GetIntSlice("intSlice"))
 
 	fmt.Println(db.HGet("xgz", "1"))
 
@@ -173,6 +174,7 @@ func testValue() {
 	db.Set("bool", true)
 	db.Set("time", time.Now())
 	db.Set("stringSlice", []string{"123", "456"})
+	db.Set("intSlice", []int{123, 456, 789})
 
 	db.HSet("xgz", "1", 123)
 	db.HSet("xgz", "2", 456)

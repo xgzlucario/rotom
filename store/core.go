@@ -261,9 +261,9 @@ func (s *storeShard) Encode(v any) error {
 	case bool:
 		if v {
 			s.buf = append(s.buf, 1)
-
+		} else {
+			s.buf = append(s.buf, 0)
 		}
-		s.buf = append(s.buf, 0)
 
 	case float64:
 		s.buf = order.AppendUint64(s.buf, math.Float64bits(v))

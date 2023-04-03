@@ -242,6 +242,9 @@ func (s *store) GetFloat64(k string) (v float64, err error) { getValue(k, &v); r
 // GetBool
 func (s *store) GetBool(k string) (v bool, err error) { getValue(k, &v); return }
 
+// GetIntSlice
+func (s *store) GetIntSlice(k string) (v []int, err error) { getValue(k, &v); return }
+
 // GetStringSlice
 func (s *store) GetStringSlice(k string) (v []string, err error) { getValue(k, &v); return }
 
@@ -288,7 +291,7 @@ func (s *store) GetBloom(key string) (*structx.Bloom, error) {
 	return getValue(key, structx.NewBloom())
 }
 
-// GetCustomType
-func GetCustomType[T any](key string, data T) (T, error) {
+// Get
+func Get[T any](key string, data T) (T, error) {
 	return getValue(key, data)
 }
