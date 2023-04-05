@@ -79,11 +79,6 @@ func test2(src any) {
 
 func test3(src any) {
 	switch src := src.(type) {
-	case []byte:
-		if len(src) == 2 {
-			src = nil
-		}
-		return
 	case int:
 	case int32:
 	case int64:
@@ -92,6 +87,10 @@ func test3(src any) {
 	case uint64:
 	case string:
 	case bool:
+	case []byte:
+		if len(src) == 2 {
+			src = nil
+		}
 	default:
 	}
 }

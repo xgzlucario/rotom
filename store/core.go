@@ -236,83 +236,63 @@ func (s *storeShard) Encode(v any) error {
 	switch v := v.(type) {
 	case string:
 		s.buf = append(s.buf, base.S2B(&v)...)
-
 	case []byte:
 		s.buf = append(s.buf, v...)
-
 	case int64:
 		s.buf = binary.AppendVarint(s.buf, v)
-
 	case uint64:
 		s.buf = binary.AppendUvarint(s.buf, v)
-
 	case int:
 		s.buf = binary.AppendVarint(s.buf, int64(v))
-
 	case uint:
 		s.buf = binary.AppendUvarint(s.buf, uint64(v))
-
 	case int32:
 		s.buf = binary.AppendVarint(s.buf, int64(v))
-
 	case uint32:
 		s.buf = binary.AppendUvarint(s.buf, uint64(v))
-
 	case bool:
 		if v {
 			s.buf = append(s.buf, 1)
 		} else {
 			s.buf = append(s.buf, 0)
 		}
-
 	case float64:
 		s.buf = order.AppendUint64(s.buf, math.Float64bits(v))
-
 	case uint8:
 		s.buf = append(s.buf, v)
-
 	case int8:
 		s.buf = binary.AppendVarint(s.buf, int64(v))
-
 	case uint16:
 		s.buf = binary.AppendUvarint(s.buf, uint64(v))
-
 	case int16:
 		s.buf = binary.AppendVarint(s.buf, int64(v))
-
 	case float32:
 		s.buf = order.AppendUint32(s.buf, math.Float32bits(v))
-
 	case []string:
 		str := strings.Join(v, ",")
 		s.buf = append(s.buf, base.S2B(&str)...)
-
 	case []int:
 		for _, i := range v {
 			s.buf = binary.AppendVarint(s.buf, int64(i))
 		}
-
 	case time.Time:
 		src, err := v.MarshalBinary()
 		if err != nil {
 			return err
 		}
 		s.buf = append(s.buf, src...)
-
 	case base.Binarier:
 		src, err := v.MarshalBinary()
 		if err != nil {
 			return err
 		}
 		s.buf = append(s.buf, src...)
-
 	case base.Marshaler:
 		src, err := v.MarshalJSON()
 		if err != nil {
 			return err
 		}
 		s.buf = append(s.buf, src...)
-
 	default:
 		return errors.New("encode unsupported type: " + reflect.TypeOf(v).String())
 	}
@@ -324,59 +304,43 @@ func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 	switch v := vptr.(type) {
 	case *[]byte:
 		*v = src
-
 	case *string:
 		*v = *base.B2S(src)
-
 	case *int64:
 		*v, _ = binary.Varint(src)
-
 	case *uint64:
 		*v, _ = binary.Uvarint(src)
-
 	case *int32:
 		num, _ := binary.Varint(src)
 		*v = int32(num)
-
 	case *uint32:
 		num, _ := binary.Uvarint(src)
 		*v = uint32(num)
-
 	case *float64:
 		*v = math.Float64frombits(order.Uint64(src))
-
 	case *bool:
 		*v = src[0] != 0
-
 	case *uint:
 		num, _ := binary.Uvarint(src)
 		*v = uint(num)
-
 	case *int:
 		num, _ := binary.Varint(src)
 		*v = int(num)
-
 	case *uint8:
 		*v = src[0]
-
 	case *int8:
 		num, _ := binary.Varint(src)
 		*v = int8(num)
-
 	case *uint16:
 		num, _ := binary.Uvarint(src)
 		*v = uint16(num)
-
 	case *int16:
 		num, _ := binary.Varint(src)
 		*v = int16(num)
-
 	case *float32:
 		*v = math.Float32frombits(order.Uint32(src))
-
 	case *[]string:
 		*v = strings.Split(*base.B2S(src), ",")
-
 	case *[]int:
 		*v = make([]int, 0)
 		for len(src) > 0 {
@@ -384,20 +348,15 @@ func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 			src = src[n:]
 			*v = append(*v, int(num))
 		}
-
 	case *time.Time:
 		return v.UnmarshalBinary(src)
-
 	case base.Binarier:
 		return v.UnmarshalBinary(src)
-
 	case base.Marshaler:
 		return v.UnmarshalJSON(src)
-
 	default:
 		return errors.New("decode unsupported type: " + reflect.TypeOf(v).String())
 	}
-
 	return nil
 }
 
