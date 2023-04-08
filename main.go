@@ -185,6 +185,24 @@ func testValue() {
 }
 
 func main() {
+	m := structx.NewMMap()
+	m.Set("阿达哒哒哒", "1", "2")
+	m.Print()
+
+	m.Set("heihei", "1", "3", "3")
+	m.Print()
+
+	m.Set("h2222i", "1", "2", "4")
+	m.Print()
+
+	m.Remove("1", "2")
+	m.Print()
+
+	m.Set("h2222i", "1", "qq", "4")
+	m.Print()
+
+	fmt.Println(m.Get("1", "qq"))
+
 	time.Sleep(time.Second * 2)
 	testValue()
 	testBloom()
