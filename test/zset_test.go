@@ -63,3 +63,38 @@ func TestZSet(t *testing.T) {
 		iter.Next()
 	}
 }
+
+func BenchmarkZSet(b *testing.B) {
+	s := structx.NewZSet[int, float64, any]()
+	b.Run("Set", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			s.Set(i, float64(i))
+		}
+	})
+
+	b.Run("Get", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			s.Get(i)
+		}
+	})
+
+	s = structx.NewZSet[int, float64, any]()
+	b.Run("SetWithScore", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			s.SetWithScore(i, float64(i), "xgz")
+		}
+	})
+
+	b.Run("Delete", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			s.Delete(i)
+		}
+	})
+
+	s = structx.NewZSet[int, float64, any]()
+	b.Run("Incr", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			s.Incr(i, float64(i))
+		}
+	})
+}
