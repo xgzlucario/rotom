@@ -275,6 +275,10 @@ func (s *storeShard) Encode(v any) error {
 		for _, i := range v {
 			s.buf = binary.AppendVarint(s.buf, int64(i))
 		}
+	case []uint:
+		for _, i := range v {
+			s.buf = binary.AppendUvarint(s.buf, uint64(i))
+		}
 	case time.Time:
 		src, err := v.MarshalBinary()
 		if err != nil {
@@ -347,6 +351,13 @@ func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 			num, n := binary.Varint(src)
 			src = src[n:]
 			*v = append(*v, int(num))
+		}
+	case *[]uint:
+		*v = make([]uint, 0)
+		for len(src) > 0 {
+			num, n := binary.Uvarint(src)
+			src = src[n:]
+			*v = append(*v, uint(num))
 		}
 	case *time.Time:
 		return v.UnmarshalBinary(src)

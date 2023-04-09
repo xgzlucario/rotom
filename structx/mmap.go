@@ -55,22 +55,23 @@ func (m MMap) Set(value any, keys ...string) {
 }
 
 // Remove
-func (m MMap) Remove(keys ...string) {
+func (m MMap) Remove(keys ...string) (val any, ok bool) {
 	if len(keys) == 0 {
 		return
 	}
 
 	// last key
 	if len(keys) == 1 {
+		val = m[keys[0]]
 		delete(m, keys[0])
-		return
+		return val, true
 	}
 
 	mm, ok := m[keys[0]].(MMap)
 	if !ok {
 		return
 	}
-	mm.Remove(keys[1:]...)
+	return mm.Remove(keys[1:]...)
 }
 
 // Print

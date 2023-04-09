@@ -79,7 +79,7 @@ func (s *store) Persist(key string) bool {
 }
 
 // HGet
-func (s *store) HGet(key, field string) (any, bool) {
+func (s *store) HGet(key string, fields ...string) (any, bool) {
 	sd := s.getShard(key)
 
 	sd.RLock()
@@ -87,23 +87,23 @@ func (s *store) HGet(key, field string) (any, bool) {
 
 	m, ok := sd.Cache.Get(key)
 	if ok {
-		return m.(structx.Map[string, any]).Get(field)
+		return m.(structx.MMap).Get(fields...)
 	}
 	return nil, false
 }
 
 // HSet
-func (s *store) HSet(key, field string, value any) {
+func (s *store) HSet(value any, key string, fields ...string) {
 	sd := s.getShard(key)
 
 	sd.Lock()
 	defer sd.Unlock()
 
-	// 5{key}|{field}|{value}\n
+	// 5{key}|{fields}|{value}\n
 	sd.encodeBytes(OP_HSET)
 	sd.encodeBytes(base.S2B(&key)...)
 	sd.encodeBytes(sprChar)
-	sd.encodeBytes(base.S2B(&field)...)
+	sd.Encode(fields)
 	sd.encodeBytes(sprChar)
 	if err := sd.Encode(value); err != nil {
 		panic(err)
@@ -112,45 +112,31 @@ func (s *store) HSet(key, field string, value any) {
 
 	m, ok := sd.Cache.Get(key)
 	if ok {
-		m.(structx.Map[string, any]).Set(field, value)
+		m.(structx.MMap).Set(value, fields...)
 	} else {
-		sd.Cache.Set(key, structx.Map[string, any]{field: value})
+		m := structx.MMap{}
+		m.Set(value, fields...)
+		sd.Cache.Set(key, m)
 	}
-}
-
-// HKeys
-func (s *store) HKeys(key string) []string {
-	sd := s.getShard(key)
-
-	sd.RLock()
-	defer sd.RUnlock()
-
-	m, ok := sd.Cache.Get(key)
-	if ok {
-		return m.(structx.Map[string, any]).Keys()
-	}
-	return nil
 }
 
 // HRemove
-func (s *store) HRemove(key, field string) (any, bool) {
+func (s *store) HRemove(key string, fields ...string) (any, bool) {
 	sd := s.getShard(key)
 
 	sd.Lock()
 	defer sd.Unlock()
 
-	// 6{key}|{field}\n
+	// 6{key}|{fields}\n
 	sd.encodeBytes(OP_HREMOVE)
 	sd.encodeBytes(base.S2B(&key)...)
 	sd.encodeBytes(sprChar)
-	sd.encodeBytes(base.S2B(&field)...)
+	sd.Encode(fields)
 	sd.encodeBytes(lineSpr...)
 
 	m, ok := sd.Cache.Get(key)
 	if ok {
-		if m, ok := m.(structx.Map[string, any]); ok {
-			return m.Remove(field)
-		}
+		return m.(structx.MMap).Remove(fields...)
 	}
 	return nil, false
 }
@@ -289,6 +275,11 @@ func (s *store) GetBitMap(key string) (*structx.BitMap, error) {
 // GetBloom
 func (s *store) GetBloom(key string) (*structx.Bloom, error) {
 	return getValue(key, structx.NewBloom())
+}
+
+// GetMMap
+func (s *store) GetMMap(key string) (structx.MMap, error) {
+	return getValue(key, structx.MMap{})
 }
 
 // Get
