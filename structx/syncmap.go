@@ -22,7 +22,7 @@ func (m *SyncMap[K, V]) Get(key K) (V, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	val, ok := m.m[key]
+	val, ok := m.m.Get(key)
 	return val, ok
 }
 
@@ -31,7 +31,7 @@ func (m *SyncMap[K, V]) Set(key K, val V) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.m[key] = val
+	m.m.Set(key, val)
 }
 
 // Remove
@@ -39,10 +39,7 @@ func (m *SyncMap[K, V]) Remove(key K) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	_, ok := m.m[key]
-	if ok {
-		delete(m.m, key)
-	}
+	_, ok := m.m.Delete(key)
 	return ok
 }
 
@@ -59,7 +56,7 @@ func (m *SyncMap[K, V]) Count() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	return len(m.m)
+	return m.m.Len()
 }
 
 // Clear

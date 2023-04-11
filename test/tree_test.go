@@ -1,28 +1,34 @@
 package test
 
 import (
-	"strconv"
 	"testing"
 
-	"github.com/dghubble/trie"
+	"github.com/brianvoe/gofakeit/v6"
+	"github.com/tidwall/hashmap"
 	"github.com/xgzlucario/rotom/structx"
 )
+
+func BenchmarkFakeit(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		gofakeit.Phone()
+	}
+}
 
 func BenchmarkMap(b *testing.B) {
 	m := map[string]struct{}{}
 	b.Run("Set", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m["xgz12345678"+strconv.Itoa(i)] = struct{}{}
+			m[gofakeit.Phone()] = struct{}{}
 		}
 	})
 	b.Run("Get", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = m["xgz12345678"+strconv.Itoa(i)]
+			_ = m[gofakeit.Phone()]
 		}
 	})
 	b.Run("Remove", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			delete(m, "xgz12345678"+strconv.Itoa(i))
+			delete(m, gofakeit.Phone())
 		}
 	})
 }
@@ -31,17 +37,17 @@ func BenchmarkTrie(b *testing.B) {
 	m := structx.NewTrie[struct{}]()
 	b.Run("Set", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Put("xgz12345678"+strconv.Itoa(i), struct{}{})
+			m.Put(gofakeit.Phone(), struct{}{})
 		}
 	})
 	b.Run("Get", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Get("xgz12345678" + strconv.Itoa(i))
+			m.Get(gofakeit.Phone())
 		}
 	})
 	b.Run("Remove", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Remove("xgz12345678" + strconv.Itoa(i))
+			m.Remove(gofakeit.Phone())
 		}
 	})
 }
@@ -50,36 +56,36 @@ func BenchmarkRBTree(b *testing.B) {
 	m := structx.NewRBTree[string, struct{}]()
 	b.Run("Set", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Insert("xgz12345678"+strconv.Itoa(i), struct{}{})
+			m.Insert(gofakeit.Phone(), struct{}{})
 		}
 	})
 	b.Run("Get", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Find("xgz12345678" + strconv.Itoa(i))
+			m.Find(gofakeit.Phone())
 		}
 	})
 	b.Run("Remove", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Delete("xgz12345678" + strconv.Itoa(i))
+			m.Delete(gofakeit.Phone())
 		}
 	})
 }
 
-func BenchmarkTrieV2(b *testing.B) {
-	m := trie.NewRuneTrie()
+func BenchmarkHashmap(b *testing.B) {
+	var m hashmap.Map[string, struct{}]
 	b.Run("Set", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Put("xgz12345678"+strconv.Itoa(i), struct{}{})
+			m.Set(gofakeit.Phone(), struct{}{})
 		}
 	})
 	b.Run("Get", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Get("xgz12345678" + strconv.Itoa(i))
+			m.Get(gofakeit.Phone())
 		}
 	})
 	b.Run("Remove", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Delete("xgz12345678" + strconv.Itoa(i))
+			m.Delete(gofakeit.Phone())
 		}
 	})
 }

@@ -99,7 +99,7 @@ func (c *Cache[V]) Persist(key string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	item, ok := c.data.data[key]
+	item, ok := c.data.data.Get(key)
 	if ok {
 		c.data.updateScore(item, key, NoTTL)
 	}
