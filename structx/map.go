@@ -5,6 +5,7 @@ import (
 	"github.com/tidwall/hashmap"
 )
 
+// Map
 type Map[K comparable, V any] struct {
 	*hashmap.Map[K, V]
 }
@@ -20,4 +21,14 @@ func (m Map[K, V]) MarshalJSON() ([]byte, error) {
 
 func (m Map[K, V]) UnmarshalJSON(src []byte) error {
 	return sonic.Unmarshal(src, m)
+}
+
+// Set
+type Set[K comparable] struct {
+	*hashmap.Set[K]
+}
+
+// NewSet
+func NewSet[K comparable]() Set[K] {
+	return Set[K]{&hashmap.Set[K]{}}
 }

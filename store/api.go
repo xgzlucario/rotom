@@ -244,12 +244,12 @@ func GetList[T comparable](key string) (*structx.List[T], error) {
 
 // GetSet
 func GetSet[T comparable](s *store, key string) (structx.Set[T], error) {
-	return getValue(key, structx.NewMapSet[T]())
+	return getValue(key, structx.NewSet[T]())
 }
 
 // GetMap
 func GetMap[K comparable, V any](key string) (structx.Map[K, V], error) {
-	return getValue(key, structx.Map[K, V]{})
+	return getValue(key, structx.NewMap[K, V]())
 }
 
 // GetSyncMap
