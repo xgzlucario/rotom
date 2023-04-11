@@ -6,6 +6,7 @@ require (
 	github.com/bits-and-blooms/bloom v2.0.3+incompatible
 	github.com/brianvoe/gofakeit/v6 v6.20.2
 	github.com/bytedance/sonic v1.8.7
+	github.com/dghubble/trie v0.0.0-20230228185955-dca8fa4fd7f8
 	github.com/klauspost/compress v1.16.4
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/sourcegraph/conc v0.3.0

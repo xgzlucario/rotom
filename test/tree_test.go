@@ -4,76 +4,82 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/dghubble/trie"
 	"github.com/xgzlucario/rotom/structx"
 )
 
-func getTrie() *structx.Trie[struct{}] {
-	tree := structx.NewTrie[struct{}]()
-	for i := 0; i < 10000; i++ {
-		tree.Put("xgz"+strconv.Itoa(i), struct{}{})
-	}
-	return tree
+func BenchmarkMap(b *testing.B) {
+	m := map[string]struct{}{}
+	b.Run("Set", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m["xgz12345678"+strconv.Itoa(i)] = struct{}{}
+		}
+	})
+	b.Run("Get", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_ = m["xgz12345678"+strconv.Itoa(i)]
+		}
+	})
+	b.Run("Remove", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			delete(m, "xgz12345678"+strconv.Itoa(i))
+		}
+	})
 }
 
-func getRBTree() *structx.RBTree[string, struct{}] {
-	tree := structx.NewRBTree[string, struct{}]()
-	for i := 0; i < 10000; i++ {
-		tree.Insert("xgz"+strconv.Itoa(i), struct{}{})
-	}
-	return tree
+func BenchmarkTrie(b *testing.B) {
+	m := structx.NewTrie[struct{}]()
+	b.Run("Set", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Put("xgz12345678"+strconv.Itoa(i), struct{}{})
+		}
+	})
+	b.Run("Get", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Get("xgz12345678" + strconv.Itoa(i))
+		}
+	})
+	b.Run("Remove", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Remove("xgz12345678" + strconv.Itoa(i))
+		}
+	})
 }
 
-func getMap() map[string]struct{} {
-	tree := map[string]struct{}{}
-	for i := 0; i < 10000; i++ {
-		tree["xgz"+strconv.Itoa(i)] = struct{}{}
-	}
-	return tree
+func BenchmarkRBTree(b *testing.B) {
+	m := structx.NewRBTree[string, struct{}]()
+	b.Run("Set", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Insert("xgz12345678"+strconv.Itoa(i), struct{}{})
+		}
+	})
+	b.Run("Get", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Find("xgz12345678" + strconv.Itoa(i))
+		}
+	})
+	b.Run("Remove", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Delete("xgz12345678" + strconv.Itoa(i))
+		}
+	})
 }
 
-// Put
-func Benchmark_TriePut(b *testing.B) {
-	tree := structx.NewTrie[struct{}]()
-	for i := 0; i < b.N; i++ {
-		tree.Put("xgz"+strconv.Itoa(i), struct{}{})
-	}
-}
-func Benchmark_RBTreePut(b *testing.B) {
-	tree := structx.NewRBTree[string, struct{}]()
-	for i := 0; i < b.N; i++ {
-		tree.Insert("xgz"+strconv.Itoa(i), struct{}{})
-	}
-}
-func Benchmark_MapPut(b *testing.B) {
-	tree := map[string]struct{}{}
-	for i := 0; i < b.N; i++ {
-		tree["xgz"+strconv.Itoa(i)] = struct{}{}
-	}
-}
-
-// Get
-func Benchmark_TrieGet(b *testing.B) {
-	tree := getTrie()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tree.Get("xgz" + strconv.Itoa(i))
-	}
-}
-func Benchmark_RBTreeGet(b *testing.B) {
-	tree := getRBTree()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tree.Find("xgz" + strconv.Itoa(i))
-	}
-}
-func Benchmark_MapGet(b *testing.B) {
-	tree := getMap()
-	var s1 struct{}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		s1 = tree["xgz"+strconv.Itoa(i)]
-	}
-	if s1 == struct{}{} {
-		s1 = struct{}{}
-	}
+func BenchmarkTrieV2(b *testing.B) {
+	m := trie.NewRuneTrie()
+	b.Run("Set", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Put("xgz12345678"+strconv.Itoa(i), struct{}{})
+		}
+	})
+	b.Run("Get", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Get("xgz12345678" + strconv.Itoa(i))
+		}
+	})
+	b.Run("Remove", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Delete("xgz12345678" + strconv.Itoa(i))
+		}
+	})
 }
