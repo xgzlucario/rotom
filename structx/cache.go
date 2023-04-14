@@ -57,8 +57,8 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 	return
 }
 
-// GetWithTTL
-func (c *Cache[V]) GetWithTTL(key string) (v V, ttl int64, ok bool) {
+// GetEX
+func (c *Cache[V]) GetEX(key string) (v V, ttl int64, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -78,16 +78,16 @@ func (c *Cache[V]) Set(key string, value V) {
 	c.data.Set(key, value)
 }
 
-// SetWithDeadLine
-func (c *Cache[V]) SetWithDeadLine(key string, value V, ts int64) {
+// SetTX set deadline with key-value
+func (c *Cache[V]) SetTX(key string, value V, ts int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.data.SetWithScore(key, ts+atomic.AddInt64(&c.count, 1), value)
 }
 
-// SetWithTTL
-func (c *Cache[V]) SetWithTTL(key string, value V, ttl time.Duration) {
+// SetEX set expire time with key-value
+func (c *Cache[V]) SetEX(key string, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

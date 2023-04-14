@@ -19,6 +19,25 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
+const (
+	// Status
+	STATUS_INIT uint32 = iota + 1
+	STATUS_NORMAL
+	STATUS_REWRITE
+
+	// Operation
+	OP_SET byte = iota + '1'
+	OP_SETEX
+	OP_REMOVE
+	OP_PERSIST
+	OP_HSET
+	OP_HREMOVE
+
+	// Char
+	C_SPR = byte(0x00)
+	C_END = byte('\n')
+)
+
 var (
 	// DBPath for db file directory
 	DBPath = "db/"
@@ -37,34 +56,33 @@ var (
 
 	// database
 	db store
+
+	lineSpr = []byte{C_SPR, C_SPR, C_END}
+
+	order = binary.BigEndian
 )
 
-const (
-	INIT uint32 = iota + 1
-	NORMAL
-	REWRITE
+var (
+	errUnSupportType = errors.New("unsupported type")
 )
 
 type store []*storeShard
 
 type storeShard struct {
-	// shard index
 	id int
 
 	// runtime status
 	status uint32
 
-	// DBPath and rwPath
+	// dbPath and rwPath
 	path   string
 	rwPath string
 
-	// buffer
-	buf []byte
-
-	// rw buffer
+	// buffer and rwbuffer
+	buf   []byte
 	rwbuf []byte
 
-	// data
+	// data based on Cache
 	*structx.Cache[any]
 
 	// filter
@@ -101,7 +119,7 @@ func init() {
 	for i := range db {
 		db[i] = &storeShard{
 			id:     i,
-			status: INIT,
+			status: STATUS_INIT,
 			path:   fmt.Sprintf("%sdat%d", DBPath, i),
 			rwPath: fmt.Sprintf("%sdat%d.rw", DBPath, i),
 			Cache:  structx.NewCache[any](),
@@ -114,10 +132,10 @@ func init() {
 			for {
 				time.Sleep(FlushDuration)
 				switch sd.getStatus() {
-				case NORMAL:
+				case STATUS_NORMAL:
 					sd.flushBuffer()
 
-				case INIT, REWRITE:
+				case STATUS_INIT, STATUS_REWRITE:
 					sd.flushRwBuffer()
 				}
 			}
@@ -129,7 +147,7 @@ func init() {
 				time.Sleep(RewriteDuration)
 				rwPool.Go(func() {
 					sd.flushBuffer()
-					sd.setStatus(REWRITE)
+					sd.setStatus(STATUS_REWRITE)
 					sd.reWrite()
 				})
 			}
@@ -151,7 +169,7 @@ func (s *store) Set(key string, value any) {
 
 	// {SET}{key}|{value}
 	sd.Lock()
-	sd.encBytes(OP_SET).encBytes(base.S2B(&key)...).encBytes(sprChar)
+	sd.encBytes(OP_SET).encBytes(base.S2B(&key)...).encBytes(C_SPR)
 	if err := sd.Encode(value); err != nil {
 		panic(err)
 	}
@@ -161,21 +179,21 @@ func (s *store) Set(key string, value any) {
 	sd.Set(key, value)
 }
 
-// SetWithTTL
-func (s *store) SetWithTTL(key string, value any, ttl time.Duration) {
+// SetEX
+func (s *store) SetEX(key string, value any, ttl time.Duration) {
 	sd := s.getShard(key)
 	ts := atomic.LoadInt64(&globalTime) + int64(ttl)
 
-	// {SET_WITH_TTL}{key}|{ttl}|{value}
+	// {SETEX}{key}|{ttl}|{value}
 	sd.Lock()
-	sd.encBytes(OP_SET_WITH_TTL).encBytes(base.S2B(&key)...).encBytes(sprChar).encInt64(ts).encBytes(sprChar)
+	sd.encBytes(OP_SETEX).encBytes(base.S2B(&key)...).encBytes(C_SPR).encInt64(ts).encBytes(C_SPR)
 	if err := sd.Encode(value); err != nil {
 		panic(err)
 	}
 	sd.encBytes(lineSpr...)
 	sd.Unlock()
 
-	sd.SetWithTTL(key, value, ttl)
+	sd.SetEX(key, value, ttl)
 }
 
 // Remove
@@ -223,7 +241,7 @@ func (s *store) HSet(value any, key string, fields ...string) {
 	defer sd.Unlock()
 
 	// {HSET}{key}|{fields}|{value}
-	sd.encBytes(OP_HSET).encBytes(base.S2B(&key)...).encBytes(sprChar).encStringSlice(fields).encBytes(sprChar)
+	sd.encBytes(OP_HSET).encBytes(base.S2B(&key)...).encBytes(C_SPR).encStringSlice(fields).encBytes(C_SPR)
 	if err := sd.Encode(value); err != nil {
 		panic(err)
 	}
@@ -248,7 +266,7 @@ func (s *store) HRemove(key string, fields ...string) (any, bool) {
 	defer sd.Unlock()
 
 	// {HREMOVE}{key}|{fields}
-	sd.encBytes(OP_HREMOVE).encBytes(base.S2B(&key)...).encBytes(sprChar).encStringSlice(fields).encBytes(lineSpr...)
+	sd.encBytes(OP_HREMOVE).encBytes(base.S2B(&key)...).encBytes(C_SPR).encStringSlice(fields).encBytes(lineSpr...)
 
 	val, _ := sd.Cache.Get(key)
 	m, ok := val.(structx.MMap)
@@ -403,32 +421,8 @@ func Get[T any](key string, data T) (T, error) {
 	return getValue(key, data)
 }
 
-const (
-	// Operation
-	OP_SET byte = iota + '1'
-	OP_SET_WITH_TTL
-	OP_REMOVE
-	OP_PERSIST
-	OP_HSET
-	OP_HREMOVE
-
-	// seperate char
-	sprChar = byte(0x00)
-
-	// endline char
-	endChar = byte('\n')
-)
-
-var (
-	lineSpr = []byte{sprChar, sprChar, endChar}
-
-	order = binary.BigEndian
-
-	errUnSupportType = errors.New("unsupported type")
-)
-
 func (s *storeShard) reWrite() {
-	defer s.setStatus(NORMAL)
+	defer s.setStatus(STATUS_NORMAL)
 
 	data, err := os.ReadFile(s.path)
 	if err != nil {
@@ -439,7 +433,7 @@ func (s *storeShard) reWrite() {
 	s.filter = structx.NewBloom()
 
 	// read line from tail
-	lines := bytes.Split(data, []byte{sprChar, endChar})
+	lines := bytes.Split(data, []byte{C_SPR, C_END})
 	for i := len(lines) - 1; i >= 0; i-- {
 		s.readLine(lines[i])
 	}
@@ -507,7 +501,7 @@ func (s *storeShard) flush(buf []byte, path string) (int, error) {
 // readLine
 func (s *storeShard) readLine(line []byte) {
 	// valid
-	if !bytes.HasSuffix(line, []byte{sprChar}) {
+	if !bytes.HasSuffix(line, []byte{C_SPR}) {
 		return
 	}
 	line = line[:len(line)-1]
@@ -515,12 +509,12 @@ func (s *storeShard) readLine(line []byte) {
 	switch line[0] {
 	// {SET}{key}|{value}
 	case OP_SET:
-		i := bytes.IndexByte(line, sprChar)
+		i := bytes.IndexByte(line, C_SPR)
 		if i <= 0 {
 			return
 		}
 
-		// 当 key 存在时，表示该 key 在未来被 SET, SET_WITH_TTL, REMOVE 过, 不需要重演
+		// 当 key 存在时，表示该 key 在未来被 SET, SETEX, REMOVE 过, 不需要重演
 		if !s.testAndAdd(line[1:i]) {
 			return
 		}
@@ -528,15 +522,15 @@ func (s *storeShard) readLine(line []byte) {
 		s.rwbuf = append(s.rwbuf, line...)
 		s.rwbuf = append(s.rwbuf, lineSpr...)
 
-		if atomic.LoadUint32(&s.status) == REWRITE {
+		if atomic.LoadUint32(&s.status) == STATUS_REWRITE {
 			return
 		}
 		s.Set(*base.B2S(line[1:i]), line[i+1:])
 
-	// {SET_WITH_TTL}{key}|{ttl}|{value}
-	case OP_SET_WITH_TTL:
-		sp1 := bytes.IndexByte(line, sprChar)
-		sp2 := bytes.IndexByte(line[sp1+1:], sprChar)
+	// {SETEX}{key}|{ttl}|{value}
+	case OP_SETEX:
+		sp1 := bytes.IndexByte(line, C_SPR)
+		sp2 := bytes.IndexByte(line[sp1+1:], C_SPR)
 		sp2 += sp1 + 1
 
 		if !s.testAndAdd(line[1:sp1]) {
@@ -549,11 +543,11 @@ func (s *storeShard) readLine(line []byte) {
 			s.rwbuf = append(s.rwbuf, line...)
 			s.rwbuf = append(s.rwbuf, lineSpr...)
 
-			if atomic.LoadUint32(&s.status) == REWRITE {
+			if atomic.LoadUint32(&s.status) == STATUS_REWRITE {
 				return
 			}
 
-			s.SetWithDeadLine(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), ts)
+			s.SetTX(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), ts)
 		}
 
 	// {REMOVE}{key}
@@ -561,14 +555,14 @@ func (s *storeShard) readLine(line []byte) {
 		if !s.testAndAdd(line[1:]) {
 			return
 		}
-		if atomic.LoadUint32(&s.status) == REWRITE {
+		if atomic.LoadUint32(&s.status) == STATUS_REWRITE {
 			return
 		}
 
 		// REMOVE 不需要重写，重写日志中应仅包含 SET, SET_WITH_TTL, PERWSIST 操作
 		s.Remove(*base.B2S(line[1:]))
 
-	// PERSIST: {op}{key}
+	// {PERSIST}{key}
 	case OP_PERSIST:
 		// 当 {op}{key} 存在时，表示该 key 未来被 PERSIST 过, 不需要重演
 		if !s.testAndAdd(line) {
@@ -578,7 +572,7 @@ func (s *storeShard) readLine(line []byte) {
 		s.rwbuf = append(s.rwbuf, line...)
 		s.rwbuf = append(s.rwbuf, lineSpr...)
 
-		if atomic.LoadUint32(&s.status) == REWRITE {
+		if atomic.LoadUint32(&s.status) == STATUS_REWRITE {
 			return
 		}
 
@@ -602,9 +596,9 @@ func (s store) getShard(key string) *storeShard {
 
 // getValue
 func getValue[T any](key string, vptr T) (T, error) {
-	sd := db.getShard(key)
+	s := db.getShard(key)
 	// get
-	val, ok := sd.Get(key)
+	val, ok := s.Get(key)
 	if !ok {
 		return vptr, base.ErrKeyNotFound(key)
 	}
@@ -615,10 +609,10 @@ func getValue[T any](key string, vptr T) (T, error) {
 		return v, nil
 
 	case []byte:
-		if err := sd.Decode(v, vptr); err != nil {
+		if err := s.Decode(v, vptr); err != nil {
 			return vptr, err
 		}
-		sd.Set(key, vptr)
+		s.Set(key, vptr)
 
 	default:
 		return vptr, errUnSupportType
@@ -804,11 +798,11 @@ func (s *Session) Set(key string, val any) {
 	s.store.Set(key, val)
 }
 
-// SetWithTTL
-func (s *Session) SetWithTTL(key string, val any, ttl time.Duration) {
+// SetEX
+func (s *Session) SetEX(key string, val any, ttl time.Duration) {
 	s.sdmap[s.getShard(key)] = struct{}{}
 
-	s.store.SetWithTTL(key, val, ttl)
+	s.store.SetEX(key, val, ttl)
 }
 
 // Remove
