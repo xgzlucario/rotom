@@ -174,7 +174,7 @@ func testValue() {
 	db.Set("bool", true)
 	db.Set("time", time.Now())
 	db.Set("stringSlice", []string{"123", "456"})
-	db.Set("intSlice", []int{123, 456, 789})
+	db.Set("intSlice", []int{1, 123, 456, 23, 789, 55663})
 
 	db.HSet(123, "xgz", "1")
 	db.HSet(456, "xgz", "2")

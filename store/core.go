@@ -202,21 +202,19 @@ func getValue[T any](key string, vptr T) (T, error) {
 	}
 
 	// type assertion
-	obj, ok := val.(T)
-	if ok {
-		return obj, nil
-	}
+	switch v := val.(type) {
+	case T:
+		return v, nil
 
-	// unmarshal
-	raw, ok := val.([]byte)
-	if !ok {
-		return vptr, base.ErrType(key)
-	}
+	case []byte:
+		if err := sd.Decode(v, vptr); err != nil {
+			return vptr, err
+		}
+		sd.Set(key, vptr)
 
-	if err := sd.Decode(raw, vptr); err != nil {
-		return vptr, err
+	default:
+		return vptr, errUnSupportType
 	}
-	sd.Set(key, vptr)
 
 	return vptr, nil
 }
@@ -274,10 +272,6 @@ func (s *storeShard) Encode(v any) error {
 	case []int:
 		for _, i := range v {
 			s.buf = binary.AppendVarint(s.buf, int64(i))
-		}
-	case []uint:
-		for _, i := range v {
-			s.buf = binary.AppendUvarint(s.buf, uint64(i))
 		}
 	case time.Time:
 		src, err := v.MarshalBinary()
@@ -351,13 +345,6 @@ func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 			num, n := binary.Varint(src)
 			src = src[n:]
 			*v = append(*v, int(num))
-		}
-	case *[]uint:
-		*v = make([]uint, 0)
-		for len(src) > 0 {
-			num, n := binary.Uvarint(src)
-			src = src[n:]
-			*v = append(*v, uint(num))
 		}
 	case *time.Time:
 		return v.UnmarshalBinary(src)
