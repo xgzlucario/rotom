@@ -4,7 +4,7 @@ import "time"
 
 // Session
 type Session struct {
-	*store
+	store
 	sdmap map[*storeShard]struct{}
 }
 
@@ -47,7 +47,7 @@ func (s *Session) Persist(key string) bool {
 // Commit
 func (s *Session) Commit() error {
 	for sd := range s.sdmap {
-		if _, err := sd.WriteBuffer(); err != nil {
+		if _, err := sd.flushBuffer(); err != nil {
 			return err
 		}
 	}

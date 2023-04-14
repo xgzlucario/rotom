@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
@@ -16,8 +17,7 @@ import (
 )
 
 const (
-	// 操作码
-	// 从 `1` 开始, 以便于在文件中直接使用 `1` 表示 `OP_SET`
+	// Operation
 	OP_SET byte = iota + '1'
 	OP_SET_WITH_TTL
 	OP_REMOVE
@@ -25,26 +25,20 @@ const (
 	OP_HSET
 	OP_HREMOVE
 
-	// 分隔符, 分隔数据行中的不同字段
-	// 同时也是校验符, 校验数据行是否完整
-	// 判断一条数据是否完整, 只需判断最后一个字符是否为 sprChar 即可
+	// seperate char
 	sprChar = byte(0x00)
 
-	// 换行符, 表示数据行的结尾
+	// endline char
 	endChar = byte('\n')
 )
 
 var (
-	// 行尾, 起到换行及校验的作用
 	lineSpr = []byte{sprChar, sprChar, endChar}
 
 	order = binary.BigEndian
 )
 
 func (s *storeShard) load() {
-	s.Lock()
-	defer s.Unlock()
-
 	data, err := os.ReadFile(s.storePath)
 	if err != nil {
 		return
@@ -59,14 +53,21 @@ func (s *storeShard) load() {
 		s.readLine(lines[i])
 	}
 
-	// rewrite
+	// flush
+	s.Lock()
+	defer s.Unlock()
+
 	fs, err := os.OpenFile(s.rwPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
-		panic(err)
+		return
 	}
+
+	fs.Write(s.rwbuf)
+	s.rwbuf = s.rwbuf[0:0]
 
 	fs.Write(s.buf)
 	s.buf = s.buf[0:0]
+
 	fs.Close()
 
 	// rename rwFile to storeFile
@@ -75,38 +76,37 @@ func (s *storeShard) load() {
 	}
 }
 
-// WriteBuffer
-func (s *storeShard) WriteBuffer() (int, error) {
-	return s.flush(s.storePath)
-}
+func (s *storeShard) flushBuffer() (int, error) { return s.flush(s.buf, s.storePath) }
 
-// ReWriteBuffer
-func (s *storeShard) ReWriteBuffer() (int, error) {
-	return s.flush(s.rwPath)
-}
+func (s *storeShard) flushRwBuffer() (int, error) { return s.flush(s.rwbuf, s.rwPath) }
 
-// flush buffer to file
-func (s *storeShard) flush(path string) (int, error) {
+// flush
+func (s *storeShard) flush(buf []byte, path string) (int, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	if len(s.buf) == 0 {
+	if len(buf) == 0 {
 		return 0, nil
 	}
 
 	fs, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 	defer fs.Close()
 
-	// write file
-	if n, err := fs.Write(s.buf); err != nil {
+	if n, err := fs.Write(buf); err != nil {
 		return 0, err
 
 	} else {
-		// reset buf
-		s.buf = s.buf[0:0]
+		// reset
+		if path == s.storePath {
+			s.buf = s.buf[0:0]
+
+		} else if path == s.rwPath {
+			s.rwbuf = s.rwbuf[0:0]
+		}
+
 		return n, nil
 	}
 }
@@ -132,9 +132,12 @@ func (s *storeShard) readLine(line []byte) {
 			return
 		}
 
-		s.buf = append(s.buf, line...)
-		s.buf = append(s.buf, lineSpr...)
+		s.rwbuf = append(s.rwbuf, line...)
+		s.rwbuf = append(s.rwbuf, lineSpr...)
 
+		if atomic.LoadUint32(&s.status) == REWRITE {
+			return
+		}
 		s.Set(*base.B2S(line[1:i]), line[i+1:])
 
 	// SET_WITH_TTL: {op}{key}|{ttl}|{value}
@@ -150,8 +153,12 @@ func (s *storeShard) readLine(line []byte) {
 		ts, _ := binary.Varint(line[sp1+1 : sp2])
 		// not expired
 		if ts > GlobalTime() {
-			s.buf = append(s.buf, line...)
-			s.buf = append(s.buf, lineSpr...)
+			s.rwbuf = append(s.rwbuf, line...)
+			s.rwbuf = append(s.rwbuf, lineSpr...)
+
+			if atomic.LoadUint32(&s.status) == REWRITE {
+				return
+			}
 
 			s.SetWithDeadLine(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), ts)
 		}
@@ -159,6 +166,9 @@ func (s *storeShard) readLine(line []byte) {
 	// REMOVE: {op}{key}
 	case OP_REMOVE:
 		if !s.testAndAdd(line[1:]) {
+			return
+		}
+		if atomic.LoadUint32(&s.status) == REWRITE {
 			return
 		}
 
@@ -172,8 +182,12 @@ func (s *storeShard) readLine(line []byte) {
 			return
 		}
 
-		s.buf = append(s.buf, line...)
-		s.buf = append(s.buf, lineSpr...)
+		s.rwbuf = append(s.rwbuf, line...)
+		s.rwbuf = append(s.rwbuf, lineSpr...)
+
+		if atomic.LoadUint32(&s.status) == REWRITE {
+			return
+		}
 
 		s.Persist(*base.B2S(line[1:]))
 	}
@@ -188,8 +202,8 @@ func (s *storeShard) testAndAdd(line []byte) bool {
 	return true
 }
 
-func (s *store) getShard(key string) *storeShard {
-	return s.shards[xxh3.HashString(key)&(ShardCount-1)]
+func (s store) getShard(key string) *storeShard {
+	return s[xxh3.HashString(key)&(ShardCount-1)]
 }
 
 // getValue
@@ -220,14 +234,10 @@ func getValue[T any](key string, vptr T) (T, error) {
 }
 
 // encodeBytes without assert
-func (s *storeShard) encodeBytes(v ...byte) {
-	s.buf = append(s.buf, v...)
-}
+func (s *storeShard) encodeBytes(v ...byte) { s.buf = append(s.buf, v...) }
 
 // encodeInt64 without assert
-func (s *storeShard) encodeInt64(v int64) {
-	s.buf = binary.AppendVarint(s.buf, v)
-}
+func (s *storeShard) encodeInt64(v int64) { s.buf = binary.AppendVarint(s.buf, v) }
 
 // Encode
 func (s *storeShard) Encode(v any) error {
@@ -358,16 +368,10 @@ func (s *storeShard) Decode(src []byte, vptr interface{}) error {
 	return nil
 }
 
-func (s *storeShard) getStatus() Status {
-	s.Lock()
-	defer s.Unlock()
-
-	return s.status
+func (s *storeShard) getStatus() uint32 {
+	return atomic.LoadUint32(&s.status)
 }
 
-func (s *storeShard) setStatus(status Status) {
-	s.Lock()
-	defer s.Unlock()
-
-	s.status = status
+func (s *storeShard) setStatus(status uint32) {
+	atomic.SwapUint32(&s.status, status)
 }

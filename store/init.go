@@ -23,43 +23,40 @@ var (
 	// RewriteDuration is the time interval for rewriting data to disk
 	RewriteDuration = time.Second * 10
 
-	// default buffer size
-	defaultBufSize = 4096
-
 	// global time
 	globalTime = time.Now().UnixNano()
 
 	// database
-	db *store
+	db store
 )
 
-// Status for runtime
-type Status byte
-
 const (
-	ERR Status = iota
-	START
-	READY
+	INIT uint32 = iota + 1
+	NORMAL
 	REWRITE
 )
 
-type store struct {
-	shards []*storeShard
-}
+type store []*storeShard
 
 type storeShard struct {
-	status    Status
+	// runtime status
+	status uint32
+
+	// store path
 	storePath string
 	rwPath    string
 
 	// buffer
 	buf []byte
 
-	// data
+	// rw buffer
+	rwbuf []byte
 	sync.RWMutex
+
+	// data
 	*structx.Cache[any]
 
-	// bloom filter
+	// filter
 	filter *structx.Bloom
 }
 
@@ -69,9 +66,7 @@ func init() {
 		panic(err)
 	}
 
-	db = &store{
-		shards: make([]*storeShard, ShardCount),
-	}
+	db = make([]*storeShard, ShardCount)
 
 	pool := structx.NewDefaultPool()
 	rwPool := structx.NewDefaultPool()
@@ -85,48 +80,44 @@ func init() {
 	}()
 
 	// load
-	for i := range db.shards {
+	for i := range db {
 		// init
-		db.shards[i] = &storeShard{
-			status:    START,
+		db[i] = &storeShard{
+			status:    INIT,
 			storePath: fmt.Sprintf("%sdat%d", StorePath, i),
 			rwPath:    fmt.Sprintf("%sdat%d.rw", StorePath, i),
-			buf:       make([]byte, 0, defaultBufSize),
 			Cache:     structx.NewCache[any](),
 		}
-		sd := db.shards[i]
-		sd.setStatus(START)
+		sd := db[i]
 
-		// write buffer
+		// flush buffer
 		go func() {
-			for {
-				time.Sleep(time.Second)
+			tk := time.NewTicker(time.Second)
+			for range tk.C {
+				if s := sd.getStatus(); s == NORMAL {
+					sd.flushBuffer()
 
-				if sd.getStatus() == REWRITE {
-					sd.ReWriteBuffer()
-				} else {
-					sd.WriteBuffer()
+				} else if s == REWRITE || s == INIT {
+					sd.flushRwBuffer()
 				}
 			}
 		}()
 
 		// rewrite
 		go func() {
-			for {
-				time.Sleep(RewriteDuration)
-				sd.setStatus(REWRITE)
-
+			tk := time.NewTicker(RewriteDuration)
+			for range tk.C {
 				rwPool.Go(func() {
-					sd.WriteBuffer()
+					sd.setStatus(REWRITE)
 					sd.load()
-					sd.setStatus(READY)
+					sd.setStatus(NORMAL)
 				})
 			}
 		}()
 
 		pool.Go(func() {
 			sd.load()
-			sd.setStatus(READY)
+			sd.setStatus(NORMAL)
 		})
 	}
 	pool.Wait()

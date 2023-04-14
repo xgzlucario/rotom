@@ -9,7 +9,7 @@ import (
 )
 
 // DB
-func DB() *store { return db }
+func DB() store { return db }
 
 // Set
 func (s *store) Set(key string, value any) {
@@ -156,9 +156,9 @@ func (s *store) Type(key string) reflect.Type {
 }
 
 // Flush writes all the buf data to disk
-func (s *store) Flush() error {
-	for _, sd := range s.shards {
-		if _, err := sd.WriteBuffer(); err != nil {
+func (s store) Flush() error {
+	for _, sd := range s {
+		if _, err := sd.flushBuffer(); err != nil {
 			return err
 		}
 	}
@@ -166,26 +166,25 @@ func (s *store) Flush() error {
 }
 
 // Count
-func (s *store) Count() int {
-	var sum int
-	for _, s := range s.shards {
+func (s store) Count() (sum int) {
+	for _, s := range s {
 		sum += s.Count()
 	}
 	return sum
 }
 
 // WithExpired
-func (s *store) WithExpired(f func(string, any)) *store {
-	for _, s := range s.shards {
+func (s store) WithExpired(f func(string, any)) store {
+	for _, s := range s {
 		s.WithExpired(f)
 	}
 	return s
 }
 
 // Keys
-func (s *store) Keys() []string {
+func (s store) Keys() []string {
 	arr := make([]string, 0, s.Count())
-	for _, s := range s.shards {
+	for _, s := range s {
 		arr = append(arr, s.Keys()...)
 	}
 	return arr
