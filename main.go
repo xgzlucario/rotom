@@ -99,7 +99,7 @@ func testStress() {
 	// Simulate testing
 	for i := 0; i < 10000*10000; i++ {
 		count++
-		db.SetWithTTL(gofakeit.Phone(), gofakeit.Uint32(), time.Second*5)
+		db.SetEX(gofakeit.Phone(), gofakeit.Uint32(), time.Second*5)
 	}
 	fmt.Println("total cost:", time.Since(a))
 }
