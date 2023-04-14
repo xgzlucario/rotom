@@ -7,6 +7,7 @@ require (
 	github.com/brianvoe/gofakeit/v6 v6.20.2
 	github.com/bytedance/sonic v1.8.7
 	github.com/klauspost/compress v1.16.4
+	github.com/rs/zerolog v1.29.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2
@@ -23,6 +24,8 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.18 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
