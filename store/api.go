@@ -85,9 +85,10 @@ func (s *store) HGet(key string, fields ...string) (any, bool) {
 	sd.RLock()
 	defer sd.RUnlock()
 
-	m, ok := sd.Cache.Get(key)
+	val, _ := sd.Cache.Get(key)
+	m, ok := val.(structx.MMap)
 	if ok {
-		return m.(structx.MMap).Get(fields...)
+		return m.Get(fields...)
 	}
 	return nil, false
 }
@@ -110,11 +111,13 @@ func (s *store) HSet(value any, key string, fields ...string) {
 	}
 	sd.encodeBytes(lineSpr...)
 
-	m, ok := sd.Cache.Get(key)
+	// set
+	val, _ := sd.Cache.Get(key)
+	m, ok := val.(structx.MMap)
 	if ok {
-		m.(structx.MMap).Set(value, fields...)
+		m.Set(value, fields...)
 	} else {
-		m := structx.MMap{}
+		m := structx.NewMMap()
 		m.Set(value, fields...)
 		sd.Cache.Set(key, m)
 	}
@@ -134,9 +137,10 @@ func (s *store) HRemove(key string, fields ...string) (any, bool) {
 	sd.Encode(fields)
 	sd.encodeBytes(lineSpr...)
 
-	m, ok := sd.Cache.Get(key)
+	val, _ := sd.Cache.Get(key)
+	m, ok := val.(structx.MMap)
 	if ok {
-		return m.(structx.MMap).Remove(fields...)
+		return m.Remove(fields...)
 	}
 	return nil, false
 }
