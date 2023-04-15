@@ -23,10 +23,10 @@ func BenchmarkCacheSet(b *testing.B) {
 	}
 }
 
-func BenchmarkCacheSetWithTTL(b *testing.B) {
+func BenchmarkCacheSetEX(b *testing.B) {
 	s := structx.NewCache[struct{}]()
 	for i := 0; i < b.N; i++ {
-		s.SetWithTTL(strconv.Itoa(i), struct{}{}, time.Minute)
+		s.SetEX(strconv.Itoa(i), struct{}{}, time.Minute)
 	}
 }
 

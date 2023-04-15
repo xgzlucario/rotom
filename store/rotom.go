@@ -13,7 +13,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
 	"github.com/zeebo/xxh3"
@@ -39,8 +38,8 @@ const (
 )
 
 var (
-	// DBPath for db file directory
-	DBPath = "db/"
+	// DB file path
+	DBFilePath = "db/"
 
 	// ShardCount for db
 	ShardCount uint64 = 32
@@ -51,7 +50,7 @@ var (
 	// RewriteDuration is the time interval for rewriting data to disk
 	RewriteDuration = time.Second * 10
 
-	// global time
+	// globalTime
 	globalTime = time.Now().UnixNano()
 
 	// database
@@ -63,7 +62,7 @@ var (
 )
 
 var (
-	errUnSupportType = errors.New("unsupported type")
+	errUnSupportType = errors.New("unsupport type")
 )
 
 type store []*storeShard
@@ -88,9 +87,6 @@ type storeShard struct {
 	// filter
 	filter *structx.Bloom
 
-	// log
-	logger *zerolog.Logger
-
 	sync.RWMutex
 }
 
@@ -102,7 +98,7 @@ func initGlobalTime() {
 
 func init() {
 	// db file directory
-	if err := os.MkdirAll(DBPath, os.ModeDir); err != nil {
+	if err := os.MkdirAll(DBFilePath, os.ModeDir); err != nil {
 		panic(err)
 	}
 
@@ -113,21 +109,20 @@ func init() {
 
 	go initGlobalTime()
 
-	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-
-	// init
+	// init db
 	for i := range db {
 		db[i] = &storeShard{
 			id:     i,
 			status: STATUS_INIT,
-			path:   fmt.Sprintf("%sdat%d", DBPath, i),
-			rwPath: fmt.Sprintf("%sdat%d.rw", DBPath, i),
+			path:   fmt.Sprintf("%sdat%d", DBFilePath, i),
+			rwPath: fmt.Sprintf("%sdat%d.rw", DBFilePath, i),
 			Cache:  structx.NewCache[any](),
-			logger: &logger,
 		}
 		sd := db[i]
 
-		// flush buffer
+		pool.Go(func() { sd.reWrite() })
+
+		// flush buffer worker
 		go func() {
 			for {
 				time.Sleep(FlushDuration)
@@ -141,7 +136,7 @@ func init() {
 			}
 		}()
 
-		// rewrite
+		// rewrite worker
 		go func() {
 			for {
 				time.Sleep(RewriteDuration)
@@ -152,10 +147,6 @@ func init() {
 				})
 			}
 		}()
-
-		pool.Go(func() {
-			sd.reWrite()
-		})
 	}
 	pool.Wait()
 }
@@ -164,36 +155,36 @@ func init() {
 func DB() store { return db }
 
 // Set
-func (s *store) Set(key string, value any) {
+func (s *store) Set(key string, val any) {
 	sd := s.getShard(key)
 
 	// {SET}{key}|{value}
 	sd.Lock()
 	sd.encBytes(OP_SET).encBytes(base.S2B(&key)...).encBytes(C_SPR)
-	if err := sd.Encode(value); err != nil {
+	if err := sd.Encode(val); err != nil {
 		panic(err)
 	}
 	sd.encBytes(lineSpr...)
 	sd.Unlock()
 
-	sd.Set(key, value)
+	sd.Set(key, val)
 }
 
 // SetEX
-func (s *store) SetEX(key string, value any, ttl time.Duration) {
+func (s *store) SetEX(key string, val any, ttl time.Duration) {
 	sd := s.getShard(key)
 	ts := atomic.LoadInt64(&globalTime) + int64(ttl)
 
 	// {SETEX}{key}|{ttl}|{value}
 	sd.Lock()
 	sd.encBytes(OP_SETEX).encBytes(base.S2B(&key)...).encBytes(C_SPR).encInt64(ts).encBytes(C_SPR)
-	if err := sd.Encode(value); err != nil {
+	if err := sd.Encode(val); err != nil {
 		panic(err)
 	}
 	sd.encBytes(lineSpr...)
 	sd.Unlock()
 
-	sd.SetEX(key, value, ttl)
+	sd.SetEX(key, val, ttl)
 }
 
 // Remove
@@ -235,26 +226,26 @@ func (s *store) HGet(key string, fields ...string) (any, bool) {
 }
 
 // HSet
-func (s *store) HSet(value any, key string, fields ...string) {
+func (s *store) HSet(val any, key string, fields ...string) {
 	sd := s.getShard(key)
 	sd.Lock()
 	defer sd.Unlock()
 
 	// {HSET}{key}|{fields}|{value}
 	sd.encBytes(OP_HSET).encBytes(base.S2B(&key)...).encBytes(C_SPR).encStringSlice(fields).encBytes(C_SPR)
-	if err := sd.Encode(value); err != nil {
+	if err := sd.Encode(val); err != nil {
 		panic(err)
 	}
 	sd.encBytes(lineSpr...)
 
 	// set
-	val, _ := sd.Cache.Get(key)
-	m, ok := val.(structx.MMap)
+	v, _ := sd.Cache.Get(key)
+	m, ok := v.(structx.MMap)
 	if ok {
-		m.Set(value, fields...)
+		m.Set(val, fields...)
 	} else {
 		m := structx.NewMMap()
-		m.Set(value, fields...)
+		m.Set(val, fields...)
 		sd.Cache.Set(key, m)
 	}
 }
@@ -421,6 +412,7 @@ func Get[T any](key string, data T) (T, error) {
 	return getValue(key, data)
 }
 
+// reWrite shrink the database
 func (s *storeShard) reWrite() {
 	defer s.setStatus(STATUS_NORMAL)
 
@@ -434,8 +426,10 @@ func (s *storeShard) reWrite() {
 
 	// read line from tail
 	lines := bytes.Split(data, []byte{C_SPR, C_END})
+	status := s.getStatus()
+
 	for i := len(lines) - 1; i >= 0; i-- {
-		s.readLine(lines[i])
+		s.readLine(lines[i], status)
 	}
 
 	// flush
@@ -474,8 +468,6 @@ func (s *storeShard) flush(buf []byte, path string) (int, error) {
 		return 0, nil
 	}
 
-	s.logger.Info().Int("shard", s.id).Str("op", "flush")
-
 	fs, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		return 0, err
@@ -499,12 +491,13 @@ func (s *storeShard) flush(buf []byte, path string) (int, error) {
 }
 
 // readLine
-func (s *storeShard) readLine(line []byte) {
-	// valid
-	if !bytes.HasSuffix(line, []byte{C_SPR}) {
+func (s *storeShard) readLine(line []byte, status uint32) {
+	// valid that the end of line must be C_SPR
+	if n := len(line); n == 0 || line[n-1] != C_SPR {
 		return
+	} else {
+		line = line[:n-1]
 	}
-	line = line[:len(line)-1]
 
 	switch line[0] {
 	// {SET}{key}|{value}
@@ -514,7 +507,7 @@ func (s *storeShard) readLine(line []byte) {
 			return
 		}
 
-		// 当 key 存在时，表示该 key 在未来被 SET, SETEX, REMOVE 过, 不需要重演
+		// test the key is in filter and is nessesary to write
 		if !s.testAndAdd(line[1:i]) {
 			return
 		}
@@ -522,7 +515,7 @@ func (s *storeShard) readLine(line []byte) {
 		s.rwbuf = append(s.rwbuf, line...)
 		s.rwbuf = append(s.rwbuf, lineSpr...)
 
-		if atomic.LoadUint32(&s.status) == STATUS_REWRITE {
+		if status == STATUS_REWRITE {
 			return
 		}
 		s.Set(*base.B2S(line[1:i]), line[i+1:])
@@ -543,7 +536,7 @@ func (s *storeShard) readLine(line []byte) {
 			s.rwbuf = append(s.rwbuf, line...)
 			s.rwbuf = append(s.rwbuf, lineSpr...)
 
-			if atomic.LoadUint32(&s.status) == STATUS_REWRITE {
+			if status == STATUS_REWRITE {
 				return
 			}
 
@@ -552,19 +545,18 @@ func (s *storeShard) readLine(line []byte) {
 
 	// {REMOVE}{key}
 	case OP_REMOVE:
+		// test {key}
 		if !s.testAndAdd(line[1:]) {
 			return
 		}
-		if atomic.LoadUint32(&s.status) == STATUS_REWRITE {
+		if status == STATUS_REWRITE {
 			return
 		}
-
-		// REMOVE 不需要重写，重写日志中应仅包含 SET, SET_WITH_TTL, PERWSIST 操作
 		s.Remove(*base.B2S(line[1:]))
 
 	// {PERSIST}{key}
 	case OP_PERSIST:
-		// 当 {op}{key} 存在时，表示该 key 未来被 PERSIST 过, 不需要重演
+		// test {PERSIST}{key}
 		if !s.testAndAdd(line) {
 			return
 		}
@@ -572,10 +564,9 @@ func (s *storeShard) readLine(line []byte) {
 		s.rwbuf = append(s.rwbuf, line...)
 		s.rwbuf = append(s.rwbuf, lineSpr...)
 
-		if atomic.LoadUint32(&s.status) == STATUS_REWRITE {
+		if status == STATUS_REWRITE {
 			return
 		}
-
 		s.Persist(*base.B2S(line[1:]))
 	}
 }
@@ -597,13 +588,11 @@ func (s store) getShard(key string) *storeShard {
 // getValue
 func getValue[T any](key string, vptr T) (T, error) {
 	s := db.getShard(key)
-	// get
 	val, ok := s.Get(key)
 	if !ok {
 		return vptr, base.ErrKeyNotFound(key)
 	}
 
-	// type assertion
 	switch v := val.(type) {
 	case T:
 		return v, nil
