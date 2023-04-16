@@ -218,9 +218,9 @@ func (s *store) HGet(key string, fields ...string) (any, bool) {
 	defer sd.RUnlock()
 
 	val, _ := sd.Cache.Get(key)
-	m, ok := val.(structx.MMap)
+	m, ok := val.(structx.HMap)
 	if ok {
-		return m.Get(fields...)
+		return m.HGet(fields...)
 	}
 	return nil, false
 }
@@ -240,12 +240,12 @@ func (s *store) HSet(val any, key string, fields ...string) {
 
 	// set
 	v, _ := sd.Cache.Get(key)
-	m, ok := v.(structx.MMap)
+	m, ok := v.(structx.HMap)
 	if ok {
-		m.Set(val, fields...)
+		m.HSet(val, fields...)
 	} else {
-		m := structx.NewMMap()
-		m.Set(val, fields...)
+		m := structx.NewHMap()
+		m.HSet(val, fields...)
 		sd.Cache.Set(key, m)
 	}
 }
@@ -260,9 +260,9 @@ func (s *store) HRemove(key string, fields ...string) (any, bool) {
 	sd.encBytes(OP_HREMOVE).encBytes(base.S2B(&key)...).encBytes(C_SPR).encStringSlice(fields).encBytes(lineSpr...)
 
 	val, _ := sd.Cache.Get(key)
-	m, ok := val.(structx.MMap)
+	m, ok := val.(structx.HMap)
 	if ok {
-		return m.Remove(fields...)
+		return m.HRemove(fields...)
 	}
 	return nil, false
 }
@@ -377,9 +377,9 @@ func GetMap[K comparable, V any](key string) (structx.Map[K, V], error) {
 	return getValue(key, structx.NewMap[K, V]())
 }
 
-// GetSyncMap
-func GetSyncMap[T any](key string) (*structx.SyncMap[string, T], error) {
-	return getValue(key, structx.NewSyncMap[string, T]())
+// GetHHMap
+func (s *store) GetHMap(key string) (structx.HMap, error) {
+	return getValue(key, structx.NewHMap())
 }
 
 // GetTrie
@@ -400,11 +400,6 @@ func (s *store) GetBitMap(key string) (*structx.BitMap, error) {
 // GetBloom
 func (s *store) GetBloom(key string) (*structx.Bloom, error) {
 	return getValue(key, structx.NewBloom())
-}
-
-// GetMMap
-func (s *store) GetMMap(key string) (structx.MMap, error) {
-	return getValue(key, structx.MMap{})
 }
 
 // Get
