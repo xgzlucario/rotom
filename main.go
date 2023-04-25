@@ -97,11 +97,10 @@ func testStress() {
 	}()
 
 	// Simulate testing
-	for i := 0; i < 10000*10000; i++ {
+	for {
 		count++
 		db.SetEX(gofakeit.Phone(), gofakeit.Uint32(), time.Second*5)
 	}
-	fmt.Println("total cost:", time.Since(a))
 }
 
 func testBloom() {
@@ -185,7 +184,6 @@ func testValue() {
 }
 
 func main() {
-	time.Sleep(time.Second * 2)
 	testValue()
 	testBloom()
 	testTrie()

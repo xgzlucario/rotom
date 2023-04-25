@@ -24,7 +24,7 @@ type Cache[V any] struct {
 	count int64
 
 	// call when key-value expired
-	onExpired func(string, V)
+	onExpired func(string, V, int64)
 
 	// data based on ZSet
 	data *ZSet[string, int64, V]
@@ -78,20 +78,20 @@ func (c *Cache[V]) Set(key string, value V) {
 	c.data.Set(key, value)
 }
 
-// SetTX set deadline with key-value
-func (c *Cache[V]) SetTX(key string, value V, ts int64) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.data.SetWithScore(key, ts+atomic.AddInt64(&c.count, 1), value)
-}
-
-// SetEX set expire time with key-value
+// SetEX
 func (c *Cache[V]) SetEX(key string, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.data.SetWithScore(key, c.ts+int64(ttl)+atomic.AddInt64(&c.count, 1), value)
+}
+
+// SetTX
+func (c *Cache[V]) SetTX(key string, value V, ts int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.data.SetWithScore(key, ts+atomic.AddInt64(&c.count, 1), value)
 }
 
 // Persist
@@ -115,7 +115,7 @@ func (c *Cache[V]) Keys() []string {
 }
 
 // WithExpired
-func (c *Cache[V]) WithExpired(f func(string, V)) {
+func (c *Cache[V]) WithExpired(f func(string, V, int64)) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -172,7 +172,7 @@ func (c *Cache[V]) eviction() {
 				if ok {
 					// on expired
 					if c.onExpired != nil {
-						c.onExpired(f.Key(), v)
+						c.onExpired(f.Key(), v, f.Score())
 					}
 				}
 			}

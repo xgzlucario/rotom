@@ -8,12 +8,6 @@ import (
 	"github.com/xgzlucario/rotom/structx"
 )
 
-func BenchmarkFakeit(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		gofakeit.Phone()
-	}
-}
-
 func BenchmarkMap(b *testing.B) {
 	m := map[string]struct{}{}
 	b.Run("Set", func(b *testing.B) {
@@ -29,6 +23,25 @@ func BenchmarkMap(b *testing.B) {
 	b.Run("Remove", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			delete(m, gofakeit.Phone())
+		}
+	})
+}
+
+func BenchmarkHashmap(b *testing.B) {
+	var m hashmap.Map[string, struct{}]
+	b.Run("Set", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Set(gofakeit.Phone(), struct{}{})
+		}
+	})
+	b.Run("Get", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Get(gofakeit.Phone())
+		}
+	})
+	b.Run("Remove", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			m.Delete(gofakeit.Phone())
 		}
 	})
 }
@@ -62,25 +75,6 @@ func BenchmarkRBTree(b *testing.B) {
 	b.Run("Get", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			m.Find(gofakeit.Phone())
-		}
-	})
-	b.Run("Remove", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			m.Delete(gofakeit.Phone())
-		}
-	})
-}
-
-func BenchmarkHashmap(b *testing.B) {
-	var m hashmap.Map[string, struct{}]
-	b.Run("Set", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			m.Set(gofakeit.Phone(), struct{}{})
-		}
-	})
-	b.Run("Get", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			m.Get(gofakeit.Phone())
 		}
 	})
 	b.Run("Remove", func(b *testing.B) {

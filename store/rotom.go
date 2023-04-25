@@ -35,6 +35,9 @@ const (
 	// Char
 	C_SPR = byte(0x00)
 	C_END = byte('\n')
+
+	// Config
+	timeCarry = 1000 * 1000 * 1000
 )
 
 var (
@@ -53,15 +56,13 @@ var (
 	// globalTime
 	globalTime = time.Now().UnixNano()
 
-	// database
+	// default database
 	db store
 
 	lineSpr = []byte{C_SPR, C_SPR, C_END}
 
 	order = binary.BigEndian
-)
 
-var (
 	errUnSupportType = errors.New("unsupport type")
 )
 
@@ -173,18 +174,20 @@ func (s *store) Set(key string, val any) {
 // SetEX
 func (s *store) SetEX(key string, val any, ttl time.Duration) {
 	sd := s.getShard(key)
-	ts := atomic.LoadInt64(&globalTime) + int64(ttl)
+
+	i64ts := atomic.LoadInt64(&globalTime) + int64(ttl)
+	u32ts := uint32(i64ts / timeCarry)
 
 	// {SETEX}{key}|{ttl}|{value}
 	sd.Lock()
-	sd.encBytes(OP_SETEX).encBytes(base.S2B(&key)...).encBytes(C_SPR).encInt64(ts).encBytes(C_SPR)
+	sd.encBytes(OP_SETEX).encBytes(base.S2B(&key)...).encBytes(C_SPR).encUint32(u32ts).encBytes(C_SPR)
 	if err := sd.Encode(val); err != nil {
 		panic(err)
 	}
 	sd.encBytes(lineSpr...)
 	sd.Unlock()
 
-	sd.SetEX(key, val, ttl)
+	sd.SetTX(key, val, i64ts)
 }
 
 // Remove
@@ -296,7 +299,7 @@ func (s store) Count() (sum int) {
 }
 
 // WithExpired
-func (s store) WithExpired(f func(string, any)) store {
+func (s store) WithExpired(f func(string, any, int64)) store {
 	for _, s := range s {
 		s.WithExpired(f)
 	}
@@ -525,7 +528,8 @@ func (s *storeShard) readLine(line []byte, status uint32) {
 			return
 		}
 
-		ts, _ := binary.Varint(line[sp1+1 : sp2])
+		u64ts, _ := binary.Uvarint(line[sp1+1 : sp2])
+		ts := int64(u64ts) * timeCarry
 		// not expired
 		if ts > atomic.LoadInt64(&globalTime) {
 			s.rwbuf = append(s.rwbuf, line...)
@@ -611,9 +615,9 @@ func (s *storeShard) encBytes(v ...byte) *storeShard {
 	return s
 }
 
-// encInt64
-func (s *storeShard) encInt64(v int64) *storeShard {
-	s.buf = binary.AppendVarint(s.buf, v)
+// encUint32
+func (s *storeShard) encUint32(v uint32) *storeShard {
+	s.buf = binary.AppendUvarint(s.buf, uint64(v))
 	return s
 }
 
@@ -759,57 +763,4 @@ func (s *storeShard) getStatus() uint32 {
 
 func (s *storeShard) setStatus(status uint32) {
 	atomic.SwapUint32(&s.status, status)
-}
-
-// Session
-type Session struct {
-	store
-	sdmap map[*storeShard]struct{}
-}
-
-// NewSession
-func NewSession() *Session {
-	return &Session{
-		store: db,
-		sdmap: make(map[*storeShard]struct{}),
-	}
-}
-
-// Set
-func (s *Session) Set(key string, val any) {
-	s.sdmap[s.getShard(key)] = struct{}{}
-
-	s.store.Set(key, val)
-}
-
-// SetEX
-func (s *Session) SetEX(key string, val any, ttl time.Duration) {
-	s.sdmap[s.getShard(key)] = struct{}{}
-
-	s.store.SetEX(key, val, ttl)
-}
-
-// Remove
-func (s *Session) Remove(key string) (any, bool) {
-	s.sdmap[s.getShard(key)] = struct{}{}
-
-	return s.store.Remove(key)
-}
-
-// Persist
-func (s *Session) Persist(key string) bool {
-	s.sdmap[s.getShard(key)] = struct{}{}
-
-	return s.store.Persist(key)
-}
-
-// Commit
-func (s *Session) Commit() error {
-	for sd := range s.sdmap {
-		if _, err := sd.flushBuffer(); err != nil {
-			return err
-		}
-	}
-	s.sdmap = make(map[*storeShard]struct{})
-	return nil
 }

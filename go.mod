@@ -5,8 +5,8 @@ go 1.20
 require (
 	github.com/bits-and-blooms/bloom v2.0.3+incompatible
 	github.com/brianvoe/gofakeit/v6 v6.21.0
-	github.com/bytedance/sonic v1.8.7
-	github.com/klauspost/compress v1.16.4
+	github.com/bytedance/sonic v1.8.8
+	github.com/klauspost/compress v1.16.5
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2
@@ -14,7 +14,7 @@ require (
 	github.com/tidwall/hashmap v1.8.1
 	github.com/tidwall/sjson v1.2.5
 	github.com/zeebo/xxh3 v1.0.2
-	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
+	golang.org/x/exp v0.0.0-20230425010034-47ecfdc1ba53
 )
 
 require (
