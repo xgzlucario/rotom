@@ -1,14 +1,14 @@
 package structx
 
 import (
+	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
 const (
 	// NoTTL
-	NoTTL = 0
+	NoTTL = math.MaxInt64
 )
 
 var (
@@ -35,8 +35,7 @@ type Cache[V any] struct {
 // NewCache
 func NewCache[V any]() *Cache[V] {
 	cache := &Cache[V]{
-		ts: time.Now().UnixNano(),
-
+		ts:   time.Now().UnixNano(),
 		data: NewZSet[string, int64, V](),
 	}
 	go cache.eviction()
@@ -50,8 +49,7 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 	defer c.mu.RUnlock()
 
 	v, ttl, ok := c.data.Get(key)
-	// check valid
-	if ok && (ttl > c.ts || ttl == NoTTL) {
+	if ok && ttl > c.ts {
 		return v, true
 	}
 	return
@@ -63,8 +61,7 @@ func (c *Cache[V]) GetEX(key string) (v V, ttl int64, ok bool) {
 	defer c.mu.RUnlock()
 
 	v, ttl, ok = c.data.Get(key)
-	// check valid
-	if ok && (ttl > c.ts || ttl == NoTTL) {
+	if ok && ttl > c.ts {
 		return v, ttl, true
 	}
 	return
@@ -83,7 +80,8 @@ func (c *Cache[V]) SetEX(key string, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data.SetWithScore(key, c.ts+int64(ttl)+atomic.AddInt64(&c.count, 1), value)
+	c.count++
+	c.data.SetWithScore(key, c.ts+int64(ttl)+c.count, value)
 }
 
 // SetTX
@@ -91,7 +89,8 @@ func (c *Cache[V]) SetTX(key string, value V, ts int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data.SetWithScore(key, ts+atomic.AddInt64(&c.count, 1), value)
+	c.count++
+	c.data.SetWithScore(key, ts+c.count, value)
 }
 
 // Persist
@@ -151,26 +150,21 @@ func (c *Cache[V]) eviction() {
 	for c != nil {
 		time.Sleep(TickDuration)
 
-		// update current timestamp
-		c.ts = time.Now().UnixNano()
-		// reset count
-		atomic.SwapInt64(&c.count, 0)
-
 		c.mu.Lock()
+
+		// reset
+		c.ts = time.Now().UnixNano()
+		c.count = 0
 
 		// clear expired keys
 		if c.data.Size() > 0 {
 			for f := c.data.Iter(); f.Valid(); f.Next() {
-				if f.Score() == NoTTL {
-					continue
-				}
 				if f.Score() > c.ts {
 					break
 				}
 
 				v, ok := c.data.Delete(f.Key())
 				if ok {
-					// on expired
 					if c.onExpired != nil {
 						c.onExpired(f.Key(), v, f.Score())
 					}
