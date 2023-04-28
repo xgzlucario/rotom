@@ -2,19 +2,9 @@ package structx
 
 import "github.com/xgzlucario/rotom/base"
 
-type Maper[K comparable, V any] interface {
-	Get(K) (V, bool)
-	Set(K, V) (V, bool)
-	Delete(K) (V, bool)
-	Scan(func(K, V) bool)
-	Keys() []K
-	MarshalJSON() ([]byte, error)
-	UnmarshalJSON([]byte) error
-}
-
 // ZSet
 type ZSet[K, S base.Ordered, V any] struct {
-	data Maper[K, *zsNode[S, V]]
+	data Map[K, *zsNode[S, V]]
 	tree *RBTree[S, K]
 }
 
@@ -27,7 +17,7 @@ type zsIter[S base.Ordered, V any] struct {
 	n *rbnode[S, V]
 }
 
-// NewZSet with more time efficient
+// NewZSet
 func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
 	return &ZSet[K, S, V]{
 		data: NewMap[K, *zsNode[S, V]](),
@@ -35,17 +25,20 @@ func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
 	}
 }
 
-// NewZSetWithTrie with more memory efficient
-func NewZSetWithTrie[S base.Ordered, V any]() *ZSet[string, S, V] {
-	return &ZSet[string, S, V]{
-		data: NewTrie[*zsNode[S, V]](),
-		tree: NewRBTree[S, string](),
-	}
-}
-
-// Get returns value, score, ok
+// Get
 func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
 	item, ok := z.data.Get(key)
+	if !ok {
+		var v V
+		var s S
+		return v, s, false
+	}
+	return item.V, item.S, ok
+}
+
+// GetPos
+func (z *ZSet[K, S, V]) GetPos(pos uint64) (V, S, bool) {
+	_, item, ok := z.data.GetPos(pos)
 	if !ok {
 		var v V
 		var s S

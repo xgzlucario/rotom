@@ -16,12 +16,17 @@ import (
 	"github.com/xgzlucario/rotom/structx"
 )
 
-var db = store.DB()
+var db = store.CreateDB(&store.Config{
+	DBDirPath:       "db",
+	ShardCount:      32,
+	FlushDuration:   time.Second,
+	RewriteDuration: time.Second * 10,
+})
 
 func testTrie() {
 	fmt.Println("===== start test Trie =====")
 
-	tree, err := store.GetTrie[int]("trie")
+	tree, err := store.GetTrie[int](db, "trie")
 	if err != nil {
 		fmt.Println("get trie error:", err)
 		tree = structx.NewTrie[int]()
@@ -65,7 +70,7 @@ func (s *Stu) UnmarshalJSON(src []byte) error {
 func testCustom() {
 	fmt.Println("===== start test Custom =====")
 
-	stu, err := store.Get("stu", new(Stu))
+	stu, err := store.Get(db, "stu", new(Stu))
 	if err != nil {
 		fmt.Println("error:", err)
 		db.Set("stu", &Stu{"xgz", 22})
@@ -152,8 +157,8 @@ func testValue() {
 	fmt.Println(db.GetString("string"))
 	fmt.Println(db.GetBool("bool"))
 	fmt.Println(db.GetTime("time"))
-	fmt.Println(db.GetStringSlice("stringSlice"))
-	fmt.Println(db.GetIntSlice("intSlice"))
+	fmt.Println(db.GetStrings("stringSlice"))
+	fmt.Println(db.GetInts("intSlice"))
 
 	db.Set("uint", uint(123))
 	db.Set("uint8", uint8(123))

@@ -54,6 +54,18 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 	return
 }
 
+// GetPos
+func (c *Cache[V]) GetPos(pos uint64) (val V, ok bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	v, ttl, ok := c.data.GetPos(pos)
+	if ok && (ttl == NoTTL || ttl > c.ts) {
+		return v, true
+	}
+	return
+}
+
 // GetEX
 func (c *Cache[V]) GetEX(key string) (v V, ttl int64, ok bool) {
 	c.mu.RLock()

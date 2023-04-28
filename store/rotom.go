@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"math"
 	"os"
+	"path"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,41 +24,30 @@ const (
 	STATUS_INIT uint32 = iota + 1
 	STATUS_NORMAL
 	STATUS_REWRITE
+)
 
+const (
 	// Operation
-	OP_SET byte = iota + '1'
+	OP_SET byte = iota + 1
 	OP_SETEX
 	OP_REMOVE
 	OP_PERSIST
 	OP_HSET
 	OP_HREMOVE
+)
 
+const (
 	// Char
 	C_SPR = byte(0x00)
-	C_END = byte('\n')
+	C_END = byte(0xff)
 
 	// Config
 	timeCarry = 1000 * 1000 * 1000
 )
 
 var (
-	// DB file path
-	DBFilePath = "db/"
-
-	// ShardCount for db
-	ShardCount uint64 = 32
-
-	// FlushDuration is the time interval for flushing data to disk
-	FlushDuration = time.Second
-
-	// RewriteDuration is the time interval for rewriting data to disk
-	RewriteDuration = time.Second * 10
-
 	// globalTime
 	globalTime = time.Now().UnixNano()
-
-	// default database
-	db store
 
 	lineSpr = []byte{C_SPR, C_SPR, C_END}
 
@@ -66,11 +56,24 @@ var (
 	errUnSupportType = errors.New("unsupport type")
 )
 
-type store []*storeShard
+type store struct {
+	*Config
+	mask   uint64
+	shards []*storeShard
+}
+
+type Config struct {
+	ShardCount uint64
+	DBDirPath  string
+
+	// FlushDuration is the time interval for flushing data to disk
+	FlushDuration time.Duration
+
+	// RewriteDuration is the time interval for rewriting data to disk
+	RewriteDuration time.Duration
+}
 
 type storeShard struct {
-	id int
-
 	// runtime status
 	status uint32
 
@@ -91,57 +94,58 @@ type storeShard struct {
 	sync.RWMutex
 }
 
-func initGlobalTime() {
-	for t := range time.NewTicker(time.Millisecond).C {
-		atomic.SwapInt64(&globalTime, t.UnixNano())
+func CreateDB(conf *Config) *store {
+	db := &store{
+		Config: conf,
+		mask:   conf.ShardCount - 1,
+		shards: make([]*storeShard, conf.ShardCount),
 	}
-}
 
-func init() {
-	// db file directory
-	if err := os.MkdirAll(DBFilePath, os.ModeDir); err != nil {
+	if err := os.MkdirAll(db.DBDirPath, os.ModeDir); err != nil {
 		panic(err)
 	}
 
-	db = make([]*storeShard, ShardCount)
-
-	pool := structx.NewDefaultPool()
-	rwPool := structx.NewDefaultPool()
-
-	go initGlobalTime()
-
-	// init db
-	for i := range db {
-		db[i] = &storeShard{
-			id:     i,
+	// load config
+	for i := range db.shards {
+		db.shards[i] = &storeShard{
 			status: STATUS_INIT,
-			path:   fmt.Sprintf("%sdat%d", DBFilePath, i),
-			rwPath: fmt.Sprintf("%sdat%d.rw", DBFilePath, i),
+			path:   path.Join(db.DBDirPath, "dat"+strconv.Itoa(i)),
+			rwPath: path.Join(db.DBDirPath, "rw"+strconv.Itoa(i)),
 			Cache:  structx.NewCache[any](),
 		}
-		sd := db[i]
+	}
 
+	// init
+	pool := structx.NewDefaultPool()
+	for i := range db.shards {
+		sd := db.shards[i]
 		pool.Go(func() { sd.reWrite() })
+	}
+	pool.Wait()
 
-		// flush buffer worker
+	// start worker
+	pool = structx.NewDefaultPool()
+	for i := range db.shards {
+		sd := db.shards[i]
+
+		// flush worker
 		go func() {
 			for {
-				time.Sleep(FlushDuration)
+				time.Sleep(db.FlushDuration)
 				switch sd.getStatus() {
 				case STATUS_NORMAL:
 					sd.flushBuffer()
 
-				case STATUS_INIT, STATUS_REWRITE:
+				case STATUS_REWRITE:
 					sd.flushRwBuffer()
 				}
 			}
 		}()
-
 		// rewrite worker
 		go func() {
 			for {
-				time.Sleep(RewriteDuration)
-				rwPool.Go(func() {
+				time.Sleep(db.RewriteDuration)
+				pool.Go(func() {
 					sd.flushBuffer()
 					sd.setStatus(STATUS_REWRITE)
 					sd.reWrite()
@@ -149,11 +153,9 @@ func init() {
 			}
 		}()
 	}
-	pool.Wait()
-}
 
-// DB
-func DB() store { return db }
+	return db
+}
 
 // Set
 func (s *store) Set(key string, val any) {
@@ -282,7 +284,7 @@ func (s *store) Type(key string) reflect.Type {
 
 // Flush writes all the buf data to disk
 func (s store) Flush() error {
-	for _, sd := range s {
+	for _, sd := range s.shards {
 		if _, err := sd.flushBuffer(); err != nil {
 			return err
 		}
@@ -292,7 +294,7 @@ func (s store) Flush() error {
 
 // Count
 func (s store) Count() (sum int) {
-	for _, s := range s {
+	for _, s := range s.shards {
 		sum += s.Count()
 	}
 	return sum
@@ -300,7 +302,7 @@ func (s store) Count() (sum int) {
 
 // WithExpired
 func (s store) WithExpired(f func(string, any, int64)) store {
-	for _, s := range s {
+	for _, s := range s.shards {
 		s.WithExpired(f)
 	}
 	return s
@@ -309,7 +311,7 @@ func (s store) WithExpired(f func(string, any, int64)) store {
 // Keys
 func (s store) Keys() []string {
 	arr := make([]string, 0, s.Count())
-	for _, s := range s {
+	for _, s := range s.shards {
 		arr = append(arr, s.Keys()...)
 	}
 	return arr
@@ -327,87 +329,87 @@ func (s *store) Incr(key string, incr float64) (val float64, err error) {
 }
 
 // GetString
-func (s *store) GetString(k string) (v string, err error) { getValue(k, &v); return }
+func (s *store) GetString(k string) (v string, err error) { getValue(s, k, &v); return }
 
 // GetInt
-func (s *store) GetInt(k string) (v int, err error) { getValue(k, &v); return }
+func (s *store) GetInt(k string) (v int, err error) { getValue(s, k, &v); return }
 
 // GetInt32
-func (s *store) GetInt32(k string) (v int32, err error) { getValue(k, &v); return }
+func (s *store) GetInt32(k string) (v int32, err error) { getValue(s, k, &v); return }
 
 // GetInt64
-func (s *store) GetInt64(k string) (v int64, err error) { getValue(k, &v); return }
+func (s *store) GetInt64(k string) (v int64, err error) { getValue(s, k, &v); return }
 
 // GetUint
-func (s *store) GetUint(k string) (v uint, err error) { getValue(k, &v); return }
+func (s *store) GetUint(k string) (v uint, err error) { getValue(s, k, &v); return }
 
 // GetUint32
-func (s *store) GetUint32(k string) (v uint32, err error) { getValue(k, &v); return }
+func (s *store) GetUint32(k string) (v uint32, err error) { getValue(s, k, &v); return }
 
 // GetUint64
-func (s *store) GetUint64(k string) (v uint64, err error) { getValue(k, &v); return }
+func (s *store) GetUint64(k string) (v uint64, err error) { getValue(s, k, &v); return }
 
 // GetFloat32
-func (s *store) GetFloat32(k string) (v float32, err error) { getValue(k, &v); return }
+func (s *store) GetFloat32(k string) (v float32, err error) { getValue(s, k, &v); return }
 
 // GetFloat64
-func (s *store) GetFloat64(k string) (v float64, err error) { getValue(k, &v); return }
+func (s *store) GetFloat64(k string) (v float64, err error) { getValue(s, k, &v); return }
 
 // GetBool
-func (s *store) GetBool(k string) (v bool, err error) { getValue(k, &v); return }
+func (s *store) GetBool(k string) (v bool, err error) { getValue(s, k, &v); return }
 
 // GetIntSlice
-func (s *store) GetIntSlice(k string) (v []int, err error) { getValue(k, &v); return }
+func (s *store) GetInts(k string) (v []int, err error) { getValue(s, k, &v); return }
 
 // GetStringSlice
-func (s *store) GetStringSlice(k string) (v []string, err error) { getValue(k, &v); return }
+func (s *store) GetStrings(k string) (v []string, err error) { getValue(s, k, &v); return }
 
 // GetTime
-func (s *store) GetTime(k string) (v time.Time, err error) { getValue(k, &v); return }
+func (s *store) GetTime(k string) (v time.Time, err error) { getValue(s, k, &v); return }
 
 // GetList
-func GetList[T comparable](key string) (*structx.List[T], error) {
-	return getValue(key, structx.NewList[T]())
+func GetList[T comparable](s *store, key string) (*structx.List[T], error) {
+	return getValue(s, key, structx.NewList[T]())
 }
 
 // GetSet
 func GetSet[T comparable](s *store, key string) (structx.Set[T], error) {
-	return getValue(key, structx.NewSet[T]())
+	return getValue(s, key, structx.NewSet[T]())
 }
 
 // GetMap
-func GetMap[K comparable, V any](key string) (structx.Map[K, V], error) {
-	return getValue(key, structx.NewMap[K, V]())
+func GetMap[K comparable, V any](s *store, key string) (structx.Map[K, V], error) {
+	return getValue(s, key, structx.NewMap[K, V]())
 }
 
 // GetHHMap
 func (s *store) GetHMap(key string) (structx.HMap, error) {
-	return getValue(key, structx.NewHMap())
+	return getValue(s, key, structx.NewHMap())
 }
 
 // GetTrie
-func GetTrie[T any](key string) (*structx.Trie[T], error) {
-	return getValue(key, structx.NewTrie[T]())
+func GetTrie[T any](s *store, key string) (*structx.Trie[T], error) {
+	return getValue(s, key, structx.NewTrie[T]())
 }
 
 // GetZset
-func GetZset[K, S base.Ordered, V any](key string) (*structx.ZSet[K, S, V], error) {
-	return getValue(key, structx.NewZSet[K, S, V]())
+func GetZset[K, S base.Ordered, V any](s *store, key string) (*structx.ZSet[K, S, V], error) {
+	return getValue(s, key, structx.NewZSet[K, S, V]())
 }
 
 // GetBitMap
 func (s *store) GetBitMap(key string) (*structx.BitMap, error) {
-	return getValue(key, structx.NewBitMap())
+	return getValue(s, key, structx.NewBitMap())
 }
 
 // GetBloom
 func (s *store) GetBloom(key string) (*structx.Bloom, error) {
-	return getValue(key, structx.NewBloom())
+	return getValue(s, key, structx.NewBloom())
 }
 
 // Get
-func Get[T any](key string, data T) (T, error) {
-	return getValue(key, data)
+func Get[T any](s *store, key string, data T) (T, error) {
+	return getValue(s, key, data)
 }
 
 // reWrite shrink the database
@@ -490,9 +492,10 @@ func (s *storeShard) flush(buf []byte, path string) (int, error) {
 
 // readLine
 func (s *storeShard) readLine(line []byte, status uint32) {
-	// valid that the end of line must be C_SPR
+	// valid the end of line
 	if n := len(line); n == 0 || line[n-1] != C_SPR {
 		return
+
 	} else {
 		line = line[:n-1]
 	}
@@ -580,14 +583,16 @@ func (s *storeShard) testAndAdd(line []byte) bool {
 }
 
 // getShard
-func (s store) getShard(key string) *storeShard {
-	return s[xxh3.HashString(key)&(ShardCount-1)]
+func (s *store) getShard(key string) *storeShard {
+	return s.shards[xxh3.HashString(key)&(s.ShardCount-1)]
 }
 
 // getValue
-func getValue[T any](key string, vptr T) (T, error) {
-	s := db.getShard(key)
-	val, ok := s.Get(key)
+func getValue[T any](db *store, key string, vptr T) (T, error) {
+	hash := xxh3.HashString(key)
+
+	sd := db.shards[hash&db.mask]
+	val, ok := sd.GetPos(hash)
 	if !ok {
 		return vptr, base.ErrKeyNotFound(key)
 	}
@@ -597,10 +602,10 @@ func getValue[T any](key string, vptr T) (T, error) {
 		return v, nil
 
 	case []byte:
-		if err := s.Decode(v, vptr); err != nil {
+		if err := sd.Decode(v, vptr); err != nil {
 			return vptr, err
 		}
-		s.Set(key, vptr)
+		sd.Set(key, vptr)
 
 	default:
 		return vptr, errUnSupportType
