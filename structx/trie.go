@@ -74,20 +74,8 @@ func (t *Trie[V]) Size() int {
 	return t.n
 }
 
-// Contains
-func (t *Trie[V]) Contains(key string) bool {
-	if len(key) == 0 {
-		return false
-	}
-	_, ok := t.Get(key)
-	return ok
-}
-
 // Get
 func (t *Trie[V]) Get(key string) (v V, ok bool) {
-	if len(key) == 0 {
-		return v, false
-	}
 	x := t.get(t.root, key, 0)
 	if x == nil || !x.valid {
 		return v, false
@@ -99,6 +87,7 @@ func (t *Trie[V]) get(x *node[V], key string, d int) *node[V] {
 	if x == nil || len(key) == 0 {
 		return nil
 	}
+
 	c := key[d]
 	if c < x.c {
 		return t.get(x.left, key, d)
@@ -111,15 +100,16 @@ func (t *Trie[V]) get(x *node[V], key string, d int) *node[V] {
 	}
 }
 
-// Put
-func (t *Trie[V]) Put(key string, val V) {
+// Set
+func (t *Trie[V]) Set(key string, val V) (v V, ok bool) {
 	if len(key) == 0 {
 		return
 	}
-	if !t.Contains(key) {
+	if _, ok := t.Get(key); !ok {
 		t.n++
 	}
 	t.root = t.put(t.root, key, val, 0)
+	return val, true
 }
 
 func (t *Trie[V]) put(x *node[V], key string, val V, d int) *node[V] {
@@ -142,13 +132,14 @@ func (t *Trie[V]) put(x *node[V], key string, val V, d int) *node[V] {
 	return x
 }
 
-// Remove
-func (t *Trie[V]) Remove(key string) {
+// Delete
+func (t *Trie[V]) Delete(key string) (v V, ok bool) {
 	if len(key) == 0 {
 		return
 	}
 	t.root = t.remove(t.root, key, 0)
 	t.n--
+	return v, true
 }
 
 func (t *Trie[V]) remove(x *node[V], key string, d int) *node[V] {
@@ -177,6 +168,16 @@ func (t *Trie[V]) remove(x *node[V], key string, d int) *node[V] {
 	return x
 }
 
+// Scan
+func (t *Trie[V]) Scan(f func(string, V) bool) {
+	keys, values := t.collectAll(t.root, nil, nil, nil)
+	for i, k := range keys {
+		if f(k, values[i]) {
+			break
+		}
+	}
+}
+
 func (t *Trie[V]) collect(x *node[V], prefix []byte, queue []string) []string {
 	if x == nil {
 		return queue
@@ -186,6 +187,7 @@ func (t *Trie[V]) collect(x *node[V], prefix []byte, queue []string) []string {
 		queue = append(queue, string(append(prefix, x.c)))
 	}
 	queue = t.collect(x.mid, append(prefix, x.c), queue)
+
 	return t.collect(x.right, prefix, queue)
 }
 
@@ -199,6 +201,7 @@ func (t *Trie[V]) collectAll(x *node[V], prefix []byte, queue []string, value []
 		value = append(value, x.val)
 	}
 	queue, value = t.collectAll(x.mid, append(prefix, x.c), queue, value)
+
 	return t.collectAll(x.right, prefix, queue, value)
 }
 
@@ -236,9 +239,8 @@ func (t *Trie[T]) UnmarshalJSON(src []byte) error {
 		return err
 	}
 
-	// set
 	for i, k := range tmp.K {
-		t.Put(k, tmp.V[i])
+		t.Set(k, tmp.V[i])
 	}
 	return nil
 }

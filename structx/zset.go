@@ -2,9 +2,19 @@ package structx
 
 import "github.com/xgzlucario/rotom/base"
 
-// ZSet structure: K key, S score, V value
+type Maper[K comparable, V any] interface {
+	Get(K) (V, bool)
+	Set(K, V) (V, bool)
+	Delete(K) (V, bool)
+	Scan(func(K, V) bool)
+	Keys() []K
+	MarshalJSON() ([]byte, error)
+	UnmarshalJSON([]byte) error
+}
+
+// ZSet
 type ZSet[K, S base.Ordered, V any] struct {
-	data Map[K, *zsNode[S, V]]
+	data Maper[K, *zsNode[S, V]]
 	tree *RBTree[S, K]
 }
 
@@ -17,11 +27,19 @@ type zsIter[S base.Ordered, V any] struct {
 	n *rbnode[S, V]
 }
 
-// NewZSet return new zset instance
+// NewZSet with more time efficient
 func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
 	return &ZSet[K, S, V]{
-		tree: NewRBTree[S, K](),
 		data: NewMap[K, *zsNode[S, V]](),
+		tree: NewRBTree[S, K](),
+	}
+}
+
+// NewZSetWithTrie with more memory efficient
+func NewZSetWithTrie[S base.Ordered, V any]() *ZSet[string, S, V] {
+	return &ZSet[string, S, V]{
+		data: NewTrie[*zsNode[S, V]](),
+		tree: NewRBTree[S, string](),
 	}
 }
 
@@ -150,6 +168,7 @@ func (z *ZSet[K, S, V]) UnmarshalJSON(src []byte) error {
 	if err := z.data.UnmarshalJSON(src); err != nil {
 		return err
 	}
+
 	z.data.Scan(func(k K, item *zsNode[S, V]) bool {
 		z.tree.Insert(item.S, k)
 		return true

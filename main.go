@@ -28,7 +28,7 @@ func testTrie() {
 	}
 
 	for i := 0; i < 10; i++ {
-		tree.Put(gofakeit.Name(), gofakeit.Minute())
+		tree.Set(gofakeit.Name(), gofakeit.Minute())
 	}
 
 	fmt.Println(tree.Size(), tree.Keys())
@@ -155,8 +155,6 @@ func testValue() {
 	fmt.Println(db.GetStringSlice("stringSlice"))
 	fmt.Println(db.GetIntSlice("intSlice"))
 
-	fmt.Println(db.HGet("xgz", "1"))
-
 	db.Set("uint", uint(123))
 	db.Set("uint8", uint8(123))
 	db.Set("uint16", uint16(123))
@@ -175,19 +173,16 @@ func testValue() {
 	db.Set("stringSlice", []string{"123", "456"})
 	db.Set("intSlice", []int{1, 123, 456, 23, 789, 55663})
 
-	db.HSet(123, "xgz", "1")
-	db.HSet(456, "xgz", "2")
-	fmt.Println(db.HGet("xgz", "1"))
-	fmt.Println(db.HGet("xgz", "2"))
-
 	fmt.Println()
 }
 
 func main() {
+	time.Sleep(time.Second)
 	testValue()
 	testBloom()
 	testTrie()
 	testCustom()
 	testStress()
 	db.Flush()
+	time.Sleep(time.Second)
 }

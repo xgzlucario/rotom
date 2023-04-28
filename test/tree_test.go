@@ -100,7 +100,7 @@ func BenchmarkTrie(b *testing.B) {
 	m := structx.NewTrie[struct{}]()
 	b.Run("Set", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Put(gofakeit.Phone(), struct{}{})
+			m.Set(gofakeit.Phone(), struct{}{})
 		}
 	})
 	b.Run("Get", func(b *testing.B) {
@@ -110,7 +110,7 @@ func BenchmarkTrie(b *testing.B) {
 	})
 	b.Run("Remove", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Remove(gofakeit.Phone())
+			m.Delete(gofakeit.Phone())
 		}
 	})
 }

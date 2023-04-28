@@ -1,14 +1,13 @@
 package structx
 
 import (
-	"math"
 	"sync"
 	"time"
 )
 
 const (
 	// NoTTL
-	NoTTL = math.MaxInt64
+	NoTTL = 0
 )
 
 var (
@@ -49,7 +48,7 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 	defer c.mu.RUnlock()
 
 	v, ttl, ok := c.data.Get(key)
-	if ok && ttl > c.ts {
+	if ok && (ttl == NoTTL || ttl > c.ts) {
 		return v, true
 	}
 	return
@@ -61,7 +60,7 @@ func (c *Cache[V]) GetEX(key string) (v V, ttl int64, ok bool) {
 	defer c.mu.RUnlock()
 
 	v, ttl, ok = c.data.Get(key)
-	if ok && ttl > c.ts {
+	if ok && (ttl == NoTTL || ttl > c.ts) {
 		return v, ttl, true
 	}
 	return
@@ -159,6 +158,9 @@ func (c *Cache[V]) eviction() {
 		// clear expired keys
 		if c.data.Size() > 0 {
 			for f := c.data.Iter(); f.Valid(); f.Next() {
+				if f.Score() == NoTTL {
+					continue
+				}
 				if f.Score() > c.ts {
 					break
 				}

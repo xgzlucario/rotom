@@ -20,3 +20,5 @@ type GTreeJSON[K, V any] struct {
 	K []K
 	V []V
 }
+
+type Raw []byte
