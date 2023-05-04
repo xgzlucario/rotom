@@ -7,73 +7,110 @@ import (
 	"github.com/xgzlucario/rotom/structx"
 )
 
-// CREATE BY CHATGPT
-
-func TestBitMap_Add(t *testing.T) {
+func BenchmarkBitMap(b *testing.B) {
 	bm := structx.NewBitMap()
-
-	// Add new numbers
-	assert.True(t, bm.Add(10))
-	assert.True(t, bm.Add(20))
-	assert.True(t, bm.Add(30))
-
-	// Add existing number
-	assert.False(t, bm.Add(10))
-
-	// Check the length and contents
-	assert.Equal(t, 3, bm.Len())
-	assert.True(t, bm.Contains(10))
-	assert.True(t, bm.Contains(20))
-	assert.True(t, bm.Contains(30))
+	b.Run("Add", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			bm.Add(uint32(i))
+		}
+	})
+	b.Run("Contains", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			bm.Contains(uint32(i))
+		}
+	})
+	b.Run("Max", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			bm.Max()
+		}
+	})
+	bm1 := bm.Copy()
+	b.Run("Or", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			bm.Or(bm1)
+		}
+	})
+	b.Run("And", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			bm.And(bm1)
+		}
+	})
+	b.Run("Xor", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			bm.Xor(bm1)
+		}
+	})
+	b.Run("Remove", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			bm.Remove(uint32(i))
+		}
+	})
 }
 
-func TestBitMap_Remove(t *testing.T) {
-	bm := structx.NewBitMap(10, 20, 30)
+func TestBitMap(t *testing.T) {
+	bm := structx.NewBitMap(1, 3, 5, 7, 9)
+	assert.Equal(t, 5, bm.Len())
 
-	// Remove existing numbers
-	assert.True(t, bm.Remove(10))
-	assert.True(t, bm.Remove(20))
+	bm.Add(1)
+	assert.Equal(t, 5, bm.Len())
 
-	// Remove non-existing number
-	assert.False(t, bm.Remove(40))
+	bm.Add(2)
+	assert.Equal(t, 6, bm.Len())
 
-	// Check the length and contents
-	assert.Equal(t, 1, bm.Len())
-	assert.True(t, bm.Contains(30))
-}
+	assert.True(t, bm.Contains(1))
+	assert.False(t, bm.Contains(0))
 
-func TestBitMap_Equal(t *testing.T) {
-	bm1 := structx.NewBitMap(10, 20, 30)
-	bm2 := structx.NewBitMap(10, 30, 20)
+	assert.Equal(t, 1, bm.Min())
+	assert.Equal(t, 9, bm.Max())
 
-	if !bm1.Equal(bm2) {
-		t.Errorf("Expected bitmaps to be equal, but they were not")
-	}
-}
+	bm.Remove(1)
+	assert.Equal(t, 5, bm.Len())
+	assert.False(t, bm.Contains(1))
 
-func TestBitMap_Min(t *testing.T) {
-	bm := structx.NewBitMap(10, 20, 30)
+	// Test copy
+	bm2 := bm.Copy()
+	assert.True(t, bm.Equal(bm2))
 
-	// Check minimum value
-	assert.Equal(t, 10, bm.Min())
-}
+	// Test MarshalBinary and UnmarshalBinary
+	data, err := bm.MarshalBinary()
+	assert.Nil(t, err)
 
-func TestBitMap_Max(t *testing.T) {
-	bm := structx.NewBitMap(10, 20, 30)
+	bm3 := new(structx.BitMap)
+	err = bm3.UnmarshalBinary(data)
+	assert.Nil(t, err)
+	assert.True(t, bm.Equal(bm3))
 
-	// Check maximum value
-	assert.Equal(t, 30, bm.Max())
-}
+	// Test Range
+	var nums []uint32
+	bm.Range(func(num uint32) bool {
+		nums = append(nums, num)
+		return false
+	})
+	assert.Equal(t, []uint32{2, 3, 5, 7, 9}, nums)
 
-func TestBitMap_Union(t *testing.T) {
-	bm1 := structx.NewBitMap(10, 20, 30)
-	bm2 := structx.NewBitMap(20, 30, 40)
+	// Test RevRange
+	nums = nil
+	bm.RevRange(func(num uint32) bool {
+		nums = append(nums, num)
+		return false
+	})
+	assert.Equal(t, []uint32{9, 7, 5, 3, 2}, nums)
 
-	// Union
-	bm1.Union(bm2)
+	// Test bitwise operations
+	bm = structx.NewBitMap(1, 3, 5, 7, 9)
+	bm4 := structx.NewBitMap(1, 2, 3, 4, 5)
+	bm5 := structx.NewBitMap(2, 3, 4, 5, 6)
+	bm6 := structx.NewBitMap(1, 6)
 
-	// Check the length and contents
-	assert.Equal(t, 4, bm1.Len())
-	assert.True(t, bm1.Contains(10))
-	assert.True(t, bm1.Contains(20))
+	// Test Or
+	bm7 := bm.Copy().Or(bm4)
+	assert.Equal(t, structx.NewBitMap(1, 2, 3, 4, 5, 7, 9), bm7)
+
+	// Test And
+	bm8 := bm.Copy().And(bm5)
+	assert.Equal(t, structx.NewBitMap(3, 5), bm8)
+
+	// Test Xor
+	bm9 := bm.Copy().Xor(bm6)
+	assert.Equal(t, structx.NewBitMap(3, 5, 6, 7, 9), bm9)
 }

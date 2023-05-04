@@ -1,9 +1,10 @@
 package structx
 
 import (
+	"encoding/binary"
+	"errors"
 	"math/bits"
 
-	"github.com/bytedance/sonic"
 	"golang.org/x/exp/slices"
 )
 
@@ -26,12 +27,12 @@ func NewBitMap(nums ...uint32) *BitMap {
 	return bm
 }
 
-// Add return true if num not set yet
+// Add
 func (bm *BitMap) Add(num uint32) bool {
 	word, bit := num>>log2BitSize, num%bitSize
 
-	if n := int(word) - len(bm.words); n >= 0 {
-		bm.words = append(bm.words, make([]uint64, n+1)...)
+	for len(bm.words) <= int(word) {
+		bm.words = append(bm.words, uint64(0))
 	}
 
 	// not exist
@@ -44,7 +45,7 @@ func (bm *BitMap) Add(num uint32) bool {
 	return false
 }
 
-// Remove return true if num exist
+// Remove
 func (bm *BitMap) Remove(num uint32) bool {
 	word, bit := num>>log2BitSize, num%bitSize
 	if int(word) >= len(bm.words) {
@@ -61,12 +62,12 @@ func (bm *BitMap) Remove(num uint32) bool {
 	return false
 }
 
-// Equal returns whether the two bitmaps are equal
+// Equal
 func (bm *BitMap) Equal(t *BitMap) bool {
 	return bm.len == t.len && slices.Equal(bm.words, t.words)
 }
 
-// Contains check if num exist
+// Contains
 func (bm *BitMap) Contains(num uint32) bool {
 	word, bit := num/bitSize, num%bitSize
 	return int(word) < len(bm.words) && bm.words[word]&(1<<bit) != 0
@@ -91,7 +92,6 @@ func (bm *BitMap) Max() int {
 			continue
 		}
 		for j := bitSize - 1; j >= 0; j-- {
-			// bit and is not 0
 			if v&(1<<j) != 0 {
 				return bitSize*i + j
 			}
@@ -100,13 +100,14 @@ func (bm *BitMap) Max() int {
 	return -1
 }
 
-// Union modified current object default.
-func (bm *BitMap) Union(t *BitMap) *BitMap {
+// Or
+func (bm *BitMap) Or(t *BitMap) *BitMap {
 	bm.len = 0
-	bm.resize(len(t.words))
+	for t.Cap() > bm.Cap() {
+		bm.words = append(bm.words, uint64(0))
+	}
 
 	for i, v := range t.words {
-		// OR
 		bm.words[i] |= v
 		bm.len += bits.OnesCount64(bm.words[i])
 	}
@@ -114,13 +115,14 @@ func (bm *BitMap) Union(t *BitMap) *BitMap {
 	return bm
 }
 
-// Intersect modified current object default.
-func (bm *BitMap) Intersect(t *BitMap) *BitMap {
+// And
+func (bm *BitMap) And(t *BitMap) *BitMap {
 	bm.len = 0
-	bm.resize(len(t.words))
 
 	for i, v := range t.words {
-		// AND
+		if i >= bm.Cap() {
+			break
+		}
 		bm.words[i] &= v
 		bm.len += bits.OnesCount64(bm.words[i])
 	}
@@ -128,13 +130,14 @@ func (bm *BitMap) Intersect(t *BitMap) *BitMap {
 	return bm
 }
 
-// Difference modified current object default.
-func (bm *BitMap) Difference(t *BitMap) *BitMap {
+// Xor
+func (bm *BitMap) Xor(t *BitMap) *BitMap {
 	bm.len = 0
-	bm.resize(len(t.words))
+	for t.Cap() > bm.Cap() {
+		bm.words = append(bm.words, uint64(0))
+	}
 
 	for i, v := range t.words {
-		// NOR
 		bm.words[i] ^= v
 		bm.len += bits.OnesCount64(bm.words[i])
 	}
@@ -147,17 +150,9 @@ func (bm *BitMap) Len() int {
 	return bm.len
 }
 
-// resize
-func (bm *BitMap) resize(cap int) {
-	n := len(bm.words)
-	if cap == n {
-		return
-	}
-	if cap < n {
-		bm.words = bm.words[:cap]
-		return
-	}
-	bm.words = append(bm.words, make([]uint64, cap-len(bm.words))...)
+// Cap
+func (bm *BitMap) Cap() int {
+	return cap(bm.words)
 }
 
 // Copy
@@ -200,22 +195,30 @@ func (bm *BitMap) RevRange(f func(uint32) bool) {
 	}
 }
 
-type bitmapJSON struct {
-	L int
-	W []uint64
-}
+// MarshalBinary
+func (bm *BitMap) MarshalBinary() ([]byte, error) {
+	buf := make([]byte, 0, len(bm.words)*bitSize)
 
-func (bm *BitMap) MarshalJSON() ([]byte, error) {
-	return sonic.Marshal(bitmapJSON{bm.len, bm.words})
-}
-
-func (bm *BitMap) UnmarshalJSON(src []byte) error {
-	var bmJSON bitmapJSON
-	if err := sonic.Unmarshal(src, &bmJSON); err != nil {
-		return err
+	buf = binary.BigEndian.AppendUint64(buf, uint64(bm.len))
+	for _, v := range bm.words {
+		buf = binary.BigEndian.AppendUint64(buf, v)
 	}
 
-	bm.words = bmJSON.W
-	bm.len = bmJSON.L
+	return buf, nil
+}
+
+// UnmarshalBinary
+func (bm *BitMap) UnmarshalBinary(src []byte) error {
+	if len(src) < 8 {
+		return errors.New("unmarshal error")
+	}
+
+	bm.len = int(binary.BigEndian.Uint64(src[0:8]))
+	bm.words = make([]uint64, 0, len(src)/8-1)
+
+	for i := 8; i < len(src); i += 8 {
+		bm.words = append(bm.words, binary.BigEndian.Uint64(src[i:i+8]))
+	}
+
 	return nil
 }
