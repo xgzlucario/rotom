@@ -44,14 +44,6 @@ func (bm *BitMap) Add(num uint32) bool {
 	return false
 }
 
-// AddRange
-func (bm *BitMap) AddRange(start uint32, end uint32) *BitMap {
-	for i := start; i < end; i++ {
-		bm.Add(i)
-	}
-	return bm
-}
-
 // Remove return true if num exist
 func (bm *BitMap) Remove(num uint32) bool {
 	word, bit := num>>log2BitSize, num%bitSize
@@ -71,7 +63,7 @@ func (bm *BitMap) Remove(num uint32) bool {
 
 // Equal returns whether the two bitmaps are equal
 func (bm *BitMap) Equal(t *BitMap) bool {
-	return slices.Equal(bm.words, t.words)
+	return bm.len == t.len && slices.Equal(bm.words, t.words)
 }
 
 // Contains check if num exist
@@ -208,7 +200,6 @@ func (bm *BitMap) RevRange(f func(uint32) bool) {
 	}
 }
 
-// marshal type
 type bitmapJSON struct {
 	L int
 	W []uint64

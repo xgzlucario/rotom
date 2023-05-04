@@ -18,11 +18,12 @@ func (m HMap) HGet(keys ...string) (val any, ok bool) {
 	if len(keys) == 0 {
 		return
 	}
+
+	val, ok = m.Get(keys[0])
 	if len(keys) == 1 {
-		return m.Get(keys[0])
+		return
 	}
 
-	val, _ = m.Get(keys[0])
 	mm, ok := val.(HMap)
 	if !ok {
 		return nil, false

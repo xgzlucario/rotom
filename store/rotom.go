@@ -20,39 +20,40 @@ import (
 )
 
 const (
-	// Status
 	STATUS_INIT uint32 = iota + 1
 	STATUS_NORMAL
 	STATUS_REWRITE
 )
 
 const (
-	// Operation
 	OP_SET byte = iota + 1
 	OP_SETEX
 	OP_REMOVE
 	OP_PERSIST
+
+	OP_HGET
 	OP_HSET
 	OP_HREMOVE
+
+	
 )
 
 const (
-	// Char
 	C_SPR = byte(0x00)
 	C_END = byte(0xff)
 
-	// Config
 	timeCarry = 1000 * 1000 * 1000
 )
 
 var (
-	// globalTime
 	globalTime = time.Now().UnixNano()
 
 	lineSpr = []byte{C_SPR, C_SPR, C_END}
 
 	order = binary.BigEndian
+)
 
+var (
 	errUnSupportType = errors.New("unsupport type")
 )
 
@@ -92,6 +93,14 @@ type storeShard struct {
 	filter *structx.Bloom
 
 	sync.RWMutex
+}
+
+func init() {
+	go func() {
+		for t := range time.NewTicker(time.Microsecond).C {
+			atomic.SwapInt64(&globalTime, t.UnixNano())
+		}
+	}()
 }
 
 func CreateDB(conf *Config) *store {

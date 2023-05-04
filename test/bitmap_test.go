@@ -27,19 +27,6 @@ func TestBitMap_Add(t *testing.T) {
 	assert.True(t, bm.Contains(30))
 }
 
-func TestBitMap_AddRange(t *testing.T) {
-	bm := structx.NewBitMap()
-
-	// Add range of numbers
-	bm.AddRange(10, 20)
-
-	// Check the length and contents
-	assert.Equal(t, 10, bm.Len())
-	for i := 10; i < 20; i++ {
-		assert.True(t, bm.Contains(uint32(i)))
-	}
-}
-
 func TestBitMap_Remove(t *testing.T) {
 	bm := structx.NewBitMap(10, 20, 30)
 
