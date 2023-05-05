@@ -3,13 +3,9 @@ package store
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
-	"math"
 	"os"
 	"path"
-	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,8 +49,6 @@ var (
 	globalTime = time.Now().UnixNano()
 
 	lineSpr = []byte{C_SPR, C_SPR, C_END}
-
-	order = binary.BigEndian
 )
 
 type store struct {
@@ -83,11 +77,11 @@ type storeShard struct {
 	rwPath string
 
 	// buffer and rwbuffer
-	buf   []byte
-	rwbuf []byte
+	*base.Coder
+	rwbuf *base.Coder
 
 	// data based on Cache
-	*structx.Cache[Value]
+	*structx.Cache[any]
 
 	// filter
 	filter *structx.Bloom
@@ -118,9 +112,11 @@ func CreateDB(conf *Config) *store {
 	for i := range db.shards {
 		db.shards[i] = &storeShard{
 			status: STATUS_INIT,
+			Coder:  base.NewCoder(nil),
+			rwbuf:  base.NewCoder(nil),
 			path:   path.Join(db.DBDirPath, "dat"+strconv.Itoa(i)),
 			rwPath: path.Join(db.DBDirPath, "rw"+strconv.Itoa(i)),
-			Cache:  structx.NewCache[Value](),
+			Cache:  structx.NewUnsafeCache[any](),
 		}
 	}
 
@@ -143,10 +139,10 @@ func CreateDB(conf *Config) *store {
 				time.Sleep(db.FlushDuration)
 				switch sd.getStatus() {
 				case STATUS_NORMAL:
-					sd.flushBuffer()
+					sd.FlushToFile(sd.path)
 
 				case STATUS_REWRITE:
-					sd.flushRwBuffer()
+					sd.rwbuf.FlushToFile(sd.rwPath)
 				}
 			}
 		}()
@@ -155,7 +151,7 @@ func CreateDB(conf *Config) *store {
 			for {
 				time.Sleep(db.RewriteDuration)
 				pool.Go(func() {
-					sd.flushBuffer()
+					sd.FlushToFile(sd.path)
 					sd.setStatus(STATUS_REWRITE)
 					sd.reWrite()
 				})
@@ -169,17 +165,17 @@ func CreateDB(conf *Config) *store {
 // Set
 func (s *store) Set(key string, val any) {
 	sd := s.getShard(key)
+	sd.Lock()
+	defer sd.Unlock()
 
 	// {SET}{key}|{value}
-	sd.Lock()
-	sd.encBytes(OP_SET).encBytes(base.S2B(&key)...).encBytes(C_SPR)
+	sd.EncBytes(OP_SET).EncBytes(base.S2B(&key)...).EncBytes(C_SPR)
 	if err := sd.Encode(val); err != nil {
 		panic(err)
 	}
-	sd.encBytes(lineSpr...)
-	sd.Unlock()
+	sd.EncBytes(lineSpr...)
 
-	sd.Set(key, Value{Val: val})
+	sd.Set(key, val)
 }
 
 // SetEX
@@ -189,26 +185,27 @@ func (s *store) SetEX(key string, val any, ttl time.Duration) {
 	i64ts := atomic.LoadInt64(&globalTime) + int64(ttl)
 	u32ts := uint32(i64ts / timeCarry)
 
-	// {SETEX}{key}|{ttl}|{value}
 	sd.Lock()
-	sd.encBytes(OP_SETEX).encBytes(base.S2B(&key)...).encBytes(C_SPR).encUint32(u32ts).encBytes(C_SPR)
+	defer sd.Unlock()
+
+	// {SETEX}{key}|{ttl}|{value}
+	sd.EncBytes(OP_SETEX).EncBytes(base.S2B(&key)...).EncBytes(C_SPR).EncUint32(u32ts).EncBytes(C_SPR)
 	if err := sd.Encode(val); err != nil {
 		panic(err)
 	}
-	sd.encBytes(lineSpr...)
-	sd.Unlock()
+	sd.EncBytes(lineSpr...)
 
-	sd.SetTX(key, Value{Val: val}, i64ts)
+	sd.SetTX(key, val, i64ts)
 }
 
 // Remove
-func (s *store) Remove(key string) (any, bool) {
+func (s *store) Remove(key string) (val any, ok bool) {
 	sd := s.getShard(key)
+	sd.Lock()
+	defer sd.Unlock()
 
 	// {REMOVE}{key}
-	sd.Lock()
-	sd.encBytes(OP_REMOVE).encBytes(base.S2B(&key)...).encBytes(lineSpr...)
-	sd.Unlock()
+	sd.EncBytes(OP_REMOVE).EncBytes(base.S2B(&key)...).EncBytes(lineSpr...)
 
 	return sd.Remove(key)
 }
@@ -216,19 +213,19 @@ func (s *store) Remove(key string) (any, bool) {
 // Persist removes the expiration from a key
 func (s *store) Persist(key string) bool {
 	sd := s.getShard(key)
+	sd.Lock()
+	defer sd.Unlock()
 
 	// {PERSIST}{key}
-	sd.Lock()
-	sd.encBytes(OP_PERSIST).encBytes(base.S2B(&key)...).encBytes(lineSpr...)
-	sd.Unlock()
+	sd.EncBytes(OP_PERSIST).EncBytes(base.S2B(&key)...).EncBytes(lineSpr...)
 
 	return sd.Persist(key)
 }
 
 // Flush writes all the buf data to disk
-func (s store) Flush() error {
+func (s *store) Flush() error {
 	for _, sd := range s.shards {
-		if _, err := sd.flushBuffer(); err != nil {
+		if _, err := sd.FlushToFile(sd.path); err != nil {
 			return err
 		}
 	}
@@ -236,27 +233,30 @@ func (s store) Flush() error {
 }
 
 // Count
-func (s store) Count() (sum int) {
+func (s *store) Count() (sum int) {
 	for _, s := range s.shards {
 		sum += s.Count()
 	}
+
 	return sum
 }
 
 // WithExpired
-func (s store) WithExpired(f func(string, Value, int64)) store {
+func (s *store) WithExpired(f func(string, any, int64)) *store {
 	for _, s := range s.shards {
 		s.WithExpired(f)
 	}
+
 	return s
 }
 
 // Keys
-func (s store) Keys() []string {
+func (s *store) Keys() []string {
 	arr := make([]string, 0, s.Count())
 	for _, s := range s.shards {
 		arr = append(arr, s.Keys()...)
 	}
+
 	return arr
 }
 
@@ -284,57 +284,12 @@ func (s *storeShard) reWrite() {
 	s.Lock()
 	defer s.Unlock()
 
-	fs, err := os.OpenFile(s.rwPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		return
-	}
-
-	fs.Write(s.rwbuf)
-	s.rwbuf = s.rwbuf[0:0]
-
-	fs.Write(s.buf)
-	s.buf = s.buf[0:0]
-
-	fs.Close()
+	s.FlushToFile(s.rwPath)
+	s.rwbuf.FlushToFile(s.rwPath)
 
 	// rename rwFile to storeFile
 	if err := os.Rename(s.rwPath, s.path); err != nil {
 		panic(err)
-	}
-}
-
-func (s *storeShard) flushBuffer() (int, error) { return s.flush(s.buf, s.path) }
-
-func (s *storeShard) flushRwBuffer() (int, error) { return s.flush(s.rwbuf, s.rwPath) }
-
-// flush
-func (s *storeShard) flush(buf []byte, path string) (int, error) {
-	s.Lock()
-	defer s.Unlock()
-
-	if len(buf) == 0 {
-		return 0, nil
-	}
-
-	fs, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		return 0, err
-	}
-	defer fs.Close()
-
-	if n, err := fs.Write(buf); err != nil {
-		return 0, err
-
-	} else {
-		// reset
-		if path == s.path {
-			s.buf = s.buf[0:0]
-
-		} else if path == s.rwPath {
-			s.rwbuf = s.rwbuf[0:0]
-		}
-
-		return n, nil
 	}
 }
 
@@ -361,13 +316,12 @@ func (s *storeShard) readLine(line []byte, status uint32) {
 			return
 		}
 
-		s.rwbuf = append(s.rwbuf, line...)
-		s.rwbuf = append(s.rwbuf, lineSpr...)
+		s.rwbuf.EncBytes(line...).EncBytes(lineSpr...)
 
 		if status == STATUS_REWRITE {
 			return
 		}
-		s.Set(*base.B2S(line[1:i]), Value{Raw: line[i+1:]})
+		s.Set(*base.B2S(line[1:i]), base.Raw(line[i+1:]))
 
 	// {SETEX}{key}|{ttl}|{value}
 	case OP_SETEX:
@@ -381,16 +335,16 @@ func (s *storeShard) readLine(line []byte, status uint32) {
 
 		u64ts, _ := binary.Uvarint(line[sp1+1 : sp2])
 		ts := int64(u64ts) * timeCarry
+
 		// not expired
 		if ts > atomic.LoadInt64(&globalTime) {
-			s.rwbuf = append(s.rwbuf, line...)
-			s.rwbuf = append(s.rwbuf, lineSpr...)
+			s.rwbuf.EncBytes(line...).EncBytes(lineSpr...)
 
 			if status == STATUS_REWRITE {
 				return
 			}
 
-			s.SetTX(*base.B2S(line[1:sp1]), Value{Raw: line[sp2+1:]}, ts)
+			s.SetTX(*base.B2S(line[1:sp1]), base.Raw(line[sp2+1:]), ts)
 		}
 
 	// {REMOVE}{key}
@@ -411,8 +365,7 @@ func (s *storeShard) readLine(line []byte, status uint32) {
 			return
 		}
 
-		s.rwbuf = append(s.rwbuf, line...)
-		s.rwbuf = append(s.rwbuf, lineSpr...)
+		s.rwbuf.EncBytes(line...).EncBytes(lineSpr...)
 
 		if status == STATUS_REWRITE {
 			return
@@ -438,173 +391,38 @@ func (s *store) getShard(key string) *storeShard {
 // Get
 func (s *store) Get(key string) Value {
 	hash := xxh3.HashString(key)
-	sd := s.shards[xxh3.HashString(key)&(s.ShardCount-1)]
+	sd := s.shards[hash&(s.ShardCount-1)]
+
 	val, ok := sd.Cache.GetPos(hash)
+	if !ok {
+		return Value{}
+	}
 
-	val.sd = sd
-	val.ok = ok
+	if raw, isRaw := val.(base.Raw); isRaw {
+		return Value{raw: raw, key: key, sd: sd}
 
-	return val
+	} else {
+		return Value{val: val, key: key, sd: sd}
+	}
 }
 
 // getValue
 func getValue[T any](v Value, vptr T) (T, error) {
-	if v.Raw != nil {
-		if err := v.sd.Decode(v.Raw, &vptr); err != nil {
+	if v.raw != nil {
+		if err := v.sd.Decode(v.raw, &vptr); err != nil {
 			return vptr, err
 		}
 
-		v.sd.Set(v.key, Value{Val: vptr})
+		v.sd.Set(v.key, vptr)
 		return vptr, nil
 	}
 
-	if tmp, ok := v.Val.(T); ok {
+	if tmp, ok := v.val.(T); ok {
 		return tmp, nil
 
 	} else {
-		return vptr, base.ErrUnSupportType
+		return vptr, base.ErrWrongType
 	}
-}
-
-// encBytes
-func (s *storeShard) encBytes(v ...byte) *storeShard {
-	s.buf = append(s.buf, v...)
-	return s
-}
-
-// encUint32
-func (s *storeShard) encUint32(v uint32) *storeShard {
-	s.buf = binary.AppendUvarint(s.buf, uint64(v))
-	return s
-}
-
-// Encode
-func (s *storeShard) Encode(v any) error {
-	switch v := v.(type) {
-	case string:
-		s.buf = append(s.buf, base.S2B(&v)...)
-	case []byte:
-		s.buf = append(s.buf, v...)
-	case int64:
-		s.buf = binary.AppendVarint(s.buf, v)
-	case uint64:
-		s.buf = binary.AppendUvarint(s.buf, v)
-	case int:
-		s.buf = binary.AppendVarint(s.buf, int64(v))
-	case uint:
-		s.buf = binary.AppendUvarint(s.buf, uint64(v))
-	case int32:
-		s.buf = binary.AppendVarint(s.buf, int64(v))
-	case uint32:
-		s.buf = binary.AppendUvarint(s.buf, uint64(v))
-	case bool:
-		if v {
-			s.buf = append(s.buf, 1)
-		} else {
-			s.buf = append(s.buf, 0)
-		}
-	case float64:
-		s.buf = order.AppendUint64(s.buf, math.Float64bits(v))
-	case uint8:
-		s.buf = append(s.buf, v)
-	case int8:
-		s.buf = binary.AppendVarint(s.buf, int64(v))
-	case uint16:
-		s.buf = binary.AppendUvarint(s.buf, uint64(v))
-	case int16:
-		s.buf = binary.AppendVarint(s.buf, int64(v))
-	case float32:
-		s.buf = order.AppendUint32(s.buf, math.Float32bits(v))
-	case []string:
-		str := strings.Join(v, ",")
-		s.buf = append(s.buf, base.S2B(&str)...)
-	case []int:
-		for _, i := range v {
-			s.buf = binary.AppendVarint(s.buf, int64(i))
-		}
-	case time.Time:
-		src, err := v.MarshalBinary()
-		if err != nil {
-			return err
-		}
-		s.buf = append(s.buf, src...)
-	case base.Binarier:
-		src, err := v.MarshalBinary()
-		if err != nil {
-			return err
-		}
-		s.buf = append(s.buf, src...)
-	case base.Marshaler:
-		src, err := v.MarshalJSON()
-		if err != nil {
-			return err
-		}
-		s.buf = append(s.buf, src...)
-	default:
-		return errors.New("encode unsupported type: " + reflect.TypeOf(v).String())
-	}
-	return nil
-}
-
-// Decode
-func (s *storeShard) Decode(src []byte, vptr interface{}) error {
-	switch v := vptr.(type) {
-	case *[]byte:
-		*v = src
-	case *string:
-		*v = *base.B2S(src)
-	case *int64:
-		*v, _ = binary.Varint(src)
-	case *uint64:
-		*v, _ = binary.Uvarint(src)
-	case *int32:
-		num, _ := binary.Varint(src)
-		*v = int32(num)
-	case *uint32:
-		num, _ := binary.Uvarint(src)
-		*v = uint32(num)
-	case *float64:
-		*v = math.Float64frombits(order.Uint64(src))
-	case *bool:
-		*v = src[0] != 0
-	case *uint:
-		num, _ := binary.Uvarint(src)
-		*v = uint(num)
-	case *int:
-		num, _ := binary.Varint(src)
-		*v = int(num)
-	case *uint8:
-		*v = src[0]
-	case *int8:
-		num, _ := binary.Varint(src)
-		*v = int8(num)
-	case *uint16:
-		num, _ := binary.Uvarint(src)
-		*v = uint16(num)
-	case *int16:
-		num, _ := binary.Varint(src)
-		*v = int16(num)
-	case *float32:
-		*v = math.Float32frombits(order.Uint32(src))
-	case *[]string:
-		*v = strings.Split(*base.B2S(src), ",")
-	case *[]int:
-		*v = make([]int, 0)
-		for len(src) > 0 {
-			num, n := binary.Varint(src)
-			src = src[n:]
-			*v = append(*v, int(num))
-		}
-	case *time.Time:
-		return v.UnmarshalBinary(src)
-	case base.Binarier:
-		return v.UnmarshalBinary(src)
-	case base.Marshaler:
-		return v.UnmarshalJSON(src)
-	default:
-		return errors.New("decode unsupported type: " + reflect.TypeOf(v).String())
-	}
-	return nil
 }
 
 func (s *storeShard) getStatus() uint32 {
