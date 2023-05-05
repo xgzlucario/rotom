@@ -48,26 +48,44 @@ func BenchmarkBitMap(b *testing.B) {
 }
 
 func TestBitMap(t *testing.T) {
+	// Test NewBitMap
 	bm := structx.NewBitMap(1, 3, 5, 7, 9)
-	assert.Equal(t, 5, bm.Len())
+	expected := structx.NewBitMap()
+	for _, num := range []uint32{1, 3, 5, 7, 9} {
+		expected.Add(num)
+	}
+	assert.True(t, bm.Equal(expected))
 
-	bm.Add(1)
-	assert.Equal(t, 5, bm.Len())
-
-	bm.Add(2)
+	// Test Add
+	added := bm.Add(2)
+	assert.True(t, added)
 	assert.Equal(t, 6, bm.Len())
 
+	// Test Add duplicate
+	added = bm.Add(2)
+	assert.False(t, added)
+	assert.Equal(t, 6, bm.Len())
+
+	// Test Contains
 	assert.True(t, bm.Contains(1))
 	assert.False(t, bm.Contains(0))
 
+	// Test Min and Max
 	assert.Equal(t, 1, bm.Min())
 	assert.Equal(t, 9, bm.Max())
 
-	bm.Remove(1)
+	// Test Remove
+	removed := bm.Remove(1)
+	assert.True(t, removed)
 	assert.Equal(t, 5, bm.Len())
 	assert.False(t, bm.Contains(1))
 
-	// Test copy
+	// Test Remove non-existent element
+	removed = bm.Remove(1)
+	assert.False(t, removed)
+	assert.Equal(t, 5, bm.Len())
+
+	// Test Copy
 	bm2 := bm.Copy()
 	assert.True(t, bm.Equal(bm2))
 

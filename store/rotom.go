@@ -31,11 +31,15 @@ const (
 	OP_REMOVE
 	OP_PERSIST
 
+	// TODO
 	OP_HGET
 	OP_HSET
 	OP_HREMOVE
 
-	
+	// TODO
+	OP_GETBIT
+	OP_SETBIT
+	OP_COUNTBIT
 )
 
 const (
@@ -51,10 +55,6 @@ var (
 	lineSpr = []byte{C_SPR, C_SPR, C_END}
 
 	order = binary.BigEndian
-)
-
-var (
-	errUnSupportType = errors.New("unsupport type")
 )
 
 type store struct {
@@ -87,7 +87,7 @@ type storeShard struct {
 	rwbuf []byte
 
 	// data based on Cache
-	*structx.Cache[any]
+	*structx.Cache[Value]
 
 	// filter
 	filter *structx.Bloom
@@ -120,7 +120,7 @@ func CreateDB(conf *Config) *store {
 			status: STATUS_INIT,
 			path:   path.Join(db.DBDirPath, "dat"+strconv.Itoa(i)),
 			rwPath: path.Join(db.DBDirPath, "rw"+strconv.Itoa(i)),
-			Cache:  structx.NewCache[any](),
+			Cache:  structx.NewCache[Value](),
 		}
 	}
 
@@ -179,7 +179,7 @@ func (s *store) Set(key string, val any) {
 	sd.encBytes(lineSpr...)
 	sd.Unlock()
 
-	sd.Set(key, val)
+	sd.Set(key, Value{Val: val})
 }
 
 // SetEX
@@ -198,7 +198,7 @@ func (s *store) SetEX(key string, val any, ttl time.Duration) {
 	sd.encBytes(lineSpr...)
 	sd.Unlock()
 
-	sd.SetTX(key, val, i64ts)
+	sd.SetTX(key, Value{Val: val}, i64ts)
 }
 
 // Remove
@@ -225,72 +225,6 @@ func (s *store) Persist(key string) bool {
 	return sd.Persist(key)
 }
 
-// HGet
-func (s *store) HGet(key string, fields ...string) (any, bool) {
-	sd := s.getShard(key)
-	sd.RLock()
-	defer sd.RUnlock()
-
-	val, _ := sd.Cache.Get(key)
-	m, ok := val.(structx.HMap)
-	if ok {
-		return m.HGet(fields...)
-	}
-	return nil, false
-}
-
-// HSet
-func (s *store) HSet(val any, key string, fields ...string) {
-	sd := s.getShard(key)
-	sd.Lock()
-	defer sd.Unlock()
-
-	// {HSET}{key}|{fields}|{value}
-	sd.encBytes(OP_HSET).encBytes(base.S2B(&key)...).encBytes(C_SPR).encStringSlice(fields).encBytes(C_SPR)
-	if err := sd.Encode(val); err != nil {
-		panic(err)
-	}
-	sd.encBytes(lineSpr...)
-
-	// set
-	v, _ := sd.Cache.Get(key)
-	m, ok := v.(structx.HMap)
-	if ok {
-		m.HSet(val, fields...)
-	} else {
-		m := structx.NewHMap()
-		m.HSet(val, fields...)
-		sd.Cache.Set(key, m)
-	}
-}
-
-// HRemove
-func (s *store) HRemove(key string, fields ...string) (any, bool) {
-	sd := s.getShard(key)
-	sd.Lock()
-	defer sd.Unlock()
-
-	// {HREMOVE}{key}|{fields}
-	sd.encBytes(OP_HREMOVE).encBytes(base.S2B(&key)...).encBytes(C_SPR).encStringSlice(fields).encBytes(lineSpr...)
-
-	val, _ := sd.Cache.Get(key)
-	m, ok := val.(structx.HMap)
-	if ok {
-		return m.HRemove(fields...)
-	}
-	return nil, false
-}
-
-// Type returns the type of the value stored at key
-func (s *store) Type(key string) reflect.Type {
-	sd := s.getShard(key)
-	v, ok := sd.Get(key)
-	if ok {
-		return reflect.TypeOf(v)
-	}
-	return nil
-}
-
 // Flush writes all the buf data to disk
 func (s store) Flush() error {
 	for _, sd := range s.shards {
@@ -310,7 +244,7 @@ func (s store) Count() (sum int) {
 }
 
 // WithExpired
-func (s store) WithExpired(f func(string, any, int64)) store {
+func (s store) WithExpired(f func(string, Value, int64)) store {
 	for _, s := range s.shards {
 		s.WithExpired(f)
 	}
@@ -324,101 +258,6 @@ func (s store) Keys() []string {
 		arr = append(arr, s.Keys()...)
 	}
 	return arr
-}
-
-// Incr
-func (s *store) Incr(key string, incr float64) (val float64, err error) {
-	val, err = s.GetFloat64(key)
-	if err != nil {
-		return -1, err
-	}
-	val += incr
-	s.Set(key, val)
-	return
-}
-
-// GetString
-func (s *store) GetString(k string) (v string, err error) { getValue(s, k, &v); return }
-
-// GetInt
-func (s *store) GetInt(k string) (v int, err error) { getValue(s, k, &v); return }
-
-// GetInt32
-func (s *store) GetInt32(k string) (v int32, err error) { getValue(s, k, &v); return }
-
-// GetInt64
-func (s *store) GetInt64(k string) (v int64, err error) { getValue(s, k, &v); return }
-
-// GetUint
-func (s *store) GetUint(k string) (v uint, err error) { getValue(s, k, &v); return }
-
-// GetUint32
-func (s *store) GetUint32(k string) (v uint32, err error) { getValue(s, k, &v); return }
-
-// GetUint64
-func (s *store) GetUint64(k string) (v uint64, err error) { getValue(s, k, &v); return }
-
-// GetFloat32
-func (s *store) GetFloat32(k string) (v float32, err error) { getValue(s, k, &v); return }
-
-// GetFloat64
-func (s *store) GetFloat64(k string) (v float64, err error) { getValue(s, k, &v); return }
-
-// GetBool
-func (s *store) GetBool(k string) (v bool, err error) { getValue(s, k, &v); return }
-
-// GetIntSlice
-func (s *store) GetInts(k string) (v []int, err error) { getValue(s, k, &v); return }
-
-// GetStringSlice
-func (s *store) GetStrings(k string) (v []string, err error) { getValue(s, k, &v); return }
-
-// GetTime
-func (s *store) GetTime(k string) (v time.Time, err error) { getValue(s, k, &v); return }
-
-// GetList
-func GetList[T comparable](s *store, key string) (*structx.List[T], error) {
-	return getValue(s, key, structx.NewList[T]())
-}
-
-// GetSet
-func GetSet[T comparable](s *store, key string) (structx.Set[T], error) {
-	return getValue(s, key, structx.NewSet[T]())
-}
-
-// GetMap
-func GetMap[K comparable, V any](s *store, key string) (structx.Map[K, V], error) {
-	return getValue(s, key, structx.NewMap[K, V]())
-}
-
-// GetHHMap
-func (s *store) GetHMap(key string) (structx.HMap, error) {
-	return getValue(s, key, structx.NewHMap())
-}
-
-// GetTrie
-func GetTrie[T any](s *store, key string) (*structx.Trie[T], error) {
-	return getValue(s, key, structx.NewTrie[T]())
-}
-
-// GetZset
-func GetZset[K, S base.Ordered, V any](s *store, key string) (*structx.ZSet[K, S, V], error) {
-	return getValue(s, key, structx.NewZSet[K, S, V]())
-}
-
-// GetBitMap
-func (s *store) GetBitMap(key string) (*structx.BitMap, error) {
-	return getValue(s, key, structx.NewBitMap())
-}
-
-// GetBloom
-func (s *store) GetBloom(key string) (*structx.Bloom, error) {
-	return getValue(s, key, structx.NewBloom())
-}
-
-// Get
-func Get[T any](s *store, key string, data T) (T, error) {
-	return getValue(s, key, data)
 }
 
 // reWrite shrink the database
@@ -528,7 +367,7 @@ func (s *storeShard) readLine(line []byte, status uint32) {
 		if status == STATUS_REWRITE {
 			return
 		}
-		s.Set(*base.B2S(line[1:i]), line[i+1:])
+		s.Set(*base.B2S(line[1:i]), Value{Raw: line[i+1:]})
 
 	// {SETEX}{key}|{ttl}|{value}
 	case OP_SETEX:
@@ -551,7 +390,7 @@ func (s *storeShard) readLine(line []byte, status uint32) {
 				return
 			}
 
-			s.SetTX(*base.B2S(line[1:sp1]), *base.B2S(line[sp2+1:]), ts)
+			s.SetTX(*base.B2S(line[1:sp1]), Value{Raw: line[sp2+1:]}, ts)
 		}
 
 	// {REMOVE}{key}
@@ -596,31 +435,35 @@ func (s *store) getShard(key string) *storeShard {
 	return s.shards[xxh3.HashString(key)&(s.ShardCount-1)]
 }
 
-// getValue
-func getValue[T any](db *store, key string, vptr T) (T, error) {
+// Get
+func (s *store) Get(key string) Value {
 	hash := xxh3.HashString(key)
+	sd := s.shards[xxh3.HashString(key)&(s.ShardCount-1)]
+	val, ok := sd.Cache.GetPos(hash)
 
-	sd := db.shards[hash&db.mask]
-	val, ok := sd.GetPos(hash)
-	if !ok {
-		return vptr, base.ErrKeyNotFound(key)
-	}
+	val.sd = sd
+	val.ok = ok
 
-	switch v := val.(type) {
-	case T:
-		return v, nil
+	return val
+}
 
-	case []byte:
-		if err := sd.Decode(v, vptr); err != nil {
+// getValue
+func getValue[T any](v Value, vptr T) (T, error) {
+	if v.Raw != nil {
+		if err := v.sd.Decode(v.Raw, &vptr); err != nil {
 			return vptr, err
 		}
-		sd.Set(key, vptr)
 
-	default:
-		return vptr, errUnSupportType
+		v.sd.Set(v.key, Value{Val: vptr})
+		return vptr, nil
 	}
 
-	return vptr, nil
+	if tmp, ok := v.Val.(T); ok {
+		return tmp, nil
+
+	} else {
+		return vptr, base.ErrUnSupportType
+	}
 }
 
 // encBytes
@@ -632,13 +475,6 @@ func (s *storeShard) encBytes(v ...byte) *storeShard {
 // encUint32
 func (s *storeShard) encUint32(v uint32) *storeShard {
 	s.buf = binary.AppendUvarint(s.buf, uint64(v))
-	return s
-}
-
-// encStringSlice
-func (s *storeShard) encStringSlice(v []string) *storeShard {
-	str := strings.Join(v, ",")
-	s.buf = append(s.buf, base.S2B(&str)...)
 	return s
 }
 

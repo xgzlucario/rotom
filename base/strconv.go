@@ -1,18 +1,7 @@
 package base
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
 	"unsafe"
-
-	"github.com/bytedance/sonic"
-	"github.com/klauspost/compress/zstd"
-)
-
-var (
-	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
-	decoder, _ = zstd.NewReader(nil)
 )
 
 // string and bytes convert unsafe
@@ -26,21 +15,4 @@ func S2B(str *string) []byte {
 
 func B2S(buf []byte) *string {
 	return (*string)(unsafe.Pointer(&buf))
-}
-
-// Zstd encoder and decoder
-func ZstdEncode(src []byte) []byte {
-	return encoder.EncodeAll(src, nil)
-}
-
-func ZstdDecode(src []byte) ([]byte, error) {
-	return decoder.DecodeAll(src, nil)
-}
-
-// JSON output
-func PrettyPrint(data any) {
-	src, _ := sonic.Marshal(data)
-	var str bytes.Buffer
-	json.Indent(&str, src, "", "	")
-	fmt.Println(str.String())
 }

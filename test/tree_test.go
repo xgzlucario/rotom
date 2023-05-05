@@ -108,22 +108,3 @@ func BenchmarkTrie(b *testing.B) {
 		}
 	})
 }
-
-func BenchmarkMMap(b *testing.B) {
-	m := structx.NewHMap()
-	b.Run("Set", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			m.HSet(struct{}{}, gofakeit.Animal(), gofakeit.Animal(), gofakeit.Animal())
-		}
-	})
-	b.Run("Get", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			m.HGet(gofakeit.Animal(), gofakeit.Animal(), gofakeit.Animal())
-		}
-	})
-	b.Run("Remove", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			m.HRemove(gofakeit.Animal(), gofakeit.Animal(), gofakeit.Animal())
-		}
-	})
-}

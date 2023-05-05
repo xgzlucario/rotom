@@ -31,8 +31,8 @@ func NewBitMap(nums ...uint32) *BitMap {
 func (bm *BitMap) Add(num uint32) bool {
 	word, bit := num>>log2BitSize, num%bitSize
 
-	for len(bm.words) <= int(word) {
-		bm.words = append(bm.words, uint64(0))
+	for bm.size() <= int(word) {
+		bm.words = append(bm.words, 0)
 	}
 
 	// not exist
@@ -48,7 +48,7 @@ func (bm *BitMap) Add(num uint32) bool {
 // Remove
 func (bm *BitMap) Remove(num uint32) bool {
 	word, bit := num>>log2BitSize, num%bitSize
-	if int(word) >= len(bm.words) {
+	if int(word) >= bm.size() {
 		return false
 	}
 
@@ -70,7 +70,7 @@ func (bm *BitMap) Equal(t *BitMap) bool {
 // Contains
 func (bm *BitMap) Contains(num uint32) bool {
 	word, bit := num/bitSize, num%bitSize
-	return int(word) < len(bm.words) && bm.words[word]&(1<<bit) != 0
+	return int(word) < bm.size() && bm.words[word]&(1<<bit) != 0
 }
 
 // Min
@@ -86,7 +86,7 @@ func (bm *BitMap) Min() int {
 
 // Max
 func (bm *BitMap) Max() int {
-	for i := len(bm.words) - 1; i >= 0; i-- {
+	for i := bm.size() - 1; i >= 0; i-- {
 		v := bm.words[i]
 		if v == 0 {
 			continue
@@ -103,8 +103,8 @@ func (bm *BitMap) Max() int {
 // Or
 func (bm *BitMap) Or(t *BitMap) *BitMap {
 	bm.len = 0
-	for t.Cap() > bm.Cap() {
-		bm.words = append(bm.words, uint64(0))
+	for t.size() > bm.size() {
+		bm.words = append(bm.words, 0)
 	}
 
 	for i, v := range t.words {
@@ -120,7 +120,7 @@ func (bm *BitMap) And(t *BitMap) *BitMap {
 	bm.len = 0
 
 	for i, v := range t.words {
-		if i >= bm.Cap() {
+		if i >= bm.size() {
 			break
 		}
 		bm.words[i] &= v
@@ -133,8 +133,8 @@ func (bm *BitMap) And(t *BitMap) *BitMap {
 // Xor
 func (bm *BitMap) Xor(t *BitMap) *BitMap {
 	bm.len = 0
-	for t.Cap() > bm.Cap() {
-		bm.words = append(bm.words, uint64(0))
+	for t.size() > bm.size() {
+		bm.words = append(bm.words, 0)
 	}
 
 	for i, v := range t.words {
@@ -150,9 +150,9 @@ func (bm *BitMap) Len() int {
 	return bm.len
 }
 
-// Cap
-func (bm *BitMap) Cap() int {
-	return cap(bm.words)
+// size
+func (bm *BitMap) size() int {
+	return len(bm.words)
 }
 
 // Copy
@@ -179,7 +179,7 @@ func (bm *BitMap) Range(f func(uint32) bool) {
 
 // RevRange
 func (bm *BitMap) RevRange(f func(uint32) bool) {
-	for i := len(bm.words) - 1; i >= 0; i-- {
+	for i := bm.size() - 1; i >= 0; i-- {
 		v := bm.words[i]
 		if v == 0 {
 			continue
@@ -197,7 +197,7 @@ func (bm *BitMap) RevRange(f func(uint32) bool) {
 
 // MarshalBinary
 func (bm *BitMap) MarshalBinary() ([]byte, error) {
-	buf := make([]byte, 0, len(bm.words)*bitSize)
+	buf := make([]byte, 0, bm.size()*bitSize)
 
 	buf = binary.BigEndian.AppendUint64(buf, uint64(bm.len))
 	for _, v := range bm.words {
