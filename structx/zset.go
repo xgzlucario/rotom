@@ -36,17 +36,6 @@ func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
 	return item.V, item.S, ok
 }
 
-// GetPos
-func (z *ZSet[K, S, V]) GetPos(pos uint64) (V, S, bool) {
-	_, item, ok := z.data.GetPos(pos)
-	if !ok {
-		var v V
-		var s S
-		return v, s, false
-	}
-	return item.V, item.S, ok
-}
-
 // Set upsert value by key
 func (z *ZSet[K, S, V]) Set(key K, value V) {
 	item, ok := z.data.Get(key)

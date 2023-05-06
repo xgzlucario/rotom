@@ -14,12 +14,7 @@ import (
 	"github.com/xgzlucario/rotom/store"
 )
 
-var db = store.CreateDB(&store.Config{
-	DBDirPath:       "db",
-	ShardCount:      32,
-	FlushDuration:   time.Second,
-	RewriteDuration: time.Second * 10,
-})
+var db = store.CreateDB(store.DefaultConfig)
 
 func testStress() {
 	fmt.Println("===== start test Stress =====")
@@ -65,13 +60,16 @@ func getDBFileSize() int64 {
 func main() {
 	time.Sleep(time.Second)
 
-	testStress()
-
 	fmt.Println(db.Get("xgz").ToInt())
+	fmt.Println(db.Get("now_time").ToTime())
 
 	db.Set("xgz", 123)
+	db.Set("now_time", time.Now())
 
 	fmt.Println(db.Get("xgz").ToInt())
+	fmt.Println(db.Get("now_time").ToTime())
+
+	testStress()
 
 	db.Flush()
 

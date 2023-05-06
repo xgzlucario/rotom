@@ -49,6 +49,13 @@ var (
 	globalTime = time.Now().UnixNano()
 
 	lineSpr = []byte{C_SPR, C_SPR, C_END}
+
+	DefaultConfig = &Config{
+		DBDirPath:       "db",
+		ShardCount:      32,
+		FlushDuration:   time.Second,
+		RewriteDuration: time.Second * 30,
+	}
 )
 
 type store struct {
@@ -116,7 +123,7 @@ func CreateDB(conf *Config) *store {
 			rwbuf:  base.NewCoder(nil),
 			path:   path.Join(db.DBDirPath, "dat"+strconv.Itoa(i)),
 			rwPath: path.Join(db.DBDirPath, "rw"+strconv.Itoa(i)),
-			Cache:  structx.NewUnsafeCache[any](),
+			Cache:  structx.NewCache[any](),
 		}
 	}
 
@@ -390,10 +397,8 @@ func (s *store) getShard(key string) *storeShard {
 
 // Get
 func (s *store) Get(key string) Value {
-	hash := xxh3.HashString(key)
-	sd := s.shards[hash&(s.ShardCount-1)]
-
-	val, ok := sd.Cache.GetPos(hash)
+	sd := s.getShard(key)
+	val, ok := sd.Cache.Get(key)
 	if !ok {
 		return Value{}
 	}
@@ -419,6 +424,9 @@ func getValue[T any](v Value, vptr T) (T, error) {
 
 	if tmp, ok := v.val.(T); ok {
 		return tmp, nil
+
+	} else if v.key == "" {
+		return vptr, base.ErrKeyNotFound
 
 	} else {
 		return vptr, base.ErrWrongType
