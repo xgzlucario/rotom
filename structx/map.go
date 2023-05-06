@@ -15,6 +15,11 @@ func NewMap[K comparable, V any]() Map[K, V] {
 	return Map[K, V]{&hashmap.Map[K, V]{}}
 }
 
+// NewMapWithCap
+func NewMapWithCap[K comparable, V any](cap int) Map[K, V] {
+	return Map[K, V]{hashmap.New[K, V](cap)}
+}
+
 func (m Map[K, V]) MarshalJSON() ([]byte, error) {
 	return sonic.Marshal(m)
 }

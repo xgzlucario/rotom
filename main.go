@@ -3,9 +3,12 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"strconv"
 	"time"
+
+	_ "net/http/pprof"
 
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/shirou/gopsutil/cpu"
@@ -58,11 +61,13 @@ func getDBFileSize() int64 {
 }
 
 func main() {
+	go http.ListenAndServe("localhost:6060", nil)
+
 	time.Sleep(time.Second)
 
-	// 插入一百万条数据
+	// 插入五百万条数据
 	start := time.Now()
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < 500*10000; i++ {
 		db.Set(gofakeit.Phone(), i)
 	}
 
@@ -77,6 +82,8 @@ func main() {
 
 	// fmt.Println(db.Get("xgz").ToInt())
 	// fmt.Println(db.Get("now_time").ToTime())
+
+	// testStress()
 
 	RedisTest()
 

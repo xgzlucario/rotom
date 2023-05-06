@@ -23,10 +23,10 @@ func RedisTest() {
 		log.Fatalf("连接 Redis 失败: %v", err)
 	}
 
-	// 插入一百万条数据
+	// 插入五百万条数据
 	start := time.Now()
 	pipe := client.Pipeline()
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < 500*10000; i++ {
 		pipe.Set(ctx, gofakeit.Phone(), i, 0)
 	}
 
@@ -36,5 +36,5 @@ func RedisTest() {
 	}
 
 	elapsed := time.Since(start)
-	fmt.Printf("Redis 批量插入一百万条数据耗时: %s\n", elapsed)
+	fmt.Printf("Redis 批量插入五百万条数据耗时: %s\n", elapsed)
 }

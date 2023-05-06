@@ -1,8 +1,7 @@
-build:
+build-run:
 	go build -ldflags="-s -w" -o rotom
+	rm -rf db/
+	./rotom
 
-upx-build:
-	go build -ldflags="-s -w" -o rotom && upx -9 rotom
-
-testa:
-	rm -rf db && go run *.go
+pprof:
+	go tool pprof -http=:8081 "http://localhost:6060/debug/pprof/profile?seconds=60"

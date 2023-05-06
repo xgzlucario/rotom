@@ -11,5 +11,5 @@ type Bloom struct {
 
 // NewBloom
 func NewBloom() *Bloom {
-	return &Bloom{bloom.NewWithEstimates(1000000, 0.01)}
+	return &Bloom{bloom.NewWithEstimates(100*10000, 0.01)}
 }

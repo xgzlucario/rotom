@@ -89,7 +89,7 @@ type storeShard struct {
 	*structx.Cache[any]
 
 	// filter
-	filter *structx.Bloom
+	filter structx.Map[uint64, struct{}]
 
 	sync.RWMutex
 	rwlock sync.Mutex
@@ -274,12 +274,12 @@ func (s *storeShard) reWrite(initial ...bool) {
 		return
 	}
 
-	// init filter
-	s.filter = structx.NewBloom()
-
 	// read line from tail
 	lines := bytes.Split(data, []byte{C_SPR, C_END})
 	init := len(initial) > 0 && initial[0]
+
+	// init filter
+	s.filter = structx.NewMapWithCap[uint64, struct{}](len(lines))
 
 	for i := len(lines) - 1; i >= 0; i-- {
 		s.readLine(lines[i], init)
@@ -371,10 +371,11 @@ func (s *storeShard) readLine(line []byte, init bool) {
 
 // testAdd
 func (s *storeShard) testAdd(line []byte) bool {
-	if s.filter.Test(line) {
+	hash := xxh3.Hash(line)
+	if _, ok := s.filter.Get(hash); ok {
 		return false
 	}
-	s.filter.Add(line)
+	s.filter.Set(hash, struct{}{})
 	return true
 }
 
