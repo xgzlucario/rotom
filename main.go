@@ -60,16 +60,25 @@ func getDBFileSize() int64 {
 func main() {
 	time.Sleep(time.Second)
 
-	fmt.Println(db.Get("xgz").ToInt())
-	fmt.Println(db.Get("now_time").ToTime())
+	// 插入一百万条数据
+	start := time.Now()
+	for i := 0; i < 100*10000; i++ {
+		db.Set(gofakeit.Phone(), i)
+	}
 
-	db.Set("xgz", 123)
-	db.Set("now_time", time.Now())
+	elapsed := time.Since(start)
+	fmt.Printf("Rotom 批量插入一百万数据耗时: %s\n", elapsed)
 
-	fmt.Println(db.Get("xgz").ToInt())
-	fmt.Println(db.Get("now_time").ToTime())
+	// fmt.Println(db.Get("xgz").ToInt())
+	// fmt.Println(db.Get("now_time").ToTime())
 
-	testStress()
+	// db.Set("xgz", 123)
+	// db.Set("now_time", time.Now())
+
+	// fmt.Println(db.Get("xgz").ToInt())
+	// fmt.Println(db.Get("now_time").ToTime())
+
+	RedisTest()
 
 	db.Flush()
 

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strconv"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v6"
 	"github.com/go-redis/redis/v8"
 )
 
@@ -23,13 +23,11 @@ func RedisTest() {
 		log.Fatalf("连接 Redis 失败: %v", err)
 	}
 
-	// 插入 1 万条数据
+	// 插入一百万条数据
 	start := time.Now()
 	pipe := client.Pipeline()
-	for i := 0; i < 10000; i++ {
-		key := "key" + strconv.Itoa(i)
-		value := "value" + strconv.Itoa(i)
-		pipe.Set(ctx, key, value, 0)
+	for i := 0; i < 100*10000; i++ {
+		pipe.Set(ctx, gofakeit.Phone(), i, 0)
 	}
 
 	_, err = pipe.Exec(ctx)
@@ -38,5 +36,5 @@ func RedisTest() {
 	}
 
 	elapsed := time.Since(start)
-	fmt.Printf("使用管道批量插入 1 万条数据耗时: %s\n", elapsed)
+	fmt.Printf("Redis 批量插入一百万条数据耗时: %s\n", elapsed)
 }
