@@ -1,6 +1,10 @@
 package store
 
-import "time"
+import (
+	"time"
+
+	"github.com/xgzlucario/rotom/base"
+)
 
 // value
 type Value struct {
@@ -31,4 +35,26 @@ func (v Value) ToTime() (r time.Time, e error) { return getValue(v, r) }
 func (v Value) Scan(val any) error {
 	_, err := getValue(v, val)
 	return err
+}
+
+// getValue
+func getValue[T any](v Value, vptr T) (T, error) {
+	if v.raw != nil {
+		if err := v.sd.Decode(v.raw, &vptr); err != nil {
+			return vptr, err
+		}
+
+		v.sd.Set(v.key, vptr)
+		return vptr, nil
+	}
+
+	if tmp, ok := v.val.(T); ok {
+		return tmp, nil
+
+	} else if v.key == "" {
+		return vptr, base.ErrKeyNotFound
+
+	} else {
+		return vptr, base.ErrWrongType
+	}
 }
