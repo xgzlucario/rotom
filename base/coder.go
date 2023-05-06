@@ -3,7 +3,6 @@ package base
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"reflect"
@@ -163,26 +162,31 @@ func (s *Coder) Decode(src []byte, vptr interface{}) error {
 	return nil
 }
 
-// Flush
-func (s *Coder) Flush(writer io.Writer) (int, error) {
+// FlushFile
+func (s *Coder) FlushFile(path string) (int, error) {
 	if len(s.buf) == 0 {
 		return 0, nil
 	}
 
-	defer func() {
-		s.buf = s.buf[0:0]
-	}()
-
-	return writer.Write(s.buf)
-}
-
-// FlushToFile
-func (s *Coder) FlushToFile(path string) (int, error) {
 	fs, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		return 0, err
 	}
 	defer fs.Close()
 
-	return s.Flush(fs)
+	// write
+	n, err := fs.Write(s.buf)
+	if err != nil {
+		return 0, err
+	}
+
+	// reset
+	s.buf = s.buf[0:0]
+
+	return n, nil
+}
+
+// ZstdEncode
+func (s *Coder) ZstdEncode() {
+	s.buf = encoder.EncodeAll(s.buf, nil)
 }

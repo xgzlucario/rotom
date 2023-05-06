@@ -22,6 +22,10 @@ func (v Value) ToFloat64() (r float64, e error) { return getValue(v, r) }
 
 func (v Value) ToString() (r string, e error) { return getValue(v, r) }
 
+func (v Value) ToIntSlice() (r []int, e error) { return getValue(v, r) }
+
+func (v Value) ToStringSlice() (r []string, e error) { return getValue(v, r) }
+
 func (v Value) ToTime() (r time.Time, e error) { return getValue(v, r) }
 
 func (v Value) Scan(val any) error {

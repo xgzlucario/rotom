@@ -54,7 +54,7 @@ var (
 		DBDirPath:       "db",
 		ShardCount:      32,
 		FlushDuration:   time.Second,
-		RewriteDuration: time.Second * 30,
+		RewriteDuration: time.Second * 10,
 	}
 )
 
@@ -146,10 +146,10 @@ func CreateDB(conf *Config) *store {
 				time.Sleep(db.FlushDuration)
 				switch sd.getStatus() {
 				case STATUS_NORMAL:
-					sd.FlushToFile(sd.path)
+					sd.FlushFile(sd.path)
 
 				case STATUS_REWRITE:
-					sd.rwbuf.FlushToFile(sd.rwPath)
+					sd.rwbuf.FlushFile(sd.rwPath)
 				}
 			}
 		}()
@@ -158,7 +158,7 @@ func CreateDB(conf *Config) *store {
 			for {
 				time.Sleep(db.RewriteDuration)
 				pool.Go(func() {
-					sd.FlushToFile(sd.path)
+					sd.FlushFile(sd.path)
 					sd.setStatus(STATUS_REWRITE)
 					sd.reWrite()
 				})
@@ -232,7 +232,7 @@ func (s *store) Persist(key string) bool {
 // Flush writes all the buf data to disk
 func (s *store) Flush() error {
 	for _, sd := range s.shards {
-		if _, err := sd.FlushToFile(sd.path); err != nil {
+		if _, err := sd.FlushFile(sd.path); err != nil {
 			return err
 		}
 	}
@@ -291,8 +291,8 @@ func (s *storeShard) reWrite() {
 	s.Lock()
 	defer s.Unlock()
 
-	s.FlushToFile(s.rwPath)
-	s.rwbuf.FlushToFile(s.rwPath)
+	s.FlushFile(s.rwPath)
+	s.rwbuf.FlushFile(s.rwPath)
 
 	// rename rwFile to storeFile
 	if err := os.Rename(s.rwPath, s.path); err != nil {
