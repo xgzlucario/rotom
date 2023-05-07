@@ -245,15 +245,6 @@ func (s *store) Count() (sum int) {
 	return sum
 }
 
-// WithExpired
-func (s *store) WithExpired(f func(string, any, int64)) *store {
-	for _, s := range s.shards {
-		s.WithExpired(f)
-	}
-
-	return s
-}
-
 // Keys
 func (s *store) Keys() []string {
 	arr := make([]string, 0, s.Count())

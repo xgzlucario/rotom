@@ -1,13 +1,17 @@
 package structx
 
 import (
+	"math"
 	"sync"
 	"time"
 )
 
 const (
-	// NoTTL
-	NoTTL = 0
+	noTTL = math.MaxInt64
+
+	probeCount = 100
+
+	probeSpace = 3
 )
 
 var (
@@ -24,9 +28,6 @@ type Cache[V any] struct {
 	// current timestamp
 	ts int64
 
-	// call when key-value expired
-	onExpired func(string, V, int64)
-
 	// data based on Map
 	data Map[string, *cacheItem[V]]
 
@@ -39,8 +40,7 @@ func NewCache[V any]() *Cache[V] {
 		ts:   time.Now().UnixNano(),
 		data: NewMap[string, *cacheItem[V]](),
 	}
-	go cache.eviction()
-
+	go cache.eliminate()
 	return cache
 }
 
@@ -50,7 +50,7 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 	defer c.mu.RUnlock()
 
 	n, ok := c.data.Get(key)
-	if ok && (n.T == NoTTL || n.T > c.ts) {
+	if ok && n.T > c.ts {
 		return n.V, true
 	}
 	return
@@ -62,34 +62,34 @@ func (c *Cache[V]) GetEX(key string) (v V, ttl int64, ok bool) {
 	defer c.mu.RUnlock()
 
 	n, ok := c.data.Get(key)
-	if ok && (n.T == NoTTL || n.T > c.ts) {
+	if ok && n.T > c.ts {
 		return n.V, n.T, true
 	}
 	return
 }
 
 // Set
-func (c *Cache[V]) Set(key string, value V) {
+func (c *Cache[V]) Set(key string, val V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data.Set(key, &cacheItem[V]{V: value})
+	c.data.Set(key, &cacheItem[V]{T: noTTL, V: val})
 }
 
 // SetEX
-func (c *Cache[V]) SetEX(key string, value V, ttl time.Duration) {
+func (c *Cache[V]) SetEX(key string, val V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data.Set(key, &cacheItem[V]{T: c.ts + int64(ttl), V: value})
+	c.data.Set(key, &cacheItem[V]{T: c.ts + int64(ttl), V: val})
 }
 
 // SetTX
-func (c *Cache[V]) SetTX(key string, value V, ts int64) {
+func (c *Cache[V]) SetTX(key string, val V, ts int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data.Set(key, &cacheItem[V]{T: ts, V: value})
+	c.data.Set(key, &cacheItem[V]{T: ts, V: val})
 }
 
 // Persist
@@ -99,7 +99,7 @@ func (c *Cache[V]) Persist(key string) bool {
 
 	n, ok := c.data.Get(key)
 	if ok {
-		n.T = NoTTL
+		n.T = noTTL
 	}
 	return ok
 }
@@ -110,14 +110,6 @@ func (c *Cache[V]) Keys() []string {
 	defer c.mu.RUnlock()
 
 	return nil
-}
-
-// WithExpired
-func (c *Cache[V]) WithExpired(f func(string, V, int64)) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.onExpired = f
 }
 
 // Remove
@@ -145,34 +137,50 @@ func (c *Cache[V]) Count() int {
 	return c.data.Len()
 }
 
-// Scheduled update current timestamp and clear expired keys
-func (c *Cache[V]) eviction() {
+// eval for DEBUG
+func (c *Cache[V]) eval() (start time.Time, expired, total int) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	start = time.Now()
+
+	c.data.Scan(func(_ string, value *cacheItem[V]) bool {
+		if value.T < c.ts {
+			expired++
+		}
+		return true
+	})
+
+	return start, expired, c.data.Len()
+}
+
+// eliminate the expired key-value pairs.
+// This elimination strategy has been tested to keep the elimination rate below 15%.
+func (c *Cache[V]) eliminate() {
 	for c != nil {
 		time.Sleep(TickDuration)
+		// start := time.Now()
 
 		c.mu.Lock()
 
 		// reset
 		c.ts = time.Now().UnixNano()
-		count := uint64(0)
+		offset := uint64(0)
 
-		for flag := 0; flag < 30; flag++ {
-			count++
-			k, v, ok := c.data.GetPos(uint64(c.ts) + count)
-			if ok {
-				if v.T > c.ts || v.T == NoTTL {
-					continue
-				}
-
-				// expired
-				flag = 0
+		for i := 0; i < probeCount; i++ {
+			offset += probeSpace
+			k, v, ok := c.data.GetPos(uint64(c.ts) + offset)
+			// expired
+			if ok && v.T < c.ts {
+				i = 0
 				c.data.Delete(k)
-				if c.onExpired != nil {
-					c.onExpired(k, v.V, v.T)
-				}
 			}
 		}
 		c.mu.Unlock()
+
+		// end, a, b := c.eval()
+		// eval: {expiredCount} / {totalCount} -> {expiredRate} cost: {time}
+		// fmt.Printf("eval: %d / %d -> %.2f%% cost: %v\n", a, b, float64(a)/float64(b)*100, end.Sub(start))
 	}
 }
 

@@ -23,7 +23,6 @@ func testStress() {
 	fmt.Println("===== start test Stress =====")
 
 	a := time.Now()
-	db.WithExpired(nil)
 
 	// monitor
 	var count int64
