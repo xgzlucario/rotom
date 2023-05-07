@@ -65,14 +65,11 @@ func main() {
 
 	time.Sleep(time.Second)
 
-	// 插入五百万条数据
 	start := time.Now()
-	for i := 0; i < 500*10000; i++ {
+	for i := 0; i < 100*10000; i++ {
 		db.Set(gofakeit.Phone(), i)
 	}
-
-	elapsed := time.Since(start)
-	fmt.Printf("Rotom 批量插入一百万数据耗时: %s\n", elapsed)
+	fmt.Printf("Rotom 批量插入一百万数据耗时: %s\n", time.Since(start))
 
 	// fmt.Println(db.Get("xgz").ToInt())
 	// fmt.Println(db.Get("now_time").ToTime())

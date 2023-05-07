@@ -63,10 +63,6 @@ func (z *ZSet[K, S, V]) SetScore(key K, score S) {
 
 // update score of key
 func (z *ZSet[K, S, V]) updateScore(node *zsNode[S, V], key K, score S) {
-	// score no change
-	if node.S == score {
-		return
-	}
 	z.tree.Delete(node.S)
 	node.S = score
 	z.tree.Insert(score, key)
@@ -101,9 +97,8 @@ func (z *ZSet[K, S, V]) Incr(key K, score S) S {
 
 // Delete
 func (z *ZSet[K, S, V]) Delete(key K) (v V, ok bool) {
-	item, ok := z.data.Get(key)
+	item, ok := z.data.Delete(key)
 	if ok {
-		z.data.Delete(key)
 		z.tree.Delete(item.S)
 		return item.V, ok
 	}

@@ -12,21 +12,23 @@ const (
 
 var (
 	// duration of update timestamp and expired keys evictions
-	TickDuration = time.Second / 10
+	TickDuration = time.Millisecond * 10
 )
+
+type cacheItem[V any] struct {
+	T int64
+	V V
+}
 
 type Cache[V any] struct {
 	// current timestamp
 	ts int64
 
-	// pairs count in duration
-	count int64
-
 	// call when key-value expired
 	onExpired func(string, V, int64)
 
-	// data based on ZSet
-	data *ZSet[string, int64, V]
+	// data based on Map
+	data Map[string, *cacheItem[V]]
 
 	mu sync.RWMutex
 }
@@ -35,7 +37,7 @@ type Cache[V any] struct {
 func NewCache[V any]() *Cache[V] {
 	cache := &Cache[V]{
 		ts:   time.Now().UnixNano(),
-		data: NewZSet[string, int64, V](),
+		data: NewMap[string, *cacheItem[V]](),
 	}
 	go cache.eviction()
 
@@ -47,9 +49,9 @@ func (c *Cache[V]) Get(key string) (val V, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	v, ttl, ok := c.data.Get(key)
-	if ok && (ttl == NoTTL || ttl > c.ts) {
-		return v, true
+	n, ok := c.data.Get(key)
+	if ok && (n.T == NoTTL || n.T > c.ts) {
+		return n.V, true
 	}
 	return
 }
@@ -59,9 +61,9 @@ func (c *Cache[V]) GetEX(key string) (v V, ttl int64, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	v, ttl, ok = c.data.Get(key)
-	if ok && (ttl == NoTTL || ttl > c.ts) {
-		return v, ttl, true
+	n, ok := c.data.Get(key)
+	if ok && (n.T == NoTTL || n.T > c.ts) {
+		return n.V, n.T, true
 	}
 	return
 }
@@ -71,7 +73,7 @@ func (c *Cache[V]) Set(key string, value V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data.Set(key, value)
+	c.data.Set(key, &cacheItem[V]{V: value})
 }
 
 // SetEX
@@ -79,8 +81,7 @@ func (c *Cache[V]) SetEX(key string, value V, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.count++
-	c.data.SetWithScore(key, c.ts+int64(ttl)+c.count, value)
+	c.data.Set(key, &cacheItem[V]{T: c.ts + int64(ttl), V: value})
 }
 
 // SetTX
@@ -88,8 +89,7 @@ func (c *Cache[V]) SetTX(key string, value V, ts int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.count++
-	c.data.SetWithScore(key, ts+c.count, value)
+	c.data.Set(key, &cacheItem[V]{T: ts, V: value})
 }
 
 // Persist
@@ -97,9 +97,9 @@ func (c *Cache[V]) Persist(key string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	item, ok := c.data.data.Get(key)
+	n, ok := c.data.Get(key)
 	if ok {
-		c.data.updateScore(item, key, NoTTL)
+		n.T = NoTTL
 	}
 	return ok
 }
@@ -109,7 +109,7 @@ func (c *Cache[V]) Keys() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.data.data.Keys()
+	return nil
 }
 
 // WithExpired
@@ -125,7 +125,8 @@ func (c *Cache[V]) Remove(key string) (V, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.data.Delete(key)
+	n, ok := c.data.Delete(key)
+	return n.V, ok
 }
 
 // Clear
@@ -133,7 +134,7 @@ func (c *Cache[V]) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data = NewZSet[string, int64, V]()
+	c.data = NewMap[string, *cacheItem[V]]()
 }
 
 // Count
@@ -141,7 +142,7 @@ func (c *Cache[V]) Count() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.data.Size()
+	return c.data.Len()
 }
 
 // Scheduled update current timestamp and clear expired keys
@@ -153,23 +154,21 @@ func (c *Cache[V]) eviction() {
 
 		// reset
 		c.ts = time.Now().UnixNano()
-		c.count = 0
+		count := uint64(0)
 
-		// clear expired keys
-		if c.data.Size() > 0 {
-			for f := c.data.Iter(); f.Valid(); f.Next() {
-				if f.Score() == NoTTL {
+		for flag := 0; flag < 30; flag++ {
+			count++
+			k, v, ok := c.data.GetPos(uint64(c.ts) + count)
+			if ok {
+				if v.T > c.ts || v.T == NoTTL {
 					continue
 				}
-				if f.Score() > c.ts {
-					break
-				}
 
-				v, ok := c.data.Delete(f.Key())
-				if ok {
-					if c.onExpired != nil {
-						c.onExpired(f.Key(), v, f.Score())
-					}
+				// expired
+				flag = 0
+				c.data.Delete(k)
+				if c.onExpired != nil {
+					c.onExpired(k, v.V, v.T)
 				}
 			}
 		}
