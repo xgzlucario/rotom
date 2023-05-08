@@ -4,6 +4,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/bytedance/sonic"
 )
 
 const (
@@ -12,8 +14,8 @@ const (
 
 	// probe config with elimination strategy
 	probeCount = 100
-	probeLimit = 10000
 	probeSpace = 3
+	expRate    = 0.2
 )
 
 var (
@@ -38,16 +40,16 @@ type cacheItem[V any] struct {
 
 // NewCache
 func NewCache[V any]() *Cache[V] {
-	return NewCustomCache[V](probeCount, probeLimit, probeSpace)
+	return NewCustomCache[V](expRate)
 }
 
 // NewCustomCache
-func NewCustomCache[V any](pbCount int, pbLimit, pbSpace uint64) *Cache[V] {
+func NewCustomCache[V any](expRate float64) *Cache[V] {
 	c := &Cache[V]{
 		ts:   time.Now().UnixNano(),
 		data: NewMap[string, *cacheItem[V]](),
 	}
-	go c.eliminate(pbCount, pbLimit, pbSpace)
+	go c.eliminate(expRate)
 	return c
 }
 
@@ -77,18 +79,12 @@ func (c *Cache[V]) GetEX(key string) (v V, ttl int64, ok bool) {
 
 // Set
 func (c *Cache[V]) Set(key string, val V) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.data.Set(key, &cacheItem[V]{T: noTTL, V: val})
+	c.SetTX(key, val, noTTL)
 }
 
 // SetEX
 func (c *Cache[V]) SetEX(key string, val V, ttl time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.data.Set(key, &cacheItem[V]{T: c.ts + int64(ttl), V: val})
+	c.SetTX(key, val, c.ts+int64(ttl))
 }
 
 // SetTX
@@ -152,44 +148,81 @@ func (c *Cache[V]) Count() int {
 }
 
 // eliminate the expired key-value pairs.
-// This elimination strategy can to keep the elimination rate blow 10%.
-func (c *Cache[V]) eliminate(pbCount int, pbLimit, pbSpace uint64) {
+func (c *Cache[V]) eliminate(expRate float64) {
 	for c != nil {
 		time.Sleep(TickInterval)
-
 		c.mu.Lock()
-		// reset
-		c.ts = time.Now().UnixNano()
-		offset := uint64(0)
 
-		// probe and eliminate
-		for i := 0; i < pbCount; i++ {
-			offset += pbSpace
-			if offset/3 >= pbLimit {
-				break
+		// update ts
+		start := time.Now()
+		c.ts = start.UnixNano()
+
+		for {
+			// eliminate eval
+			var pb, elimi float64
+
+			for i := 0; i < probeCount; i++ {
+				k, v, ok := c.data.GetPos(uint64(c.ts) + uint64(i*probeSpace))
+				// expired
+				if ok && v.T < c.ts {
+					elimi++
+					c.data.Delete(k)
+				}
+				pb++
 			}
 
-			k, v, ok := c.data.GetPos(uint64(c.ts) + offset)
-			// expired
-			if ok && v.T < c.ts {
-				i = 0
-				c.data.Delete(k)
+			// update ts
+			ts := time.Now()
+			c.ts = ts.UnixNano()
+
+			// break if cost over 25ms or blow expRate
+			if ts.Sub(start).Milliseconds() >= 25 || elimi/pb <= expRate {
+				break
 			}
 		}
 		c.mu.Unlock()
 	}
 }
 
+type mapJSON[V any] struct {
+	K []string
+	V []*cacheItem[V]
+}
+
+// MarshalJSON
 func (c *Cache[V]) MarshalJSON() ([]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	return c.data.MarshalJSON()
+	tmp := mapJSON[V]{
+		K: make([]string, 0, c.data.Len()),
+		V: make([]*cacheItem[V], 0, c.data.Len()),
+	}
+	c.data.Scan(func(k string, v *cacheItem[V]) bool {
+		if v.T > c.ts {
+			tmp.K = append(tmp.K, k)
+			tmp.V = append(tmp.V, v)
+		}
+		return true
+	})
+
+	return sonic.Marshal(tmp)
 }
 
+// UnmarshalJSON
 func (c *Cache[V]) UnmarshalJSON(src []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	return c.data.UnmarshalJSON(src)
+	var tmp mapJSON[V]
+	if err := sonic.Unmarshal(src, &tmp); err != nil {
+		return err
+	}
+
+	c.data = NewMap[string, *cacheItem[V]]()
+	for i, k := range tmp.K {
+		c.data.Set(k, tmp.V[i])
+	}
+
+	return nil
 }
