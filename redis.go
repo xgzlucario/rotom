@@ -25,7 +25,7 @@ func RedisTest() {
 
 	start := time.Now()
 	pipe := client.Pipeline()
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < 200*10000; i++ {
 		pipe.Set(ctx, gofakeit.Phone(), i, 0)
 	}
 

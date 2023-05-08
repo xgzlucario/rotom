@@ -20,6 +20,7 @@ const (
 	OP_SETEX
 	OP_REMOVE
 	OP_PERSIST
+	OP_INCR
 
 	// TODO
 	OP_HGET
@@ -40,16 +41,15 @@ const (
 )
 
 const (
-	C_SPR = byte(0x00)
-	C_END = byte(0xff)
-
+	C_SPR     = byte(0x00)
+	C_VALID   = byte(0x01)
 	timeCarry = 1000 * 1000 * 1000
 )
 
 var (
 	globalTime = time.Now().UnixNano()
 
-	lineSpr = []byte{C_SPR, C_SPR, C_END}
+	lineSpr = []byte{C_VALID, C_SPR, C_SPR, '\n'}
 
 	DefaultConfig = &Config{
 		DBDirPath:       "db",
@@ -266,7 +266,7 @@ func (s *storeShard) reWrite(initial ...bool) {
 	}
 
 	// read line from tail
-	lines := bytes.Split(data, []byte{C_SPR, C_END})
+	lines := bytes.Split(data, lineSpr[1:])
 	init := len(initial) > 0 && initial[0]
 
 	// init filter
@@ -291,11 +291,9 @@ func (s *storeShard) reWrite(initial ...bool) {
 
 // readLine
 func (s *storeShard) readLine(line []byte, init bool) {
-	// line validate
 	n := len(line)
-	if n == 0 || line[n-1] != C_SPR {
+	if n == 0 || line[n-1] != lineSpr[0] {
 		return
-
 	}
 	line = line[:n-1]
 

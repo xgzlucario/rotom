@@ -7,41 +7,48 @@ import (
 )
 
 const (
+	// noTTL means the expiration time is infinite
 	noTTL = math.MaxInt64
 
+	// probe config with elimination strategy
 	probeCount = 100
-
+	probeLimit = 10000
 	probeSpace = 3
 )
 
 var (
-	// duration of update timestamp and expired keys evictions
-	TickDuration = time.Millisecond * 10
+	// Interval of eliminate expired items and update timestamp
+	TickInterval = time.Millisecond * 10
 )
+
+type Cache[V any] struct {
+	// current timestamp
+	ts int64
+
+	// based on Hashmap
+	data Map[string, *cacheItem[V]]
+
+	mu sync.RWMutex
+}
 
 type cacheItem[V any] struct {
 	T int64
 	V V
 }
 
-type Cache[V any] struct {
-	// current timestamp
-	ts int64
-
-	// data based on Map
-	data Map[string, *cacheItem[V]]
-
-	mu sync.RWMutex
-}
-
 // NewCache
 func NewCache[V any]() *Cache[V] {
-	cache := &Cache[V]{
+	return NewCustomCache[V](probeCount, probeLimit, probeSpace)
+}
+
+// NewCustomCache
+func NewCustomCache[V any](pbCount int, pbLimit, pbSpace uint64) *Cache[V] {
+	c := &Cache[V]{
 		ts:   time.Now().UnixNano(),
 		data: NewMap[string, *cacheItem[V]](),
 	}
-	go cache.eliminate()
-	return cache
+	go c.eliminate(pbCount, pbLimit, pbSpace)
+	return c
 }
 
 // Get
@@ -109,6 +116,13 @@ func (c *Cache[V]) Keys() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	keys := make([]string, 0, c.data.Len())
+	c.data.Scan(func(k string, v *cacheItem[V]) bool {
+		if v.T > c.ts {
+			keys = append(keys, k)
+		}
+		return true
+	})
 	return nil
 }
 
@@ -137,38 +151,24 @@ func (c *Cache[V]) Count() int {
 	return c.data.Len()
 }
 
-// eval for DEBUG
-func (c *Cache[V]) eval() (start time.Time, expired, total int) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	start = time.Now()
-
-	c.data.Scan(func(_ string, value *cacheItem[V]) bool {
-		if value.T < c.ts {
-			expired++
-		}
-		return true
-	})
-
-	return start, expired, c.data.Len()
-}
-
 // eliminate the expired key-value pairs.
-// This elimination strategy has been tested to keep the elimination rate below 15%.
-func (c *Cache[V]) eliminate() {
+// This elimination strategy can to keep the elimination rate blow 10%.
+func (c *Cache[V]) eliminate(pbCount int, pbLimit, pbSpace uint64) {
 	for c != nil {
-		time.Sleep(TickDuration)
-		// start := time.Now()
+		time.Sleep(TickInterval)
 
 		c.mu.Lock()
-
 		// reset
 		c.ts = time.Now().UnixNano()
 		offset := uint64(0)
 
-		for i := 0; i < probeCount; i++ {
-			offset += probeSpace
+		// probe and eliminate
+		for i := 0; i < pbCount; i++ {
+			offset += pbSpace
+			if offset/3 >= pbLimit {
+				break
+			}
+
 			k, v, ok := c.data.GetPos(uint64(c.ts) + offset)
 			// expired
 			if ok && v.T < c.ts {
@@ -177,10 +177,6 @@ func (c *Cache[V]) eliminate() {
 			}
 		}
 		c.mu.Unlock()
-
-		// end, a, b := c.eval()
-		// eval: {expiredCount} / {totalCount} -> {expiredRate} cost: {time}
-		// fmt.Printf("eval: %d / %d -> %.2f%% cost: %v\n", a, b, float64(a)/float64(b)*100, end.Sub(start))
 	}
 }
 
