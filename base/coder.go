@@ -27,9 +27,9 @@ func (s *Coder) EncBytes(v ...byte) *Coder {
 	return s
 }
 
-// EncUint32
-func (s *Coder) EncUint32(v uint32) *Coder {
-	s.buf = binary.AppendUvarint(s.buf, uint64(v))
+// EncInt64
+func (s *Coder) EncInt64(v int64) *Coder {
+	s.buf = binary.AppendVarint(s.buf, v)
 	return s
 }
 

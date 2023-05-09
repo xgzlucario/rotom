@@ -4,8 +4,6 @@ import (
 	"math"
 	"sync"
 	"time"
-
-	"github.com/bytedance/sonic"
 )
 
 const (
@@ -13,9 +11,10 @@ const (
 	noTTL = math.MaxInt64
 
 	// probe config with elimination strategy
-	probeCount = 100
-	probeSpace = 3
-	expRate    = 0.2
+	probeCount     = 100
+	probeSpace     = 3
+	expRate        = 0.2
+	eliminateMaxMs = 25
 )
 
 var (
@@ -139,6 +138,19 @@ func (c *Cache[V]) Clear() {
 	c.data = NewMap[string, *cacheItem[V]]()
 }
 
+// Scan
+func (c *Cache[V]) Scan(f func(string, int64, V) bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	c.data.Scan(func(key string, value *cacheItem[V]) bool {
+		if value.T > c.ts {
+			return f(key, value.T, value.V)
+		}
+		return true
+	})
+}
+
 // Count
 func (c *Cache[V]) Count() int {
 	c.mu.RLock()
@@ -175,54 +187,11 @@ func (c *Cache[V]) eliminate(expRate float64) {
 			ts := time.Now()
 			c.ts = ts.UnixNano()
 
-			// break if cost over 25ms or blow expRate
-			if ts.Sub(start).Milliseconds() >= 25 || elimi/pb <= expRate {
+			// break if cost over limit or blow expRate
+			if ts.Sub(start).Milliseconds() >= eliminateMaxMs || elimi/pb <= expRate {
 				break
 			}
 		}
 		c.mu.Unlock()
 	}
-}
-
-type mapJSON[V any] struct {
-	K []string
-	V []*cacheItem[V]
-}
-
-// MarshalJSON
-func (c *Cache[V]) MarshalJSON() ([]byte, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	tmp := mapJSON[V]{
-		K: make([]string, 0, c.data.Len()),
-		V: make([]*cacheItem[V], 0, c.data.Len()),
-	}
-	c.data.Scan(func(k string, v *cacheItem[V]) bool {
-		if v.T > c.ts {
-			tmp.K = append(tmp.K, k)
-			tmp.V = append(tmp.V, v)
-		}
-		return true
-	})
-
-	return sonic.Marshal(tmp)
-}
-
-// UnmarshalJSON
-func (c *Cache[V]) UnmarshalJSON(src []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	var tmp mapJSON[V]
-	if err := sonic.Unmarshal(src, &tmp); err != nil {
-		return err
-	}
-
-	c.data = NewMap[string, *cacheItem[V]]()
-	for i, k := range tmp.K {
-		c.data.Set(k, tmp.V[i])
-	}
-
-	return nil
 }

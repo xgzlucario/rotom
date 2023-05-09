@@ -41,9 +41,18 @@ const (
 )
 
 const (
-	C_SPR     = byte(0x00)
-	C_VALID   = byte(0x01)
-	timeCarry = 1000 * 1000 * 1000
+	C_SPR   = byte(0x00)
+	C_VALID = byte(0x01)
+)
+
+type (
+	Map    = structx.Map[string, string]
+	List   = structx.List[string]
+	Set    = structx.Set[string]
+	ZSet   = structx.ZSet[string, float64, string]
+	RBTree = structx.RBTree[string, string]
+	Trie   = structx.Trie[string]
+	BitMap = structx.BitMap
 )
 
 var (
@@ -53,7 +62,7 @@ var (
 
 	DefaultConfig = &Config{
 		DBDirPath:       "db",
-		ShardCount:      32,
+		ShardCount:      64,
 		FlushDuration:   time.Second,
 		RewriteDuration: time.Second * 10,
 	}
@@ -87,9 +96,6 @@ type storeShard struct {
 
 	// data based on Cache
 	*structx.Cache[any]
-
-	// filter
-	filter structx.Map[uint64, struct{}]
 
 	sync.RWMutex
 	rwlock sync.Mutex
@@ -130,7 +136,7 @@ func CreateDB(conf *Config) *store {
 	for i := range db.shards {
 		sd := db.shards[i]
 		pool.Go(func() {
-			sd.reWrite(true)
+			sd.load()
 		})
 	}
 	pool.Wait()
@@ -187,13 +193,12 @@ func (s *store) SetEX(key string, val any, ttl time.Duration) {
 	sd := s.getShard(key)
 
 	i64ts := atomic.LoadInt64(&globalTime) + int64(ttl)
-	u32ts := uint32(i64ts / timeCarry)
 
 	sd.Lock()
 	defer sd.Unlock()
 
 	// {SETEX}{key}|{ttl}|{value}
-	sd.EncBytes(OP_SETEX).EncBytes(base.S2B(&key)...).EncBytes(C_SPR).EncUint32(u32ts).EncBytes(C_SPR)
+	sd.EncBytes(OP_SETEX).EncBytes(base.S2B(&key)...).EncBytes(C_SPR).EncInt64(i64ts).EncBytes(C_SPR)
 	if err := sd.Encode(val); err != nil {
 		panic(err)
 	}
@@ -255,33 +260,42 @@ func (s *store) Keys() []string {
 	return arr
 }
 
-// reWrite shrink the database
-func (s *storeShard) reWrite(initial ...bool) {
-	s.rwlock.Lock()
-	defer s.rwlock.Unlock()
-
+// load redo operation from file
+func (s *storeShard) load() {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		return
 	}
 
-	// read line from tail
+	// read line
 	lines := bytes.Split(data, lineSpr[1:])
-	init := len(initial) > 0 && initial[0]
-
-	// init filter
-	s.filter = structx.NewMapWithCap[uint64, struct{}](len(lines))
-
-	for i := len(lines) - 1; i >= 0; i-- {
-		s.readLine(lines[i], init)
+	for _, line := range lines {
+		s.readLine(line)
 	}
+}
+
+// reWrite shrink the database
+func (s *storeShard) reWrite() {
+	s.rwlock.Lock()
+	defer s.rwlock.Unlock()
+
+	// dump
+	s.Scan(func(k string, i int64, v any) bool {
+		s.rwbuf.EncBytes(OP_SETEX).EncBytes(base.S2B(&k)...).EncBytes(C_SPR).EncInt64(i).EncBytes(C_SPR)
+		if err := s.rwbuf.Encode(v); err != nil {
+			panic(err)
+		}
+		s.rwbuf.EncBytes(lineSpr...)
+
+		return true
+	})
 
 	// flush
 	s.Lock()
 	defer s.Unlock()
 
-	s.FlushFile(s.rwPath)
 	s.rwbuf.FlushFile(s.rwPath)
+	s.FlushFile(s.rwPath)
 
 	// rename rwFile to storeFile
 	if err := os.Rename(s.rwPath, s.path); err != nil {
@@ -290,7 +304,7 @@ func (s *storeShard) reWrite(initial ...bool) {
 }
 
 // readLine
-func (s *storeShard) readLine(line []byte, init bool) {
+func (s *storeShard) readLine(line []byte) {
 	n := len(line)
 	if n == 0 || line[n-1] != lineSpr[0] {
 		return
@@ -304,15 +318,7 @@ func (s *storeShard) readLine(line []byte, init bool) {
 		if i <= 0 {
 			return
 		}
-		if !s.testAdd(line[1:i]) {
-			return
-		}
-
-		s.rwbuf.EncBytes(line...).EncBytes(lineSpr...)
-
-		if init {
-			s.Set(*base.B2S(line[1:i]), base.Raw(line[i+1:]))
-		}
+		s.Set(*base.B2S(line[1:i]), base.Raw(line[i+1:]))
 
 	// {SETEX}{key}|{ttl}|{value}
 	case OP_SETEX:
@@ -320,52 +326,21 @@ func (s *storeShard) readLine(line []byte, init bool) {
 		sp2 := bytes.IndexByte(line[sp1+1:], C_SPR)
 		sp2 += sp1 + 1
 
-		if !s.testAdd(line[1:sp1]) {
-			return
-		}
-
-		u64ts, _ := binary.Uvarint(line[sp1+1 : sp2])
-		ts := int64(u64ts) * timeCarry
+		ts, _ := binary.Varint(line[sp1+1 : sp2])
 
 		// not expired
 		if ts > atomic.LoadInt64(&globalTime) {
-			s.rwbuf.EncBytes(line...).EncBytes(lineSpr...)
-
-			if init {
-				s.SetTX(*base.B2S(line[1:sp1]), base.Raw(line[sp2+1:]), ts)
-			}
+			s.SetTX(*base.B2S(line[1:sp1]), base.Raw(line[sp2+1:]), ts)
 		}
 
 	// {REMOVE}{key}
 	case OP_REMOVE:
-		if !s.testAdd(line[1:]) {
-			return
-		}
-		if init {
-			s.Remove(*base.B2S(line[1:]))
-		}
+		s.Remove(*base.B2S(line[1:]))
 
 	// {PERSIST}{key}
 	case OP_PERSIST:
-		if !s.testAdd(line) {
-			return
-		}
-		s.rwbuf.EncBytes(line...).EncBytes(lineSpr...)
-
-		if init {
-			s.Persist(*base.B2S(line[1:]))
-		}
+		s.Persist(*base.B2S(line[1:]))
 	}
-}
-
-// testAdd
-func (s *storeShard) testAdd(line []byte) bool {
-	hash := xxh3.Hash(line)
-	if _, ok := s.filter.Get(hash); ok {
-		return false
-	}
-	s.filter.Set(hash, struct{}{})
-	return true
 }
 
 // getShard
