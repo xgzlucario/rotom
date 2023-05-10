@@ -9,7 +9,7 @@ import (
 // value
 type Value struct {
 	key string
-	sd  *storeShard
+	s   *storeShard
 	raw []byte
 	val any
 }
@@ -40,11 +40,11 @@ func (v Value) Scan(val any) error {
 // getValue
 func getValue[T any](v Value, vptr T) (T, error) {
 	if v.raw != nil {
-		if err := v.sd.Decode(v.raw, &vptr); err != nil {
+		if err := v.s.Decode(v.raw, &vptr); err != nil {
 			return vptr, err
 		}
 
-		v.sd.Set(v.key, vptr)
+		v.s.Set(v.key, vptr)
 		return vptr, nil
 	}
 

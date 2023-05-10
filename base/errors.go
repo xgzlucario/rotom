@@ -9,7 +9,13 @@ var (
 
 	ErrKeyNotFound = errors.New("key not found")
 
-	ErrWrongType = errors.New("wrong type")
+	ErrKeyIsEmpty = errors.New("key is empty")
 
-	ErrUnSupportType = errors.New("unsupport data type")
+	ErrWrongType = errors.New("wrong data type")
+
+	ErrUnSupportDataType = errors.New("unsupport data type")
+
+	ErrUnknownOperationType = errors.New("unknown operation type")
+
+	ErrParseAOFLine = errors.New("parse aof line error")
 )

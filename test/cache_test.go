@@ -1,55 +1,82 @@
 package test
 
 import (
-	"strconv"
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/xgzlucario/rotom/structx"
 )
 
-func getCache() *structx.Cache[struct{}] {
-	s := structx.NewCache[struct{}]()
-	for i := 0; i < 1000000; i++ {
-		s.Set(strconv.Itoa(i), struct{}{})
-	}
-	return s
-}
+func TestCache(t *testing.T) {
+	cache := structx.NewCache[int]()
 
-func BenchmarkCacheSet(b *testing.B) {
-	s := structx.NewCache[struct{}]()
-	for i := 0; i < b.N; i++ {
-		s.Set(strconv.Itoa(i), struct{}{})
-	}
-}
+	// Test Set and Get
+	cache.Set("key1", 1)
+	value, ok := cache.Get("key1")
+	assert.True(t, ok)
+	assert.Equal(t, 1, value)
 
-func BenchmarkCacheSetEX(b *testing.B) {
-	s := structx.NewCache[struct{}]()
-	for i := 0; i < b.N; i++ {
-		s.SetEX(strconv.Itoa(i), struct{}{}, time.Minute)
-	}
-}
+	// Test SetEX and Get
+	cache.SetEX("key2", 2, time.Millisecond*50)
+	value, ok = cache.Get("key2")
+	assert.True(t, ok)
+	assert.Equal(t, 2, value)
 
-func BenchmarkCacheGet(b *testing.B) {
-	s := getCache()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		s.Get(strconv.Itoa(i))
-	}
-}
+	// Test expiration of key2
+	time.Sleep(time.Millisecond * 60)
+	_, ok = cache.Get("key2")
+	assert.False(t, ok)
 
-func BenchmarkCacheRemove(b *testing.B) {
-	s := getCache()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		s.Remove(strconv.Itoa(i))
-	}
-}
+	// Test GetTX
+	cache.Set("key3", 3)
+	value, ttl, ok := cache.GetTX("key3")
+	assert.True(t, ok)
+	assert.Equal(t, 3, value)
+	assert.Equal(t, int64(math.MaxInt64), ttl)
 
-func BenchmarkCacheCount(b *testing.B) {
-	s := getCache()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		s.Count()
-	}
+	// Test SetEX
+	cache.SetEX("key4", 4, time.Millisecond*100)
+	value, ok = cache.Get("key4")
+	assert.True(t, ok)
+	assert.Equal(t, 4, value)
+
+	// Test Persist
+	cache.Persist("key3")
+	value, ttl, ok = cache.GetTX("key3")
+	assert.True(t, ok)
+	assert.Equal(t, 3, value)
+	assert.Equal(t, int64(math.MaxInt64), ttl)
+
+	// Test Keys
+	keys := cache.Keys()
+	fmt.Println(cache.Keys())
+	assert.Contains(t, keys, "key1")
+	assert.Contains(t, keys, "key3")
+	assert.Contains(t, keys, "key4")
+
+	// Test Remove
+	value, ok = cache.Remove("key1")
+	assert.True(t, ok)
+	assert.Equal(t, 1, value)
+
+	// Test Clear
+	cache.Clear()
+	_, ok = cache.Get("key3")
+	assert.False(t, ok)
+
+	// Test Scan
+	cache.Set("key5", 5)
+	cache.Set("key6", 6)
+	cache.Set("key7", 7)
+
+	cache.Scan(func(key string, value int, ttl int64) bool {
+		assert.True(t, value >= 5 && value <= 7)
+		return true
+	})
+
+	// Test Count
+	assert.Equal(t, 3, cache.Count())
 }

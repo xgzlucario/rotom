@@ -112,7 +112,7 @@ func (s *Coder) encode(v any) (buf []byte, err error) {
 	case Marshaler:
 		return v.MarshalJSON()
 	default:
-		return nil, fmt.Errorf("%v: %v", ErrUnSupportType, reflect.TypeOf(v).String())
+		return nil, fmt.Errorf("%v: %v", ErrUnSupportDataType, reflect.TypeOf(v).String())
 	}
 	return
 }
@@ -173,7 +173,7 @@ func (s *Coder) Decode(src []byte, vptr interface{}) error {
 	case Marshaler:
 		return v.UnmarshalJSON(src)
 	default:
-		return fmt.Errorf("%v: %v", ErrUnSupportType, reflect.TypeOf(v).String())
+		return fmt.Errorf("%v: %v", ErrUnSupportDataType, reflect.TypeOf(v).String())
 	}
 	return nil
 }

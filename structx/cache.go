@@ -53,19 +53,13 @@ func NewCustomCache[V any](expRate float64) *Cache[V] {
 }
 
 // Get
-func (c *Cache[V]) Get(key string) (val V, ok bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	n, ok := c.data.Get(key)
-	if ok && n.T > c.ts {
-		return n.V, true
-	}
-	return
+func (c *Cache[V]) Get(key string) (V, bool) {
+	v, _, ok := c.GetTX(key)
+	return v, ok
 }
 
-// GetEX
-func (c *Cache[V]) GetEX(key string) (v V, ttl int64, ok bool) {
+// GetTX
+func (c *Cache[V]) GetTX(key string) (v V, ttl int64, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -118,7 +112,7 @@ func (c *Cache[V]) Keys() []string {
 		}
 		return true
 	})
-	return nil
+	return keys
 }
 
 // Remove
@@ -139,13 +133,13 @@ func (c *Cache[V]) Clear() {
 }
 
 // Scan
-func (c *Cache[V]) Scan(f func(string, int64, V) bool) {
+func (c *Cache[V]) Scan(f func(string, V, int64) bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	c.data.Scan(func(key string, value *cacheItem[V]) bool {
 		if value.T > c.ts {
-			return f(key, value.T, value.V)
+			return f(key, value.V, value.T)
 		}
 		return true
 	})

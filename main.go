@@ -64,24 +64,15 @@ func main() {
 
 	time.Sleep(time.Second)
 
-	// start := time.Now()
-	// for i := 0; i < 200*10000; i++ {
-	// 	db.Set(gofakeit.Phone(), i)
-	// }
-	// fmt.Printf("Rotom 批量插入一百万数据耗时: %s\n", time.Since(start))
+	start := time.Now()
+	for i := 0; i < 200*10000; i++ {
+		db.Set(gofakeit.Phone(), i)
+	}
+	fmt.Printf("Rotom 批量插入一百万数据耗时: %s\n", time.Since(start))
 
-	// fmt.Println(db.Get("xgz").ToInt())
-	// fmt.Println(db.Get("now_time").ToTime())
-
-	// db.Set("xgz", 123)
-	// db.Set("now_time", time.Now())
-
-	// fmt.Println(db.Get("xgz").ToInt())
-	// fmt.Println(db.Get("now_time").ToTime())
+	RedisTest()
 
 	testStress()
-
-	// RedisTest()
 
 	db.Flush()
 
