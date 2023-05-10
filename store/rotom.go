@@ -3,7 +3,6 @@ package store
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"os"
 	"path"
 	"strconv"
@@ -17,7 +16,8 @@ import (
 )
 
 const (
-	OP_SETTX byte = iota + 'A'
+	OP_SET byte = iota + 'A'
+	OP_SETTX
 	OP_REMOVE
 	OP_PERSIST
 	OP_INCR
@@ -172,7 +172,21 @@ func Open(conf *Config) *store {
 
 // Set
 func (db *store) Set(key string, val any) error {
-	return db.SetTX(key, val, math.MaxInt64)
+	if len(key) == 0 {
+		return base.ErrKeyIsEmpty
+	}
+	s := db.getShard(key)
+	s.Lock()
+	defer s.Unlock()
+
+	s.Enc(OP_SET)
+	s.EncodeBytes(C_SPR, base.S2B(&key)...)
+	if err := s.Encode(val, C_SPR); err != nil {
+		return err
+	}
+
+	s.Set(key, val)
+	return nil
 }
 
 // SetEX
@@ -273,6 +287,12 @@ func (s *storeShard) load() {
 		key, line = parseLine(line, C_SPR)
 
 		switch op {
+		case OP_SET:
+			var val []byte
+			// val
+			val, line = parseLine(line, C_SPR)
+			s.Set(*base.B2S(key), base.Raw(val))
+
 		case OP_SETTX:
 			var ttl, val []byte
 
