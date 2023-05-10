@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"os"
 	"path"
 	"strconv"
@@ -43,6 +44,7 @@ const (
 const (
 	C_SPR     = byte('\n')
 	timeCarry = 1000 * 1000 * 1000
+	noTTL     = math.MaxInt64
 )
 
 type (
@@ -330,9 +332,13 @@ func (s *storeShard) dump() {
 
 	// dump
 	s.Scan(func(k string, v any, i int64) bool {
-		s.rwbuf.Enc(OP_SETTX).
-			EncodeBytes(C_SPR, base.S2B(&k)...).
-			EncodeInt64(C_SPR, i/timeCarry)
+		if i == noTTL {
+			// SET
+			s.rwbuf.Enc(OP_SET).EncodeBytes(C_SPR, base.S2B(&k)...)
+		} else {
+			// SETEX
+			s.rwbuf.Enc(OP_SETTX).EncodeBytes(C_SPR, base.S2B(&k)...).EncodeInt64(C_SPR, i/timeCarry)
+		}
 		if err := s.rwbuf.Encode(v, C_SPR); err != nil {
 			panic(err)
 		}
