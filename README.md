@@ -1,5 +1,7 @@
 # Rotom
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/xgzlucario/rotom)](https://goreportcard.com/report/github.com/xgzlucario/rotom)![](https://img.shields.io/github/languages/code-size/xgzlucario/rotom.svg?style=flat)[![Go Reference](https://pkg.go.dev/badge/github.com/xgzlucario/rotom.svg)](https://pkg.go.dev/github.com/xgzlucario/rotom)
+
 Rotom is **In-memory** database, includes many structures and algorithms implemented by Golang **generics**. and upport **persist**.
 
 Currently, rotom now provides the following types of data structures to support generic types:

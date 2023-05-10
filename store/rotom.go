@@ -2,7 +2,8 @@ package store
 
 import (
 	"bytes"
-	"encoding/binary"
+	"fmt"
+	"math"
 	"os"
 	"path"
 	"strconv"
@@ -16,8 +17,7 @@ import (
 )
 
 const (
-	OP_SET byte = iota + 1
-	OP_SETEX
+	OP_SETTX byte = iota + 'a'
 	OP_REMOVE
 	OP_PERSIST
 	OP_INCR
@@ -41,8 +41,9 @@ const (
 )
 
 const (
-	C_SPR   = byte(0x00)
-	C_VALID = byte(0x01)
+	C_SPR     = byte(' ')
+	C_END     = byte('\n')
+	timeCarry = 1000 * 1000 * 1000
 )
 
 type (
@@ -50,21 +51,16 @@ type (
 	List   = structx.List[string]
 	Set    = structx.Set[string]
 	ZSet   = structx.ZSet[string, float64, string]
-	RBTree = structx.RBTree[string, string]
-	Trie   = structx.Trie[string]
 	BitMap = structx.BitMap
 )
 
 var (
-	globalTime = time.Now().UnixNano()
-
-	lineSpr = []byte{C_VALID, C_SPR, C_SPR, '\n'}
-
+	globalTime    = time.Now().UnixNano()
 	DefaultConfig = &Config{
-		DBDirPath:       "db",
-		ShardCount:      64,
-		FlushDuration:   time.Second,
-		RewriteDuration: time.Second * 10,
+		Path:        "db",
+		ShardCount:  32,
+		AOFInterval: time.Second,
+		RDBInterval: time.Second * 10,
 	}
 )
 
@@ -76,13 +72,14 @@ type store struct {
 
 type Config struct {
 	ShardCount uint64
-	DBDirPath  string
+	Path       string
 
-	// FlushDuration is the time interval for flushing data to disk
-	FlushDuration time.Duration
+	SyncPolicy base.SyncPolicy
+	// AOFInterval
+	AOFInterval time.Duration
 
-	// RewriteDuration is the time interval for rewriting data to disk
-	RewriteDuration time.Duration
+	// RDBInterval
+	RDBInterval time.Duration
 }
 
 type storeShard struct {
@@ -103,20 +100,22 @@ type storeShard struct {
 
 func init() {
 	go func() {
-		for t := range time.NewTicker(time.Microsecond).C {
+		for t := range time.NewTicker(time.Millisecond).C {
 			atomic.SwapInt64(&globalTime, t.UnixNano())
 		}
 	}()
 }
 
-func CreateDB(conf *Config) *store {
+// Open opens a database specified by config.
+// The file will be created automatically if not exist.
+func Open(conf *Config) *store {
 	db := &store{
 		Config: conf,
 		mask:   conf.ShardCount - 1,
 		shards: make([]*storeShard, conf.ShardCount),
 	}
 
-	if err := os.MkdirAll(db.DBDirPath, os.ModeDir); err != nil {
+	if err := os.MkdirAll(db.Path, os.ModeDir); err != nil {
 		panic(err)
 	}
 
@@ -125,8 +124,8 @@ func CreateDB(conf *Config) *store {
 		db.shards[i] = &storeShard{
 			Coder:  base.NewCoder(nil),
 			rwbuf:  base.NewCoder(nil),
-			path:   path.Join(db.DBDirPath, "dat"+strconv.Itoa(i)),
-			rwPath: path.Join(db.DBDirPath, "rw"+strconv.Itoa(i)),
+			path:   path.Join(db.Path, strconv.Itoa(i)+".rdb"),
+			rwPath: path.Join(db.Path, strconv.Itoa(i)+".aof"),
 			Cache:  structx.NewCache[any](),
 		}
 	}
@@ -135,9 +134,7 @@ func CreateDB(conf *Config) *store {
 	pool := structx.NewDefaultPool()
 	for i := range db.shards {
 		sd := db.shards[i]
-		pool.Go(func() {
-			sd.load()
-		})
+		pool.Go(func() { sd.load() })
 	}
 	pool.Wait()
 
@@ -146,24 +143,24 @@ func CreateDB(conf *Config) *store {
 	for i := range db.shards {
 		sd := db.shards[i]
 
-		// flush worker
+		// AOF
 		go func() {
 			for {
-				time.Sleep(db.FlushDuration)
+				time.Sleep(db.AOFInterval)
 
 				if sd.rwlock.TryLock() {
-					sd.FlushFile(sd.path)
+					sd.WriteTo(sd.path)
 					sd.rwlock.Unlock()
 				}
 			}
 		}()
-		// rewrite worker
+		// RDB
 		go func() {
 			for {
-				time.Sleep(db.RewriteDuration)
+				time.Sleep(db.RDBInterval)
 				pool.Go(func() {
-					sd.FlushFile(sd.path)
-					sd.reWrite()
+					sd.WriteTo(sd.path)
+					sd.rdb()
 				})
 			}
 		}()
@@ -172,39 +169,35 @@ func CreateDB(conf *Config) *store {
 	return db
 }
 
+// Close
+func (db *store) Close() error {
+	return db.Flush()
+}
+
 // Set
 func (s *store) Set(key string, val any) {
-	sd := s.getShard(key)
-	sd.Lock()
-	defer sd.Unlock()
-
-	// {SET}{key}|{value}
-	sd.EncBytes(OP_SET).EncBytes(base.S2B(&key)...).EncBytes(C_SPR)
-	if err := sd.Encode(val); err != nil {
-		panic(err)
-	}
-	sd.EncBytes(lineSpr...)
-
-	sd.Set(key, val)
+	s.SetTX(key, val, math.MaxInt64)
 }
 
 // SetEX
 func (s *store) SetEX(key string, val any, ttl time.Duration) {
+	s.SetTX(key, val, atomic.LoadInt64(&globalTime)+int64(ttl))
+}
+
+// SetTX
+func (s *store) SetTX(key string, val any, ts int64) {
 	sd := s.getShard(key)
-
-	i64ts := atomic.LoadInt64(&globalTime) + int64(ttl)
-
 	sd.Lock()
 	defer sd.Unlock()
 
-	// {SETEX}{key}|{ttl}|{value}
-	sd.EncBytes(OP_SETEX).EncBytes(base.S2B(&key)...).EncBytes(C_SPR).EncInt64(i64ts).EncBytes(C_SPR)
-	if err := sd.Encode(val); err != nil {
+	sd.Enc(OP_SETTX)
+	sd.EncodeBytes(C_SPR, base.S2B(&key)...)
+	sd.EncodeInt64(C_SPR, ts/timeCarry)
+	if err := sd.Encode(val, C_END); err != nil {
 		panic(err)
 	}
-	sd.EncBytes(lineSpr...)
 
-	sd.SetTX(key, val, i64ts)
+	sd.SetTX(key, val, ts)
 }
 
 // Remove
@@ -213,8 +206,7 @@ func (s *store) Remove(key string) (val any, ok bool) {
 	sd.Lock()
 	defer sd.Unlock()
 
-	// {REMOVE}{key}
-	sd.EncBytes(OP_REMOVE).EncBytes(base.S2B(&key)...).EncBytes(lineSpr...)
+	sd.Enc(OP_REMOVE).EncodeBytes(C_SPR, base.S2B(&key)...).Enc(C_END)
 
 	return sd.Remove(key)
 }
@@ -225,8 +217,7 @@ func (s *store) Persist(key string) bool {
 	sd.Lock()
 	defer sd.Unlock()
 
-	// {PERSIST}{key}
-	sd.EncBytes(OP_PERSIST).EncBytes(base.S2B(&key)...).EncBytes(lineSpr...)
+	sd.Enc(OP_PERSIST).EncodeBytes(C_SPR, base.S2B(&key)...).Enc(C_END)
 
 	return sd.Persist(key)
 }
@@ -234,7 +225,7 @@ func (s *store) Persist(key string) bool {
 // Flush writes all the buf data to disk
 func (s *store) Flush() error {
 	for _, sd := range s.shards {
-		if _, err := sd.FlushFile(sd.path); err != nil {
+		if _, err := sd.WriteTo(sd.path); err != nil {
 			return err
 		}
 	}
@@ -268,34 +259,37 @@ func (s *storeShard) load() {
 	}
 
 	// read line
-	lines := bytes.Split(data, lineSpr[1:])
+	lines := bytes.Split(data, []byte{C_END})
 	for _, line := range lines {
 		s.readLine(line)
 	}
 }
 
-// reWrite shrink the database
-func (s *storeShard) reWrite() {
+// rdb dump snapshot to disk
+func (s *storeShard) rdb() {
 	s.rwlock.Lock()
 	defer s.rwlock.Unlock()
 
 	// dump
+	a := time.Now()
 	s.Scan(func(k string, i int64, v any) bool {
-		s.rwbuf.EncBytes(OP_SETEX).EncBytes(base.S2B(&k)...).EncBytes(C_SPR).EncInt64(i).EncBytes(C_SPR)
-		if err := s.rwbuf.Encode(v); err != nil {
+		s.rwbuf.Enc(OP_SETTX)
+		s.rwbuf.EncodeBytes(C_SPR, base.S2B(&k)...)
+		s.rwbuf.EncodeInt64(C_SPR, i/timeCarry)
+		if err := s.rwbuf.Encode(v, C_END); err != nil {
 			panic(err)
 		}
-		s.rwbuf.EncBytes(lineSpr...)
 
 		return true
 	})
+	fmt.Println("rdb cost:", time.Since(a))
 
 	// flush
 	s.Lock()
 	defer s.Unlock()
 
-	s.rwbuf.FlushFile(s.rwPath)
-	s.FlushFile(s.rwPath)
+	s.rwbuf.WriteTo(s.rwPath)
+	s.WriteTo(s.rwPath)
 
 	// rename rwFile to storeFile
 	if err := os.Rename(s.rwPath, s.path); err != nil {
@@ -305,39 +299,32 @@ func (s *storeShard) reWrite() {
 
 // readLine
 func (s *storeShard) readLine(line []byte) {
-	n := len(line)
-	if n == 0 || line[n-1] != lineSpr[0] {
+	if len(line) == 0 {
 		return
 	}
-	line = line[:n-1]
+
+	// parse key
 
 	switch line[0] {
-	// {SET}{key}|{value}
-	case OP_SET:
-		i := bytes.IndexByte(line, C_SPR)
-		if i <= 0 {
-			return
-		}
-		s.Set(*base.B2S(line[1:i]), base.Raw(line[i+1:]))
-
-	// {SETEX}{key}|{ttl}|{value}
-	case OP_SETEX:
+	case OP_SETTX:
 		sp1 := bytes.IndexByte(line, C_SPR)
 		sp2 := bytes.IndexByte(line[sp1+1:], C_SPR)
 		sp2 += sp1 + 1
 
-		ts, _ := binary.Varint(line[sp1+1 : sp2])
+		ts, err := strconv.ParseInt(*base.B2S(line[sp1+1 : sp2]), 36, 64)
+		if err != nil {
+			panic(err)
+		}
+		ts *= timeCarry
 
 		// not expired
 		if ts > atomic.LoadInt64(&globalTime) {
 			s.SetTX(*base.B2S(line[1:sp1]), base.Raw(line[sp2+1:]), ts)
 		}
 
-	// {REMOVE}{key}
 	case OP_REMOVE:
 		s.Remove(*base.B2S(line[1:]))
 
-	// {PERSIST}{key}
 	case OP_PERSIST:
 		s.Persist(*base.B2S(line[1:]))
 	}

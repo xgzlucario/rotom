@@ -17,7 +17,7 @@ import (
 	"github.com/xgzlucario/rotom/store"
 )
 
-var db = store.CreateDB(store.DefaultConfig)
+var db = store.Open(store.DefaultConfig)
 
 func testStress() {
 	fmt.Println("===== start test Stress =====")

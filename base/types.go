@@ -22,3 +22,12 @@ type GTreeJSON[K, V any] struct {
 }
 
 type Raw []byte
+
+// SyncPolicy represents how often data is synced to disk.
+type SyncPolicy byte
+
+const (
+	Never SyncPolicy = iota
+	EverySecond
+	Always
+)

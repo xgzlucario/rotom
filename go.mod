@@ -7,7 +7,6 @@ require (
 	github.com/brianvoe/gofakeit/v6 v6.21.0
 	github.com/bytedance/sonic v1.8.8
 	github.com/go-redis/redis/v8 v8.11.5
-	github.com/klauspost/compress v1.16.5
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.2
