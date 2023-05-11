@@ -291,14 +291,14 @@ func (s *storeShard) load() {
 		switch op {
 		case OP_SET:
 			var val []byte
-			// val
+			// parse val
 			val, line = parseLine(line, C_SPR)
 			s.Set(*base.B2S(key), base.Raw(val))
 
 		case OP_SETTX:
 			var ttl, val []byte
 
-			// ttl
+			// parse ttl
 			ttl, line = parseLine(line, C_SPR)
 			ts, err := strconv.ParseInt(*base.B2S(ttl), 36, 64)
 			if err != nil {
@@ -306,7 +306,7 @@ func (s *storeShard) load() {
 			}
 			ts *= timeCarry
 
-			// val
+			// parse val
 			val, line = parseLine(line, C_SPR)
 			if ts > atomic.LoadInt64(&globalTime) {
 				s.SetTX(*base.B2S(key), base.Raw(val), ts)
@@ -362,7 +362,7 @@ func (s *storeShard) dump() {
 func parseLine(line []byte, valid byte) (pre []byte, suf []byte) {
 	i := bytes.IndexByte(line, ':')
 	if i <= 0 {
-		panic("get byte ':' error")
+		panic("cut line error: i <= 0")
 	}
 	l, err := strconv.ParseInt(*base.B2S(line[:i]), 36, 64)
 	if err != nil {
@@ -397,5 +397,59 @@ func (db *store) Get(key string) Value {
 
 	} else {
 		return Value{val: val, key: key, s: s}
+	}
+}
+
+type Value struct {
+	key string
+	s   *storeShard
+	raw []byte
+	val any
+}
+
+func (v Value) ToInt() (r int, e error) { return getValue(v, r) }
+
+func (v Value) ToInt64() (r int64, e error) { return getValue(v, r) }
+
+func (v Value) ToUint() (r uint, e error) { return getValue(v, r) }
+
+func (v Value) ToUint32() (r uint32, e error) { return getValue(v, r) }
+
+func (v Value) ToUint64() (r uint64, e error) { return getValue(v, r) }
+
+func (v Value) ToFloat64() (r float64, e error) { return getValue(v, r) }
+
+func (v Value) ToString() (r string, e error) { return getValue(v, r) }
+
+func (v Value) ToIntSlice() (r []int, e error) { return getValue(v, r) }
+
+func (v Value) ToStringSlice() (r []string, e error) { return getValue(v, r) }
+
+func (v Value) ToTime() (r time.Time, e error) { return getValue(v, r) }
+
+func (v Value) Scan(val any) error {
+	_, err := getValue(v, val)
+	return err
+}
+
+// getValue
+func getValue[T any](v Value, vptr T) (T, error) {
+	if v.raw != nil {
+		if err := v.s.Decode(v.raw, &vptr); err != nil {
+			return vptr, err
+		}
+
+		v.s.Set(v.key, vptr)
+		return vptr, nil
+	}
+
+	if tmp, ok := v.val.(T); ok {
+		return tmp, nil
+
+	} else if v.key == "" {
+		return vptr, base.ErrKeyNotFound
+
+	} else {
+		return vptr, base.ErrWrongType
 	}
 }

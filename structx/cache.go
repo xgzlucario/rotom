@@ -29,6 +29,8 @@ type Cache[V any] struct {
 	// based on Hashmap
 	data Map[string, *cacheItem[V]]
 
+	cb onExpired[V]
+
 	mu sync.RWMutex
 }
 
@@ -36,6 +38,8 @@ type cacheItem[V any] struct {
 	T int64
 	V V
 }
+
+type onExpired[V any] func(string, V, int64)
 
 // NewCache
 func NewCache[V any]() *Cache[V] {
@@ -88,6 +92,15 @@ func (c *Cache[V]) SetTX(key string, val V, ts int64) {
 	c.data.Set(key, &cacheItem[V]{T: ts, V: val})
 }
 
+// Remove
+func (c *Cache[V]) Remove(key string) (V, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	n, ok := c.data.Delete(key)
+	return n.V, ok
+}
+
 // Persist
 func (c *Cache[V]) Persist(key string) bool {
 	c.mu.Lock()
@@ -105,31 +118,15 @@ func (c *Cache[V]) Keys() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	keys := make([]string, 0, c.data.Len())
-	c.data.Scan(func(k string, v *cacheItem[V]) bool {
-		if v.T > c.ts {
-			keys = append(keys, k)
-		}
-		return true
-	})
-	return keys
+	return c.data.Keys()
 }
 
-// Remove
-func (c *Cache[V]) Remove(key string) (V, bool) {
+// WithExpired
+func (c *Cache[V]) WithExpired(f onExpired[V]) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	n, ok := c.data.Delete(key)
-	return n.V, ok
-}
-
-// Clear
-func (c *Cache[V]) Clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.data = NewMap[string, *cacheItem[V]]()
+	c.cb = f
 }
 
 // Scan
@@ -146,11 +143,22 @@ func (c *Cache[V]) Scan(f func(string, V, int64) bool) {
 }
 
 // Count
-func (c *Cache[V]) Count() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+func (c *Cache[V]) Count() (sum int) {
+	c.Scan(func(_ string, _ V, ts int64) bool {
+		if ts > c.ts {
+			sum++
+		}
+		return true
+	})
+	return
+}
 
-	return c.data.Len()
+// Clear
+func (c *Cache[V]) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.data = NewMap[string, *cacheItem[V]]()
 }
 
 // eliminate the expired key-value pairs.
@@ -173,6 +181,10 @@ func (c *Cache[V]) eliminate(expRate float64) {
 				if ok && v.T < c.ts {
 					elimi++
 					c.data.Delete(k)
+					// cb
+					if c.cb != nil {
+						c.cb(k, v.V, v.T)
+					}
 				}
 				pb++
 			}
