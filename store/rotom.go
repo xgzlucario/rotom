@@ -96,7 +96,6 @@ type storeShard struct {
 	*structx.Cache[any] // based on Cache
 
 	sync.RWMutex
-	rwlock sync.Mutex // rewrite locker
 }
 
 // Init the package by updates globalTime.
@@ -144,15 +143,11 @@ func Open(conf *Config) (*Store, error) {
 	for _, s := range db.shards {
 		s := s
 		base.Go(context.Background(), db.AOFInterval, func() {
-			if s.rwlock.TryLock() {
-				s.Lock()
-				s.WriteTo(s.buf, s.path)
-				s.Unlock()
-				s.rwlock.Unlock()
-			}
+			s.Lock()
+			s.WriteTo(s.buf, s.path)
+			s.Unlock()
 		})
 		base.Go(context.Background(), db.RDBInterval, func() {
-			s.WriteTo(s.buf, s.path)
 			s.dump()
 		})
 	}
@@ -284,9 +279,6 @@ func (s *storeShard) WriteTo(buf *bytes.Buffer, path string) (int64, error) {
 
 // load reads the persisted data from the shard file and loads it into memory.
 func (s *storeShard) load() {
-	s.rwlock.Lock()
-	defer s.rwlock.Unlock()
-
 	s.Lock()
 	defer s.Unlock()
 
@@ -341,20 +333,17 @@ func (s *storeShard) load() {
 
 // dump dumps the current state of the shard to the file.
 func (s *storeShard) dump() {
-	s.rwlock.Lock()
-	defer s.rwlock.Unlock()
-
 	// dump current state
 	s.Scan(func(key string, v any, i int64) bool {
 		if i == noTTL {
 			// Set
 			if coder := NewCoder(OpSet).String(key).Any(v); coder.err == nil {
-				s.buf.Write(coder.buf)
+				s.rwbuf.Write(coder.buf)
 			}
 		} else {
 			// SetTx
 			if coder := NewCoder(OpSetTx).String(key).Int64(i / timeCarry).Any(v); coder.err == nil {
-				s.buf.Write(coder.buf)
+				s.rwbuf.Write(coder.buf)
 			}
 		}
 		return true
@@ -364,8 +353,8 @@ func (s *storeShard) dump() {
 	defer s.Unlock()
 
 	// Flush buffer to file
-	s.WriteTo(s.buf, s.rwPath)
 	s.WriteTo(s.rwbuf, s.rwPath)
+	s.WriteTo(s.buf, s.rwPath)
 
 	// Rename rewrite file to the shard file
 	os.Rename(s.rwPath, s.path)

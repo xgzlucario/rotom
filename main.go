@@ -20,8 +20,6 @@ import (
 var db, _ = store.Open(store.DefaultConfig)
 
 func testStress() {
-	fmt.Println("===== start test Stress =====")
-
 	a := time.Now()
 
 	// monitor
@@ -61,8 +59,6 @@ func getDBFileSize() int64 {
 
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
-	time.Sleep(time.Second)
 	testStress()
 	db.Flush()
-	time.Sleep(time.Second)
 }

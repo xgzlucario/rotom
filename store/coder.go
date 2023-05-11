@@ -23,19 +23,27 @@ func NewCoder(v Operation) *Coder {
 	return &Coder{[]byte{byte(v)}, nil}
 }
 
+func (s *Coder) String(v string) *Coder {
+	s.int(len(v))
+	s.buf = append(s.buf, ':')
+	s.buf = append(s.buf, v...)
+	s.End()
+	return s
+}
+
 func (s *Coder) End() *Coder {
 	s.buf = append(s.buf, recordSepChar)
 	return s
 }
 
-func (s *Coder) Int(v int) *Coder {
+func (s *Coder) int(v int) *Coder {
 	str := strconv.FormatInt(int64(v), _base)
 	s.buf = append(s.buf, str...)
 	return s
 }
 
 func (s *Coder) format(v []byte) *Coder {
-	s.Int(len(v))
+	s.int(len(v))
 	s.buf = append(s.buf, ':')
 	s.buf = append(s.buf, v...)
 	s.End()
@@ -45,14 +53,6 @@ func (s *Coder) format(v []byte) *Coder {
 func (s *Coder) Int64(v int64) *Coder {
 	str := strconv.FormatInt(v, _base)
 	return s.format(base.S2B(&str))
-}
-
-func (s *Coder) String(v string) *Coder {
-	s.Int(len(v))
-	s.buf = append(s.buf, ':')
-	s.buf = append(s.buf, v...)
-	s.End()
-	return s
 }
 
 func (s *Coder) Any(v any) *Coder {
