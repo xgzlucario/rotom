@@ -113,14 +113,6 @@ func (c *Cache[V]) Persist(key string) bool {
 	return ok
 }
 
-// Keys
-func (c *Cache[V]) Keys() []string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.data.Keys()
-}
-
 // WithExpired
 func (c *Cache[V]) WithExpired(f onExpired[V]) {
 	c.mu.Lock()
@@ -140,6 +132,25 @@ func (c *Cache[V]) Scan(f func(string, V, int64) bool) {
 		}
 		return true
 	})
+}
+
+// Size
+func (c *Cache[V]) Size() int {
+	return c.data.Len()
+}
+
+// Keys
+func (c *Cache[V]) Keys() []string {
+	keys := make([]string, 0)
+
+	c.Scan(func(k string, _ V, ts int64) bool {
+		if ts > c.ts {
+			keys = append(keys, k)
+		}
+		return true
+	})
+
+	return keys
 }
 
 // Count

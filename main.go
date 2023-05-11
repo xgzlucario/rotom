@@ -1,72 +1,68 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"fmt"
 	"net/http"
+	"os/exec"
+	"strconv"
 	"time"
 
 	_ "net/http/pprof"
 
 	"github.com/brianvoe/gofakeit/v6"
-	"github.com/go-redis/redis/v8"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
+	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 )
 
-func GetRedisClient() (*redis.Client, error) {
-	ctx := context.Background()
-	client := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   0,
-	})
+var db, _ = store.Open(store.DefaultConfig)
 
-	// 测试连接
-	_, err := client.Ping(ctx).Result()
-	if err != nil {
-		fmt.Printf("connet Redis error: %v\n", err)
+func testStress() {
+	fmt.Println("===== start test Stress =====")
+
+	a := time.Now()
+
+	// monitor
+	var count int64
+	go func() {
+		for {
+			memInfo, _ := mem.VirtualMemory()
+			cpuInfo, _ := cpu.Percent(time.Second/5, false)
+			dbsize := getDBFileSize()
+			fmt.Println("---------------------------------------")
+			fmt.Printf("time: %.1fs, count: %d, num: %d\n", time.Since(a).Seconds(), count, db.Size())
+			fmt.Printf("mem: %.1f%%, cpu: %.1f%%, db: %.1fM\n", memInfo.UsedPercent, cpuInfo[0], float64(dbsize)/1024/1024)
+		}
+	}()
+
+	// Simulate testing
+	for {
+		count++
+		db.SetEx(gofakeit.Phone(), gofakeit.Uint32(), time.Second*5)
 	}
+}
 
-	return client, nil
+func getDBFileSize() int64 {
+	res, err := exec.Command("du", "-s", "db").Output()
+	if err != nil {
+		return -1
+	}
+	spr := bytes.IndexByte(res, '\t')
+	res = res[:spr]
+
+	num, err := strconv.ParseInt(*base.B2S(res), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return num * 1000
 }
 
 func main() {
-	db := store.Open(store.DefaultConfig)
-
-	rediscli, err := GetRedisClient()
-	if err != nil {
-		panic(err)
-	}
-
 	go http.ListenAndServe("localhost:6060", nil)
-
-	// Rotom Expired Test
-	db.SetEX("test1", "test", time.Second)
-	db.SetEX("test2", "test", time.Second*2)
-	db.SetEX("test3", "test", time.Second*3)
-	db.SetEX("test4", "test", time.Second*4)
-	db.SetEX("test5", "test", time.Second*5)
-
-	for i := 0; i < 55; i++ {
-		time.Sleep(time.Second / 10)
-		fmt.Println(db.Keys())
-	}
-
-	// Rotom Set
-	a := time.Now()
-	for i := 0; i < 100*10000; i++ {
-		db.SetEX(gofakeit.Phone(), gofakeit.Uint16(), time.Hour)
-	}
-	fmt.Println("Rotom Set cost:", time.Since(a))
-
-	// Redis Set
-	a = time.Now()
-	pipe := rediscli.Pipeline()
-	for i := 0; i < 100*10000; i++ {
-		pipe.Set(context.Background(), gofakeit.Phone(), gofakeit.Uint16(), time.Hour)
-	}
-	_, err = pipe.Exec(context.Background())
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Redis Set cost:", time.Since(a))
+	time.Sleep(time.Second)
+	testStress()
+	db.Flush()
+	time.Sleep(time.Second)
 }

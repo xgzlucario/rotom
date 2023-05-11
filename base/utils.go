@@ -1,6 +1,8 @@
 package base
 
 import (
+	"context"
+	"time"
 	"unsafe"
 )
 
@@ -15,4 +17,19 @@ func S2B(str *string) []byte {
 
 func B2S(buf []byte) *string {
 	return (*string)(unsafe.Pointer(&buf))
+}
+
+// Go start a background worker
+func Go(ctx context.Context, interval time.Duration, f func()) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				f()
+				time.Sleep(interval)
+			}
+		}
+	}()
 }

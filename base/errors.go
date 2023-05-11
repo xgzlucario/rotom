@@ -17,5 +17,5 @@ var (
 
 	ErrUnknownOperationType = errors.New("unknown operation type")
 
-	ErrParseAOFLine = errors.New("parse aof line error")
+	ErrParseRecordLine = errors.New("parse record line error")
 )
