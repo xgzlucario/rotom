@@ -46,7 +46,7 @@ func main() {
 	db.SetEX("test4", "test", time.Second*4)
 	db.SetEX("test5", "test", time.Second*5)
 
-	for i := 0; i < 60; i++ {
+	for i := 0; i < 55; i++ {
 		time.Sleep(time.Second / 10)
 		fmt.Println(db.Keys())
 	}
@@ -63,6 +63,10 @@ func main() {
 	pipe := rediscli.Pipeline()
 	for i := 0; i < 100*10000; i++ {
 		pipe.Set(context.Background(), gofakeit.Phone(), gofakeit.Uint16(), time.Hour)
+	}
+	_, err = pipe.Exec(context.Background())
+	if err != nil {
+		panic(err)
 	}
 	fmt.Println("Redis Set cost:", time.Since(a))
 }
