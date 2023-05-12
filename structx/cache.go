@@ -47,7 +47,10 @@ func NewCache[V any]() *Cache[V] {
 // NewCustomCache
 func NewCustomCache[V any](expRate float64) *Cache[V] {
 	c := &Cache[V]{
-		ts:   time.Now().UnixNano(),
+		ts: time.Now().UnixNano(),
+		pool: sync.Pool{New: func() any {
+			return new(cacheItem[V])
+		}},
 		data: NewMap[string, *cacheItem[V]](),
 	}
 	go c.eliminate(expRate)
@@ -87,16 +90,10 @@ func (c *Cache[V]) SetTX(key string, val V, ts int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	obj := c.pool.Get()
-	if obj == nil {
-		c.data.Set(key, &cacheItem[V]{T: ts, V: val})
-
-	} else {
-		item := obj.(*cacheItem[V])
-		item.T = ts
-		item.V = val
-		c.data.Set(key, item)
-	}
+	obj := c.pool.Get().(*cacheItem[V])
+	obj.T = ts
+	obj.V = val
+	c.data.Set(key, obj)
 }
 
 // Remove

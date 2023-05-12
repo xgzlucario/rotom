@@ -15,7 +15,9 @@ const (
 	_base = 36
 )
 
-var coderPool sync.Pool
+var coderPool = sync.Pool{
+	New: func() any { return new(Coder) },
+}
 
 type Coder struct {
 	buf []byte
@@ -24,11 +26,9 @@ type Coder struct {
 
 // NewCoder returns a Coder encode with buffer length.
 func NewCoder(v Operation) *Coder {
-	obj := coderPool.Get()
-	if obj == nil {
-		return &Coder{[]byte{byte(v)}, nil}
-	}
-	return obj.(*Coder)
+	obj := coderPool.Get().(*Coder)
+	obj.buf = append(obj.buf, byte(v))
+	return obj
 }
 
 func putCoder(obj *Coder) {
