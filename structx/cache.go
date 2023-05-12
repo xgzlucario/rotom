@@ -77,16 +77,16 @@ func (c *Cache[V]) GetTX(key string) (v V, ttl int64, ok bool) {
 
 // Set
 func (c *Cache[V]) Set(key string, val V) {
-	c.SetTX(key, val, noTTL)
+	c.SetTx(key, val, noTTL)
 }
 
-// SetEX
-func (c *Cache[V]) SetEX(key string, val V, ttl time.Duration) {
-	c.SetTX(key, val, c.ts+int64(ttl))
+// SetEx
+func (c *Cache[V]) SetEx(key string, val V, ttl time.Duration) {
+	c.SetTx(key, val, c.ts+int64(ttl))
 }
 
-// SetTX
-func (c *Cache[V]) SetTX(key string, val V, ts int64) {
+// SetTx
+func (c *Cache[V]) SetTx(key string, val V, ts int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

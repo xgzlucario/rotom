@@ -43,11 +43,6 @@ func (s *Coder) String(v string) *Coder {
 	s.int(len(v))
 	s.buf = append(s.buf, ':')
 	s.buf = append(s.buf, v...)
-	s.End()
-	return s
-}
-
-func (s *Coder) End() *Coder {
 	s.buf = append(s.buf, recordSepChar)
 	return s
 }
@@ -63,7 +58,7 @@ func (s *Coder) format(v []byte) *Coder {
 	s.int(len(v))
 	s.buf = append(s.buf, ':')
 	s.buf = append(s.buf, v...)
-	s.End()
+	s.buf = append(s.buf, recordSepChar)
 	return s
 }
 

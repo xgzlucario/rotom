@@ -9,6 +9,8 @@ var (
 
 	ErrKeyNotFound = errors.New("key not found")
 
+	ErrFieldNotFound = errors.New("field not found")
+
 	ErrKeyIsEmpty = errors.New("key is empty")
 
 	ErrWrongType = errors.New("wrong data type")

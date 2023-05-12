@@ -28,17 +28,13 @@ const (
 	OpPersist
 	OpIncr
 	// TODO: Implement these operations.
-	OpHGet
 	OpHSet
 	OpHRemove
-	OpGetBit
 	OpSetBit
-	OpCountBit
 	OpLPush
 	OpLPop
 	OpRPush
 	OpRPop
-	OpLLen
 )
 
 const (
@@ -147,9 +143,7 @@ func Open(conf *Config) (*Store, error) {
 	for _, s := range db.shards {
 		s := s
 		base.Go(context.Background(), db.SyncInterval, func() {
-			s.Lock()
 			s.writeTo(s.buf, s.path)
-			s.Unlock()
 		})
 		base.Go(context.Background(), db.RewriteInterval, func() {
 			s.dump()
@@ -161,22 +155,15 @@ func Open(conf *Config) (*Store, error) {
 
 // Set sets a key-value pair in the database.
 func (db *Store) Set(key string, val any) error {
-	if len(key) == 0 {
-		return base.ErrKeyIsEmpty
-	}
-	shard := db.getShard(key)
-
-	coder := NewCoder(OpSet).String(key).Any(val)
-	defer putCoder(coder)
-	if coder.err != nil {
-		return coder.err
+	cd := NewCoder(OpSet).String(key).Any(val)
+	defer putCoder(cd)
+	if cd.err != nil {
+		return cd.err
 	}
 
-	shard.Lock()
-	defer shard.Unlock()
-
-	shard.buf.Write(coder.buf)
-	shard.Set(key, val)
+	sd := db.getShard(key)
+	sd.write(cd.buf)
+	sd.Set(key, val)
 
 	return nil
 }
@@ -188,65 +175,79 @@ func (db *Store) SetEx(key string, val any, ttl time.Duration) error {
 
 // SetTx sets a key-value pair with expiry time in the database.
 func (db *Store) SetTx(key string, val any, ts int64) error {
-	if len(key) == 0 {
-		return base.ErrKeyIsEmpty
-	}
-	shard := db.getShard(key)
-
-	coder := NewCoder(OpSetTx).String(key).Int64(ts / timeCarry).Any(val)
-	defer putCoder(coder)
-	if coder.err != nil {
-		return coder.err
+	cd := NewCoder(OpSetTx).String(key).Int64(ts / timeCarry).Any(val)
+	defer putCoder(cd)
+	if cd.err != nil {
+		return cd.err
 	}
 
-	shard.Lock()
-	defer shard.Unlock()
-
-	shard.buf.Write(coder.buf)
-	shard.SetTX(key, val, ts)
+	sd := db.getShard(key)
+	sd.write(cd.buf)
+	sd.SetTx(key, val, ts)
 
 	return nil
 }
 
 // Remove removes a key-value pair from the database and return it.
 func (db *Store) Remove(key string) (val any, ok bool) {
-	shard := db.getShard(key)
+	cd := NewCoder(OpRemove).String(key)
+	defer putCoder(cd)
 
-	coder := NewCoder(OpRemove).String(key).End()
-	defer putCoder(coder)
+	sd := db.getShard(key)
+	sd.write(cd.buf)
 
-	shard.Lock()
-	defer shard.Unlock()
-
-	shard.buf.Write(coder.buf)
-
-	return shard.Remove(key)
+	return sd.Remove(key)
 }
 
 // Persist persists a key-value pair in the database.
 func (db *Store) Persist(key string) bool {
-	shard := db.getShard(key)
+	cd := NewCoder(OpPersist).String(key)
+	defer putCoder(cd)
 
-	coder := NewCoder(OpPersist).String(key).End()
-	defer putCoder(coder)
+	sd := db.getShard(key)
+	sd.write(cd.buf)
 
-	shard.Lock()
-	defer shard.Unlock()
+	return sd.Persist(key)
+}
 
-	shard.buf.Write(coder.buf)
+// HGet gets a value from a hashmap.
+func (db *Store) HGet(key, field string) (string, error) {
+	sd := db.getShard(key)
 
-	return shard.Persist(key)
+	hmap, err := sd.Get(key).ToHMap()
+	if err != nil {
+		return "", err
+	}
+	res, ok := hmap.Get(field)
+	if !ok {
+		return "", base.ErrFieldNotFound
+	}
+	return res, nil
+}
+
+// HSet sets a key-value pair to a hashmap.
+func (db *Store) HSet(key, field, val string) error {
+	cd := NewCoder(OpHSet).String(key).String(field).String(val)
+	defer putCoder(cd)
+
+	sd := db.getShard(key)
+	sd.write(cd.buf)
+
+	hmap, err := sd.Get(key).ToHMap()
+	hmap.Set(field, val)
+	if err != nil {
+		sd.Set(key, hmap)
+	}
+
+	return nil
 }
 
 // Flush writes all the data in the buffer to the disk.
 func (db *Store) Flush() error {
-	for _, s := range db.shards {
-		s.Lock()
-		if _, err := s.writeTo(s.buf, s.path); err != nil {
-			s.Unlock()
+	for _, sd := range db.shards {
+		if _, err := sd.writeTo(sd.buf, sd.path); err != nil {
 			return err
 		}
-		s.Unlock()
 	}
 	return nil
 }
@@ -254,22 +255,33 @@ func (db *Store) Flush() error {
 // Size returns the total size of the data in the database.
 // It is not as accurate as Count because it may include expired but not obsolete key-value pairs.
 func (db *Store) Size() (sum int) {
-	for _, s := range db.shards {
-		sum += s.Size()
+	for _, sd := range db.shards {
+		sum += sd.Size()
 	}
 	return sum
 }
 
 // Count returns the total number of key-value pairs in the database.
 func (db *Store) Count() (sum int) {
-	for _, s := range db.shards {
-		sum += s.Count()
+	for _, sd := range db.shards {
+		sum += sd.Count()
 	}
 	return sum
 }
 
+// write writes the data into the buffer.
+func (s *storeShard) write(buf []byte) {
+	s.Lock()
+	defer s.Unlock()
+
+	s.buf.Write(buf)
+}
+
 // writeTo writes the buffer into the file at the specified path.
 func (s *storeShard) writeTo(buf *bytes.Buffer, path string) (int64, error) {
+	s.Lock()
+	defer s.Unlock()
+
 	if buf.Len() == 0 {
 		return 0, nil
 	}
@@ -328,7 +340,23 @@ func (s *storeShard) load() {
 			// parse val
 			val, line = parseLine(line, recordSepChar)
 			if ts > atomic.LoadInt64(&globalTime) {
-				s.SetTX(*base.B2S(key), base.Raw(val), ts)
+				s.SetTx(*base.B2S(key), base.Raw(val), ts)
+			}
+
+		case OpHSet:
+			var field, val []byte
+
+			// parse field
+			field, line = parseLine(line, recordSepChar)
+
+			// parse val
+			val, line = parseLine(line, recordSepChar)
+
+			hmap, err := s.Get(*base.B2S(key)).ToHMap()
+			hmap.Set(*base.B2S(field), *base.B2S(val))
+			// override
+			if err != nil {
+				s.Set(*base.B2S(key), hmap)
 			}
 
 		case OpRemove:
@@ -353,22 +381,19 @@ func (s *storeShard) dump() {
 	s.Scan(func(key string, v any, i int64) bool {
 		if i == noTTL {
 			// Set
-			if coder := NewCoder(OpSet).String(key).Any(v); coder.err == nil {
-				s.rwbuf.Write(coder.buf)
-				putCoder(coder)
+			if cd := NewCoder(OpSet).String(key).Any(v); cd.err == nil {
+				s.rwbuf.Write(cd.buf)
+				putCoder(cd)
 			}
 		} else {
 			// SetTx
-			if coder := NewCoder(OpSetTx).String(key).Int64(i / timeCarry).Any(v); coder.err == nil {
-				s.rwbuf.Write(coder.buf)
-				putCoder(coder)
+			if cd := NewCoder(OpSetTx).String(key).Int64(i / timeCarry).Any(v); cd.err == nil {
+				s.rwbuf.Write(cd.buf)
+				putCoder(cd)
 			}
 		}
 		return true
 	})
-
-	s.Lock()
-	defer s.Unlock()
 
 	// Flush buffer to file
 	s.writeTo(s.rwbuf, s.rwPath)
@@ -399,24 +424,31 @@ func parseLine(line []byte, valid byte) (pre []byte, suf []byte) {
 	return
 }
 
-// getShard hashes the key to determine the shard.
+// getShard hashes the key to determine the sd.
 func (db *Store) getShard(key string) *storeShard {
 	return db.shards[xxh3.HashString(key)&db.mask]
 }
 
 // Get fetch the value by key from the database.
 func (db *Store) Get(key string) Value {
-	shard := db.getShard(key)
-	val, ok := shard.Cache.Get(key)
+	return db.getShard(key).Get(key)
+}
+
+// Get fetch the value by key from the sd.
+func (sd *storeShard) Get(key string) Value {
+	sd.RLock()
+	defer sd.RUnlock()
+
+	val, ok := sd.Cache.Get(key)
 	if !ok {
 		return Value{}
 	}
 
 	if raw, isRaw := val.(base.Raw); isRaw {
-		return Value{raw: raw, key: key, s: shard}
+		return Value{raw: raw, key: key, s: sd}
 
 	} else {
-		return Value{val: val, key: key, s: shard}
+		return Value{val: val, key: key, s: sd}
 	}
 }
 
@@ -446,6 +478,8 @@ func (v Value) ToIntSlice() (r []int, e error) { return getValue(v, r) }
 func (v Value) ToStringSlice() (r []string, e error) { return getValue(v, r) }
 
 func (v Value) ToTime() (r time.Time, e error) { return getValue(v, r) }
+
+func (v Value) ToHMap() (Map, error) { return getValue(v, structx.NewMap[string, string]()) }
 
 func (v Value) Scan(val any) error {
 	_, err := getValue(v, val)
