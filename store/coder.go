@@ -11,20 +11,22 @@ import (
 	"github.com/xgzlucario/rotom/base"
 )
 
+// _base is the base for integer conversion.
 const (
 	_base = 36
 )
 
+// coderPool is a pool of Coder objects to improve performance by reusing Coder instances.
 var coderPool = sync.Pool{
 	New: func() any { return new(Coder) },
 }
 
+// Coder is the primary type for encoding data into a specific format.
 type Coder struct {
 	buf []byte
 	err error
 }
 
-// NewCoder returns a Coder encode with buffer length.
 func NewCoder(v Operation) *Coder {
 	obj := coderPool.Get().(*Coder)
 	obj.buf = append(obj.buf, byte(v))
@@ -32,7 +34,7 @@ func NewCoder(v Operation) *Coder {
 }
 
 func putCoder(obj *Coder) {
-	obj.buf = obj.buf[0:0]
+	obj.buf = obj.buf[:0]
 	obj.err = nil
 	coderPool.Put(obj)
 }
@@ -56,6 +58,7 @@ func (s *Coder) int(v int) *Coder {
 	return s
 }
 
+// format encodes a byte slice into the Coder's buffer as a record.
 func (s *Coder) format(v []byte) *Coder {
 	s.int(len(v))
 	s.buf = append(s.buf, ':')

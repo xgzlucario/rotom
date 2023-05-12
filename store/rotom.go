@@ -223,7 +223,7 @@ func (db *Store) Remove(key string) (val any, ok bool) {
 	return shard.Remove(key)
 }
 
-// Persist  persists a key-value pair in the database.
+// Persist persists a key-value pair in the database.
 func (db *Store) Persist(key string) bool {
 	shard := db.getShard(key)
 
