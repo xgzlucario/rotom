@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/xgzlucario/rotom/base"
@@ -14,13 +15,26 @@ const (
 	_base = 36
 )
 
+var coderPool sync.Pool
+
 type Coder struct {
 	buf []byte
 	err error
 }
 
+// NewCoder returns a Coder encode with buffer length.
 func NewCoder(v Operation) *Coder {
-	return &Coder{[]byte{byte(v)}, nil}
+	obj := coderPool.Get()
+	if obj == nil {
+		return &Coder{[]byte{byte(v)}, nil}
+	}
+	return obj.(*Coder)
+}
+
+func putCoder(obj *Coder) {
+	obj.buf = obj.buf[0:0]
+	obj.err = nil
+	coderPool.Put(obj)
 }
 
 func (s *Coder) String(v string) *Coder {

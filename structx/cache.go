@@ -29,7 +29,7 @@ type Cache[V any] struct {
 	// based on Hashmap
 	data Map[string, *cacheItem[V]]
 
-	cb onExpired[V]
+	pool sync.Pool
 
 	mu sync.RWMutex
 }
@@ -38,8 +38,6 @@ type cacheItem[V any] struct {
 	T int64
 	V V
 }
-
-type onExpired[V any] func(string, V, int64)
 
 // NewCache
 func NewCache[V any]() *Cache[V] {
@@ -89,7 +87,16 @@ func (c *Cache[V]) SetTX(key string, val V, ts int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.data.Set(key, &cacheItem[V]{T: ts, V: val})
+	obj := c.pool.Get()
+	if obj == nil {
+		c.data.Set(key, &cacheItem[V]{T: ts, V: val})
+
+	} else {
+		item := obj.(*cacheItem[V])
+		item.T = ts
+		item.V = val
+		c.data.Set(key, item)
+	}
 }
 
 // Remove
@@ -97,7 +104,17 @@ func (c *Cache[V]) Remove(key string) (V, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	return c.delete(key)
+}
+
+// delete
+func (c *Cache[V]) delete(key string) (V, bool) {
 	n, ok := c.data.Delete(key)
+	defer func() {
+		var v V
+		n.V = v
+		c.pool.Put(n)
+	}()
 	return n.V, ok
 }
 
@@ -111,14 +128,6 @@ func (c *Cache[V]) Persist(key string) bool {
 		n.T = noTTL
 	}
 	return ok
-}
-
-// WithExpired
-func (c *Cache[V]) WithExpired(f onExpired[V]) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.cb = f
 }
 
 // Scan
@@ -191,11 +200,7 @@ func (c *Cache[V]) eliminate(expRate float64) {
 				// expired
 				if ok && v.T < c.ts {
 					elimi++
-					c.data.Delete(k)
-					// cb
-					if c.cb != nil {
-						c.cb(k, v.V, v.T)
-					}
+					c.delete(k)
 				}
 				pb++
 			}

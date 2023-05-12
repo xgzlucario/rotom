@@ -59,10 +59,11 @@ type (
 var (
 	globalTime    = time.Now().UnixNano()
 	DefaultConfig = &Config{
-		Path:        "db",
-		ShardCount:  32,
-		AOFInterval: time.Second,
-		RDBInterval: time.Second * 30,
+		Path:            "db",
+		ShardCount:      32,
+		SyncPolicy:      base.EverySecond,
+		SyncInterval:    time.Second,
+		RewriteInterval: time.Second * 30,
 	}
 )
 
@@ -74,8 +75,8 @@ type Config struct {
 	SyncPolicy base.SyncPolicy
 
 	// Interval of persistence.
-	AOFInterval time.Duration
-	RDBInterval time.Duration
+	SyncInterval    time.Duration
+	RewriteInterval time.Duration
 }
 
 // Store represents a key-value store.
@@ -87,6 +88,8 @@ type Store struct {
 
 // storeShard represents a shard in the Store.
 type storeShard struct {
+	syncPolicy base.SyncPolicy // sync policy
+
 	path   string
 	rwPath string // path for rewrite
 
@@ -123,11 +126,12 @@ func Open(conf *Config) (*Store, error) {
 	// Load configuration
 	for i := range db.shards {
 		db.shards[i] = &storeShard{
-			buf:    bytes.NewBuffer(nil),
-			rwbuf:  bytes.NewBuffer(nil),
-			path:   path.Join(db.Path, strconv.Itoa(i)+".db"),
-			rwPath: path.Join(db.Path, strconv.Itoa(i)+".db-rw"),
-			Cache:  structx.NewCache[any](),
+			syncPolicy: conf.SyncPolicy,
+			buf:        bytes.NewBuffer(nil),
+			rwbuf:      bytes.NewBuffer(nil),
+			path:       path.Join(db.Path, strconv.Itoa(i)+".db"),
+			rwPath:     path.Join(db.Path, strconv.Itoa(i)+".db-rw"),
+			Cache:      structx.NewCache[any](),
 		}
 	}
 
@@ -142,12 +146,12 @@ func Open(conf *Config) (*Store, error) {
 	// Start worker
 	for _, s := range db.shards {
 		s := s
-		base.Go(context.Background(), db.AOFInterval, func() {
+		base.Go(context.Background(), db.SyncInterval, func() {
 			s.Lock()
-			s.WriteTo(s.buf, s.path)
+			s.writeTo(s.buf, s.path)
 			s.Unlock()
 		})
-		base.Go(context.Background(), db.RDBInterval, func() {
+		base.Go(context.Background(), db.RewriteInterval, func() {
 			s.dump()
 		})
 	}
@@ -161,7 +165,9 @@ func (db *Store) Set(key string, val any) error {
 		return base.ErrKeyIsEmpty
 	}
 	shard := db.getShard(key)
+
 	coder := NewCoder(OpSet).String(key).Any(val)
+	defer putCoder(coder)
 	if coder.err != nil {
 		return coder.err
 	}
@@ -170,8 +176,8 @@ func (db *Store) Set(key string, val any) error {
 	defer shard.Unlock()
 
 	shard.buf.Write(coder.buf)
-
 	shard.Set(key, val)
+
 	return nil
 }
 
@@ -185,52 +191,58 @@ func (db *Store) SetTx(key string, val any, ts int64) error {
 	if len(key) == 0 {
 		return base.ErrKeyIsEmpty
 	}
-	s := db.getShard(key)
-	coder := NewCoder(OpSet).String(key).Int64(ts / timeCarry).Any(val)
+	shard := db.getShard(key)
+
+	coder := NewCoder(OpSetTx).String(key).Int64(ts / timeCarry).Any(val)
+	defer putCoder(coder)
 	if coder.err != nil {
 		return coder.err
 	}
 
-	s.Lock()
-	defer s.Unlock()
+	shard.Lock()
+	defer shard.Unlock()
 
-	s.buf.Write(coder.buf)
+	shard.buf.Write(coder.buf)
+	shard.SetTX(key, val, ts)
 
-	s.SetTX(key, val, ts)
 	return nil
 }
 
 // Remove removes a key-value pair from the database and return it.
 func (db *Store) Remove(key string) (val any, ok bool) {
-	s := db.getShard(key)
-	coder := NewCoder(OpSet).String(key).End()
+	shard := db.getShard(key)
 
-	s.Lock()
-	defer s.Unlock()
+	coder := NewCoder(OpRemove).String(key).End()
+	defer putCoder(coder)
 
-	s.buf.Write(coder.buf)
+	shard.Lock()
+	defer shard.Unlock()
 
-	return s.Remove(key)
+	shard.buf.Write(coder.buf)
+
+	return shard.Remove(key)
 }
 
 // Persist  persists a key-value pair in the database.
 func (db *Store) Persist(key string) bool {
-	s := db.getShard(key)
-	coder := NewCoder(OpSet).String(key).End()
+	shard := db.getShard(key)
 
-	s.Lock()
-	defer s.Unlock()
+	coder := NewCoder(OpPersist).String(key).End()
+	defer putCoder(coder)
 
-	s.buf.Write(coder.buf)
+	shard.Lock()
+	defer shard.Unlock()
 
-	return s.Persist(key)
+	shard.buf.Write(coder.buf)
+
+	return shard.Persist(key)
 }
 
 // Flush writes all the data in the buffer to the disk.
 func (db *Store) Flush() error {
 	for _, s := range db.shards {
 		s.Lock()
-		if _, err := s.WriteTo(s.buf, s.path); err != nil {
+		if _, err := s.writeTo(s.buf, s.path); err != nil {
 			s.Unlock()
 			return err
 		}
@@ -256,8 +268,8 @@ func (db *Store) Count() (sum int) {
 	return sum
 }
 
-// WriteTo writes the buffer into the file at the specified path.
-func (s *storeShard) WriteTo(buf *bytes.Buffer, path string) (int64, error) {
+// writeTo writes the buffer into the file at the specified path.
+func (s *storeShard) writeTo(buf *bytes.Buffer, path string) (int64, error) {
 	if buf.Len() == 0 {
 		return 0, nil
 	}
@@ -307,7 +319,7 @@ func (s *storeShard) load() {
 
 			// parse ttl
 			ttl, line = parseLine(line, recordSepChar)
-			ts, err := strconv.ParseInt(*base.B2S(ttl), 36, 64)
+			ts, err := strconv.ParseInt(*base.B2S(ttl), _base, 64)
 			if err != nil {
 				panic(err)
 			}
@@ -333,17 +345,23 @@ func (s *storeShard) load() {
 
 // dump dumps the current state of the shard to the file.
 func (s *storeShard) dump() {
+	if s.syncPolicy == base.Never {
+		return
+	}
+
 	// dump current state
 	s.Scan(func(key string, v any, i int64) bool {
 		if i == noTTL {
 			// Set
 			if coder := NewCoder(OpSet).String(key).Any(v); coder.err == nil {
 				s.rwbuf.Write(coder.buf)
+				putCoder(coder)
 			}
 		} else {
 			// SetTx
 			if coder := NewCoder(OpSetTx).String(key).Int64(i / timeCarry).Any(v); coder.err == nil {
 				s.rwbuf.Write(coder.buf)
+				putCoder(coder)
 			}
 		}
 		return true
@@ -353,8 +371,8 @@ func (s *storeShard) dump() {
 	defer s.Unlock()
 
 	// Flush buffer to file
-	s.WriteTo(s.rwbuf, s.rwPath)
-	s.WriteTo(s.buf, s.rwPath)
+	s.writeTo(s.rwbuf, s.rwPath)
+	s.writeTo(s.buf, s.rwPath)
 
 	// Rename rewrite file to the shard file
 	os.Rename(s.rwPath, s.path)
@@ -366,7 +384,7 @@ func parseLine(line []byte, valid byte) (pre []byte, suf []byte) {
 	if i <= 0 {
 		panic(base.ErrParseRecordLine)
 	}
-	l, err := strconv.ParseInt(*base.B2S(line[:i]), 36, 64)
+	l, err := strconv.ParseInt(*base.B2S(line[:i]), _base, 64)
 	if err != nil {
 		panic(err)
 	}
@@ -388,17 +406,17 @@ func (db *Store) getShard(key string) *storeShard {
 
 // Get fetch the value by key from the database.
 func (db *Store) Get(key string) Value {
-	s := db.getShard(key)
-	val, ok := s.Cache.Get(key)
+	shard := db.getShard(key)
+	val, ok := shard.Cache.Get(key)
 	if !ok {
 		return Value{}
 	}
 
 	if raw, isRaw := val.(base.Raw); isRaw {
-		return Value{raw: raw, key: key, s: s}
+		return Value{raw: raw, key: key, s: shard}
 
 	} else {
-		return Value{val: val, key: key, s: s}
+		return Value{val: val, key: key, s: shard}
 	}
 }
 
