@@ -352,7 +352,7 @@ func (s *storeShard) load() {
 			// parse val
 			val, line = parseLine(line, recordSepChar)
 
-			hmap, err := s.Get(*base.B2S(key)).ToHMap()
+			hmap, err := s.get(*base.B2S(key)).ToHMap()
 			hmap.Set(*base.B2S(field), *base.B2S(val))
 			// override
 			if err != nil {
@@ -439,6 +439,10 @@ func (sd *storeShard) Get(key string) Value {
 	sd.RLock()
 	defer sd.RUnlock()
 
+	return sd.get(key)
+}
+
+func (sd *storeShard) get(key string) Value {
 	val, ok := sd.Cache.Get(key)
 	if !ok {
 		return Value{}
