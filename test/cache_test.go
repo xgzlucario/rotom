@@ -20,7 +20,7 @@ func TestCache(t *testing.T) {
 	assert.Equal(t, 1, value)
 
 	// Test SetEX and Get
-	cache.SetEX("key2", 2, time.Millisecond*50)
+	cache.SetEx("key2", 2, time.Millisecond*50)
 	value, ok = cache.Get("key2")
 	assert.True(t, ok)
 	assert.Equal(t, 2, value)
@@ -38,7 +38,7 @@ func TestCache(t *testing.T) {
 	assert.Equal(t, int64(math.MaxInt64), ttl)
 
 	// Test SetEX
-	cache.SetEX("key4", 4, time.Millisecond*100)
+	cache.SetEx("key4", 4, time.Millisecond*100)
 	value, ok = cache.Get("key4")
 	assert.True(t, ok)
 	assert.Equal(t, 4, value)

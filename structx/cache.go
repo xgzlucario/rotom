@@ -29,6 +29,7 @@ type Cache[V any] struct {
 	// based on Hashmap
 	data Map[string, *cacheItem[V]]
 
+	// Reuse object to reduce GC stress
 	pool sync.Pool
 
 	mu sync.RWMutex

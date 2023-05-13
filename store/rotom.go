@@ -26,10 +26,10 @@ const (
 	OpSetTx
 	OpRemove
 	OpPersist
-	OpIncr
-	// TODO: Implement these operations.
 	OpHSet
 	OpHRemove
+	// TODO: Implement these operations.
+	OpIncr
 	OpSetBit
 	OpLPush
 	OpLPop
@@ -45,10 +45,10 @@ const (
 
 // Type aliases for structx types.
 type (
-	Map    = structx.Map[string, string]
+	Map    = map[string]string
+	Set    = map[string]struct{}
 	List   = structx.List[string]
-	Set    = structx.Set[string]
-	ZSet   = structx.ZSet[string, float64, string]
+	ZSet   = *structx.ZSet[string, float64, string]
 	BitMap = structx.BitMap
 )
 
@@ -156,61 +156,65 @@ func Open(conf *Config) (*Store, error) {
 // Set sets a key-value pair in the database.
 func (db *Store) Set(key string, val any) error {
 	cd := NewCoder(OpSet).String(key).Any(val)
-	defer putCoder(cd)
 	if cd.err != nil {
 		return cd.err
 	}
 
-	sd := db.getShard(key)
-	sd.write(cd.buf)
-	sd.Set(key, val)
-
+	db.command(key, cd, func(sd *storeShard) {
+		sd.Set(key, val)
+	})
 	return nil
+}
+
+func (db *Store) command(key string, cd *Coder, cmd func(*storeShard)) {
+	sd := db.getShard(key)
+	sd.Lock()
+	defer sd.Unlock()
+
+	sd.buf.Write(cd.buf)
+	cmd(sd)
+	putCoder(cd)
 }
 
 // SetEx sets a key-value pair with TTL (Time To Live) in the database.
 func (db *Store) SetEx(key string, val any, ttl time.Duration) error {
-	return db.SetTx(key, val, atomic.LoadInt64(&globalTime)+int64(ttl))
+	return db.SetTx(key, val, globalTime+int64(ttl))
 }
 
 // SetTx sets a key-value pair with expiry time in the database.
 func (db *Store) SetTx(key string, val any, ts int64) error {
 	cd := NewCoder(OpSetTx).String(key).Int64(ts / timeCarry).Any(val)
-	defer putCoder(cd)
 	if cd.err != nil {
 		return cd.err
 	}
 
-	sd := db.getShard(key)
-	sd.write(cd.buf)
-	sd.SetTx(key, val, ts)
-
+	db.command(key, cd, func(sd *storeShard) {
+		sd.SetTx(key, val, ts)
+	})
 	return nil
 }
 
 // Remove removes a key-value pair from the database and return it.
 func (db *Store) Remove(key string) (val any, ok bool) {
 	cd := NewCoder(OpRemove).String(key)
-	defer putCoder(cd)
 
-	sd := db.getShard(key)
-	sd.write(cd.buf)
-
-	return sd.Remove(key)
+	db.command(key, cd, func(sd *storeShard) {
+		val, ok = sd.Remove(key)
+	})
+	return
 }
 
 // Persist persists a key-value pair in the database.
-func (db *Store) Persist(key string) bool {
+func (db *Store) Persist(key string) (ok bool) {
 	cd := NewCoder(OpPersist).String(key)
-	defer putCoder(cd)
 
-	sd := db.getShard(key)
-	sd.write(cd.buf)
-
-	return sd.Persist(key)
+	db.command(key, cd, func(sd *storeShard) {
+		ok = sd.Persist(key)
+	})
+	return
 }
 
-// HGet gets a value from a hashmap.
+// HGet
 func (db *Store) HGet(key, field string) (string, error) {
 	sd := db.getShard(key)
 
@@ -218,28 +222,46 @@ func (db *Store) HGet(key, field string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	res, ok := hmap.Get(field)
+	res, ok := hmap[field]
+
 	if !ok {
 		return "", base.ErrFieldNotFound
 	}
 	return res, nil
 }
 
-// HSet sets a key-value pair to a hashmap.
-func (db *Store) HSet(key, field, val string) error {
+// HSet
+func (db *Store) HSet(key, field, val string) (_err error) {
 	cd := NewCoder(OpHSet).String(key).String(field).String(val)
-	defer putCoder(cd)
 
-	sd := db.getShard(key)
-	sd.write(cd.buf)
+	db.command(key, cd, func(sd *storeShard) {
+		m, err := sd.get(key).ToHMap()
+		m[field] = val
+		// if hmap not exist, create a new one
+		if err == base.ErrKeyNotFound {
+			sd.Set(key, m)
+		} else {
+			_err = err
+		}
+	})
 
-	hmap, err := sd.Get(key).ToHMap()
-	hmap.Set(field, val)
-	if err != nil {
-		sd.Set(key, hmap)
-	}
+	return
+}
 
-	return nil
+// HRemove
+func (db *Store) HRemove(key, field string) (_err error) {
+	cd := NewCoder(OpHRemove).String(key).String(field)
+
+	db.command(key, cd, func(sd *storeShard) {
+		hmap, err := sd.get(key).ToHMap()
+		if err != nil {
+			_err = err
+			return
+		}
+		delete(hmap, field)
+	})
+
+	return
 }
 
 // Flush writes all the data in the buffer to the disk.
@@ -269,22 +291,10 @@ func (db *Store) Count() (sum int) {
 	return sum
 }
 
-// write writes the data into the buffer.
-func (s *storeShard) write(buf []byte) {
-	s.Lock()
-	defer s.Unlock()
-
-	s.buf.Write(buf)
-}
-
 // writeTo writes the buffer into the file at the specified path.
 func (s *storeShard) writeTo(buf *bytes.Buffer, path string) (int64, error) {
 	s.Lock()
 	defer s.Unlock()
-
-	if buf.Len() == 0 {
-		return 0, nil
-	}
 
 	fs, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
@@ -353,11 +363,23 @@ func (s *storeShard) load() {
 			val, line = parseLine(line, recordSepChar)
 
 			hmap, err := s.get(*base.B2S(key)).ToHMap()
-			hmap.Set(*base.B2S(field), *base.B2S(val))
+			hmap[*base.B2S(field)] = *base.B2S(val)
 			// override
 			if err != nil {
 				s.Set(*base.B2S(key), hmap)
 			}
+
+		case OpHRemove:
+			var field []byte
+
+			// parse field
+			field, line = parseLine(line, recordSepChar)
+
+			hmap, err := s.get(*base.B2S(key)).ToHMap()
+			if err != nil {
+				return
+			}
+			delete(hmap, *base.B2S(field))
 
 		case OpRemove:
 			s.Remove(*base.B2S(key))
@@ -483,7 +505,7 @@ func (v Value) ToStringSlice() (r []string, e error) { return getValue(v, r) }
 
 func (v Value) ToTime() (r time.Time, e error) { return getValue(v, r) }
 
-func (v Value) ToHMap() (Map, error) { return getValue(v, structx.NewMap[string, string]()) }
+func (v Value) ToHMap() (Map, error) { return getValue(v, Map{}) }
 
 func (v Value) Scan(val any) error {
 	_, err := getValue(v, val)

@@ -58,12 +58,11 @@ func getDBFileSize() int64 {
 }
 
 func main() {
-	fmt.Println(db.HGet("hmap", "1"))
-	fmt.Println(db.HGet("hmap", "2"))
-
 	db.HSet("hmap", "1", "123")
 	db.HSet("hmap", "2", "234")
-	time.Sleep(time.Minute)
+
+	fmt.Println(db.HGet("hmap", "1"))
+	fmt.Println(db.HGet("hmap", "2"))
 
 	go http.ListenAndServe("localhost:6060", nil)
 	testStress()
