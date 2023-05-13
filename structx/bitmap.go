@@ -1,10 +1,9 @@
 package structx
 
 import (
-	"encoding/binary"
-	"errors"
 	"math/bits"
 
+	"github.com/bytedance/sonic"
 	"golang.org/x/exp/slices"
 )
 
@@ -195,30 +194,23 @@ func (bm *BitMap) RevRange(f func(uint32) bool) {
 	}
 }
 
-// MarshalBinary
-func (bm *BitMap) MarshalBinary() ([]byte, error) {
-	buf := make([]byte, 0, bm.size()*bitSize)
-
-	buf = binary.BigEndian.AppendUint64(buf, uint64(bm.len))
-	for _, v := range bm.words {
-		buf = binary.BigEndian.AppendUint64(buf, v)
-	}
-
-	return buf, nil
+// marshal type
+type bitmapJSON struct {
+	L int
+	W []uint64
 }
 
-// UnmarshalBinary
-func (bm *BitMap) UnmarshalBinary(src []byte) error {
-	if len(src) < 8 {
-		return errors.New("unmarshal error")
+func (bm *BitMap) MarshalJSON() ([]byte, error) {
+	return sonic.Marshal(bitmapJSON{bm.len, bm.words})
+}
+
+func (bm *BitMap) UnmarshalJSON(src []byte) error {
+	var bmJSON bitmapJSON
+	if err := sonic.Unmarshal(src, &bmJSON); err != nil {
+		return err
 	}
 
-	bm.len = int(binary.BigEndian.Uint64(src[0:8]))
-	bm.words = make([]uint64, 0, len(src)/8-1)
-
-	for i := 8; i < len(src); i += 8 {
-		bm.words = append(bm.words, binary.BigEndian.Uint64(src[i:i+8]))
-	}
-
+	bm.words = bmJSON.W
+	bm.len = bmJSON.L
 	return nil
 }

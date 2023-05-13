@@ -38,7 +38,11 @@ func testStress() {
 	// Simulate testing
 	for {
 		count++
-		db.SetEx(gofakeit.Phone(), gofakeit.Uint32(), time.Second*5)
+		val := gofakeit.Animal()
+
+		db.SetEx(gofakeit.Phone(), base.S2B(&val), time.Second*5)
+		// db.HSet("hmap", gofakeit.Animal(), base.S2B(&val))
+		// db.SetBit("bit", gofakeit.Uint32())
 	}
 }
 
@@ -58,11 +62,20 @@ func getDBFileSize() int64 {
 }
 
 func main() {
-	db.HSet("hmap", "1", "123")
-	db.HSet("hmap", "2", "234")
+	for i := 0; i < 9999; i++ {
+		db.SetBit("bit", uint32(i))
+		time.Sleep(time.Second)
 
-	fmt.Println(db.HGet("hmap", "1"))
-	fmt.Println(db.HGet("hmap", "2"))
+		fmt.Println(i)
+		fmt.Println(db.GetBit("bit", uint32(i)))
+		fmt.Println(db.GetBit("bit", uint32(i+1)))
+	}
+
+	// db.HSet("hmap", "1", "123")
+	// db.HSet("hmap", "2", "234")
+
+	// fmt.Println(db.HGet("hmap", "1"))
+	// fmt.Println(db.HGet("hmap", "2"))
 
 	go http.ListenAndServe("localhost:6060", nil)
 	testStress()

@@ -5,14 +5,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"path"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
 	"github.com/zeebo/xxh3"
@@ -22,8 +21,7 @@ type Operation byte
 
 // Operation types.
 const (
-	OpSet Operation = iota + 'A'
-	OpSetTx
+	OpSetTx Operation = iota + 'A'
 	OpRemove
 	OpPersist
 	OpHSet
@@ -37,19 +35,32 @@ const (
 	OpRPop
 )
 
+// Record types.
+type RecordType byte
+
+const (
+	RecordString RecordType = iota + 'A'
+	RecordMap
+	RecordSet
+	RecordList
+	RecordZSet
+	RecordBitMap
+)
+
 const (
 	recordSepChar = byte('\n')
 	timeCarry     = 1000 * 1000 * 1000
-	noTTL         = math.MaxInt64
+	noTTL         = 0
 )
 
 // Type aliases for structx types.
 type (
-	Map    = map[string]string
+	String = []byte
+	Map    = map[string][]byte
 	Set    = map[string]struct{}
 	List   = structx.List[string]
-	ZSet   = *structx.ZSet[string, float64, string]
-	BitMap = structx.BitMap
+	ZSet   = *structx.ZSet[string, float64, []byte]
+	BitMap = *structx.BitMap
 )
 
 var (
@@ -101,7 +112,7 @@ type storeShard struct {
 func init() {
 	go func() {
 		for t := range time.NewTicker(time.Millisecond).C {
-			atomic.SwapInt64(&globalTime, t.UnixNano())
+			globalTime = t.UnixNano()
 		}
 	}()
 }
@@ -154,36 +165,29 @@ func Open(conf *Config) (*Store, error) {
 }
 
 // Set sets a key-value pair in the database.
-func (db *Store) Set(key string, val any) error {
-	cd := NewCoder(OpSet).String(key).Any(val)
-	if cd.err != nil {
-		return cd.err
-	}
-
-	db.command(key, cd, func(sd *storeShard) {
-		sd.Set(key, val)
-	})
-	return nil
+func (db *Store) Set(key string, val []byte) error {
+	return db.SetTx(key, val, noTTL)
 }
 
-func (db *Store) command(key string, cd *Coder, cmd func(*storeShard)) {
+func (db *Store) command(key string, coder *Coder, cmd func(*storeShard)) {
 	sd := db.getShard(key)
 	sd.Lock()
 	defer sd.Unlock()
 
-	sd.buf.Write(cd.buf)
+	sd.buf.Write(coder.buf)
+	putCoder(coder)
 	cmd(sd)
-	putCoder(cd)
 }
 
 // SetEx sets a key-value pair with TTL (Time To Live) in the database.
-func (db *Store) SetEx(key string, val any, ttl time.Duration) error {
+func (db *Store) SetEx(key string, val []byte, ttl time.Duration) error {
 	return db.SetTx(key, val, globalTime+int64(ttl))
 }
 
 // SetTx sets a key-value pair with expiry time in the database.
-func (db *Store) SetTx(key string, val any, ts int64) error {
-	cd := NewCoder(OpSetTx).String(key).Int64(ts / timeCarry).Any(val)
+// If ts set to 0, the key will never expire.
+func (db *Store) SetTx(key string, val []byte, ts int64) error {
+	cd := NewCoder(OpSetTx).Type(RecordString).String(key).Int64(ts / timeCarry).Bytes(val)
 	if cd.err != nil {
 		return cd.err
 	}
@@ -215,33 +219,39 @@ func (db *Store) Persist(key string) (ok bool) {
 }
 
 // HGet
-func (db *Store) HGet(key, field string) (string, error) {
+func (db *Store) HGet(key, field string) ([]byte, error) {
 	sd := db.getShard(key)
+	sd.RLock()
+	defer sd.RUnlock()
 
-	hmap, err := sd.Get(key).ToHMap()
+	hmap, err := sd.getMap(key)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	res, ok := hmap[field]
 
+	res, ok := hmap[field]
 	if !ok {
-		return "", base.ErrFieldNotFound
+		return nil, base.ErrFieldNotFound
 	}
 	return res, nil
 }
 
 // HSet
-func (db *Store) HSet(key, field, val string) (_err error) {
-	cd := NewCoder(OpHSet).String(key).String(field).String(val)
+func (db *Store) HSet(key, field string, val []byte) (_err error) {
+	cd := NewCoder(OpHSet).String(key).String(field).String(*base.B2S(val))
 
 	db.command(key, cd, func(sd *storeShard) {
-		m, err := sd.get(key).ToHMap()
-		m[field] = val
-		// if hmap not exist, create a new one
+		m, err := sd.getMap(key)
+
+		// if not exist, create a new one
 		if err == base.ErrKeyNotFound {
-			sd.Set(key, m)
-		} else {
+			sd.Set(key, Map{field: val})
+
+		} else if err != nil {
 			_err = err
+
+		} else {
+			m[field] = val
 		}
 	})
 
@@ -253,12 +263,49 @@ func (db *Store) HRemove(key, field string) (_err error) {
 	cd := NewCoder(OpHRemove).String(key).String(field)
 
 	db.command(key, cd, func(sd *storeShard) {
-		hmap, err := sd.get(key).ToHMap()
+		m, err := sd.getMap(key)
 		if err != nil {
 			_err = err
 			return
 		}
-		delete(hmap, field)
+		delete(m, field)
+	})
+
+	return
+}
+
+// GetBit
+func (db *Store) GetBit(key string, bit uint32) (bool, error) {
+	sd := db.getShard(key)
+	sd.RLock()
+	defer sd.RUnlock()
+
+	bm, err := sd.getBitMap(key)
+	if err != nil {
+		return false, err
+	}
+	return bm.Contains(bit), nil
+}
+
+// SetBit
+func (db *Store) SetBit(key string, bit uint32) (_err error) {
+	cd := NewCoder(OpSetBit).String(key).Uint32(bit)
+
+	db.command(key, cd, func(sd *storeShard) {
+		bm, err := sd.getBitMap(key)
+
+		// if not exist, create a new one
+		if err == base.ErrKeyNotFound {
+			bm = structx.NewBitMap()
+			bm.Add(bit)
+			sd.Set(key, bm)
+
+		} else if err != nil {
+			_err = err
+
+		} else {
+			bm.Add(bit)
+		}
 	})
 
 	return
@@ -330,27 +377,45 @@ func (s *storeShard) load() {
 		key, line = parseLine(line, recordSepChar)
 
 		switch Operation(op) {
-		case OpSet:
-			var val []byte
-			// parse val
-			val, line = parseLine(line, recordSepChar)
-			s.Set(*base.B2S(key), base.Raw(val))
-
 		case OpSetTx:
 			var ttl, val []byte
 
+			recordType := RecordType(line[0])
+			line = line[1:]
+
 			// parse ttl
 			ttl, line = parseLine(line, recordSepChar)
-			ts, err := strconv.ParseInt(*base.B2S(ttl), _base, 64)
-			if err != nil {
-				panic(err)
-			}
+			ts, _ := strconv.ParseInt(*base.B2S(ttl), _base, 64)
 			ts *= timeCarry
 
 			// parse val
 			val, line = parseLine(line, recordSepChar)
-			if ts > atomic.LoadInt64(&globalTime) {
-				s.SetTx(*base.B2S(key), base.Raw(val), ts)
+
+			// check if expired
+			if ts < globalTime && ts != noTTL {
+				continue
+			}
+
+			switch recordType {
+			case RecordString:
+				s.SetTx(*base.B2S(key), val, ts)
+
+			case RecordMap:
+				var m Map
+				if err := sonic.Unmarshal(val, &m); err != nil {
+					panic(err)
+				}
+				s.SetTx(*base.B2S(key), m, ts)
+
+			case RecordBitMap:
+				var m BitMap
+				if err := m.UnmarshalJSON(val); err != nil {
+					panic(err)
+				}
+				s.SetTx(*base.B2S(key), m, ts)
+
+			default:
+				panic(fmt.Errorf("%v: %d", base.ErrUnSupportDataType, recordType))
 			}
 
 		case OpHSet:
@@ -362,11 +427,28 @@ func (s *storeShard) load() {
 			// parse val
 			val, line = parseLine(line, recordSepChar)
 
-			hmap, err := s.get(*base.B2S(key)).ToHMap()
-			hmap[*base.B2S(field)] = *base.B2S(val)
+			hmap, err := s.getMap(*base.B2S(key))
+			hmap[*base.B2S(field)] = val
 			// override
 			if err != nil {
 				s.Set(*base.B2S(key), hmap)
+			}
+
+		case OpSetBit:
+			var src []byte
+
+			// parse bit
+			src, line = parseLine(line, recordSepChar)
+			bit, err := strconv.ParseUint(*base.B2S(src), _base, 64)
+			if err != nil {
+				return
+			}
+
+			bm, err := s.getBitMap(*base.B2S(key))
+			bm.Add(uint32(bit))
+			// override
+			if err != nil {
+				s.Set(*base.B2S(key), bm)
 			}
 
 		case OpHRemove:
@@ -375,7 +457,7 @@ func (s *storeShard) load() {
 			// parse field
 			field, line = parseLine(line, recordSepChar)
 
-			hmap, err := s.get(*base.B2S(key)).ToHMap()
+			hmap, err := s.getMap(*base.B2S(key))
 			if err != nil {
 				return
 			}
@@ -401,19 +483,29 @@ func (s *storeShard) dump() {
 
 	// dump current state
 	s.Scan(func(key string, v any, i int64) bool {
-		if i == noTTL {
-			// Set
-			if cd := NewCoder(OpSet).String(key).Any(v); cd.err == nil {
-				s.rwbuf.Write(cd.buf)
-				putCoder(cd)
-			}
-		} else {
-			// SetTx
-			if cd := NewCoder(OpSetTx).String(key).Int64(i / timeCarry).Any(v); cd.err == nil {
-				s.rwbuf.Write(cd.buf)
-				putCoder(cd)
-			}
+		var recordType RecordType
+
+		switch v.(type) {
+		case String:
+			recordType = RecordString
+		case Map:
+			recordType = RecordMap
+		case BitMap:
+			recordType = RecordBitMap
+		case List:
+			recordType = RecordList
+		case Set:
+			recordType = RecordSet
+		default:
+			panic(base.ErrUnSupportDataType)
 		}
+
+		// SetTx
+		if cd := NewCoder(OpSetTx).Type(recordType).String(key).Int64(i / timeCarry).Any(v); cd.err == nil {
+			s.rwbuf.Write(cd.buf)
+			putCoder(cd)
+		}
+
 		return true
 	})
 
@@ -451,85 +543,26 @@ func (db *Store) getShard(key string) *storeShard {
 	return db.shards[xxh3.HashString(key)&db.mask]
 }
 
-// Get fetch the value by key from the database.
-func (db *Store) Get(key string) Value {
-	return db.getShard(key).Get(key)
+// getMap
+func (sd *storeShard) getMap(key string) (Map, error) {
+	var m Map
+	return getValue(sd, key, m)
 }
 
-// Get fetch the value by key from the sd.
-func (sd *storeShard) Get(key string) Value {
-	sd.RLock()
-	defer sd.RUnlock()
-
-	return sd.get(key)
+// getBitMap
+func (sd *storeShard) getBitMap(key string) (BitMap, error) {
+	var bm BitMap
+	return getValue(sd, key, bm)
 }
 
-func (sd *storeShard) get(key string) Value {
-	val, ok := sd.Cache.Get(key)
-	if !ok {
-		return Value{}
-	}
-
-	if raw, isRaw := val.(base.Raw); isRaw {
-		return Value{raw: raw, key: key, s: sd}
-
-	} else {
-		return Value{val: val, key: key, s: sd}
-	}
-}
-
-type Value struct {
-	key string
-	s   *storeShard
-	raw []byte
-	val any
-}
-
-func (v Value) ToInt() (r int, e error) { return getValue(v, r) }
-
-func (v Value) ToInt64() (r int64, e error) { return getValue(v, r) }
-
-func (v Value) ToUint() (r uint, e error) { return getValue(v, r) }
-
-func (v Value) ToUint32() (r uint32, e error) { return getValue(v, r) }
-
-func (v Value) ToUint64() (r uint64, e error) { return getValue(v, r) }
-
-func (v Value) ToFloat64() (r float64, e error) { return getValue(v, r) }
-
-func (v Value) ToString() (r string, e error) { return getValue(v, r) }
-
-func (v Value) ToIntSlice() (r []int, e error) { return getValue(v, r) }
-
-func (v Value) ToStringSlice() (r []string, e error) { return getValue(v, r) }
-
-func (v Value) ToTime() (r time.Time, e error) { return getValue(v, r) }
-
-func (v Value) ToHMap() (Map, error) { return getValue(v, Map{}) }
-
-func (v Value) Scan(val any) error {
-	_, err := getValue(v, val)
-	return err
-}
-
-// getValue
-func getValue[T any](v Value, vptr T) (T, error) {
-	if v.raw != nil {
-		if err := decode(v.raw, &vptr); err != nil {
-			return vptr, err
+func getValue[T any](sd *storeShard, key string, vptr T) (T, error) {
+	m, ok := sd.Get(key)
+	if ok {
+		m, ok := m.(T)
+		if ok {
+			return m, nil
 		}
-
-		v.s.Set(v.key, vptr)
-		return vptr, nil
-	}
-
-	if tmp, ok := v.val.(T); ok {
-		return tmp, nil
-
-	} else if v.key == "" {
-		return vptr, base.ErrKeyNotFound
-
-	} else {
 		return vptr, base.ErrWrongType
 	}
+	return vptr, base.ErrKeyNotFound
 }

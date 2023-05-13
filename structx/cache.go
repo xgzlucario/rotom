@@ -1,14 +1,13 @@
 package structx
 
 import (
-	"math"
 	"sync"
 	"time"
 )
 
 const (
 	// noTTL means the expiration time is infinite
-	noTTL = math.MaxInt64
+	noTTL = 0
 
 	// probe config with elimination strategy
 	probeCount     = 100
@@ -64,13 +63,17 @@ func (c *Cache[V]) Get(key string) (V, bool) {
 	return v, ok
 }
 
+func (c *Cache[V]) timeAlive(ttl int64) bool {
+	return ttl > c.ts || ttl == noTTL
+}
+
 // GetTX
 func (c *Cache[V]) GetTX(key string) (v V, ttl int64, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	n, ok := c.data.Get(key)
-	if ok && n.T > c.ts {
+	if ok && c.timeAlive(n.T) {
 		return n.V, n.T, true
 	}
 	return
@@ -133,9 +136,9 @@ func (c *Cache[V]) Scan(f func(string, V, int64) bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	c.data.Scan(func(key string, value *cacheItem[V]) bool {
-		if value.T > c.ts {
-			return f(key, value.V, value.T)
+	c.data.Scan(func(key string, n *cacheItem[V]) bool {
+		if c.timeAlive(n.T) {
+			return f(key, n.V, n.T)
 		}
 		return true
 	})
@@ -151,7 +154,7 @@ func (c *Cache[V]) Keys() []string {
 	keys := make([]string, 0)
 
 	c.Scan(func(k string, _ V, ts int64) bool {
-		if ts > c.ts {
+		if c.timeAlive(ts) {
 			keys = append(keys, k)
 		}
 		return true
@@ -163,7 +166,7 @@ func (c *Cache[V]) Keys() []string {
 // Count
 func (c *Cache[V]) Count() (sum int) {
 	c.Scan(func(_ string, _ V, ts int64) bool {
-		if ts > c.ts {
+		if c.timeAlive(ts) {
 			sum++
 		}
 		return true
@@ -194,9 +197,9 @@ func (c *Cache[V]) eliminate(expRate float64) {
 			var pb, elimi float64
 
 			for i := 0; i < probeCount; i++ {
-				k, v, ok := c.data.GetPos(uint64(c.ts) + uint64(i*probeSpace))
+				k, n, ok := c.data.GetPos(uint64(c.ts) + uint64(i*probeSpace))
 				// expired
-				if ok && v.T < c.ts {
+				if ok && !c.timeAlive(n.T) {
 					elimi++
 					c.delete(k)
 				}
