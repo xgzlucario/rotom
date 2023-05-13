@@ -27,8 +27,8 @@ func Go(ctx context.Context, interval time.Duration, f func()) {
 			case <-ctx.Done():
 				return
 			default:
-				f()
 				time.Sleep(interval)
+				f()
 			}
 		}
 	}()

@@ -7,6 +7,8 @@ import (
 )
 
 func TestZSet(t *testing.T) {
+	t.Parallel()
+
 	z := structx.NewZSet[string, int, string]()
 
 	// Test Set

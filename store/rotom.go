@@ -26,9 +26,9 @@ const (
 	OpPersist
 	OpHSet
 	OpHRemove
+	OpSetBit
 	// TODO: Implement these operations.
 	OpIncr
-	OpSetBit
 	OpLPush
 	OpLPop
 	OpRPush
@@ -164,6 +164,11 @@ func Open(conf *Config) (*Store, error) {
 	return db, nil
 }
 
+// Get
+func (db *Store) Get(key string) (any, bool) {
+	return db.getShard(key).Get(key)
+}
+
 // Set sets a key-value pair in the database.
 func (db *Store) Set(key string, val []byte) error {
 	return db.SetTx(key, val, noTTL)
@@ -237,20 +242,18 @@ func (db *Store) HGet(key, field string) ([]byte, error) {
 }
 
 // HSet
-func (db *Store) HSet(key, field string, val []byte) (_err error) {
-	cd := NewCoder(OpHSet).String(key).String(field).String(*base.B2S(val))
+func (db *Store) HSet(key, field string, val []byte) (err error) {
+	cd := NewCoder(OpHSet).String(key).String(field).Bytes(val)
 
 	db.command(key, cd, func(sd *storeShard) {
-		m, err := sd.getMap(key)
+		var m Map
+		m, err = sd.getMap(key)
 
 		// if not exist, create a new one
 		if err == base.ErrKeyNotFound {
 			sd.Set(key, Map{field: val})
 
-		} else if err != nil {
-			_err = err
-
-		} else {
+		} else if err == nil {
 			m[field] = val
 		}
 	})
@@ -259,13 +262,13 @@ func (db *Store) HSet(key, field string, val []byte) (_err error) {
 }
 
 // HRemove
-func (db *Store) HRemove(key, field string) (_err error) {
+func (db *Store) HRemove(key, field string) (err error) {
 	cd := NewCoder(OpHRemove).String(key).String(field)
 
 	db.command(key, cd, func(sd *storeShard) {
-		m, err := sd.getMap(key)
+		var m Map
+		m, err = sd.getMap(key)
 		if err != nil {
-			_err = err
 			return
 		}
 		delete(m, field)
@@ -275,7 +278,7 @@ func (db *Store) HRemove(key, field string) (_err error) {
 }
 
 // GetBit
-func (db *Store) GetBit(key string, bit uint32) (bool, error) {
+func (db *Store) GetBit(key string, offset uint32) (bool, error) {
 	sd := db.getShard(key)
 	sd.RLock()
 	defer sd.RUnlock()
@@ -284,27 +287,36 @@ func (db *Store) GetBit(key string, bit uint32) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return bm.Contains(bit), nil
+	return bm.Contains(offset), nil
 }
 
 // SetBit
-func (db *Store) SetBit(key string, bit uint32) (_err error) {
-	cd := NewCoder(OpSetBit).String(key).Uint32(bit)
+func (db *Store) SetBit(key string, offset uint32, value bool) (err error) {
+	cd := NewCoder(OpSetBit).String(key).Uint32(offset)
+	if value {
+		cd = cd.Uint32(1)
+	} else {
+		cd = cd.Uint32(0)
+	}
 
 	db.command(key, cd, func(sd *storeShard) {
-		bm, err := sd.getBitMap(key)
+		var bm BitMap
+		bm, err = sd.getBitMap(key)
 
 		// if not exist, create a new one
 		if err == base.ErrKeyNotFound {
-			bm = structx.NewBitMap()
-			bm.Add(bit)
-			sd.Set(key, bm)
+			if value {
+				sd.Set(key, structx.NewBitMap(offset))
+			} else {
+				sd.Set(key, structx.NewBitMap())
+			}
 
-		} else if err != nil {
-			_err = err
-
-		} else {
-			bm.Add(bit)
+		} else if err == nil {
+			if value {
+				bm.Add(offset)
+			} else {
+				bm.Remove(offset)
+			}
 		}
 	})
 
@@ -378,18 +390,20 @@ func (s *storeShard) load() {
 
 		switch Operation(op) {
 		case OpSetTx:
-			var ttl, val []byte
+			// ttl value
+			var _ttl, _value []byte
 
 			recordType := RecordType(line[0])
 			line = line[1:]
 
-			// parse ttl
-			ttl, line = parseLine(line, recordSepChar)
-			ts, _ := strconv.ParseInt(*base.B2S(ttl), _base, 64)
+			_ttl, line = parseLine(line, recordSepChar)
+			ts, err := strconv.ParseInt(*base.B2S(_ttl), _base, 64)
+			if err != nil {
+				panic(err)
+			}
 			ts *= timeCarry
 
-			// parse val
-			val, line = parseLine(line, recordSepChar)
+			_value, line = parseLine(line, recordSepChar)
 
 			// check if expired
 			if ts < globalTime && ts != noTTL {
@@ -398,18 +412,18 @@ func (s *storeShard) load() {
 
 			switch recordType {
 			case RecordString:
-				s.SetTx(*base.B2S(key), val, ts)
+				s.SetTx(*base.B2S(key), _value, ts)
 
 			case RecordMap:
 				var m Map
-				if err := sonic.Unmarshal(val, &m); err != nil {
+				if err := sonic.Unmarshal(_value, &m); err != nil {
 					panic(err)
 				}
 				s.SetTx(*base.B2S(key), m, ts)
 
 			case RecordBitMap:
 				var m BitMap
-				if err := m.UnmarshalJSON(val); err != nil {
+				if err := m.UnmarshalJSON(_value); err != nil {
 					panic(err)
 				}
 				s.SetTx(*base.B2S(key), m, ts)
@@ -419,49 +433,62 @@ func (s *storeShard) load() {
 			}
 
 		case OpHSet:
-			var field, val []byte
+			// field value
+			var _field, _value []byte
 
-			// parse field
-			field, line = parseLine(line, recordSepChar)
+			_field, line = parseLine(line, recordSepChar)
+			_value, line = parseLine(line, recordSepChar)
 
-			// parse val
-			val, line = parseLine(line, recordSepChar)
+			m, err := s.getMap(*base.B2S(key))
+			if err == base.ErrKeyNotFound {
+				s.Set(*base.B2S(key), Map{*base.B2S(_field): _value})
 
-			hmap, err := s.getMap(*base.B2S(key))
-			hmap[*base.B2S(field)] = val
-			// override
-			if err != nil {
-				s.Set(*base.B2S(key), hmap)
+			} else if err == nil {
+				m[*base.B2S(_field)] = _value
 			}
 
 		case OpSetBit:
-			var src []byte
+			// offset value
+			var _offset, _value []byte
 
-			// parse bit
-			src, line = parseLine(line, recordSepChar)
-			bit, err := strconv.ParseUint(*base.B2S(src), _base, 64)
+			_offset, line = parseLine(line, recordSepChar)
+			_value, line = parseLine(line, recordSepChar)
+
+			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 32)
 			if err != nil {
-				return
+				panic(err)
+			}
+			value, err := strconv.ParseUint(*base.B2S(_value), _base, 32)
+			if err != nil {
+				panic(err)
 			}
 
 			bm, err := s.getBitMap(*base.B2S(key))
-			bm.Add(uint32(bit))
-			// override
-			if err != nil {
-				s.Set(*base.B2S(key), bm)
+			if err == base.ErrKeyNotFound {
+				if value == 1 {
+					s.Set(*base.B2S(key), structx.NewBitMap(uint32(offset)))
+				} else {
+					s.Set(*base.B2S(key), structx.NewBitMap())
+				}
+
+			} else if err == nil {
+				if value == 1 {
+					bm.Add(uint32(offset))
+				} else {
+					bm.Remove(uint32(offset))
+				}
 			}
 
 		case OpHRemove:
-			var field []byte
+			// field
+			var _field []byte
 
-			// parse field
-			field, line = parseLine(line, recordSepChar)
+			_field, line = parseLine(line, recordSepChar)
 
-			hmap, err := s.getMap(*base.B2S(key))
-			if err != nil {
-				return
+			m, err := s.getMap(*base.B2S(key))
+			if err == nil {
+				delete(m, *base.B2S(_field))
 			}
-			delete(hmap, *base.B2S(field))
 
 		case OpRemove:
 			s.Remove(*base.B2S(key))

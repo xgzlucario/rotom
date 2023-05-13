@@ -9,6 +9,8 @@ import (
 )
 
 func TestList(t *testing.T) {
+	t.Parallel()
+
 	list := structx.NewList(1, 2, 3, 4, 5)
 
 	// Test LPush

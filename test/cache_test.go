@@ -2,7 +2,6 @@ package test
 
 import (
 	"fmt"
-	"math"
 	"testing"
 	"time"
 
@@ -11,6 +10,9 @@ import (
 )
 
 func TestCache(t *testing.T) {
+	t.Parallel()
+
+	const noTTL int64 = 0
 	cache := structx.NewCache[int]()
 
 	// Test Set and Get
@@ -35,7 +37,7 @@ func TestCache(t *testing.T) {
 	value, ttl, ok := cache.GetTX("key3")
 	assert.True(t, ok)
 	assert.Equal(t, 3, value)
-	assert.Equal(t, int64(math.MaxInt64), ttl)
+	assert.Equal(t, noTTL, ttl)
 
 	// Test SetEX
 	cache.SetEx("key4", 4, time.Millisecond*100)
@@ -48,7 +50,7 @@ func TestCache(t *testing.T) {
 	value, ttl, ok = cache.GetTX("key3")
 	assert.True(t, ok)
 	assert.Equal(t, 3, value)
-	assert.Equal(t, int64(math.MaxInt64), ttl)
+	assert.Equal(t, noTTL, ttl)
 
 	// Test Keys
 	keys := cache.Keys()

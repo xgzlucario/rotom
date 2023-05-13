@@ -48,8 +48,11 @@ func BenchmarkBitMap(b *testing.B) {
 }
 
 func TestBitMap(t *testing.T) {
+	t.Parallel()
+
 	// Test NewBitMap
 	bm := structx.NewBitMap(1, 3, 5, 7, 9)
+
 	expected := structx.NewBitMap()
 	for _, num := range []uint32{1, 3, 5, 7, 9} {
 		expected.Add(num)
@@ -69,6 +72,7 @@ func TestBitMap(t *testing.T) {
 	// Test Contains
 	assert.True(t, bm.Contains(1))
 	assert.False(t, bm.Contains(0))
+	assert.False(t, bm.Contains(20))
 
 	// Test Min and Max
 	assert.Equal(t, 1, bm.Min())
@@ -90,11 +94,11 @@ func TestBitMap(t *testing.T) {
 	assert.True(t, bm.Equal(bm2))
 
 	// Test MarshalBinary and UnmarshalBinary
-	data, err := bm.MarshalBinary()
+	data, err := bm.MarshalJSON()
 	assert.Nil(t, err)
 
 	bm3 := new(structx.BitMap)
-	err = bm3.UnmarshalBinary(data)
+	err = bm3.UnmarshalJSON(data)
 	assert.Nil(t, err)
 	assert.True(t, bm.Equal(bm3))
 

@@ -9,6 +9,7 @@ import (
 
 const (
 	bitSize     = 64 // uint64 is 64 bits
+	mask        = bitSize - 1
 	log2BitSize = 6
 )
 
@@ -28,7 +29,7 @@ func NewBitMap(nums ...uint32) *BitMap {
 
 // Add
 func (bm *BitMap) Add(num uint32) bool {
-	word, bit := num>>log2BitSize, num%bitSize
+	word, bit := num>>log2BitSize, num&mask
 
 	for bm.size() <= int(word) {
 		bm.words = append(bm.words, 0)
@@ -46,7 +47,7 @@ func (bm *BitMap) Add(num uint32) bool {
 
 // Remove
 func (bm *BitMap) Remove(num uint32) bool {
-	word, bit := num>>log2BitSize, num%bitSize
+	word, bit := num>>log2BitSize, num&mask
 	if int(word) >= bm.size() {
 		return false
 	}
@@ -68,7 +69,7 @@ func (bm *BitMap) Equal(t *BitMap) bool {
 
 // Contains
 func (bm *BitMap) Contains(num uint32) bool {
-	word, bit := num/bitSize, num%bitSize
+	word, bit := num>>log2BitSize, num&mask
 	return int(word) < bm.size() && bm.words[word]&(1<<bit) != 0
 }
 
