@@ -15,6 +15,7 @@ import (
 	"github.com/shirou/gopsutil/mem"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
+	"github.com/xgzlucario/rotom/structx"
 )
 
 var db, _ = store.Open(store.DefaultConfig)
@@ -62,6 +63,37 @@ func getDBFileSize() int64 {
 }
 
 func main() {
+	db.Set("aa", []byte("12345"))
+	fmt.Println(db.HSet("aa", "1", []byte("123")))
+
+	bm, ok := db.Get("bit")
+	fmt.Println(bm, ok)
+
+	if bm != nil {
+		bm.(*structx.BitMap).Range(func(u uint32) bool {
+			fmt.Println(u)
+			return false
+		})
+	}
+
+	for i := 1; i < 9999; i++ {
+		db.SetBit("bit", uint32(i), true)
+		fmt.Println(i)
+		fmt.Println(db.GetBit("bit", uint32(i)))
+		fmt.Println(db.GetBit("bit", uint32(i+1)))
+
+		time.Sleep(time.Second)
+	}
+
+	db.HSet("hmap", "1", []byte("123"))
+	db.HSet("hmap", "2", []byte("123"))
+	db.HSet("hmap", "2", []byte("123"))
+
+	time.Sleep(time.Minute)
+
+	// fmt.Println(db.HGet("hmap", "1"))
+	// fmt.Println(db.HGet("hmap", "2"))
+
 	go http.ListenAndServe("localhost:6060", nil)
 	testStress()
 	db.Flush()

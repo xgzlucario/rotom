@@ -174,14 +174,18 @@ func (db *Store) Set(key string, val []byte) error {
 	return db.SetTx(key, val, noTTL)
 }
 
-func (db *Store) command(key string, coder *Coder, cmd func(*storeShard)) {
+func (db *Store) command(key string, coder *Coder, cmd func(*storeShard) error) error {
 	sd := db.getShard(key)
 	sd.Lock()
 	defer sd.Unlock()
+	defer putCoder(coder)
 
+	if err := cmd(sd); err != nil {
+		return err
+	}
 	sd.buf.Write(coder.buf)
-	putCoder(coder)
-	cmd(sd)
+
+	return nil
 }
 
 // SetEx sets a key-value pair with TTL (Time To Live) in the database.
@@ -197,18 +201,19 @@ func (db *Store) SetTx(key string, val []byte, ts int64) error {
 		return cd.err
 	}
 
-	db.command(key, cd, func(sd *storeShard) {
+	return db.command(key, cd, func(sd *storeShard) error {
 		sd.SetTx(key, val, ts)
+		return nil
 	})
-	return nil
 }
 
 // Remove removes a key-value pair from the database and return it.
 func (db *Store) Remove(key string) (val any, ok bool) {
 	cd := NewCoder(OpRemove).String(key)
 
-	db.command(key, cd, func(sd *storeShard) {
+	db.command(key, cd, func(sd *storeShard) error {
 		val, ok = sd.Remove(key)
+		return nil
 	})
 	return
 }
@@ -217,8 +222,9 @@ func (db *Store) Remove(key string) (val any, ok bool) {
 func (db *Store) Persist(key string) (ok bool) {
 	cd := NewCoder(OpPersist).String(key)
 
-	db.command(key, cd, func(sd *storeShard) {
+	db.command(key, cd, func(sd *storeShard) error {
 		ok = sd.Persist(key)
+		return nil
 	})
 	return
 }
@@ -242,39 +248,31 @@ func (db *Store) HGet(key, field string) ([]byte, error) {
 }
 
 // HSet
-func (db *Store) HSet(key, field string, val []byte) (err error) {
+func (db *Store) HSet(key, field string, val []byte) error {
 	cd := NewCoder(OpHSet).String(key).String(field).Bytes(val)
 
-	db.command(key, cd, func(sd *storeShard) {
-		var m Map
-		m, err = sd.getMap(key)
-
-		// if not exist, create a new one
-		if err == base.ErrKeyNotFound {
-			sd.Set(key, Map{field: val})
-
-		} else if err == nil {
-			m[field] = val
+	return db.command(key, cd, func(sd *storeShard) error {
+		m, err := sd.getMap(key)
+		if err != nil {
+			return err
 		}
+		m[field] = val
+		return nil
 	})
-
-	return
 }
 
 // HRemove
-func (db *Store) HRemove(key, field string) (err error) {
+func (db *Store) HRemove(key, field string) error {
 	cd := NewCoder(OpHRemove).String(key).String(field)
 
-	db.command(key, cd, func(sd *storeShard) {
-		var m Map
-		m, err = sd.getMap(key)
+	return db.command(key, cd, func(sd *storeShard) error {
+		m, err := sd.getMap(key)
 		if err != nil {
-			return
+			return err
 		}
 		delete(m, field)
+		return nil
 	})
-
-	return
 }
 
 // GetBit
@@ -291,36 +289,21 @@ func (db *Store) GetBit(key string, offset uint32) (bool, error) {
 }
 
 // SetBit
-func (db *Store) SetBit(key string, offset uint32, value bool) (err error) {
-	cd := NewCoder(OpSetBit).String(key).Uint32(offset)
-	if value {
-		cd = cd.Uint32(1)
-	} else {
-		cd = cd.Uint32(0)
-	}
+func (db *Store) SetBit(key string, offset uint32, value bool) error {
+	cd := NewCoder(OpSetBit).String(key).Uint32(offset).Bool(value)
 
-	db.command(key, cd, func(sd *storeShard) {
-		var bm BitMap
-		bm, err = sd.getBitMap(key)
-
-		// if not exist, create a new one
-		if err == base.ErrKeyNotFound {
-			if value {
-				sd.Set(key, structx.NewBitMap(offset))
-			} else {
-				sd.Set(key, structx.NewBitMap())
-			}
-
-		} else if err == nil {
-			if value {
-				bm.Add(offset)
-			} else {
-				bm.Remove(offset)
-			}
+	return db.command(key, cd, func(sd *storeShard) error {
+		bm, err := sd.getBitMap(key)
+		if err != nil {
+			return err
 		}
+		if value {
+			bm.Add(offset)
+		} else {
+			bm.Remove(offset)
+		}
+		return nil
 	})
-
-	return
 }
 
 // Flush writes all the data in the buffer to the disk.
@@ -380,21 +363,27 @@ func (s *storeShard) load() {
 		return
 	}
 
+	var op Operation
+	var recordType RecordType
+
 	for len(line) > 1 {
-		op := line[0]
+		op = Operation(line[0])
 		line = line[1:]
+
+		// SetTx 需要解析类型
+		if op == OpSetTx {
+			recordType = RecordType(line[0])
+			line = line[1:]
+		}
 
 		// parse key
 		var key []byte
 		key, line = parseLine(line, recordSepChar)
 
-		switch Operation(op) {
+		switch op {
 		case OpSetTx:
 			// ttl value
 			var _ttl, _value []byte
-
-			recordType := RecordType(line[0])
-			line = line[1:]
 
 			_ttl, line = parseLine(line, recordSepChar)
 			ts, err := strconv.ParseInt(*base.B2S(_ttl), _base, 64)
@@ -440,12 +429,10 @@ func (s *storeShard) load() {
 			_value, line = parseLine(line, recordSepChar)
 
 			m, err := s.getMap(*base.B2S(key))
-			if err == base.ErrKeyNotFound {
-				s.Set(*base.B2S(key), Map{*base.B2S(_field): _value})
-
-			} else if err == nil {
-				m[*base.B2S(_field)] = _value
+			if err != nil {
+				panic(err)
 			}
+			m[*base.B2S(_field)] = _value
 
 		case OpSetBit:
 			// offset value
@@ -458,25 +445,16 @@ func (s *storeShard) load() {
 			if err != nil {
 				panic(err)
 			}
-			value, err := strconv.ParseUint(*base.B2S(_value), _base, 32)
+
+			bm, err := s.getBitMap(*base.B2S(key))
 			if err != nil {
 				panic(err)
 			}
 
-			bm, err := s.getBitMap(*base.B2S(key))
-			if err == base.ErrKeyNotFound {
-				if value == 1 {
-					s.Set(*base.B2S(key), structx.NewBitMap(uint32(offset)))
-				} else {
-					s.Set(*base.B2S(key), structx.NewBitMap())
-				}
-
-			} else if err == nil {
-				if value == 1 {
-					bm.Add(uint32(offset))
-				} else {
-					bm.Remove(uint32(offset))
-				}
+			if _value[0] == '1' {
+				bm.Add(uint32(offset))
+			} else {
+				bm.Remove(uint32(offset))
 			}
 
 		case OpHRemove:
@@ -486,9 +464,10 @@ func (s *storeShard) load() {
 			_field, line = parseLine(line, recordSepChar)
 
 			m, err := s.getMap(*base.B2S(key))
-			if err == nil {
-				delete(m, *base.B2S(_field))
+			if err != nil {
+				panic(err)
 			}
+			delete(m, *base.B2S(_field))
 
 		case OpRemove:
 			s.Remove(*base.B2S(key))
@@ -573,17 +552,21 @@ func (db *Store) getShard(key string) *storeShard {
 // getMap
 func (sd *storeShard) getMap(key string) (Map, error) {
 	var m Map
-	return getValue(sd, key, m)
+	return getOrCreate(sd, key, m, func() Map {
+		return make(Map)
+	})
 }
 
 // getBitMap
 func (sd *storeShard) getBitMap(key string) (BitMap, error) {
-	var bm BitMap
-	return getValue(sd, key, bm)
+	var m BitMap
+	return getOrCreate(sd, key, m, func() BitMap {
+		return structx.NewBitMap()
+	})
 }
 
-func getValue[T any](sd *storeShard, key string, vptr T) (T, error) {
-	m, ok := sd.Get(key)
+func getOrCreate[T any](s *storeShard, key string, vptr T, new func() T) (T, error) {
+	m, ok := s.Get(key)
 	if ok {
 		m, ok := m.(T)
 		if ok {
@@ -591,5 +574,8 @@ func getValue[T any](sd *storeShard, key string, vptr T) (T, error) {
 		}
 		return vptr, base.ErrWrongType
 	}
-	return vptr, base.ErrKeyNotFound
+
+	vptr = new()
+	s.Set(key, vptr)
+	return vptr, nil
 }
