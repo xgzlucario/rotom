@@ -56,9 +56,9 @@ const (
 // Type aliases for structx types.
 type (
 	String = []byte
-	Map    = map[string][]byte
+	Map    = structx.Map[string, []byte]
 	Set    = map[string]struct{}
-	List   = structx.List[string]
+	List   = *structx.List[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
 	BitMap = *structx.BitMap
 )
@@ -240,7 +240,7 @@ func (db *Store) HGet(key, field string) ([]byte, error) {
 		return nil, err
 	}
 
-	res, ok := hmap[field]
+	res, ok := hmap.Get(field)
 	if !ok {
 		return nil, base.ErrFieldNotFound
 	}
@@ -256,7 +256,7 @@ func (db *Store) HSet(key, field string, val []byte) error {
 		if err != nil {
 			return err
 		}
-		m[field] = val
+		m.Set(field, val)
 		return nil
 	})
 }
@@ -270,7 +270,7 @@ func (db *Store) HRemove(key, field string) error {
 		if err != nil {
 			return err
 		}
-		delete(m, field)
+		m.Delete(field)
 		return nil
 	})
 }
@@ -432,7 +432,7 @@ func (s *storeShard) load() {
 			if err != nil {
 				panic(err)
 			}
-			m[*base.B2S(_field)] = _value
+			m.Set(*base.B2S(_field), _value)
 
 		case OpSetBit:
 			// offset value
@@ -451,10 +451,13 @@ func (s *storeShard) load() {
 				panic(err)
 			}
 
-			if _value[0] == '1' {
-				bm.Add(uint32(offset))
-			} else {
+			switch _value[0] {
+			case '0':
 				bm.Remove(uint32(offset))
+			case '1':
+				bm.Add(uint32(offset))
+			default:
+				panic(base.ErrWrongBitValue)
 			}
 
 		case OpHRemove:
@@ -467,7 +470,7 @@ func (s *storeShard) load() {
 			if err != nil {
 				panic(err)
 			}
-			delete(m, *base.B2S(_field))
+			m.Delete(*base.B2S(_field))
 
 		case OpRemove:
 			s.Remove(*base.B2S(key))
@@ -553,7 +556,7 @@ func (db *Store) getShard(key string) *storeShard {
 func (sd *storeShard) getMap(key string) (Map, error) {
 	var m Map
 	return getOrCreate(sd, key, m, func() Map {
-		return make(Map)
+		return structx.NewMap[string, []byte]()
 	})
 }
 
