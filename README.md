@@ -1,209 +1,137 @@
-# Rotom
-
-[![Go Report Card](https://goreportcard.com/badge/github.com/xgzlucario/rotom)](https://goreportcard.com/report/github.com/xgzlucario/rotom)![](https://img.shields.io/github/languages/code-size/xgzlucario/rotom.svg?style=flat)[![Go Reference](https://pkg.go.dev/badge/github.com/xgzlucario/rotom.svg)](https://pkg.go.dev/github.com/xgzlucario/rotom)
-
-Rotom is **In-memory** database, includes many structures and algorithms implemented by Golang **generics**. and upport **persist**.
-
-Currently, rotom now provides the following types of data structures to support generic types:
-
-## Support type
-### Base types
-- `string` , `int` , `float64` , `bool` , `time.Time` 
-
-### Generic types
-- `List`
-- `Map` , `SyncMap`
-- `LSet (ListSet)`
-- `Skiplist` , `ZSet`
-- `Cache`
-- `BitMap`
-- `Trie`
-
-### Custom types
-Custom struct types also supported, just need to achieve MarshalJSON() and UnmarshalJSON() methods.
-
-## Usage
-```go
-// Get the db instance and call Save() on function exit to persist
-db := store.DB(0)
-defer db.Save()
-
-// trie object
-var tree *structx.Trie[int]
-
-tree, err := store.GetTrie[int](db, "trie")
-if err != nil {
-	// not exist
-	fmt.Println("get trie error:", err)
-	tree = structx.NewTrie[int]()
-	
-	// create a new trie
-	for i := 0; i < 9999; i++ {
-		tree.Put(gofakeit.URL(), i)
-	}
-	db.Set("trie", tree)
-}
+[![](https://cdn.nlark.com/yuque/0/2023/svg/23073858/1683826295871-ced6c61b-0cd6-4378-ab58-7240fed72389.svg#clientId=u8bd460fe-a823-4&from=paste&id=u04853372&originHeight=20&originWidth=88&originalType=url&ratio=1.375&rotation=0&showTitle=false&status=done&style=none&taskId=u0d350922-ae97-413a-b256-3b7a728b4ce&title=)](https://goreportcard.com/report/github.com/xgzlucario/rotom) ![](https://img.shields.io/github/languages/code-size/xgzlucario/rotom.svg?style=flat#from=url&id=fHzda&originHeight=20&originWidth=114&originalType=binary&ratio=1.375&rotation=0&showTitle=false&status=done&style=none&title=) [![](https://cdn.nlark.com/yuque/0/2023/svg/23073858/1683826294138-12c7c05a-95ef-47ea-bc38-6f3872ce6fed.svg#clientId=u8bd460fe-a823-4&from=paste&id=uf84068c6&originHeight=20&originWidth=90&originalType=url&ratio=1.375&rotation=0&showTitle=false&status=done&style=none&taskId=u2ef32175-f661-45bc-b5ce-0db1c5f68f1&title=)](https://pkg.go.dev/github.com/xgzlucario/rotom)
+这里是 Rotom，一个 Go 编写的高性能 Key-Value 轻量内存数据库，比 Redis 性能快3倍，基于 RDB 和 AOF 混合持久化策略，内置数据类型 String，Map，Set，List，ZSet，BitMap，Trie 等，目前只支持在 Go 中以包引入的方式使用。
+## 前言
+项目灵感来自于一篇介绍日志型内存数据库的文章。日志型数据库（Log-structured database）是一种特殊类型的数据库，它以日志或追加型方式存储数据，而不是覆盖旧数据。这种类型的数据库通常用于处理大量数据，并能够高效地处理写入操作。
+日志型数据库的基础理念是所有的数据库操作都可以视为一系列的日志记录。每次数据变更（插入、更新或删除）都会生成一个新的日志记录，记录着这次变更的内容。这些日志记录会被追加到存储系统的末尾，而不是在旧数据的位置进行更新或删除。
+这样做的优点是写入操作的速度很快，因为不需要寻找数据存储的位置，直接追加到末尾即可。此外，日志型数据库也能够提供很好的故障恢复能力，因为所有的数据变更都有日志记录，可以通过重放日志来恢复数据。
+## API
+待施工。。。
+## 使用
+在使用之前，请先安装 rotom 到你的项目中。
+```bash
+go get github.com/xgzlucario/rotom
 ```
-
-## Use Custom Type
+并安装 gofakeit 库，用于生成一些随机数据。
+```bash
+go get github.com/brianvoe/gofakeit/v6
+```
+然后运行示例程序：
 ```go
-// custom struct Stu
-type Stu struct {
-	Name string
-	Age  int
-}
+package main
 
-// You need to define this to prevent UnMarshalJSON() recursive calls
-type stuJSON struct {
-	N string
-	A int
-}
+import (
+	"fmt"
+	"time"
 
-func (s *Stu) MarshalJSON() ([]byte, error) {
-	return base.MarshalJSON(stuJSON{s.Name, s.Age})
-}
-
-func (s *Stu) UnmarshalJSON(src []byte) error {
-	var stu stuJSON
-	if err := base.UnmarshalJSON(src, &stu); err != nil {
-		return err
-	}
-	s.Name = stu.N
-	s.Age = stu.A
-	return nil
-}
+	"github.com/brianvoe/gofakeit/v6"
+	"github.com/xgzlucario/rotom/store"
+)
 
 func main() {
-	db := store.DB(0)
-	defer db.Save()
-
-	stu, err := store.GetCustomStruct(db, "stu", new(Stu))
+	db, err := store.Open(store.DefaultConfig)
 	if err != nil {
-		fmt.Println(err)
-		db.Set("stu", &Stu{"xgz", 22})
-
-	} else {
-		fmt.Println(stu, err)
+		panic(err)
 	}
+    defer db.Flush()
+
+	// Set
+	db.Set("xgz", 23)
+
+	// Get
+	age, err := db.Get("xgz").ToInt()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("xgz is %d years old.\n", age) // Output: xgz is 23 years old.
+
+	// SetEx
+	db.SetEx(gofakeit.Phone(), gofakeit.Uint32(), time.Second*30)
+
+	// SetTx
+	ts := time.Date(2075, 2, 19, 0, 0, 0, 0, time.Local)
+	db.SetTx(gofakeit.Phone(), gofakeit.Uint32(), ts.UnixNano())
+
+	// Remove
+	val, ok := db.Remove("xgz")
+	fmt.Println(val, ok) // Output: 23, true
+
+	fmt.Println("db count is", db.Count()) // Output: db count is 2
+
+    // HSet
+	db.HSet("hmap", "1", []byte("123"))
+	db.HSet("hmap", "2", []byte("234"))
+
+    fmt.Println(db.HGet("hmap", "1")) // Output: 123
+	fmt.Println(db.HGet("hmap", "2")) // Output: 234
+
+    // BitSet
+    db.BitSet("bit1", 1, true)
+	db.BitSet("bit1", 2, true)
+
+	db.BitSet("bit2", 2, true)
+	db.BitSet("bit2", 3, true)
+
+    // BitOr
+	fmt.Println(db.BitOr("bit1", "bit2", "bit3")) // bit3: [1,2,3]
+}
+
+```
+## 工作原理
+### 重演（rewrite）
+本项目灵感来自于一篇介绍数据库的文章，介绍了目前主流内存数据库的持久化方案：如 BTree、B+Tree、LSM Tree、RDB、AOF 等。本项目基于 RDB 和 AOF 混合持久化方案，将 增删改 操作通过日志的方式记录到文件，加载数据时一条一条读取，进行**重演**。例如数据库运行时，有以下操作：
+```
+SET xgz 22
+SET xgz 23
+SET abc 123
+```
+数据库启动时，按照 `SET xgz 22`，`SET xgz 23`，`SET abc 123` 的顺序**重演**，即可完成数据从磁盘到内存的加载。
+### 收缩（shrink）
+基于 AOF 的存储方式的问题在于，运行过程中日志文件会不断增大，使数据库启动时加载数据变慢。因此需要对其进行**收缩**。具体来说，就是将日志记录进行**删除或合并**，例如有以下操作：
+```
+SET xgz 22
+SET xgz 23
+SET abc 123
+SET xgz 24
+```
+数据库中最终应保留 xgz=24，abc=123 这两条数据，而前两条记录为冗余记录，也被称为**脏记录**，在**收缩**时会被删除，下面是收缩后的日志：
+```
+SET abc 123
+SET xgz 24
+```
+再来看一个例子：
+```
+SET xgz 22
+INCR xgz 1
+INCR xgz 2
+```
+`xgz`经过两次自增操作，最终结果为`25`，因此它也等价为`SET xgz 25`。经过**收缩**后，这三条操作记录会被**合并**，合并后的日志即为：
+```
+SET xgz 25
+```
+### 哈希表（Hashmap）
+#### 实现方法
+Rotom 的数据存储核心是一个 HashMap，基于 开放地址法 和 [Robin hood hashing](https://en.wikipedia.org/wiki/Hash_table#Robin_Hood_hashing) 冲突算法。简单来说，发生冲突时具有较高 DIB 的键值对会“**抢夺**”较低 DIB的键值对的位置，然后较低 DIB 的键值对会**向后移动**寻找新的位置。这样做的目的是尽量**保持 DIB 较低**，从而使得哈希映射的查找性能更好。
+使用该结构的优点在于，数据全部存储在一个数组中，**随机探测**性能很高，且不需要额外数据结构。只需要一个哈希表就能完成**数据存储**+**过期淘汰策略**。
+#### 淘汰策略
+在 Rotom 中，数据库引擎为 Cache 结构。
+```go
+type cacheItem[V any] struct {
+    T int64
+    V V
+}
+
+type Cache[V any] struct {
+	// current timestamp
+	ts int64
+
+	// based on Hashmap
+	data Map[string, *cacheItem[V]]
+
+	// Reuse object to reduce GC stress
+	pool sync.Pool
+
+	mu sync.RWMutex
 }
 ```
-
-## Structx
-structx pakage contains built-in generic data structures.
-
-### BitMap
-bitmap implement backed by a slice of []uint64, and is nice wrappered.
-
-#### usage
-
-```go
-bm := structx.NewBitMap(1,2,3)
-bm.Add(4) // [1,2,3,4]
-bm.Add(1) // [1,2,3.4]
-bm.Remove(4) // [1,2,3]
-bm.Contains(2) // true
-
-bm.Min() // 1
-bm.Max() // 3
-bm.Len() // 3
-
-bm1 := structx.NewBitMap(3,4,5)
-bm.Union(bm1, true) // [1,2,3,4,5] OR operation and set inplaced
-```
-
-#### Benchmark
-
-Benchmarks below were run on a pre-allocated bitmap of 100,000,000 elements.
-
-```
-goos: linux
-goarch: amd64
-pkg: github.com/xgzlucario/structx/test
-cpu: AMD Ryzen 7 5800H with Radeon Graphics         
-BenchmarkBmAdd-16                  	787935627	         1.515 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBmContains-16             	1000000000	         0.3916 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBmRemove-16               	1000000000	         0.7613 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBmMax-16                  	1000000000	         1.169 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBmMin-16                  	1000000000	         0.8804 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBmUnion-16                	 2249113	       512.9 ns/op	    2080 B/op	       2 allocs/op
-BenchmarkBmUnionInplace-16         	 9901345	       118.2 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBmIntersect-16            	 3246958	       370.4 ns/op	    1312 B/op	       2 allocs/op
-BenchmarkBmIntersectInplace-16     	11000289	       110.2 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBmDifference-16           	 2107741	       606.5 ns/op	    2080 B/op	       2 allocs/op
-BenchmarkBmDifferenceInplace-16    	 9769774	       121.4 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBmMarshal-16              	      66	  16559485 ns/op	39497262 B/op	       7 allocs/op
-PASS
-ok  	github.com/xgzlucario/structx/test	32.252s
-```
-
-### List
-
-`List` is a data structure wrapping basic type `slice`.  Compare to basic slice type, List is `sequential`, `sortable`, and `nice wrappered`.
-
-#### usage
-
-```go
-ls := structx.NewList(1,2,3)
-ls.RPush(4) // [1,2,3,4]
-ls.LPop() // 1 [2,3,4]
-ls.Reverse() // [4,3,2]
-
-ls.Index(1) // 3
-ls.Find(4) // 0
-
-ls.RShift() // [2,4,3]
-ls.Top(1) // [4,2,3]
-
-ls.Sort(func(i, j int) bool {
-	return i<j
-}) // [2,3,4]
-```
-
-### LSet
-
-`LSet` uses `Map + List` as the storage structure. LSet is Inherited from `List`, where the elements are `sequential` and have `good iterative performance`, as well as `richer api`. When the data volume is small only `list` is used.
-
-#### Usage
-
-```go
-s := structx.NewLSet(1,2,3,4,1) // [1,2,3,4]
-
-s.Add(5) // [1,2,4,5]
-s.Remove(3) // [1,2,4]
-
-s.Reverse() // [5,4,2,1]
-s.Top(2) // [2,5,4,1]
-s.Rpop() // [5,4,1]
-
-s.Range(func(k int) bool {...})
-
-s1 := structx.NewLSet(1,2,3) // [1,2,3]
-
-union := s.Union(s1) // [0,1,2,3]
-intersect := s.Intersect(s1) // [1,2]
-diff := s.Difference(s1) // [0,3]
-```
-
-#### Benchmark
-
-Compare with mapset [deckarep/golang-set](https://github.com/deckarep/golang-set).
-
-```
-goos: linux
-goarch: amd64
-pkg: github.com/xgzlucario/structx/test
-cpu: AMD Ryzen 7 5800H with Radeon Graphics  
-Benchmark_MapSetRange-16          130693	     8991 ns/op	        0 B/op	      0 allocs/op
-Benchmark_LSetRange-16            821851	     1415 ns/op	        0 B/op	      0 allocs/op
-Benchmark_MapSetRemove-16      318151948	    3.758 ns/op	        0 B/op	      0 allocs/op
-Benchmark_LSetRemove-16        364006822	    3.303 ns/op	        0 B/op	      0 allocs/op
-Benchmark_MapSetAdd-16         	   21847	    55064 ns/op	    47871 B/op	     68 allocs/op
-Benchmark_LSetAdd-16               17355	    68348 ns/op	    73055 B/op	     78 allocs/op
-Benchmark_MapSetUnion-16           12676	    94480 ns/op	    47874 B/op	     68 allocs/op
-Benchmark_LSetUnion-16             31516	    38181 ns/op	    30181 B/op	     10 allocs/op
-Benchmark_MapSetIntersect-16       14566	    82046 ns/op	    47878 B/op	     68 allocs/op
-Benchmark_LSetIntersect-16         37855	    31650 ns/op	    30181 B/op	     10 allocs/op
-Benchmark_MapSetDiff-16            30876	    38927 ns/op	     8059 B/op	   1002 allocs/op
-Benchmark_LSetDiff-16          	   92643	    12866 ns/op	      153 B/op	      4 allocs/op
-```
-
+## 工作流程
+待施工。。。
