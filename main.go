@@ -15,6 +15,7 @@ import (
 	"github.com/shirou/gopsutil/mem"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
+	"github.com/xgzlucario/rotom/structx"
 )
 
 var db, _ = store.Open(store.DefaultConfig)
@@ -60,18 +61,25 @@ func getDBFileSize() int64 {
 }
 
 func main() {
+	db.BitSet("bit1", 1, true)
+	db.BitSet("bit1", 2, true)
+
+	db.BitSet("bit2", 2, true)
+	db.BitSet("bit2", 3, true)
+	fmt.Println(db.BitAnd("bit1", "bit2", "bit3"))
+
 	// db.Set("aa", []byte("12345"))
 	// fmt.Println(db.HSet("aa", "1", []byte("123")))
 
-	// bm, ok := db.Get("bit")
-	// fmt.Println(bm, ok)
+	bm, ok := db.Get("bit3")
+	fmt.Println(bm, ok)
 
-	// if bm != nil {
-	// 	bm.(*structx.BitMap).Range(func(u uint32) bool {
-	// 		fmt.Println(u)
-	// 		return false
-	// 	})
-	// }
+	if bm != nil {
+		bm.(*structx.BitMap).Range(func(u uint32) bool {
+			fmt.Println(u)
+			return false
+		})
+	}
 
 	// for i := 1; i < 9999; i++ {
 	// 	db.SetBit("bit", uint32(i), true)

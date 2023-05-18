@@ -26,13 +26,24 @@ const (
 	OpPersist
 	OpHSet
 	OpHRemove
-	OpSetBit
+
+	OpBitSet
+	OpBitFlip
+	OpBitOr
+	OpBitAnd
+	OpBitXor
+	OpBitShift
+
 	// TODO: Implement these operations.
 	OpIncr
 	OpLPush
 	OpLPop
 	OpRPush
 	OpRPop
+
+	OpZSet
+	OpZIncr
+	OpZRemove
 )
 
 // Record types.
@@ -275,8 +286,8 @@ func (db *Store) HRemove(key, field string) error {
 	})
 }
 
-// GetBit
-func (db *Store) GetBit(key string, offset uint32) (bool, error) {
+// BitTest
+func (db *Store) BitTest(key string, offset uint32) (bool, error) {
 	sd := db.getShard(key)
 	sd.RLock()
 	defer sd.RUnlock()
@@ -288,9 +299,9 @@ func (db *Store) GetBit(key string, offset uint32) (bool, error) {
 	return bm.Contains(offset), nil
 }
 
-// SetBit
-func (db *Store) SetBit(key string, offset uint32, value bool) error {
-	cd := NewCoder(OpSetBit).String(key).Uint32(offset).Bool(value)
+// BitSet
+func (db *Store) BitSet(key string, offset uint32, value bool) error {
+	cd := NewCoder(OpBitSet).String(key).Uint32(offset).Bool(value)
 
 	return db.command(key, cd, func(sd *storeShard) error {
 		bm, err := sd.getBitMap(key)
@@ -304,6 +315,142 @@ func (db *Store) SetBit(key string, offset uint32, value bool) error {
 		}
 		return nil
 	})
+}
+
+// BitOr
+func (db *Store) BitOr(key1, key2, dest string) error {
+	cd := NewCoder(OpBitOr).String(key1).String(key2).String(dest)
+	defer putCoder(cd)
+
+	// bitmap1
+	sd1 := db.getShard(key1)
+	sd1.RLock()
+	defer sd1.RUnlock()
+	bm1, err := sd1.getBitMap(key1)
+	if err != nil {
+		return err
+	}
+
+	// bitmap2
+	sd2 := db.getShard(key2)
+	sd2.RLock()
+	defer sd2.RUnlock()
+	bm2, err := sd2.getBitMap(key2)
+	if err != nil {
+		return err
+	}
+
+	if key1 == dest {
+		sd1.buf.Write(cd.buf)
+		bm1.Or(bm2)
+
+	} else if key2 == dest {
+		sd2.buf.Write(cd.buf)
+		bm2.Or(bm1)
+
+	} else {
+		sd := db.getShard(dest)
+		sd.Lock()
+		defer sd.Unlock()
+
+		sd.buf.Write(cd.buf)
+		sd.Set(dest, bm1.Copy().Or(bm2))
+	}
+	return nil
+}
+
+// BitXor
+func (db *Store) BitXor(key1, key2, dest string) error {
+	cd := NewCoder(OpBitXor).String(key1).String(key2).String(dest)
+	defer putCoder(cd)
+
+	// bitmap1
+	sd1 := db.getShard(key1)
+	sd1.RLock()
+	defer sd1.RUnlock()
+	bm1, err := sd1.getBitMap(key1)
+	if err != nil {
+		return err
+	}
+
+	// bitmap2
+	sd2 := db.getShard(key2)
+	sd2.RLock()
+	defer sd2.RUnlock()
+	bm2, err := sd2.getBitMap(key2)
+	if err != nil {
+		return err
+	}
+
+	if key1 == dest {
+		sd1.buf.Write(cd.buf)
+		bm1.Xor(bm2)
+
+	} else if key2 == dest {
+		sd2.buf.Write(cd.buf)
+		bm2.Xor(bm1)
+
+	} else {
+		sd := db.getShard(dest)
+		sd.Lock()
+		defer sd.Unlock()
+
+		sd.buf.Write(cd.buf)
+		sd.Set(dest, bm1.Copy().Xor(bm2))
+	}
+	return nil
+}
+
+// BitAnd
+func (db *Store) BitAnd(key1, key2, dest string) error {
+	cd := NewCoder(OpBitAnd).String(key1).String(key2).String(dest)
+	defer putCoder(cd)
+
+	// bitmap1
+	sd1 := db.getShard(key1)
+	sd1.RLock()
+	defer sd1.RUnlock()
+	bm1, err := sd1.getBitMap(key1)
+	if err != nil {
+		return err
+	}
+
+	// bitmap2
+	sd2 := db.getShard(key2)
+	sd2.RLock()
+	defer sd2.RUnlock()
+	bm2, err := sd2.getBitMap(key2)
+	if err != nil {
+		return err
+	}
+
+	if key1 == dest {
+		sd1.buf.Write(cd.buf)
+		bm1.And(bm2)
+
+	} else if key2 == dest {
+		sd2.buf.Write(cd.buf)
+		bm2.And(bm1)
+
+	} else {
+		sd := db.getShard(dest)
+		sd.Lock()
+		defer sd.Unlock()
+
+		sd.buf.Write(cd.buf)
+		sd.Set(dest, bm1.Copy().And(bm2))
+	}
+	return nil
+}
+
+// BitCount
+func (db *Store) BitCount(key string) (int, error) {
+	sd := db.getShard(key)
+	sd.RLock()
+	defer sd.RUnlock()
+
+	bm, err := sd.getBitMap(key)
+	return bm.Len(), err
 }
 
 // Flush writes all the data in the buffer to the disk.
@@ -434,7 +581,7 @@ func (s *storeShard) load() {
 			}
 			m.Set(*base.B2S(_field), _value)
 
-		case OpSetBit:
+		case OpBitSet:
 			// offset value
 			var _offset, _value []byte
 
@@ -492,25 +639,24 @@ func (s *storeShard) dump() {
 
 	// dump current state
 	s.Scan(func(key string, v any, i int64) bool {
-		var recordType RecordType
+		var record RecordType
 
 		switch v.(type) {
 		case String:
-			recordType = RecordString
+			record = RecordString
 		case Map:
-			recordType = RecordMap
+			record = RecordMap
 		case BitMap:
-			recordType = RecordBitMap
+			record = RecordBitMap
 		case List:
-			recordType = RecordList
+			record = RecordList
 		case Set:
-			recordType = RecordSet
+			record = RecordSet
 		default:
 			panic(base.ErrUnSupportDataType)
 		}
-
 		// SetTx
-		if cd := NewCoder(OpSetTx).Type(recordType).String(key).Int64(i / timeCarry).Any(v); cd.err == nil {
+		if cd := NewCoder(OpSetTx).Type(record).String(key).Int64(i / timeCarry).Any(v); cd.err == nil {
 			s.rwbuf.Write(cd.buf)
 			putCoder(cd)
 		}
@@ -578,7 +724,10 @@ func getOrCreate[T any](s *storeShard, key string, vptr T, new func() T) (T, err
 		return vptr, base.ErrWrongType
 	}
 
-	vptr = new()
-	s.Set(key, vptr)
+	if new != nil {
+		vptr = new()
+		s.Set(key, vptr)
+	}
+
 	return vptr, nil
 }

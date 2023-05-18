@@ -2,6 +2,7 @@ package test
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -81,4 +82,42 @@ func TestCache(t *testing.T) {
 
 	// Test Count
 	assert.Equal(t, 3, cache.Count())
+}
+
+func BenchmarkCache(b *testing.B) {
+	c := structx.NewCache[int]()
+
+	b.Run("CacheTest", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			if i%3 == 1 {
+				c.Remove(strconv.Itoa(i - 1))
+			} else {
+				c.Set(strconv.Itoa(i), i)
+			}
+		}
+	})
+
+	m := structx.NewMap[string, int]()
+
+	b.Run("HashMapTest", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			if i%3 == 1 {
+				m.Delete(strconv.Itoa(i - 1))
+			} else {
+				m.Set(strconv.Itoa(i), i)
+			}
+		}
+	})
+
+	m1 := map[string]int{}
+
+	b.Run("StdMapTest", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			if i%3 == 1 {
+				delete(m1, strconv.Itoa(i-1))
+			} else {
+				m1[strconv.Itoa(i)] = i
+			}
+		}
+	})
 }
