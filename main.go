@@ -40,8 +40,7 @@ func testStress() {
 	for {
 		count++
 		db.SetEx(gofakeit.Phone(), []byte{'1'}, time.Second*5)
-		// db.HSet("hmap", gofakeit.Animal(), base.S2B(&val))
-		// db.SetBit("bit", gofakeit.Uint32(), true)
+		// db.BitSet("bit", uint(rand.Uint32()), true)
 	}
 }
 
@@ -61,6 +60,10 @@ func getDBFileSize() int64 {
 }
 
 func main() {
+	bs := structx.NewBitset()
+	bs.FlipRange(5, 100)
+	fmt.Println(bs)
+
 	db.BitSet("bit1", 1, true)
 	db.BitSet("bit1", 2, true)
 

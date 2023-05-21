@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
 	"github.com/zeebo/xxh3"
@@ -68,7 +67,7 @@ const (
 type (
 	String = []byte
 	Map    = structx.Map[string, []byte]
-	Set    = map[string]struct{}
+	Set    = structx.Set[string]
 	List   = *structx.List[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
 	BitMap = *structx.Bitset
@@ -540,16 +539,16 @@ func (s *storeShard) load() {
 		switch op {
 		case OpSetTx:
 			// ttl value
-			var _ttl, _value []byte
+			var ttl, val []byte
 
-			_ttl, line = parseLine(line, recordSepChar)
-			ts, err := strconv.ParseInt(*base.B2S(_ttl), _base, 64)
+			ttl, line = parseLine(line, recordSepChar)
+			ts, err := strconv.ParseInt(*base.B2S(ttl), _base, 64)
 			if err != nil {
 				panic(err)
 			}
 			ts *= timeCarry
 
-			_value, line = parseLine(line, recordSepChar)
+			val, line = parseLine(line, recordSepChar)
 
 			// check if expired
 			if ts < globalTime && ts != noTTL {
@@ -558,21 +557,21 @@ func (s *storeShard) load() {
 
 			switch recordType {
 			case RecordString:
-				s.SetTx(*base.B2S(key), _value, ts)
+				s.SetTx(*base.B2S(key), val, ts)
 
 			case RecordMap:
 				var m Map
-				if err := sonic.Unmarshal(_value, &m); err != nil {
+				if err := m.UnmarshalJSON(val); err != nil {
 					panic(err)
 				}
-				s.SetTx(*base.B2S(key), m, ts)
+				s.Set(*base.B2S(key), m)
 
 			case RecordBitMap:
 				var m BitMap
-				if err := m.UnmarshalJSON(_value); err != nil {
+				if err := m.UnmarshalBinary(val); err != nil {
 					panic(err)
 				}
-				s.SetTx(*base.B2S(key), m, ts)
+				s.Set(*base.B2S(key), m)
 
 			default:
 				panic(fmt.Errorf("%v: %d", base.ErrUnSupportDataType, recordType))
@@ -580,23 +579,23 @@ func (s *storeShard) load() {
 
 		case OpHSet:
 			// field value
-			var _field, _value []byte
+			var field, val []byte
 
-			_field, line = parseLine(line, recordSepChar)
-			_value, line = parseLine(line, recordSepChar)
+			field, line = parseLine(line, recordSepChar)
+			val, line = parseLine(line, recordSepChar)
 
 			m, err := s.getMap(*base.B2S(key))
 			if err != nil {
 				panic(err)
 			}
-			m.Set(*base.B2S(_field), _value)
+			m.Set(*base.B2S(field), val)
 
 		case OpBitSet:
 			// offset value
-			var _offset, _value []byte
+			var _offset, val []byte
 
 			_offset, line = parseLine(line, recordSepChar)
-			_value, line = parseLine(line, recordSepChar)
+			val, line = parseLine(line, recordSepChar)
 
 			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
 			if err != nil {
@@ -607,19 +606,19 @@ func (s *storeShard) load() {
 			if err != nil {
 				panic(err)
 			}
-			bm.SetTo(uint(offset), _value[0] == '1')
+			bm.SetTo(uint(offset), val[0] == '1')
 
 		case OpHRemove:
 			// field
-			var _field []byte
+			var field []byte
 
-			_field, line = parseLine(line, recordSepChar)
+			field, line = parseLine(line, recordSepChar)
 
 			m, err := s.getMap(*base.B2S(key))
 			if err != nil {
 				panic(err)
 			}
-			m.Delete(*base.B2S(_field))
+			m.Delete(*base.B2S(field))
 
 		case OpRemove:
 			s.Remove(*base.B2S(key))
@@ -726,10 +725,8 @@ func getOrCreate[T any](s *storeShard, key string, vptr T, new func() T) (T, err
 		return vptr, base.ErrWrongType
 	}
 
-	if new != nil {
-		vptr = new()
-		s.Set(key, vptr)
-	}
+	vptr = new()
+	s.Set(key, vptr)
 
 	return vptr, nil
 }

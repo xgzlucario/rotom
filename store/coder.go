@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/bytedance/sonic"
 	"github.com/xgzlucario/rotom/base"
 )
 
@@ -105,17 +104,11 @@ func (s *Coder) encode(v any) ([]byte, error) {
 	switch v := v.(type) {
 	case String:
 		return v, nil
-	case Map:
-		return sonic.Marshal(v)
-	case Set:
-		return sonic.Marshal(v)
-	case List:
-		return v.MarshalJSON()
-	case ZSet:
-		return v.MarshalJSON()
-	case BitMap:
+	case base.Binarier:
+		return v.MarshalBinary()
+	case base.Marshaler:
 		return v.MarshalJSON()
 	default:
-		panic(fmt.Errorf("%v: %v", base.ErrUnSupportDataType, reflect.TypeOf(v).String()))
+		return nil, fmt.Errorf("%v: %v", base.ErrUnSupportDataType, reflect.TypeOf(v))
 	}
 }
