@@ -3,6 +3,7 @@ module github.com/xgzlucario/rotom
 go 1.20
 
 require (
+	github.com/bits-and-blooms/bitset v1.7.0
 	github.com/bits-and-blooms/bloom v2.0.3+incompatible
 	github.com/brianvoe/gofakeit/v6 v6.21.0
 	github.com/bytedance/sonic v1.8.8
@@ -13,7 +14,7 @@ require (
 	github.com/tidwall/hashmap v1.8.1
 	github.com/tidwall/sjson v1.2.5
 	github.com/zeebo/xxh3 v1.0.2
-	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc
+	golang.org/x/exp v0.0.0-20230519143937-03e91628a987
 )
 
 require (
@@ -30,7 +31,7 @@ require (
 	github.com/tklauser/numcpus v0.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/willf/bitset v1.1.11 // indirect
-	github.com/yusufpapurcu/wmi v1.2.2 // indirect
+	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect

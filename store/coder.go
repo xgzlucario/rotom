@@ -76,13 +76,13 @@ func (s *Coder) format(v []byte) *Coder {
 
 func (s *Coder) Bool(v bool) *Coder {
 	if v {
-		return s.format([]byte{'1'})
+		return s.format([]byte{'T'})
 	} else {
-		return s.format([]byte{'0'})
+		return s.format([]byte{'F'})
 	}
 }
 
-func (s *Coder) Uint32(v uint32) *Coder {
+func (s *Coder) Uint(v uint) *Coder {
 	str := strconv.FormatUint(uint64(v), _base)
 	return s.format(base.S2B(&str))
 }

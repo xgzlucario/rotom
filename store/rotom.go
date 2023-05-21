@@ -71,7 +71,7 @@ type (
 	Set    = map[string]struct{}
 	List   = *structx.List[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
-	BitMap = *structx.BitMap
+	BitMap = *structx.Bitset
 )
 
 var (
@@ -287,7 +287,7 @@ func (db *Store) HRemove(key, field string) error {
 }
 
 // BitTest
-func (db *Store) BitTest(key string, offset uint32) (bool, error) {
+func (db *Store) BitTest(key string, offset uint) (bool, error) {
 	sd := db.getShard(key)
 	sd.RLock()
 	defer sd.RUnlock()
@@ -296,23 +296,33 @@ func (db *Store) BitTest(key string, offset uint32) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return bm.Contains(offset), nil
+	return bm.Test(offset), nil
 }
 
 // BitSet
-func (db *Store) BitSet(key string, offset uint32, value bool) error {
-	cd := NewCoder(OpBitSet).String(key).Uint32(offset).Bool(value)
+func (db *Store) BitSet(key string, offset uint, value bool) error {
+	cd := NewCoder(OpBitSet).String(key).Uint(offset).Bool(value)
 
 	return db.command(key, cd, func(sd *storeShard) error {
 		bm, err := sd.getBitMap(key)
 		if err != nil {
 			return err
 		}
-		if value {
-			bm.Add(offset)
-		} else {
-			bm.Remove(offset)
+		bm.SetTo(offset, value)
+		return nil
+	})
+}
+
+// BitFlip
+func (db *Store) BitFlip(key string, offset uint) error {
+	cd := NewCoder(OpBitFlip).String(key).Uint(offset)
+
+	return db.command(key, cd, func(sd *storeShard) error {
+		bm, err := sd.getBitMap(key)
+		if err != nil {
+			return err
 		}
+		bm.Flip(offset)
 		return nil
 	})
 }
@@ -322,7 +332,7 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	cd := NewCoder(OpBitOr).String(key1).String(key2).String(dest)
 	defer putCoder(cd)
 
-	// bitmap1
+	// bm1
 	sd1 := db.getShard(key1)
 	sd1.RLock()
 	defer sd1.RUnlock()
@@ -331,7 +341,7 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 		return err
 	}
 
-	// bitmap2
+	// bm2
 	sd2 := db.getShard(key2)
 	sd2.RLock()
 	defer sd2.RUnlock()
@@ -342,11 +352,11 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 
 	if key1 == dest {
 		sd1.buf.Write(cd.buf)
-		bm1.Or(bm2)
+		bm1.Union(bm2)
 
 	} else if key2 == dest {
 		sd2.buf.Write(cd.buf)
-		bm2.Or(bm1)
+		bm2.Union(bm1)
 
 	} else {
 		sd := db.getShard(dest)
@@ -354,7 +364,7 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 		defer sd.Unlock()
 
 		sd.buf.Write(cd.buf)
-		sd.Set(dest, bm1.Copy().Or(bm2))
+		sd.Set(dest, bm1.Clone().Union(bm2))
 	}
 	return nil
 }
@@ -364,7 +374,7 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 	cd := NewCoder(OpBitXor).String(key1).String(key2).String(dest)
 	defer putCoder(cd)
 
-	// bitmap1
+	// bm1
 	sd1 := db.getShard(key1)
 	sd1.RLock()
 	defer sd1.RUnlock()
@@ -373,7 +383,7 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 		return err
 	}
 
-	// bitmap2
+	// bm2
 	sd2 := db.getShard(key2)
 	sd2.RLock()
 	defer sd2.RUnlock()
@@ -384,11 +394,11 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 
 	if key1 == dest {
 		sd1.buf.Write(cd.buf)
-		bm1.Xor(bm2)
+		bm1.Difference(bm2)
 
 	} else if key2 == dest {
 		sd2.buf.Write(cd.buf)
-		bm2.Xor(bm1)
+		bm2.Difference(bm1)
 
 	} else {
 		sd := db.getShard(dest)
@@ -396,7 +406,7 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 		defer sd.Unlock()
 
 		sd.buf.Write(cd.buf)
-		sd.Set(dest, bm1.Copy().Xor(bm2))
+		sd.Set(dest, bm1.Clone().Difference(bm2))
 	}
 	return nil
 }
@@ -406,7 +416,7 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 	cd := NewCoder(OpBitAnd).String(key1).String(key2).String(dest)
 	defer putCoder(cd)
 
-	// bitmap1
+	// bm1
 	sd1 := db.getShard(key1)
 	sd1.RLock()
 	defer sd1.RUnlock()
@@ -415,7 +425,7 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 		return err
 	}
 
-	// bitmap2
+	// bm2
 	sd2 := db.getShard(key2)
 	sd2.RLock()
 	defer sd2.RUnlock()
@@ -426,11 +436,11 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 
 	if key1 == dest {
 		sd1.buf.Write(cd.buf)
-		bm1.And(bm2)
+		bm1.Intersection(bm2)
 
 	} else if key2 == dest {
 		sd2.buf.Write(cd.buf)
-		bm2.And(bm1)
+		bm2.Intersection(bm1)
 
 	} else {
 		sd := db.getShard(dest)
@@ -438,13 +448,13 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 		defer sd.Unlock()
 
 		sd.buf.Write(cd.buf)
-		sd.Set(dest, bm1.Copy().And(bm2))
+		sd.Set(dest, bm1.Clone().Intersection(bm2))
 	}
 	return nil
 }
 
 // BitCount
-func (db *Store) BitCount(key string) (int, error) {
+func (db *Store) BitCount(key string) (uint, error) {
 	sd := db.getShard(key)
 	sd.RLock()
 	defer sd.RUnlock()
@@ -588,7 +598,7 @@ func (s *storeShard) load() {
 			_offset, line = parseLine(line, recordSepChar)
 			_value, line = parseLine(line, recordSepChar)
 
-			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 32)
+			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
 			if err != nil {
 				panic(err)
 			}
@@ -597,15 +607,7 @@ func (s *storeShard) load() {
 			if err != nil {
 				panic(err)
 			}
-
-			switch _value[0] {
-			case '0':
-				bm.Remove(uint32(offset))
-			case '1':
-				bm.Add(uint32(offset))
-			default:
-				panic(base.ErrWrongBitValue)
-			}
+			bm.SetTo(uint(offset), _value[0] == '1')
 
 		case OpHRemove:
 			// field
@@ -710,7 +712,7 @@ func (sd *storeShard) getMap(key string) (Map, error) {
 func (sd *storeShard) getBitMap(key string) (BitMap, error) {
 	var m BitMap
 	return getOrCreate(sd, key, m, func() BitMap {
-		return structx.NewBitMap()
+		return structx.NewBitset()
 	})
 }
 

@@ -75,20 +75,8 @@ func main() {
 	fmt.Println(bm, ok)
 
 	if bm != nil {
-		bm.(*structx.BitMap).Range(func(u uint32) bool {
-			fmt.Println(u)
-			return false
-		})
+		fmt.Println("BITSET:", bm.(*structx.Bitset).String())
 	}
-
-	// for i := 1; i < 9999; i++ {
-	// 	db.SetBit("bit", uint32(i), true)
-	// 	fmt.Println(i)
-	// 	fmt.Println(db.GetBit("bit", uint32(i)))
-	// 	fmt.Println(db.GetBit("bit", uint32(i+1)))
-
-	// 	time.Sleep(time.Second)
-	// }
 
 	fmt.Println(db.HGet("hmap", "1"))
 	fmt.Println(db.HGet("hmap", "2"))
