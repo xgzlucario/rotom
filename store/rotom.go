@@ -3,7 +3,6 @@ package store
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"path"
@@ -60,7 +59,7 @@ const (
 const (
 	recordSepChar = byte('\n')
 	timeCarry     = 1000 * 1000 * 1000
-	noTTL         = 0
+	NoTTL         = 0
 )
 
 // Type aliases for structx types.
@@ -163,10 +162,10 @@ func Open(conf *Config) (*Store, error) {
 	// Start worker
 	for _, s := range db.shards {
 		s := s
-		base.Go(context.Background(), db.SyncInterval, func() {
+		base.Go(db.SyncInterval, func() {
 			s.writeTo(s.buf, s.path)
 		})
-		base.Go(context.Background(), db.RewriteInterval, func() {
+		base.Go(db.RewriteInterval, func() {
 			s.dump()
 		})
 	}
@@ -181,7 +180,7 @@ func (db *Store) Get(key string) (any, bool) {
 
 // Set sets a key-value pair in the database.
 func (db *Store) Set(key string, val []byte) error {
-	return db.SetTx(key, val, noTTL)
+	return db.SetTx(key, val, NoTTL)
 }
 
 func (db *Store) command(key string, coder *Coder, cmd func(*storeShard) error) error {
@@ -551,7 +550,7 @@ func (s *storeShard) load() {
 			val, line = parseLine(line, recordSepChar)
 
 			// check if expired
-			if ts < globalTime && ts != noTTL {
+			if ts < globalTime && ts != NoTTL {
 				continue
 			}
 
