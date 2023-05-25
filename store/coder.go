@@ -16,7 +16,9 @@ const (
 
 // coderPool is a pool of Coder objects to improve performance by reusing Coder instances.
 var coderPool = sync.Pool{
-	New: func() any { return new(Coder) },
+	New: func() any {
+		return &Coder{buf: make([]byte, 0, 16)}
+	},
 }
 
 // Coder is the primary type for encoding data into a specific format.
@@ -58,10 +60,9 @@ func (s *Coder) Bytes(v []byte) *Coder {
 	return s
 }
 
-func (s *Coder) int(v int) *Coder {
+func (s *Coder) int(v int) {
 	str := strconv.FormatInt(int64(v), _base)
 	s.buf = append(s.buf, str...)
-	return s
 }
 
 // format encodes a byte slice into the Coder's buffer as a record.

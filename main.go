@@ -74,7 +74,7 @@ func main() {
 	// db.Set("aa", []byte("12345"))
 	// fmt.Println(db.HSet("aa", "1", []byte("123")))
 
-	bm, ok := db.Get("bit3")
+	bm, ok := db.GetAny("bit3")
 	fmt.Println(bm, ok)
 
 	if bm != nil {

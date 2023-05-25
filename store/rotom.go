@@ -13,6 +13,7 @@ import (
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
 	"github.com/zeebo/xxh3"
+	"golang.org/x/exp/slices"
 )
 
 type Operation byte
@@ -30,7 +31,6 @@ const (
 	OpBitOr
 	OpBitAnd
 	OpBitXor
-	OpBitShift
 
 	// TODO: Implement these operations.
 	OpIncr
@@ -174,8 +174,23 @@ func Open(conf *Config) (*Store, error) {
 }
 
 // Get
-func (db *Store) Get(key string) (any, bool) {
-	return db.getShard(key).Get(key)
+func (db *Store) Get(key string) ([]byte, bool) {
+	sd := db.getShard(key)
+	sd.RLock()
+	defer sd.RUnlock()
+
+	val, _ := sd.Get(key)
+	str, ok := val.(String)
+	return str, ok
+}
+
+// GetAny
+func (db *Store) GetAny(key string) (any, bool) {
+	sd := db.getShard(key)
+	sd.RLock()
+	defer sd.RUnlock()
+
+	return sd.Get(key)
 }
 
 // Set sets a key-value pair in the database.
@@ -533,21 +548,21 @@ func (s *storeShard) load() {
 
 		// parse key
 		var key []byte
-		key, line = parseLine(line, recordSepChar)
+		key, line = parseWord(line, recordSepChar)
 
 		switch op {
 		case OpSetTx:
 			// ttl value
 			var ttl, val []byte
 
-			ttl, line = parseLine(line, recordSepChar)
+			ttl, line = parseWord(line, recordSepChar)
 			ts, err := strconv.ParseInt(*base.B2S(ttl), _base, 64)
 			if err != nil {
 				panic(err)
 			}
 			ts *= timeCarry
 
-			val, line = parseLine(line, recordSepChar)
+			val, line = parseWord(line, recordSepChar)
 
 			// check if expired
 			if ts < globalTime && ts != NoTTL {
@@ -580,8 +595,8 @@ func (s *storeShard) load() {
 			// field value
 			var field, val []byte
 
-			field, line = parseLine(line, recordSepChar)
-			val, line = parseLine(line, recordSepChar)
+			field, line = parseWord(line, recordSepChar)
+			val, line = parseWord(line, recordSepChar)
 
 			m, err := s.getMap(*base.B2S(key))
 			if err != nil {
@@ -593,8 +608,8 @@ func (s *storeShard) load() {
 			// offset value
 			var _offset, val []byte
 
-			_offset, line = parseLine(line, recordSepChar)
-			val, line = parseLine(line, recordSepChar)
+			_offset, line = parseWord(line, recordSepChar)
+			val, line = parseWord(line, recordSepChar)
 
 			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
 			if err != nil {
@@ -607,11 +622,76 @@ func (s *storeShard) load() {
 			}
 			bm.SetTo(uint(offset), val[0] == '1')
 
+		case OpBitFlip:
+			// offset
+			var _offset []byte
+
+			_offset, line = parseWord(line, recordSepChar)
+
+			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
+			if err != nil {
+				panic(err)
+			}
+
+			bm, err := s.getBitMap(*base.B2S(key))
+			if err != nil {
+				panic(err)
+			}
+			bm.Flip(uint(offset))
+
+		case OpBitAnd, OpBitOr, OpBitXor:
+			// src, dest, key is bitmap1
+			var src, dest []byte
+
+			src, line = parseWord(line, recordSepChar)
+			dest, line = parseWord(line, recordSepChar)
+
+			bm1, err := s.getBitMap(*base.B2S(key))
+			if err != nil {
+				panic(err)
+			}
+
+			bm2, err := s.getBitMap(*base.B2S(src))
+			if err != nil {
+				panic(err)
+			}
+
+			if slices.Equal(key, dest) {
+				switch op {
+				case OpBitAnd:
+					bm1.Intersection(bm2)
+				case OpBitOr:
+					bm1.Union(bm2)
+				case OpBitXor:
+					bm1.Difference(bm2)
+				}
+
+			} else if slices.Equal(src, dest) {
+				switch op {
+				case OpBitAnd:
+					bm2.Intersection(bm1)
+				case OpBitOr:
+					bm2.Union(bm1)
+				case OpBitXor:
+					bm2.Difference(bm1)
+				}
+
+			} else {
+				switch op {
+				case OpBitAnd:
+					s.Set(*base.B2S(dest), bm1.Clone().Intersection(bm2))
+				case OpBitOr:
+					s.Set(*base.B2S(dest), bm1.Clone().Union(bm2))
+				case OpBitXor:
+					s.Set(*base.B2S(dest), bm1.Clone().Difference(bm2))
+				}
+			}
+
 		case OpHRemove:
 			// field
 			var field []byte
 
-			field, line = parseLine(line, recordSepChar)
+			field, line = parseWord(line, recordSepChar)
 
 			m, err := s.getMap(*base.B2S(key))
 			if err != nil {
@@ -638,9 +718,8 @@ func (s *storeShard) dump() {
 	}
 
 	// dump current state
+	var record RecordType
 	s.Scan(func(key string, v any, i int64) bool {
-		var record RecordType
-
 		switch v.(type) {
 		case String:
 			record = RecordString
@@ -672,8 +751,8 @@ func (s *storeShard) dump() {
 	os.Rename(s.rwPath, s.path)
 }
 
-// parseLine parse file content to record lines
-func parseLine(line []byte, valid byte) (pre []byte, suf []byte) {
+// parseWord parse file content to record lines
+func parseWord(line []byte, valid byte) (pre []byte, suf []byte) {
 	i := bytes.IndexByte(line, ':')
 	if i <= 0 {
 		panic(base.ErrParseRecordLine)
