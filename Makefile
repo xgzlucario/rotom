@@ -4,4 +4,4 @@ build-run:
 	./rotom
 
 pprof:
-	go tool pprof -http=:8081 "http://localhost:6060/debug/pprof/profile?seconds=60"
+	go tool pprof -http=:18081 "http://localhost:6060/debug/pprof/profile?seconds=60"

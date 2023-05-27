@@ -620,7 +620,7 @@ func (s *storeShard) load() {
 			if err != nil {
 				panic(err)
 			}
-			bm.SetTo(uint(offset), val[0] == '1')
+			bm.SetTo(uint(offset), val[0] == _true)
 
 		case OpBitFlip:
 			// offset

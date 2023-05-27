@@ -12,6 +12,9 @@ import (
 // _base is the base for integer conversion.
 const (
 	_base = 36
+
+	_true  = 'T'
+	_false = 'F'
 )
 
 // coderPool is a pool of Coder objects to improve performance by reusing Coder instances.
@@ -76,10 +79,9 @@ func (s *Coder) format(v []byte) *Coder {
 
 func (s *Coder) Bool(v bool) *Coder {
 	if v {
-		return s.format([]byte{'T'})
-	} else {
-		return s.format([]byte{'F'})
+		return s.format([]byte{_true})
 	}
+	return s.format([]byte{_false})
 }
 
 func (s *Coder) Uint(v uint) *Coder {
@@ -107,6 +109,8 @@ func (s *Coder) encode(v any) ([]byte, error) {
 		return v, nil
 	case base.Binarier:
 		return v.MarshalBinary()
+	case base.Gober:
+		return v.GobEncode()
 	case base.Marshaler:
 		return v.MarshalJSON()
 	default:

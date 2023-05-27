@@ -16,6 +16,11 @@ type Binarier interface {
 	UnmarshalBinary([]byte) error
 }
 
+type Gober interface {
+	GobEncode() ([]byte, error)
+	GobDecode([]byte) error
+}
+
 type GTreeJSON[K, V any] struct {
 	K []K
 	V []V
