@@ -42,6 +42,9 @@ const (
 	OpZSet
 	OpZIncr
 	OpZRemove
+
+	OpTrieSet
+	OpTrieRemove
 )
 
 // Record types.
@@ -79,7 +82,7 @@ var (
 		ShardCount:      32,
 		SyncPolicy:      base.EverySecond,
 		SyncInterval:    time.Second,
-		RewriteInterval: time.Second * 30,
+		RewriteInterval: time.Minute / 2,
 	}
 )
 
@@ -135,7 +138,7 @@ func Open(conf *Config) (*Store, error) {
 		shards: make([]*storeShard, conf.ShardCount),
 	}
 
-	if err := os.MkdirAll(db.Path, os.ModeDir); err != nil {
+	if err := os.MkdirAll(db.Path, 0755); err != nil {
 		return nil, err
 	}
 
@@ -143,8 +146,8 @@ func Open(conf *Config) (*Store, error) {
 	for i := range db.shards {
 		db.shards[i] = &storeShard{
 			syncPolicy: conf.SyncPolicy,
-			buf:        bytes.NewBuffer(nil),
-			rwbuf:      bytes.NewBuffer(nil),
+			buf:        bytes.NewBuffer(make([]byte, 0, 4096)),
+			rwbuf:      bytes.NewBuffer(make([]byte, 0, 4096)),
 			path:       path.Join(db.Path, strconv.Itoa(i)+".db"),
 			rwPath:     path.Join(db.Path, strconv.Itoa(i)+".db-rw"),
 			Cache:      structx.NewCache[any](),
@@ -198,6 +201,31 @@ func (db *Store) Set(key string, val []byte) error {
 	return db.SetTx(key, val, NoTTL)
 }
 
+// Incr
+func (db *Store) Incr(key string, increment float64) (float64, error) {
+	sd := db.getShard(key)
+	sd.Lock()
+	defer sd.Unlock()
+
+	val, ok := sd.Get(key)
+	if !ok {
+		return -1, base.ErrKeyNotFound
+	}
+
+	str, _ := val.(String)
+	num, err := strconv.ParseFloat(*base.B2S(str), 64)
+	if err != nil {
+		return -1, err
+	}
+
+	num += increment
+	numStr := strconv.FormatFloat(num, 'f', -1, 64)
+
+	sd.Set(key, base.S2B(&numStr))
+
+	return num, nil
+}
+
 func (db *Store) command(key string, coder *Coder, cmd func(*storeShard) error) error {
 	sd := db.getShard(key)
 	sd.Lock()
@@ -220,10 +248,7 @@ func (db *Store) SetEx(key string, val []byte, ttl time.Duration) error {
 // SetTx sets a key-value pair with expiry time in the database.
 // If ts set to 0, the key will never expire.
 func (db *Store) SetTx(key string, val []byte, ts int64) error {
-	cd := NewCoder(OpSetTx).Type(RecordString).String(key).Int64(ts / timeCarry).Bytes(val)
-	if cd.err != nil {
-		return cd.err
-	}
+	cd := NewCoder(OpSetTx).Type(RecordString).String(key).Ts(ts / timeCarry).Bytes(val)
 
 	return db.command(key, cd, func(sd *storeShard) error {
 		sd.SetTx(key, val, ts)
@@ -476,14 +501,25 @@ func (db *Store) BitCount(key string) (uint, error) {
 	return bm.Len(), err
 }
 
-// Flush writes all the data in the buffer to the disk.
+// Flush
 func (db *Store) Flush() error {
 	for _, sd := range db.shards {
+		sd.Lock()
+		defer sd.Unlock()
 		if _, err := sd.writeTo(sd.buf, sd.path); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// Clear
+func (db *Store) Clear() {
+	for _, sd := range db.shards {
+		sd.Lock()
+		defer sd.Unlock()
+		sd.Clear()
+	}
 }
 
 // Size returns the total size of the data in the database.
@@ -540,7 +576,7 @@ func (s *storeShard) load() {
 		op = Operation(line[0])
 		line = line[1:]
 
-		// SetTx 需要解析类型
+		// SetTx need parse record type
 		if op == OpSetTx {
 			recordType = RecordType(line[0])
 			line = line[1:]
@@ -552,14 +588,11 @@ func (s *storeShard) load() {
 
 		switch op {
 		case OpSetTx:
-			// ttl value
-			var ttl, val []byte
+			// ts value
+			var val []byte
+			var ts int64
 
-			ttl, line = parseWord(line, recordSepChar)
-			ts, err := strconv.ParseInt(*base.B2S(ttl), _base, 64)
-			if err != nil {
-				panic(err)
-			}
+			ts, line = parseTs(line)
 			ts *= timeCarry
 
 			val, line = parseWord(line, recordSepChar)
@@ -599,9 +632,8 @@ func (s *storeShard) load() {
 			val, line = parseWord(line, recordSepChar)
 
 			m, err := s.getMap(*base.B2S(key))
-			if err != nil {
-				panic(err)
-			}
+			base.Assert1(err)
+
 			m.Set(*base.B2S(field), val)
 
 		case OpBitSet:
@@ -612,14 +644,11 @@ func (s *storeShard) load() {
 			val, line = parseWord(line, recordSepChar)
 
 			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
-			if err != nil {
-				panic(err)
-			}
+			base.Assert1(err)
 
 			bm, err := s.getBitMap(*base.B2S(key))
-			if err != nil {
-				panic(err)
-			}
+			base.Assert1(err)
+
 			bm.SetTo(uint(offset), val[0] == _true)
 
 		case OpBitFlip:
@@ -629,14 +658,11 @@ func (s *storeShard) load() {
 			_offset, line = parseWord(line, recordSepChar)
 
 			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
-			if err != nil {
-				panic(err)
-			}
+			base.Assert1(err)
 
 			bm, err := s.getBitMap(*base.B2S(key))
-			if err != nil {
-				panic(err)
-			}
+			base.Assert1(err)
+
 			bm.Flip(uint(offset))
 
 		case OpBitAnd, OpBitOr, OpBitXor:
@@ -647,14 +673,10 @@ func (s *storeShard) load() {
 			dest, line = parseWord(line, recordSepChar)
 
 			bm1, err := s.getBitMap(*base.B2S(key))
-			if err != nil {
-				panic(err)
-			}
+			base.Assert1(err)
 
 			bm2, err := s.getBitMap(*base.B2S(src))
-			if err != nil {
-				panic(err)
-			}
+			base.Assert1(err)
 
 			if slices.Equal(key, dest) {
 				switch op {
@@ -694,9 +716,8 @@ func (s *storeShard) load() {
 			field, line = parseWord(line, recordSepChar)
 
 			m, err := s.getMap(*base.B2S(key))
-			if err != nil {
-				panic(err)
-			}
+			base.Assert1(err)
+
 			m.Delete(*base.B2S(field))
 
 		case OpRemove:
@@ -720,9 +741,14 @@ func (s *storeShard) dump() {
 	// dump current state
 	var record RecordType
 	s.Scan(func(key string, v any, i int64) bool {
-		switch v.(type) {
+		switch v := v.(type) {
 		case String:
-			record = RecordString
+			cd := NewCoder(OpSetTx).Type(RecordString).String(key).Ts(i / timeCarry).Bytes(v)
+			s.rwbuf.Write(cd.buf)
+			putCoder(cd)
+
+			return true
+
 		case Map:
 			record = RecordMap
 		case BitMap:
@@ -734,8 +760,9 @@ func (s *storeShard) dump() {
 		default:
 			panic(base.ErrUnSupportDataType)
 		}
+
 		// SetTx
-		if cd := NewCoder(OpSetTx).Type(record).String(key).Int64(i / timeCarry).Any(v); cd.err == nil {
+		if cd, err := NewCoder(OpSetTx).Type(record).String(key).Ts(i / timeCarry).Any(v); err == nil {
 			s.rwbuf.Write(cd.buf)
 			putCoder(cd)
 		}
@@ -772,23 +799,36 @@ func parseWord(line []byte, valid byte) (pre []byte, suf []byte) {
 	return
 }
 
+// parseTs
+func parseTs(line []byte) (int64, []byte) {
+	i := bytes.IndexByte(line, recordSepChar)
+	if i <= 0 {
+		panic(base.ErrParseRecordLine)
+	}
+
+	ts, err := strconv.ParseInt(*base.B2S(line[:i]), _base, 64)
+	if err != nil {
+		panic(err)
+	}
+
+	return ts, line[i+1:]
+}
+
 // getShard hashes the key to determine the sd.
 func (db *Store) getShard(key string) *storeShard {
 	return db.shards[xxh3.HashString(key)&db.mask]
 }
 
 // getMap
-func (sd *storeShard) getMap(key string) (Map, error) {
-	var m Map
+func (sd *storeShard) getMap(key string) (m Map, err error) {
 	return getOrCreate(sd, key, m, func() Map {
 		return structx.NewMap[string, []byte]()
 	})
 }
 
 // getBitMap
-func (sd *storeShard) getBitMap(key string) (BitMap, error) {
-	var m BitMap
-	return getOrCreate(sd, key, m, func() BitMap {
+func (sd *storeShard) getBitMap(key string) (bm BitMap, err error) {
+	return getOrCreate(sd, key, bm, func() BitMap {
 		return structx.NewBitset()
 	})
 }

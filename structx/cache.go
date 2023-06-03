@@ -13,12 +13,12 @@ const (
 	probeCount     = 100
 	probeSpace     = 3
 	expRate        = 0.2
-	eliminateMaxMs = 25
+	eliminateMaxMs = 20
 )
 
 var (
 	// Interval of eliminate expired items and update timestamp
-	TickInterval = time.Millisecond * 10
+	TickInterval = time.Millisecond
 )
 
 type Cache[V any] struct {
@@ -211,7 +211,7 @@ func (c *Cache[V]) eliminate(expRate float64) {
 			c.ts = ts.UnixNano()
 
 			// break if cost over limit or blow expRate
-			if ts.Sub(start).Milliseconds() >= eliminateMaxMs || elimi/pb <= expRate {
+			if ts.Sub(start).Milliseconds() > eliminateMaxMs || elimi/pb <= expRate {
 				break
 			}
 		}

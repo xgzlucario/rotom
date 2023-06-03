@@ -18,5 +18,8 @@ var (
 	ErrUnSupportDataType    = errors.New("unsupport data type")
 	ErrUnknownOperationType = errors.New("unknown operation type")
 
+	ErrNotString   = errors.New("value is not string")
+	ErrNotNumberic = errors.New("value is not numberic")
+
 	ErrParseRecordLine = errors.New("parse record line error")
 )

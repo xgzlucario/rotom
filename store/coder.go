@@ -27,7 +27,6 @@ var coderPool = sync.Pool{
 // Coder is the primary type for encoding data into a specific format.
 type Coder struct {
 	buf []byte
-	err error
 }
 
 func NewCoder(v Operation) *Coder {
@@ -38,7 +37,6 @@ func NewCoder(v Operation) *Coder {
 
 func putCoder(obj *Coder) {
 	obj.buf = obj.buf[:0]
-	obj.err = nil
 	coderPool.Put(obj)
 }
 
@@ -89,18 +87,17 @@ func (s *Coder) Uint(v uint) *Coder {
 	return s.format(base.S2B(&str))
 }
 
-func (s *Coder) Int64(v int64) *Coder {
+func (s *Coder) Ts(v int64) *Coder {
 	str := strconv.FormatInt(v, _base)
-	return s.format(base.S2B(&str))
+	s.buf = append(s.buf, str...)
+	s.buf = append(s.buf, recordSepChar)
+	return s
 }
 
-func (s *Coder) Any(v any) *Coder {
+func (s *Coder) Any(v any) (*Coder, error) {
 	buf, err := s.encode(v)
-	if err != nil {
-		s.err = err
-	}
 	s.format(buf)
-	return s
+	return s, err
 }
 
 func (s *Coder) encode(v any) ([]byte, error) {

@@ -5,7 +5,7 @@ import (
 	"unsafe"
 )
 
-// string and bytes convert unsafe
+// String convert to bytes unsafe
 func S2B(str *string) []byte {
 	strHeader := (*[2]uintptr)(unsafe.Pointer(str))
 	byteSliceHeader := [3]uintptr{
@@ -14,6 +14,7 @@ func S2B(str *string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&byteSliceHeader))
 }
 
+// Bytes convert to string unsafe
 func B2S(buf []byte) *string {
 	return (*string)(unsafe.Pointer(&buf))
 }
@@ -26,4 +27,11 @@ func Go(interval time.Duration, f func()) {
 			f()
 		}
 	}()
+}
+
+// Assert1 panic if err not nil
+func Assert1(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
