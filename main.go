@@ -42,14 +42,15 @@ func testStress() {
 				fmt.Printf("===== GET SLOW: %d ms =====\n", c)
 			}
 
-			time.Sleep(time.Millisecond * 10)
+			time.Sleep(time.Nanosecond)
 		}
 	}()
 
 	// Simulate testing
 	for {
 		count++
-		db.SetEx(gofakeit.Phone(), []byte{'a', 'b', 'c', 'd'}, time.Second*10)
+		v := gofakeit.Phone()
+		db.SetEx(v, []byte(v), time.Minute)
 	}
 }
 

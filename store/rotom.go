@@ -82,7 +82,7 @@ var (
 		ShardCount:      32,
 		SyncPolicy:      base.EverySecond,
 		SyncInterval:    time.Second,
-		RewriteInterval: time.Minute / 2,
+		RewriteInterval: time.Minute,
 	}
 )
 

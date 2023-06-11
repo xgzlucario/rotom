@@ -3,9 +3,9 @@ module github.com/xgzlucario/rotom
 go 1.20
 
 require (
-	github.com/bits-and-blooms/bitset v1.7.0
+	github.com/bits-and-blooms/bitset v1.8.0
 	github.com/bits-and-blooms/bloom v2.0.3+incompatible
-	github.com/brianvoe/gofakeit/v6 v6.21.0
+	github.com/brianvoe/gofakeit/v6 v6.22.0
 	github.com/bytedance/sonic v1.9.1
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/sourcegraph/conc v0.3.0
