@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -84,6 +85,24 @@ func TestCache(t *testing.T) {
 	assert.Equal(t, 3, cache.Count())
 }
 
+func TestBigCache(t *testing.T) {
+	cache := structx.NewBigCache()
+	valid := map[string][]byte{}
+
+	for i := 0; i < 100000; i++ {
+		p := gofakeit.Phone()
+
+		valid[p] = []byte(p)
+		cache.Set(p, []byte(p))
+	}
+
+	for k, v := range valid {
+		value, ok := cache.Get(k)
+		assert.True(t, ok)
+		assert.Equal(t, v, value)
+	}
+}
+
 func BenchmarkCache(b *testing.B) {
 	c := structx.NewCache[int]()
 
@@ -118,6 +137,26 @@ func BenchmarkCache(b *testing.B) {
 			} else {
 				m1[strconv.Itoa(i)] = i
 			}
+		}
+	})
+}
+
+func BenchmarkNowCache(b *testing.B) {
+	m := structx.NewCache[[]byte]()
+	b.Run("CacheSet", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			s := strconv.Itoa(i)
+			m.Set(s, []byte(s))
+		}
+	})
+}
+
+func BenchmarkBigCache(b *testing.B) {
+	m := structx.NewBigCache()
+	b.Run("BigCacheSet", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			s := strconv.Itoa(i)
+			m.Set(s, []byte(s))
 		}
 	})
 }
