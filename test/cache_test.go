@@ -87,19 +87,26 @@ func TestCache(t *testing.T) {
 
 func TestBigCache(t *testing.T) {
 	cache := structx.NewBigCache()
+
 	valid := map[string][]byte{}
+	ttl := map[string]int64{}
 
 	for i := 0; i < 100000; i++ {
 		p := gofakeit.Phone()
 
+		ts := time.Now().UnixMilli() * 1000 * 1000
+
 		valid[p] = []byte(p)
-		cache.Set(p, []byte(p))
+		ttl[p] = ts
+
+		cache.SetTx(p, []byte(p), ts)
 	}
 
 	for k, v := range valid {
-		value, ok := cache.Get(k)
+		value, ts, ok := cache.GetTx(k)
 		assert.True(t, ok)
 		assert.Equal(t, v, value)
+		assert.Equal(t, ttl[k], ts)
 	}
 }
 

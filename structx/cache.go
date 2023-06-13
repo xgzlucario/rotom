@@ -54,6 +54,7 @@ func NewCustomCache[V any](expRate float64) *Cache[V] {
 		data: NewMap[string, *cacheItem[V]](),
 	}
 	go c.eliminate(expRate)
+
 	return c
 }
 
