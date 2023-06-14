@@ -94,7 +94,7 @@ func TestBigCache(t *testing.T) {
 	for i := 0; i < 100000; i++ {
 		p := gofakeit.Phone()
 
-		ts := time.Now().UnixMilli() * 1000 * 1000
+		ts := time.Now().UnixNano() << 1
 
 		valid[p] = []byte(p)
 		ttl[p] = ts
@@ -112,7 +112,6 @@ func TestBigCache(t *testing.T) {
 
 func BenchmarkCache(b *testing.B) {
 	c := structx.NewCache[int]()
-
 	b.Run("CacheTest", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			if i%3 == 1 {
@@ -124,7 +123,6 @@ func BenchmarkCache(b *testing.B) {
 	})
 
 	m := structx.NewMap[string, int]()
-
 	b.Run("HashMapTest", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			if i%3 == 1 {
@@ -136,7 +134,6 @@ func BenchmarkCache(b *testing.B) {
 	})
 
 	m1 := map[string]int{}
-
 	b.Run("StdMapTest", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			if i%3 == 1 {

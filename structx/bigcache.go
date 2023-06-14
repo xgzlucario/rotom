@@ -1,53 +1,62 @@
 package structx
 
 import (
-	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"sync"
 	"time"
+
+	"golang.org/x/exp/slices"
 )
 
 const (
-	startBitsize  = 32
-	offsetBitsize = 31
-	offsetMask    = 0xffffffff
-	ttlBitsize    = 8
+	startBits  = 32
+	offsetBits = 31
+	offsetMask = 0xffffffff
+	ttlBits    = 8
 
-	timeCarry         = 1000 * 1000
-	defaultBufferSize = 1024
 	compressThreshold = 0.5
+)
+
+var (
+	order = binary.BigEndian
 )
 
 // Idx is the index of BigCahce.
 // start(32)|offset(31)|hasTTL(1)
 type Idx uint64
 
-func (i Idx) start() uint32 {
-	return uint32(i >> startBitsize)
+func (i Idx) start() int {
+	return int(i >> startBits)
 }
 
-func (i Idx) offset() uint32 {
-	return uint32(i & offsetMask >> 1)
+func (i Idx) offset() int {
+	return int((i & offsetMask) >> 1)
 }
 
 func (i Idx) hasTTL() bool {
 	return i&1 == 1
 }
 
-func newIdx(start, offset, hasTTL uint64) Idx {
-	if start > math.MaxUint32 {
-		panic("start index overflow")
+func newIdx(start, offset int, hasTTL bool) Idx {
+	// bound check
+	if start > math.MaxUint32 || offset > math.MaxUint32 {
+		panic("index overflow")
 	}
-	return Idx(start<<startBitsize | offset<<1 | hasTTL&1)
+
+	idx := Idx(start<<startBits | offset<<1)
+	if hasTTL {
+		idx |= 1
+	}
+	return idx
 }
 
 type BigCache struct {
-	total int // total size in buf
+	total int
 	ts    int64
-
-	buf []byte
-	idx Map[string, Idx]
+	buf   []byte
+	idx   Map[string, Idx]
 	sync.RWMutex
 }
 
@@ -55,7 +64,7 @@ type BigCache struct {
 func NewBigCache() *BigCache {
 	c := &BigCache{
 		ts:  time.Now().UnixNano(),
-		buf: make([]byte, 0, defaultBufferSize),
+		buf: make([]byte, 0),
 		idx: NewMap[string, Idx](),
 	}
 	go c.eliminate()
@@ -63,34 +72,30 @@ func NewBigCache() *BigCache {
 	return c
 }
 
-// Set
+// Set set key-value pairs.
 func (c *BigCache) Set(key string, value []byte) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.idx.Set(key, newIdx(uint64(len(c.buf)), uint64(len(value)), 0))
+	c.idx.Set(key, newIdx(len(c.buf), len(value), false))
 	c.buf = append(c.buf, value...)
 
 	c.total++
 }
 
-// SetEx
+// SetEx set expiry time with key-value pairs.
 func (c *BigCache) SetEx(key string, value []byte, dur time.Duration) {
 	c.SetTx(key, value, c.ts+int64(dur))
 }
 
-// SetTx
+// SetTx set deadline with key-value pairs.
 func (c *BigCache) SetTx(key string, value []byte, ts int64) {
 	c.Lock()
 	defer c.Unlock()
 
-	// Set idx and value.
-	c.idx.Set(key, newIdx(uint64(len(c.buf)), uint64(len(value)), 1))
+	c.idx.Set(key, newIdx(len(c.buf), len(value), true))
 	c.buf = append(c.buf, value...)
-
-	// Set ts.
-	c.buf = binary.AppendVarint(c.buf, ts/timeCarry)
-	c.buf = append(c.buf, 0)
+	c.buf = order.AppendUint64(c.buf, uint64(ts))
 
 	c.total++
 }
@@ -106,22 +111,28 @@ func (c *BigCache) GetTx(key string) ([]byte, int64, bool) {
 	c.RLock()
 	defer c.RUnlock()
 
+	return c.getTx(key)
+}
+
+func (c *BigCache) getTx(key string) ([]byte, int64, bool) {
 	if idx, ok := c.idx.Get(key); ok {
-		s := idx.start()
+		start := idx.start()
+		end := start + idx.offset()
 
 		// has ttl
 		if idx.hasTTL() {
-			i := s + idx.offset()
-			ti := bytes.IndexByte(c.buf[i:], 0)
-			ttl, _ := binary.Varint(c.buf[i : ti+int(i)])
+			ttl := int64(order.Uint64(c.buf[end : end+ttlBits]))
 
 			// not expired
 			if c.timeAlive(ttl) {
-				return c.buf[s:i], ttl * timeCarry, true
+				return slices.Clone(c.buf[start:end]), ttl, true
+
+			} else {
+				c.idx.Delete(key)
 			}
 
 		} else {
-			return c.buf[s : s+idx.offset()], noTTL, true
+			return slices.Clone(c.buf[start:end]), noTTL, true
 		}
 	}
 
@@ -135,14 +146,6 @@ func (c *BigCache) Remove(key string) bool {
 
 	_, ok := c.idx.Delete(key)
 	return ok
-}
-
-// Len
-func (c *BigCache) Len() int {
-	c.RLock()
-	defer c.RUnlock()
-
-	return c.idx.Len()
 }
 
 func (c *BigCache) timeAlive(ttl int64) bool {
@@ -165,22 +168,15 @@ func (c *BigCache) eliminate() {
 
 			for i := 0; i < probeCount; i++ {
 				k, idx, ok := c.idx.GetPos(uint64(c.ts) + uint64(i*probeSpace))
+
 				// expired
 				if ok && idx.hasTTL() {
-					i := idx.start() + idx.offset()
-					ti := bytes.IndexByte(c.buf[i:], 0)
-					ttl, _ := binary.Varint(c.buf[i : ti+int(i)])
+					end := idx.start() + idx.offset()
+					ttl := int64(order.Uint64(c.buf[end : end+ttlBits]))
 
 					if !c.timeAlive(ttl) {
 						elimi++
 						c.idx.Delete(k)
-
-						// compress threshold
-						if float64(c.idx.Len()/c.total) < compressThreshold {
-							c.Unlock()
-							c.Compress()
-							goto END
-						}
 					}
 				}
 				pb++
@@ -195,35 +191,34 @@ func (c *BigCache) eliminate() {
 				break
 			}
 		}
-
 		c.Unlock()
-	END:
+
+		c.compress()
 	}
 }
 
-// Compress
-func (c *BigCache) Compress() {
+// compress
+func (c *BigCache) compress() {
 	c.Lock()
 	defer c.Unlock()
 
-	// initial
-	c.total = 0
-	nbuf := make([]byte, 0, defaultBufferSize)
+	nc := NewBigCache()
 
 	c.idx.Scan(func(key string, idx Idx) bool {
-		start := idx.start()
-		end := start + idx.offset()
-
-		nbuf = append(nbuf, c.buf[start:end]...)
-		c.total++
-
-		if idx.hasTTL() {
-			ti := bytes.IndexByte(c.buf[end:], 0)
-			nbuf = append(nbuf, c.buf[end:ti+int(end)]...)
+		val, ts, ok := c.getTx(key)
+		if ok {
+			nc.SetTx(key, val, ts)
 		}
-
 		return true
 	})
 
-	c.buf = nbuf
+	c = nc
+}
+
+// Bytes
+func (c *BigCache) Print() {
+	c.RLock()
+	defer c.RUnlock()
+
+	fmt.Println(c.idx.Len(), string(c.buf))
 }

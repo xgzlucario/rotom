@@ -11,7 +11,6 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/shirou/gopsutil/cpu"
 	"github.com/shirou/gopsutil/mem"
-	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -71,47 +70,39 @@ func getDBFileSize() (count int64) {
 }
 
 func main() {
+	bc := structx.NewBigCache()
+	bc.Set("p1", []byte("[value1]"))
+
+	bc.SetEx("k1", []byte("[value2]"), time.Second*5)
+	bc.SetEx("k2", []byte("[value3]"), time.Second*4)
+	bc.SetEx("k3", []byte("[value4]"), time.Second*3)
+	bc.SetEx("k4", []byte("[value5]"), time.Second*2)
+	bc.SetEx("k5", []byte("[value6]"), time.Second)
+
+	for i := 0; i < 10; i++ {
+		bc.Print()
+		time.Sleep(time.Second)
+	}
+
+	// const num = 999999
+
+	// m := structx.NewCache[[]byte]()
+	// a := time.Now()
+	// for i := 0; i < num; i++ {
+	// 	p := gofakeit.Phone()
+	// 	m.Set(p, base.S2B(&p))
+	// }
+	// fmt.Println(time.Since(a))
+
 	// bc := structx.NewBigCache()
-	// bc.Set("key1", []byte("value1"))
-	// bc.SetWithTTL("key2", []byte("value2"), time.Now().UnixNano())
-	// bc.Set("key3", []byte("value3"))
-
-	// v1, ok1 := bc.Get("key1")
-	// fmt.Println("v1:", string(v1), ok1)
-
-	// v2, ok2 := bc.Get("key2")
-	// fmt.Println("v2:", string(v2), ok2)
-
-	// v2t, t, ok2t := bc.GetWithTTL("key2")
-	// fmt.Println("v2:", string(v2t), time.Since(time.Unix(0, t)), ok2t)
-
-	// v3, ok3 := bc.Get("key3")
-	// fmt.Println("v3:", string(v3), ok3)
-
-	// v4, ok4 := bc.Get("key4")
-	// fmt.Println("v4:", string(v4), ok4)
+	// at := time.Now()
+	// for i := 0; i < num; i++ {
+	// 	p := gofakeit.Phone()
+	// 	bc.Set(p, base.S2B(&p))
+	// }
+	// fmt.Println(time.Since(at))
 
 	// time.Sleep(time.Hour)
-
-	const num = 999999
-
-	m := structx.NewCache[[]byte]()
-	a := time.Now()
-	for i := 0; i < num; i++ {
-		p := gofakeit.Phone()
-		m.Set(p, base.S2B(&p))
-	}
-	fmt.Println(time.Since(a))
-
-	bc := structx.NewBigCache()
-	a = time.Now()
-	for i := 0; i < num; i++ {
-		p := gofakeit.Phone()
-		bc.Set(p, base.S2B(&p))
-	}
-	fmt.Println(time.Since(a))
-
-	time.Sleep(time.Hour)
 
 	go http.ListenAndServe("localhost:6060", nil)
 	testStress()
