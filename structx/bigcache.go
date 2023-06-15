@@ -42,7 +42,7 @@ func (i Idx) hasTTL() bool {
 
 func newIdx(start, offset int, hasTTL bool) Idx {
 	// bound check
-	if start > math.MaxUint32 || offset > math.MaxUint32 {
+	if start > math.MaxUint32 || offset > math.MaxUint32>>1 {
 		panic("index overflow")
 	}
 
@@ -53,6 +53,7 @@ func newIdx(start, offset int, hasTTL bool) Idx {
 	return idx
 }
 
+// BigCache
 type BigCache struct {
 	total int
 	ts    int64
@@ -112,10 +113,6 @@ func (c *BigCache) GetTx(key string) ([]byte, int64, bool) {
 	c.RLock()
 	defer c.RUnlock()
 
-	return c.get(key)
-}
-
-func (c *BigCache) get(key string) ([]byte, int64, bool) {
 	if idx, ok := c.idx.Get(key); ok {
 		start := idx.start()
 		end := start + idx.offset()

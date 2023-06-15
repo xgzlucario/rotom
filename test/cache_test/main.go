@@ -2,33 +2,38 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	"os"
 	"time"
 
-	_ "net/http/pprof"
-
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 	"github.com/xgzlucario/rotom/structx"
 )
 
-var db, _ = store.Open(store.DefaultConfig)
+var db, _ = store.Open(&store.Config{
+	Path:            "db",
+	ShardCount:      32,
+	SyncPolicy:      base.Never,
+	SyncInterval:    time.Second,
+	RewriteInterval: time.Minute,
+})
 
 func testStress() {
 	a := time.Now()
 
-	var sum float64
-	var stat, count int64
+	var sum, stat float64
+	var count int64
 
+	// Monitor
 	go func() {
 		for {
 			time.Sleep(time.Second)
 			fmt.Printf("[Cache] %.1fs\t count: %dk\t num: %dk\t avg: %.2f ns\n",
-				time.Since(a).Seconds(), count/1000, db.Size()/1000, sum/float64(stat))
+				time.Since(a).Seconds(), count/1000, db.Size()/1000, sum/stat)
 		}
 	}()
 
+	// Get
 	go func() {
 		for {
 			a := time.Now()
@@ -42,6 +47,7 @@ func testStress() {
 		}
 	}()
 
+	// Set
 	for {
 		count++
 		v := gofakeit.Phone()
@@ -52,8 +58,8 @@ func testStress() {
 func testStress2() {
 	a := time.Now()
 
-	var sum float64
-	var stat, count int64
+	var sum, stat float64
+	var count int64
 
 	const n = 512
 
@@ -69,14 +75,16 @@ func testStress2() {
 		return sum
 	}
 
+	// Monitor
 	go func() {
 		for {
 			time.Sleep(time.Second)
 			fmt.Printf("[BigCC] %.1fs\t count: %dk\t num: %dk\t avg: %.2f ns\n",
-				time.Since(a).Seconds(), count/1000, getLen()/1000, sum/float64(stat))
+				time.Since(a).Seconds(), count/1000, getLen()/1000, sum/stat)
 		}
 	}()
 
+	// Get
 	go func() {
 		for i := 0; ; i++ {
 			a := time.Now()
@@ -90,7 +98,7 @@ func testStress2() {
 		}
 	}()
 
-	// Simulate testing
+	// Set
 	for i := 0; ; i++ {
 		count++
 		v := gofakeit.Phone()
@@ -98,22 +106,7 @@ func testStress2() {
 	}
 }
 
-func getDBFileSize() (count int64) {
-	if files, err := os.ReadDir("db"); err != nil {
-		return -1
-	} else {
-		for _, file := range files {
-			info, err := file.Info()
-			if err == nil {
-				count += info.Size()
-			}
-		}
-		return
-	}
-}
-
 func main() {
-	go http.ListenAndServe("localhost:6060", nil)
 	go testStress2()
 	go testStress()
 	select {}

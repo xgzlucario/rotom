@@ -147,20 +147,28 @@ func BenchmarkCache(b *testing.B) {
 
 func BenchmarkNowCache(b *testing.B) {
 	m := structx.NewCache[[]byte]()
-	b.Run("CacheSet", func(b *testing.B) {
+	for i := 0; i < 999999; i++ {
+		s := strconv.Itoa(i)
+		m.Set(s, []byte(s))
+	}
+
+	b.Run("CacheGet", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			s := strconv.Itoa(i)
-			m.Set(s, []byte(s))
+			m.Get(strconv.Itoa(i))
 		}
 	})
 }
 
 func BenchmarkBigCache(b *testing.B) {
 	m := structx.NewBigCache()
-	b.Run("BigCacheSet", func(b *testing.B) {
+	for i := 0; i < 999999; i++ {
+		s := strconv.Itoa(i)
+		m.Set(s, []byte(s))
+	}
+
+	b.Run("BigCacheGet", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			s := strconv.Itoa(i)
-			m.Set(s, []byte(s))
+			m.Get(strconv.Itoa(i))
 		}
 	})
 }
