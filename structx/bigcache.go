@@ -2,10 +2,10 @@ package structx
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"sync"
 	"time"
+	"unsafe"
 
 	"golang.org/x/exp/slices"
 )
@@ -13,14 +13,15 @@ import (
 const (
 	startBits  = 32
 	offsetBits = 31
-	offsetMask = 0xffffffff
 	ttlBits    = 8
+	offsetMask = 0xffffffff
 
+	defaultBufSize    = 1024
 	compressThreshold = 0.5
 )
 
 var (
-	order = binary.BigEndian
+	order = binary.LittleEndian
 )
 
 // Idx is the index of BigCahce.
@@ -64,7 +65,7 @@ type BigCache struct {
 func NewBigCache() *BigCache {
 	c := &BigCache{
 		ts:  time.Now().UnixNano(),
-		buf: make([]byte, 0),
+		buf: make([]byte, 0, defaultBufSize),
 		idx: NewMap[string, Idx](),
 	}
 	go c.eliminate()
@@ -111,10 +112,10 @@ func (c *BigCache) GetTx(key string) ([]byte, int64, bool) {
 	c.RLock()
 	defer c.RUnlock()
 
-	return c.getTx(key)
+	return c.get(key)
 }
 
-func (c *BigCache) getTx(key string) ([]byte, int64, bool) {
+func (c *BigCache) get(key string) ([]byte, int64, bool) {
 	if idx, ok := c.idx.Get(key); ok {
 		start := idx.start()
 		end := start + idx.offset()
@@ -155,7 +156,7 @@ func (c *BigCache) timeAlive(ttl int64) bool {
 // eliminate the expired key-value pairs.
 func (c *BigCache) eliminate() {
 	for c != nil {
-		time.Sleep(time.Second)
+		time.Sleep(time.Millisecond)
 		c.Lock()
 
 		// update ts
@@ -172,7 +173,7 @@ func (c *BigCache) eliminate() {
 				// expired
 				if ok && idx.hasTTL() {
 					end := idx.start() + idx.offset()
-					ttl := int64(order.Uint64(c.buf[end : end+ttlBits]))
+					ttl := int64(*(*uint64)(unsafe.Pointer(&c.buf[end])))
 
 					if !c.timeAlive(ttl) {
 						elimi++
@@ -193,32 +194,44 @@ func (c *BigCache) eliminate() {
 		}
 		c.Unlock()
 
-		c.compress()
+		// on compress threshold
+		if float64(c.idx.Len())/float64(c.total) < compressThreshold {
+			c.Compress()
+		}
 	}
 }
 
-// compress
-func (c *BigCache) compress() {
+// Compress
+func (c *BigCache) Compress() {
 	c.Lock()
 	defer c.Unlock()
 
-	nc := NewBigCache()
+	c.total = 0
+	nbuf := make([]byte, 0, len(c.buf))
 
 	c.idx.Scan(func(key string, idx Idx) bool {
-		val, ts, ok := c.getTx(key)
-		if ok {
-			nc.SetTx(key, val, ts)
+		// offset only contains value, except ttl
+		start, offset, has := idx.start(), idx.offset(), idx.hasTTL()
+
+		// reset
+		c.idx.Set(key, newIdx(len(nbuf), offset, has))
+		if has {
+			nbuf = append(nbuf, c.buf[start:start+offset+ttlBits]...)
+		} else {
+			nbuf = append(nbuf, c.buf[start:start+offset]...)
 		}
+
+		c.total++
 		return true
 	})
 
-	c = nc
+	c.buf = nbuf
 }
 
-// Bytes
-func (c *BigCache) Print() {
+// Len
+func (c *BigCache) Len() int {
 	c.RLock()
 	defer c.RUnlock()
 
-	fmt.Println(c.idx.Len(), string(c.buf))
+	return c.idx.Len()
 }
