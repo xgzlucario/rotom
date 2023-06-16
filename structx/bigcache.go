@@ -157,36 +157,19 @@ func (c *BigCache) eliminate() {
 		c.Lock()
 
 		// update ts
-		start := time.Now()
-		c.ts = start.UnixNano()
+		c.ts = time.Now().UnixNano()
 
-		for {
-			// eliminate eval
-			var pb, elimi float64
+		for i := uint64(0); i < 100; i++ {
+			k, idx, ok := c.idx.GetPos(uint64(c.ts) + i)
 
-			for i := 0; i < probeCount; i++ {
-				k, idx, ok := c.idx.GetPos(uint64(c.ts) + uint64(i*probeSpace))
+			// expired
+			if ok && idx.hasTTL() {
+				end := idx.start() + idx.offset()
+				ttl := int64(*(*uint64)(unsafe.Pointer(&c.buf[end])))
 
-				// expired
-				if ok && idx.hasTTL() {
-					end := idx.start() + idx.offset()
-					ttl := int64(*(*uint64)(unsafe.Pointer(&c.buf[end])))
-
-					if !c.timeAlive(ttl) {
-						elimi++
-						c.idx.Delete(k)
-					}
+				if !c.timeAlive(ttl) {
+					c.idx.Delete(k)
 				}
-				pb++
-			}
-
-			// update ts
-			ts := time.Now()
-			c.ts = ts.UnixNano()
-
-			// break if cost over limit or blow expRate
-			if ts.Sub(start).Milliseconds() > eliminateMaxMs || elimi/pb <= expRate {
-				break
 			}
 		}
 		c.Unlock()

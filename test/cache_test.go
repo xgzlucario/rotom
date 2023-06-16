@@ -112,63 +112,30 @@ func TestBigCache(t *testing.T) {
 
 func BenchmarkCache(b *testing.B) {
 	c := structx.NewCache[int]()
-	b.Run("CacheTest", func(b *testing.B) {
+	b.Run("CacheSet", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			if i%3 == 1 {
-				c.Remove(strconv.Itoa(i - 1))
-			} else {
-				c.Set(strconv.Itoa(i), i)
-			}
+			c.Set(strconv.Itoa(i), i)
 		}
 	})
 
 	m := structx.NewMap[string, int]()
-	b.Run("HashMapTest", func(b *testing.B) {
+	b.Run("HashMapSet", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			if i%3 == 1 {
-				m.Delete(strconv.Itoa(i - 1))
-			} else {
-				m.Set(strconv.Itoa(i), i)
-			}
+			m.Set(strconv.Itoa(i), i)
 		}
 	})
 
 	m1 := map[string]int{}
-	b.Run("StdMapTest", func(b *testing.B) {
+	b.Run("StdMapSet", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			if i%3 == 1 {
-				delete(m1, strconv.Itoa(i-1))
-			} else {
-				m1[strconv.Itoa(i)] = i
-			}
+			m1[strconv.Itoa(i)] = i
 		}
 	})
-}
 
-func BenchmarkNowCache(b *testing.B) {
-	m := structx.NewCache[[]byte]()
-	for i := 0; i < 999999; i++ {
-		s := strconv.Itoa(i)
-		m.Set(s, []byte(s))
-	}
-
-	b.Run("CacheGet", func(b *testing.B) {
+	bc := structx.NewBigCache()
+	b.Run("BigCacheSet", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			m.Get(strconv.Itoa(i))
-		}
-	})
-}
-
-func BenchmarkBigCache(b *testing.B) {
-	m := structx.NewBigCache()
-	for i := 0; i < 999999; i++ {
-		s := strconv.Itoa(i)
-		m.Set(s, []byte(s))
-	}
-
-	b.Run("BigCacheGet", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			m.Get(strconv.Itoa(i))
+			bc.Set(strconv.Itoa(i), []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		}
 	})
 }

@@ -10,10 +10,7 @@ const (
 	noTTL = 0
 
 	// probe config with elimination strategy
-	probeCount     = 100
-	probeSpace     = 3
-	expRate        = 0.2
-	eliminateMaxMs = 20
+	probeCount = 100
 )
 
 var (
@@ -41,11 +38,6 @@ type cacheItem[V any] struct {
 
 // NewCache
 func NewCache[V any]() *Cache[V] {
-	return NewCustomCache[V](expRate)
-}
-
-// NewCustomCache
-func NewCustomCache[V any](expRate float64) *Cache[V] {
 	c := &Cache[V]{
 		ts: time.Now().UnixNano(),
 		pool: sync.Pool{New: func() any {
@@ -53,7 +45,7 @@ func NewCustomCache[V any](expRate float64) *Cache[V] {
 		}},
 		data: NewMap[string, *cacheItem[V]](),
 	}
-	go c.eliminate(expRate)
+	go c.eliminate()
 
 	return c
 }
@@ -184,7 +176,7 @@ func (c *Cache[V]) Clear() {
 }
 
 // eliminate the expired key-value pairs.
-func (c *Cache[V]) eliminate(expRate float64) {
+func (c *Cache[V]) eliminate() {
 	for c != nil {
 		time.Sleep(TickInterval)
 		c.mu.Lock()
@@ -193,29 +185,14 @@ func (c *Cache[V]) eliminate(expRate float64) {
 		start := time.Now()
 		c.ts = start.UnixNano()
 
-		for {
-			// eliminate eval
-			var pb, elimi float64
-
-			for i := 0; i < probeCount; i++ {
-				k, n, ok := c.data.GetPos(uint64(c.ts) + uint64(i*probeSpace))
-				// expired
-				if ok && !c.timeAlive(n.T) {
-					elimi++
-					c.delete(k)
-				}
-				pb++
-			}
-
-			// update ts
-			ts := time.Now()
-			c.ts = ts.UnixNano()
-
-			// break if cost over limit or blow expRate
-			if ts.Sub(start).Milliseconds() > eliminateMaxMs || elimi/pb <= expRate {
-				break
+		for i := uint64(0); i < probeCount; i++ {
+			k, n, ok := c.data.GetPos(uint64(c.ts) + i)
+			// expired
+			if ok && !c.timeAlive(n.T) {
+				c.delete(k)
 			}
 		}
+
 		c.mu.Unlock()
 	}
 }
