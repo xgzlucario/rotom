@@ -21,7 +21,6 @@ type Operation byte
 const (
 	OpSetTx Operation = iota + 'A'
 	OpRemove
-	OpPersist
 	OpHSet
 	OpHRemove
 
@@ -104,9 +103,9 @@ type Store struct {
 	*Config
 
 	buf   *bytes.Buffer
-	rwbuf *bytes.Buffer // buffer for rewrite
+	rwbuf *bytes.Buffer
 
-	m *cache.GigaCache[string] // based on GigaCache
+	m *cache.GigaCache[string]
 
 	sync.Mutex
 }
@@ -122,10 +121,11 @@ func Open(conf *Config) (*Store, error) {
 	}
 	db.load()
 
-	// Initialize
+	// Init
 	base.Go(db.SyncInterval, func() {
 		db.writeTo(db.buf, db.Path)
 	})
+
 	base.Go(db.RewriteInterval, func() {
 		db.dump()
 	})
@@ -134,21 +134,29 @@ func Open(conf *Config) (*Store, error) {
 }
 
 // Get
-func (db *Store) Get(key string) ([]byte, bool) {
-	val, _, ok := db.m.Get(key)
-	return val, ok
+func (db *Store) Get(key string) ([]byte, int64, bool) {
+	return db.m.Get(key)
 }
 
 // GetAny
-func (db *Store) GetAny(key string) (any, bool) {
-	val, _, ok := db.m.GetAny(key)
-	return val, ok
+func (db *Store) GetAny(key string) (any, int64, bool) {
+	return db.m.GetAny(key)
 }
 
-// Set sets a key-value pair in the database.
+// Set
 func (db *Store) Set(key string, val []byte) error {
-	cd := NewCoder(OpSetTx).Type(RecordString).String(key).Bytes(val)
-	db.m.Set(key, val)
+	return db.SetTx(key, val, NoTTL)
+}
+
+// SetEx
+func (db *Store) SetEx(key string, val []byte, ttl time.Duration) error {
+	return db.SetTx(key, val, cache.GetUnixNano()+int64(ttl))
+}
+
+// SetTx
+func (db *Store) SetTx(key string, val []byte, ts int64) error {
+	cd := NewCoder(OpSetTx).Type(RecordString).String(key).Ts(ts / timeCarry).Bytes(val)
+	db.m.SetTx(key, val, ts)
 
 	db.Lock()
 	defer db.Unlock()
@@ -159,8 +167,8 @@ func (db *Store) Set(key string, val []byte) error {
 	return nil
 }
 
-// Remove removes a key-value pair from the database and return it.
-func (db *Store) Remove(key string) (val any, ok bool) {
+// Remove
+func (db *Store) Remove(key string) (any, bool) {
 	cd := NewCoder(OpRemove).String(key)
 	db.m.Delete(key)
 
@@ -171,6 +179,11 @@ func (db *Store) Remove(key string) (val any, ok bool) {
 	db.buf.Write(cd.buf)
 
 	return nil, true
+}
+
+// Len
+func (db *Store) Len() int {
+	return db.m.Len()
 }
 
 // HGet
@@ -191,16 +204,16 @@ func (db *Store) HGet(key, field string) ([]byte, error) {
 func (db *Store) HSet(key, field string, val []byte) error {
 	cd := NewCoder(OpHSet).String(key).String(field).Bytes(val)
 
-	m, err := db.getMap(key)
-	if err != nil {
-		return err
-	}
-	m.Set(field, val)
-
 	db.Lock()
 	defer db.Unlock()
 	defer putCoder(cd)
 
+	m, err := db.getMap(key)
+	if err != nil {
+		return err
+	}
+
+	m.Set(field, val)
 	db.buf.Write(cd.buf)
 
 	return nil
@@ -307,89 +320,75 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	return nil
 }
 
-// // BitXor
-// func (db *Store) BitXor(key1, key2, dest string) error {
-// 	cd := NewCoder(OpBitXor).String(key1).String(key2).String(dest)
-// 	defer putCoder(cd)
+// BitXor
+func (db *Store) BitXor(key1, key2, dest string) error {
+	cd := NewCoder(OpBitXor).String(key1).String(key2).String(dest)
+	defer putCoder(cd)
 
-// 	// bm1
-// 	sd1 := db.getShard(key1)
-// 	sd1.RLock()
-// 	defer sd1.RUnlock()
-// 	bm1, err := sd1.getBitMap(key1)
-// 	if err != nil {
-// 		return err
-// 	}
+	// bm1
+	bm1, err := db.getBitMap(key1)
+	if err != nil {
+		return err
+	}
 
-// 	// bm2
-// 	sd2 := db.getShard(key2)
-// 	sd2.RLock()
-// 	defer sd2.RUnlock()
-// 	bm2, err := sd2.getBitMap(key2)
-// 	if err != nil {
-// 		return err
-// 	}
+	// bm2
+	bm2, err := db.getBitMap(key2)
+	if err != nil {
+		return err
+	}
 
-// 	if key1 == dest {
-// 		sd1.buf.Write(cd.buf)
-// 		bm1.Difference(bm2)
+	if key1 == dest {
+		db.buf.Write(cd.buf)
+		bm1.Difference(bm2)
 
-// 	} else if key2 == dest {
-// 		sd2.buf.Write(cd.buf)
-// 		bm2.Difference(bm1)
+	} else if key2 == dest {
+		db.buf.Write(cd.buf)
+		bm2.Difference(bm1)
 
-// 	} else {
-// 		sd := db.getShard(dest)
-// 		sd.Lock()
-// 		defer sd.Unlock()
+	} else {
+		db.Lock()
+		defer db.Unlock()
 
-// 		sd.buf.Write(cd.buf)
-// 		sd.Set(dest, bm1.Clone().Difference(bm2))
-// 	}
-// 	return nil
-// }
+		db.buf.Write(cd.buf)
+		db.m.SetAny(dest, bm1.Clone().Difference(bm2))
+	}
+	return nil
+}
 
-// // BitAnd
-// func (db *Store) BitAnd(key1, key2, dest string) error {
-// 	cd := NewCoder(OpBitAnd).String(key1).String(key2).String(dest)
-// 	defer putCoder(cd)
+// BitAnd
+func (db *Store) BitAnd(key1, key2, dest string) error {
+	cd := NewCoder(OpBitAnd).String(key1).String(key2).String(dest)
+	defer putCoder(cd)
 
-// 	// bm1
-// 	sd1 := db.getShard(key1)
-// 	sd1.RLock()
-// 	defer sd1.RUnlock()
-// 	bm1, err := sd1.getBitMap(key1)
-// 	if err != nil {
-// 		return err
-// 	}
+	// bm1
+	bm1, err := db.getBitMap(key1)
+	if err != nil {
+		return err
+	}
 
-// 	// bm2
-// 	sd2 := db.getShard(key2)
-// 	sd2.RLock()
-// 	defer sd2.RUnlock()
-// 	bm2, err := sd2.getBitMap(key2)
-// 	if err != nil {
-// 		return err
-// 	}
+	// bm2
+	bm2, err := db.getBitMap(key2)
+	if err != nil {
+		return err
+	}
 
-// 	if key1 == dest {
-// 		sd1.buf.Write(cd.buf)
-// 		bm1.Intersection(bm2)
+	if key1 == dest {
+		db.buf.Write(cd.buf)
+		bm1.Intersection(bm2)
 
-// 	} else if key2 == dest {
-// 		sd2.buf.Write(cd.buf)
-// 		bm2.Intersection(bm1)
+	} else if key2 == dest {
+		db.buf.Write(cd.buf)
+		bm2.Intersection(bm1)
 
-// 	} else {
-// 		sd := db.getShard(dest)
-// 		sd.Lock()
-// 		defer sd.Unlock()
+	} else {
+		db.Lock()
+		defer db.Unlock()
 
-// 		sd.buf.Write(cd.buf)
-// 		sd.Set(dest, bm1.Clone().Intersection(bm2))
-// 	}
-// 	return nil
-// }
+		db.buf.Write(cd.buf)
+		db.m.SetAny(dest, bm1.Clone().Intersection(bm2))
+	}
+	return nil
+}
 
 // BitCount
 func (db *Store) BitCount(key string) (uint, error) {
@@ -456,13 +455,13 @@ func (s *Store) load() {
 			val, line = parseWord(line, recordSepChar)
 
 			// check if expired
-			// if ts < globalTime && ts != NoTTL {
-			// 	continue
-			// }
+			if ts < cache.GetUnixNano() && ts != NoTTL {
+				continue
+			}
 
 			switch recordType {
 			case RecordString:
-				// s.SetTx(*base.B2S(key), val, ts)
+				s.m.SetTx(*base.B2S(key), val, ts)
 
 			case RecordMap:
 				var m Map
@@ -580,9 +579,6 @@ func (s *Store) load() {
 
 		case OpRemove:
 			s.Remove(*base.B2S(key))
-
-		case OpPersist:
-			// s.Persist(*base.B2S(key))
 
 		default:
 			panic(fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op))

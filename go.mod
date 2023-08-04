@@ -7,9 +7,8 @@ require (
 	github.com/bits-and-blooms/bloom v2.0.3+incompatible
 	github.com/brianvoe/gofakeit/v6 v6.23.0
 	github.com/bytedance/sonic v1.10.0-rc3
-	github.com/sourcegraph/conc v0.3.0
 	github.com/tidwall/hashmap v1.8.1
-	github.com/xgzlucario/GigaCache v0.0.0-20230803100610-c722fe239290
+	github.com/xgzlucario/GigaCache v0.0.0-20230804181232-0f58b4bcda8c
 	golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b
 )
 
@@ -21,7 +20,6 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/willf/bitset v1.1.11 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
-	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.4.0 // indirect
-	golang.org/x/sys v0.10.0 // indirect
+	golang.org/x/sys v0.11.0 // indirect
 )
