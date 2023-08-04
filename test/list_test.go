@@ -70,8 +70,8 @@ func TestList(t *testing.T) {
 	}
 
 	// Test Sort
-	list.Sort(func(a, b int) bool { return a > b })
-	if !list.IsSorted(func(a, b int) bool { return a > b }) {
+	list.Sort(func(a, b int) int { return a - b })
+	if !list.IsSorted(func(a, b int) int { return a - b }) {
 		t.Errorf("Sort error: %v\n", list.Values())
 	}
 

@@ -5,14 +5,13 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"path"
 	"strconv"
 	"sync"
 	"time"
 
+	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
-	"github.com/zeebo/xxh3"
 	"golang.org/x/exp/slices"
 )
 
@@ -76,10 +75,10 @@ type (
 )
 
 var (
-	globalTime    = time.Now().UnixNano()
 	DefaultConfig = &Config{
-		Path:            "db",
-		ShardCount:      32,
+		Path:            "rotom.rdb",
+		TmpPath:         "rotom.aof",
+		ShardCount:      1024,
 		SyncPolicy:      base.EverySecond,
 		SyncInterval:    time.Second,
 		RewriteInterval: time.Minute,
@@ -88,8 +87,10 @@ var (
 
 // Config represents the configuration for a Store.
 type Config struct {
-	ShardCount uint64
-	Path       string
+	ShardCount int
+
+	Path    string
+	TmpPath string
 
 	SyncPolicy base.SyncPolicy
 
@@ -101,32 +102,13 @@ type Config struct {
 // Store represents a key-value store.
 type Store struct {
 	*Config
-	mask   uint64
-	shards []*storeShard
-}
-
-// storeShard represents a shard in the Store.
-type storeShard struct {
-	syncPolicy base.SyncPolicy // sync policy
-
-	path   string
-	rwPath string // path for rewrite
 
 	buf   *bytes.Buffer
 	rwbuf *bytes.Buffer // buffer for rewrite
 
-	*structx.Cache[any] // based on Cache
+	m *cache.GigaCache[string] // based on GigaCache
 
-	sync.RWMutex
-}
-
-// Init the package by updates globalTime.
-func init() {
-	go func() {
-		for t := range time.NewTicker(time.Millisecond).C {
-			globalTime = t.UnixNano()
-		}
-	}()
+	sync.Mutex
 }
 
 // Open opens a database specified by config.
@@ -134,157 +116,66 @@ func init() {
 func Open(conf *Config) (*Store, error) {
 	db := &Store{
 		Config: conf,
-		mask:   conf.ShardCount - 1,
-		shards: make([]*storeShard, conf.ShardCount),
+		buf:    bytes.NewBuffer(nil),
+		rwbuf:  bytes.NewBuffer(nil),
+		m:      cache.New[string](conf.ShardCount),
 	}
-
-	if err := os.MkdirAll(db.Path, 0755); err != nil {
-		return nil, err
-	}
-
-	// Load configuration
-	for i := range db.shards {
-		db.shards[i] = &storeShard{
-			syncPolicy: conf.SyncPolicy,
-			buf:        bytes.NewBuffer(make([]byte, 0, 4096)),
-			rwbuf:      bytes.NewBuffer(make([]byte, 0, 4096)),
-			path:       path.Join(db.Path, strconv.Itoa(i)+".db"),
-			rwPath:     path.Join(db.Path, strconv.Itoa(i)+".db-rw"),
-			Cache:      structx.NewCache[any](),
-		}
-	}
+	db.load()
 
 	// Initialize
-	pool := structx.NewDefaultPool()
-	for i := range db.shards {
-		s := db.shards[i]
-		pool.Go(func() { s.load() })
-	}
-	pool.Wait()
-
-	// Start worker
-	for _, s := range db.shards {
-		s := s
-		base.Go(db.SyncInterval, func() {
-			s.writeTo(s.buf, s.path)
-		})
-		base.Go(db.RewriteInterval, func() {
-			s.dump()
-		})
-	}
+	base.Go(db.SyncInterval, func() {
+		db.writeTo(db.buf, db.Path)
+	})
+	base.Go(db.RewriteInterval, func() {
+		db.dump()
+	})
 
 	return db, nil
 }
 
 // Get
 func (db *Store) Get(key string) ([]byte, bool) {
-	sd := db.getShard(key)
-	sd.RLock()
-	defer sd.RUnlock()
-
-	val, _ := sd.Get(key)
-	str, ok := val.(String)
-	return str, ok
+	val, _, ok := db.m.Get(key)
+	return val, ok
 }
 
 // GetAny
 func (db *Store) GetAny(key string) (any, bool) {
-	sd := db.getShard(key)
-	sd.RLock()
-	defer sd.RUnlock()
-
-	return sd.Get(key)
+	val, _, ok := db.m.GetAny(key)
+	return val, ok
 }
 
 // Set sets a key-value pair in the database.
 func (db *Store) Set(key string, val []byte) error {
-	return db.SetTx(key, val, NoTTL)
-}
+	cd := NewCoder(OpSetTx).Type(RecordString).String(key).Bytes(val)
+	db.m.Set(key, val)
 
-// Incr
-func (db *Store) Incr(key string, increment float64) (float64, error) {
-	sd := db.getShard(key)
-	sd.Lock()
-	defer sd.Unlock()
+	db.Lock()
+	defer db.Unlock()
+	defer putCoder(cd)
 
-	val, ok := sd.Get(key)
-	if !ok {
-		return -1, base.ErrKeyNotFound
-	}
-
-	str, _ := val.(String)
-	num, err := strconv.ParseFloat(*base.B2S(str), 64)
-	if err != nil {
-		return -1, err
-	}
-
-	num += increment
-	numStr := strconv.FormatFloat(num, 'f', -1, 64)
-
-	sd.Set(key, base.S2B(&numStr))
-
-	return num, nil
-}
-
-func (db *Store) command(key string, coder *Coder, cmd func(*storeShard) error) error {
-	sd := db.getShard(key)
-	sd.Lock()
-	defer sd.Unlock()
-	defer putCoder(coder)
-
-	if err := cmd(sd); err != nil {
-		return err
-	}
-	sd.buf.Write(coder.buf)
+	db.buf.Write(cd.buf)
 
 	return nil
-}
-
-// SetEx sets a key-value pair with TTL (Time To Live) in the database.
-func (db *Store) SetEx(key string, val []byte, ttl time.Duration) error {
-	return db.SetTx(key, val, globalTime+int64(ttl))
-}
-
-// SetTx sets a key-value pair with expiry time in the database.
-// If ts set to 0, the key will never expire.
-func (db *Store) SetTx(key string, val []byte, ts int64) error {
-	cd := NewCoder(OpSetTx).Type(RecordString).String(key).Ts(ts / timeCarry).Bytes(val)
-
-	return db.command(key, cd, func(sd *storeShard) error {
-		sd.SetTx(key, val, ts)
-		return nil
-	})
 }
 
 // Remove removes a key-value pair from the database and return it.
 func (db *Store) Remove(key string) (val any, ok bool) {
 	cd := NewCoder(OpRemove).String(key)
+	db.m.Delete(key)
 
-	db.command(key, cd, func(sd *storeShard) error {
-		val, ok = sd.Remove(key)
-		return nil
-	})
-	return
-}
+	db.Lock()
+	defer db.Unlock()
+	defer putCoder(cd)
 
-// Persist persists a key-value pair in the database.
-func (db *Store) Persist(key string) (ok bool) {
-	cd := NewCoder(OpPersist).String(key)
+	db.buf.Write(cd.buf)
 
-	db.command(key, cd, func(sd *storeShard) error {
-		ok = sd.Persist(key)
-		return nil
-	})
-	return
+	return nil, true
 }
 
 // HGet
 func (db *Store) HGet(key, field string) ([]byte, error) {
-	sd := db.getShard(key)
-	sd.RLock()
-	defer sd.RUnlock()
-
-	hmap, err := sd.getMap(key)
+	hmap, err := db.getMap(key)
 	if err != nil {
 		return nil, err
 	}
@@ -300,37 +191,43 @@ func (db *Store) HGet(key, field string) ([]byte, error) {
 func (db *Store) HSet(key, field string, val []byte) error {
 	cd := NewCoder(OpHSet).String(key).String(field).Bytes(val)
 
-	return db.command(key, cd, func(sd *storeShard) error {
-		m, err := sd.getMap(key)
-		if err != nil {
-			return err
-		}
-		m.Set(field, val)
-		return nil
-	})
+	m, err := db.getMap(key)
+	if err != nil {
+		return err
+	}
+	m.Set(field, val)
+
+	db.Lock()
+	defer db.Unlock()
+	defer putCoder(cd)
+
+	db.buf.Write(cd.buf)
+
+	return nil
 }
 
 // HRemove
 func (db *Store) HRemove(key, field string) error {
 	cd := NewCoder(OpHRemove).String(key).String(field)
 
-	return db.command(key, cd, func(sd *storeShard) error {
-		m, err := sd.getMap(key)
-		if err != nil {
-			return err
-		}
-		m.Delete(field)
-		return nil
-	})
+	m, err := db.getMap(key)
+	if err != nil {
+		return err
+	}
+	m.Delete(field)
+
+	db.Lock()
+	defer db.Unlock()
+	defer putCoder(cd)
+
+	db.buf.Write(cd.buf)
+
+	return nil
 }
 
 // BitTest
 func (db *Store) BitTest(key string, offset uint) (bool, error) {
-	sd := db.getShard(key)
-	sd.RLock()
-	defer sd.RUnlock()
-
-	bm, err := sd.getBitMap(key)
+	bm, err := db.getBitMap(key)
 	if err != nil {
 		return false, err
 	}
@@ -341,28 +238,38 @@ func (db *Store) BitTest(key string, offset uint) (bool, error) {
 func (db *Store) BitSet(key string, offset uint, value bool) error {
 	cd := NewCoder(OpBitSet).String(key).Uint(offset).Bool(value)
 
-	return db.command(key, cd, func(sd *storeShard) error {
-		bm, err := sd.getBitMap(key)
-		if err != nil {
-			return err
-		}
-		bm.SetTo(offset, value)
-		return nil
-	})
+	bm, err := db.getBitMap(key)
+	if err != nil {
+		return err
+	}
+	bm.SetTo(offset, value)
+
+	db.Lock()
+	defer db.Unlock()
+	defer putCoder(cd)
+
+	db.buf.Write(cd.buf)
+
+	return nil
 }
 
 // BitFlip
 func (db *Store) BitFlip(key string, offset uint) error {
 	cd := NewCoder(OpBitFlip).String(key).Uint(offset)
 
-	return db.command(key, cd, func(sd *storeShard) error {
-		bm, err := sd.getBitMap(key)
-		if err != nil {
-			return err
-		}
-		bm.Flip(offset)
-		return nil
-	})
+	bm, err := db.getBitMap(key)
+	if err != nil {
+		return err
+	}
+	bm.Flip(offset)
+
+	db.Lock()
+	defer db.Unlock()
+	defer putCoder(cd)
+
+	db.buf.Write(cd.buf)
+
+	return nil
 }
 
 // BitOr
@@ -371,176 +278,127 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	defer putCoder(cd)
 
 	// bm1
-	sd1 := db.getShard(key1)
-	sd1.RLock()
-	defer sd1.RUnlock()
-	bm1, err := sd1.getBitMap(key1)
+	bm1, err := db.getBitMap(key1)
 	if err != nil {
 		return err
 	}
 
 	// bm2
-	sd2 := db.getShard(key2)
-	sd2.RLock()
-	defer sd2.RUnlock()
-	bm2, err := sd2.getBitMap(key2)
+	bm2, err := db.getBitMap(key2)
 	if err != nil {
 		return err
 	}
 
 	if key1 == dest {
-		sd1.buf.Write(cd.buf)
+		db.buf.Write(cd.buf)
 		bm1.Union(bm2)
 
 	} else if key2 == dest {
-		sd2.buf.Write(cd.buf)
+		db.buf.Write(cd.buf)
 		bm2.Union(bm1)
 
 	} else {
-		sd := db.getShard(dest)
-		sd.Lock()
-		defer sd.Unlock()
+		db.Lock()
+		defer db.Unlock()
 
-		sd.buf.Write(cd.buf)
-		sd.Set(dest, bm1.Clone().Union(bm2))
+		db.buf.Write(cd.buf)
+		db.m.SetAny(dest, bm1.Clone().Union(bm2))
 	}
 	return nil
 }
 
-// BitXor
-func (db *Store) BitXor(key1, key2, dest string) error {
-	cd := NewCoder(OpBitXor).String(key1).String(key2).String(dest)
-	defer putCoder(cd)
+// // BitXor
+// func (db *Store) BitXor(key1, key2, dest string) error {
+// 	cd := NewCoder(OpBitXor).String(key1).String(key2).String(dest)
+// 	defer putCoder(cd)
 
-	// bm1
-	sd1 := db.getShard(key1)
-	sd1.RLock()
-	defer sd1.RUnlock()
-	bm1, err := sd1.getBitMap(key1)
-	if err != nil {
-		return err
-	}
+// 	// bm1
+// 	sd1 := db.getShard(key1)
+// 	sd1.RLock()
+// 	defer sd1.RUnlock()
+// 	bm1, err := sd1.getBitMap(key1)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// bm2
-	sd2 := db.getShard(key2)
-	sd2.RLock()
-	defer sd2.RUnlock()
-	bm2, err := sd2.getBitMap(key2)
-	if err != nil {
-		return err
-	}
+// 	// bm2
+// 	sd2 := db.getShard(key2)
+// 	sd2.RLock()
+// 	defer sd2.RUnlock()
+// 	bm2, err := sd2.getBitMap(key2)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if key1 == dest {
-		sd1.buf.Write(cd.buf)
-		bm1.Difference(bm2)
+// 	if key1 == dest {
+// 		sd1.buf.Write(cd.buf)
+// 		bm1.Difference(bm2)
 
-	} else if key2 == dest {
-		sd2.buf.Write(cd.buf)
-		bm2.Difference(bm1)
+// 	} else if key2 == dest {
+// 		sd2.buf.Write(cd.buf)
+// 		bm2.Difference(bm1)
 
-	} else {
-		sd := db.getShard(dest)
-		sd.Lock()
-		defer sd.Unlock()
+// 	} else {
+// 		sd := db.getShard(dest)
+// 		sd.Lock()
+// 		defer sd.Unlock()
 
-		sd.buf.Write(cd.buf)
-		sd.Set(dest, bm1.Clone().Difference(bm2))
-	}
-	return nil
-}
+// 		sd.buf.Write(cd.buf)
+// 		sd.Set(dest, bm1.Clone().Difference(bm2))
+// 	}
+// 	return nil
+// }
 
-// BitAnd
-func (db *Store) BitAnd(key1, key2, dest string) error {
-	cd := NewCoder(OpBitAnd).String(key1).String(key2).String(dest)
-	defer putCoder(cd)
+// // BitAnd
+// func (db *Store) BitAnd(key1, key2, dest string) error {
+// 	cd := NewCoder(OpBitAnd).String(key1).String(key2).String(dest)
+// 	defer putCoder(cd)
 
-	// bm1
-	sd1 := db.getShard(key1)
-	sd1.RLock()
-	defer sd1.RUnlock()
-	bm1, err := sd1.getBitMap(key1)
-	if err != nil {
-		return err
-	}
+// 	// bm1
+// 	sd1 := db.getShard(key1)
+// 	sd1.RLock()
+// 	defer sd1.RUnlock()
+// 	bm1, err := sd1.getBitMap(key1)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// bm2
-	sd2 := db.getShard(key2)
-	sd2.RLock()
-	defer sd2.RUnlock()
-	bm2, err := sd2.getBitMap(key2)
-	if err != nil {
-		return err
-	}
+// 	// bm2
+// 	sd2 := db.getShard(key2)
+// 	sd2.RLock()
+// 	defer sd2.RUnlock()
+// 	bm2, err := sd2.getBitMap(key2)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if key1 == dest {
-		sd1.buf.Write(cd.buf)
-		bm1.Intersection(bm2)
+// 	if key1 == dest {
+// 		sd1.buf.Write(cd.buf)
+// 		bm1.Intersection(bm2)
 
-	} else if key2 == dest {
-		sd2.buf.Write(cd.buf)
-		bm2.Intersection(bm1)
+// 	} else if key2 == dest {
+// 		sd2.buf.Write(cd.buf)
+// 		bm2.Intersection(bm1)
 
-	} else {
-		sd := db.getShard(dest)
-		sd.Lock()
-		defer sd.Unlock()
+// 	} else {
+// 		sd := db.getShard(dest)
+// 		sd.Lock()
+// 		defer sd.Unlock()
 
-		sd.buf.Write(cd.buf)
-		sd.Set(dest, bm1.Clone().Intersection(bm2))
-	}
-	return nil
-}
+// 		sd.buf.Write(cd.buf)
+// 		sd.Set(dest, bm1.Clone().Intersection(bm2))
+// 	}
+// 	return nil
+// }
 
 // BitCount
 func (db *Store) BitCount(key string) (uint, error) {
-	sd := db.getShard(key)
-	sd.RLock()
-	defer sd.RUnlock()
-
-	bm, err := sd.getBitMap(key)
+	bm, err := db.getBitMap(key)
 	return bm.Len(), err
 }
 
-// Flush
-func (db *Store) Flush() error {
-	for _, sd := range db.shards {
-		sd.Lock()
-		defer sd.Unlock()
-		if _, err := sd.writeTo(sd.buf, sd.path); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Clear
-func (db *Store) Clear() {
-	for _, sd := range db.shards {
-		sd.Lock()
-		defer sd.Unlock()
-		sd.Clear()
-	}
-}
-
-// Size returns the total size of the data in the database.
-// It is not as accurate as Count because it may include expired but not obsolete key-value pairs.
-func (db *Store) Size() (sum int) {
-	for _, sd := range db.shards {
-		sum += sd.Size()
-	}
-	return sum
-}
-
-// Count returns the total number of key-value pairs in the database.
-func (db *Store) Count() (sum int) {
-	for _, sd := range db.shards {
-		sum += sd.Count()
-	}
-	return sum
-}
-
 // writeTo writes the buffer into the file at the specified path.
-func (s *storeShard) writeTo(buf *bytes.Buffer, path string) (int64, error) {
+func (s *Store) writeTo(buf *bytes.Buffer, path string) (int64, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -560,11 +418,11 @@ func (s *storeShard) writeTo(buf *bytes.Buffer, path string) (int64, error) {
 }
 
 // load reads the persisted data from the shard file and loads it into memory.
-func (s *storeShard) load() {
+func (s *Store) load() {
 	s.Lock()
 	defer s.Unlock()
 
-	line, err := os.ReadFile(s.path)
+	line, err := os.ReadFile(s.Path)
 	if err != nil {
 		return
 	}
@@ -598,27 +456,27 @@ func (s *storeShard) load() {
 			val, line = parseWord(line, recordSepChar)
 
 			// check if expired
-			if ts < globalTime && ts != NoTTL {
-				continue
-			}
+			// if ts < globalTime && ts != NoTTL {
+			// 	continue
+			// }
 
 			switch recordType {
 			case RecordString:
-				s.SetTx(*base.B2S(key), val, ts)
+				// s.SetTx(*base.B2S(key), val, ts)
 
 			case RecordMap:
 				var m Map
 				if err := m.UnmarshalJSON(val); err != nil {
 					panic(err)
 				}
-				s.Set(*base.B2S(key), m)
+				s.m.SetAny(*base.B2S(key), m)
 
 			case RecordBitMap:
 				var m BitMap
 				if err := m.UnmarshalBinary(val); err != nil {
 					panic(err)
 				}
-				s.Set(*base.B2S(key), m)
+				s.m.SetAny(*base.B2S(key), m)
 
 			default:
 				panic(fmt.Errorf("%v: %d", base.ErrUnSupportDataType, recordType))
@@ -701,11 +559,11 @@ func (s *storeShard) load() {
 			} else {
 				switch op {
 				case OpBitAnd:
-					s.Set(*base.B2S(dest), bm1.Clone().Intersection(bm2))
+					s.m.SetAny(*base.B2S(dest), bm1.Clone().Intersection(bm2))
 				case OpBitOr:
-					s.Set(*base.B2S(dest), bm1.Clone().Union(bm2))
+					s.m.SetAny(*base.B2S(dest), bm1.Clone().Union(bm2))
 				case OpBitXor:
-					s.Set(*base.B2S(dest), bm1.Clone().Difference(bm2))
+					s.m.SetAny(*base.B2S(dest), bm1.Clone().Difference(bm2))
 				}
 			}
 
@@ -724,7 +582,7 @@ func (s *storeShard) load() {
 			s.Remove(*base.B2S(key))
 
 		case OpPersist:
-			s.Persist(*base.B2S(key))
+			// s.Persist(*base.B2S(key))
 
 		default:
 			panic(fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op))
@@ -733,14 +591,14 @@ func (s *storeShard) load() {
 }
 
 // dump dumps the current state of the shard to the file.
-func (s *storeShard) dump() {
-	if s.syncPolicy == base.Never {
+func (s *Store) dump() {
+	if s.SyncPolicy == base.Never {
 		return
 	}
 
 	// dump current state
 	var record RecordType
-	s.Scan(func(key string, v any, i int64) bool {
+	s.m.Scan(func(key string, v any, i int64) bool {
 		switch v := v.(type) {
 		case String:
 			cd := NewCoder(OpSetTx).Type(RecordString).String(key).Ts(i / timeCarry).Bytes(v)
@@ -771,11 +629,11 @@ func (s *storeShard) dump() {
 	})
 
 	// Flush buffer to file
-	s.writeTo(s.rwbuf, s.rwPath)
-	s.writeTo(s.buf, s.rwPath)
+	s.writeTo(s.rwbuf, s.TmpPath)
+	s.writeTo(s.buf, s.TmpPath)
 
 	// Rename rewrite file to the shard file
-	os.Rename(s.rwPath, s.path)
+	os.Rename(s.TmpPath, s.Path)
 }
 
 // parseWord parse file content to record lines
@@ -814,27 +672,22 @@ func parseTs(line []byte) (int64, []byte) {
 	return ts, line[i+1:]
 }
 
-// getShard hashes the key to determine the sd.
-func (db *Store) getShard(key string) *storeShard {
-	return db.shards[xxh3.HashString(key)&db.mask]
-}
-
 // getMap
-func (sd *storeShard) getMap(key string) (m Map, err error) {
-	return getOrCreate(sd, key, m, func() Map {
+func (db *Store) getMap(key string) (m Map, err error) {
+	return getOrCreate(db, key, m, func() Map {
 		return structx.NewMap[string, []byte]()
 	})
 }
 
 // getBitMap
-func (sd *storeShard) getBitMap(key string) (bm BitMap, err error) {
-	return getOrCreate(sd, key, bm, func() BitMap {
+func (db *Store) getBitMap(key string) (bm BitMap, err error) {
+	return getOrCreate(db, key, bm, func() BitMap {
 		return structx.NewBitset()
 	})
 }
 
-func getOrCreate[T any](s *storeShard, key string, vptr T, new func() T) (T, error) {
-	m, ok := s.Get(key)
+func getOrCreate[T any](s *Store, key string, vptr T, new func() T) (T, error) {
+	m, _, ok := s.m.GetAny(key)
 	if ok {
 		m, ok := m.(T)
 		if ok {
@@ -844,7 +697,7 @@ func getOrCreate[T any](s *storeShard, key string, vptr T, new func() T) (T, err
 	}
 
 	vptr = new()
-	s.Set(key, vptr)
+	s.m.SetAny(key, vptr)
 
 	return vptr, nil
 }

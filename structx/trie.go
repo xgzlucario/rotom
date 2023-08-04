@@ -1,6 +1,8 @@
 package structx
 
 import (
+	"strings"
+
 	"github.com/bytedance/sonic"
 	"github.com/xgzlucario/rotom/base"
 )
@@ -243,4 +245,55 @@ func (t *Trie[T]) UnmarshalJSON(src []byte) error {
 		t.Set(k, tmp.V[i])
 	}
 	return nil
+}
+
+func (t *Trie[V]) Serialize() string {
+	res := t.serialize(t.root, "")
+	if len(res) > 0 && res[0] == ',' {
+		return "[" + res[1:] + "]"
+	}
+	return "[" + res + "]"
+}
+
+func (t *Trie[V]) serialize(x *node[V], prefix string) string {
+	if x == nil {
+		return ""
+	}
+
+	var result string
+	if x.valid {
+		result += prefix + string(x.c)
+	}
+
+	if x.mid != nil {
+		midResult := t.serialize(x.mid, prefix+string(x.c))
+		if midResult != "" {
+			children := strings.Split(midResult, ",")
+			if len(children) > 1 || (result != "" && len(children) > 0) {
+				if result == "" {
+					result += prefix + string(x.c) + "[," + midResult + "]"
+				} else {
+					result += "[" + midResult + "]"
+				}
+			} else {
+				result += midResult
+			}
+		}
+	}
+
+	if x.left != nil {
+		leftResult := t.serialize(x.left, prefix)
+		if leftResult != "" {
+			result += "," + leftResult
+		}
+	}
+
+	if x.right != nil {
+		rightResult := t.serialize(x.right, prefix)
+		if rightResult != "" {
+			result += "," + rightResult
+		}
+	}
+
+	return result
 }

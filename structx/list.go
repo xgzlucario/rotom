@@ -106,13 +106,13 @@ func (ls *List[T]) Min(less func(t1, t2 T) bool) T {
 }
 
 // Sort
-func (ls *List[T]) Sort(f func(T, T) bool) *List[T] {
+func (ls *List[T]) Sort(f func(T, T) int) *List[T] {
 	slices.SortFunc(ls.array, f)
 	return ls
 }
 
 // IsSorted
-func (ls *List[T]) IsSorted(f func(T, T) bool) bool {
+func (ls *List[T]) IsSorted(f func(T, T) int) bool {
 	return slices.IsSortedFunc(ls.array, f)
 }
 
