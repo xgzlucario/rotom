@@ -35,13 +35,13 @@ func main() {
 	var mem runtime.MemStats
 
 	// Stat
-	var maxNum int
+	var maxNum uint64
 	go func() {
 		for i := 0; ; i++ {
 			time.Sleep(time.Second / 10)
 			runtime.ReadMemStats(&mem)
 
-			n := bc.Len() / 1e3
+			n := bc.Stat().Len / 1e3
 			if n > maxNum {
 				maxNum = n
 			}
@@ -79,6 +79,7 @@ func main() {
 	for i := 0; ; i++ {
 		count++
 		v := strconv.Itoa(i)
-		bc.SetEx(v, S2B(&v), time.Second*10)
+		bc.SetEx(v, S2B(&v), time.Second)
+		bc.HSet("mymap", v, S2B(&v))
 	}
 }

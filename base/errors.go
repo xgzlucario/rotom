@@ -2,6 +2,7 @@ package base
 
 import (
 	"errors"
+	"time"
 )
 
 var (
@@ -23,3 +24,20 @@ var (
 
 	ErrParseRecordLine = errors.New("parse record line error")
 )
+
+// Assert1 panic if err not nil
+func Assert1(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+// Go start a background worker
+func Go(interval time.Duration, f func()) {
+	go func() {
+		for {
+			time.Sleep(interval)
+			f()
+		}
+	}()
+}

@@ -3,7 +3,6 @@ package store
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"sync"
 
 	"github.com/xgzlucario/rotom/base"
@@ -11,8 +10,6 @@ import (
 
 // _base is the base for integer conversion.
 const (
-	_base = 36
-
 	_true  = 'T'
 	_false = 'F'
 )
@@ -20,7 +17,7 @@ const (
 // coderPool is a pool of Coder objects to improve performance by reusing Coder instances.
 var coderPool = sync.Pool{
 	New: func() any {
-		return &Coder{buf: make([]byte, 0, 16)}
+		return &Coder{buf: make([]byte, 0, 8)}
 	},
 }
 
@@ -62,7 +59,7 @@ func (s *Coder) Bytes(v []byte) *Coder {
 }
 
 func (s *Coder) int(v int) {
-	str := strconv.FormatInt(int64(v), _base)
+	str := base.FormatInt(int64(v))
 	s.buf = append(s.buf, str...)
 }
 
@@ -83,12 +80,12 @@ func (s *Coder) Bool(v bool) *Coder {
 }
 
 func (s *Coder) Uint(v uint) *Coder {
-	str := strconv.FormatUint(uint64(v), _base)
+	str := base.FormatUint(uint64(v))
 	return s.format(base.S2B(&str))
 }
 
 func (s *Coder) Ts(v int64) *Coder {
-	str := strconv.FormatInt(v, _base)
+	str := base.FormatInt(v)
 	s.buf = append(s.buf, str...)
 	s.buf = append(s.buf, recordSepChar)
 	return s
