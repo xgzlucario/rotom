@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -182,8 +181,8 @@ func (db *Store) Remove(key string) (any, bool) {
 }
 
 // Len
-func (db *Store) Len() int {
-	return db.m.Len()
+func (db *Store) Stat() cache.CacheStat {
+	return db.m.Stat()
 }
 
 // HGet
@@ -500,7 +499,7 @@ func (s *Store) load() {
 			_offset, line = parseWord(line, recordSepChar)
 			val, line = parseWord(line, recordSepChar)
 
-			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
+			offset, err := base.ParseUint(*base.B2S(_offset))
 			base.Assert1(err)
 
 			bm, err := s.getBitMap(*base.B2S(key))
@@ -514,7 +513,7 @@ func (s *Store) load() {
 
 			_offset, line = parseWord(line, recordSepChar)
 
-			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
+			offset, err := base.ParseUint(*base.B2S(_offset))
 			base.Assert1(err)
 
 			bm, err := s.getBitMap(*base.B2S(key))
@@ -638,7 +637,7 @@ func parseWord(line []byte, valid byte) (pre []byte, suf []byte) {
 	if i <= 0 {
 		panic(base.ErrParseRecordLine)
 	}
-	l, err := strconv.ParseInt(*base.B2S(line[:i]), _base, 64)
+	l, err := base.ParseInt(*base.B2S(line[:i]))
 	if err != nil {
 		panic(err)
 	}
@@ -660,7 +659,7 @@ func parseTs(line []byte) (int64, []byte) {
 		panic(base.ErrParseRecordLine)
 	}
 
-	ts, err := strconv.ParseInt(*base.B2S(line[:i]), _base, 64)
+	ts, err := base.ParseInt(*base.B2S(line[:i]))
 	if err != nil {
 		panic(err)
 	}

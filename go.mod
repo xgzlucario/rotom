@@ -8,7 +8,7 @@ require (
 	github.com/brianvoe/gofakeit/v6 v6.23.0
 	github.com/bytedance/sonic v1.10.0-rc3
 	github.com/tidwall/hashmap v1.8.1
-	github.com/xgzlucario/GigaCache v0.0.0-20230804181232-0f58b4bcda8c
+	github.com/xgzlucario/GigaCache v0.0.0-20230807074130-7a58d6c072c9
 	golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b
 )
 
