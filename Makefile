@@ -1,5 +1,5 @@
 run:
-	rm -rf db/
+	rm rotom.rdb
 	go build -ldflags="-s -w" -o rotom
 	./rotom
 
@@ -8,7 +8,7 @@ run2:
 	./rotom
 
 gc-trace-run:
-	rm -rf db/
+	rm rotom.rdb
 	GODEBUG=gctrace=1 go run main.go
 
 pprof:

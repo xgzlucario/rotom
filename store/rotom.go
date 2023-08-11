@@ -42,6 +42,8 @@ const (
 
 	OpTrieSet
 	OpTrieRemove
+
+	OpMarshalBytes // Marshal bytes for gigacache.
 )
 
 // Record types.
@@ -493,7 +495,7 @@ func (s *Store) load() {
 			m.Set(*base.B2S(field), val)
 
 		case OpBitSet:
-			// offset value
+			// offset val
 			var _offset, val []byte
 
 			_offset, line = parseWord(line, recordSepChar)
@@ -579,6 +581,11 @@ func (s *Store) load() {
 		case OpRemove:
 			s.Remove(*base.B2S(key))
 
+		case OpMarshalBytes:
+			if err := s.m.UnmarshalBytes(line); err != nil {
+				panic(err)
+			}
+
 		default:
 			panic(fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op))
 		}
@@ -591,15 +598,21 @@ func (s *Store) dump() {
 		return
 	}
 
-	// dump current state
+	// MarshalBytes
+	data, err := s.m.MarshalBytes()
+	if err != nil {
+		panic(err)
+	}
+	cd := NewCoder(OpMarshalBytes).Bytes(data)
+	s.rwbuf.Write(cd.buf)
+	putCoder(cd)
+
+	// MarshalOthers
 	var record RecordType
 	s.m.Scan(func(key string, v any, i int64) bool {
-		switch v := v.(type) {
+		switch v.(type) {
 		case String:
-			cd := NewCoder(OpSetTx).Type(RecordString).String(key).Ts(i / timeCarry).Bytes(v)
-			s.rwbuf.Write(cd.buf)
-			putCoder(cd)
-
+			// continue
 			return true
 
 		case Map:
@@ -627,7 +640,6 @@ func (s *Store) dump() {
 	s.writeTo(s.rwbuf, s.TmpPath)
 	s.writeTo(s.buf, s.TmpPath)
 
-	// Rename rewrite file to the shard file
 	os.Rename(s.TmpPath, s.Path)
 }
 
