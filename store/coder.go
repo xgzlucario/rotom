@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync"
 
 	"github.com/xgzlucario/rotom/base"
@@ -12,6 +13,8 @@ import (
 const (
 	_true  = 'T'
 	_false = 'F'
+
+	_base = 36
 )
 
 // coderPool is a pool of Coder objects to improve performance by reusing Coder instances.
@@ -59,7 +62,7 @@ func (s *Coder) Bytes(v []byte) *Coder {
 }
 
 func (s *Coder) int(v int) {
-	str := base.FormatInt(int64(v))
+	str := strconv.FormatInt(int64(v), _base)
 	s.buf = append(s.buf, str...)
 }
 
@@ -80,12 +83,12 @@ func (s *Coder) Bool(v bool) *Coder {
 }
 
 func (s *Coder) Uint(v uint) *Coder {
-	str := base.FormatUint(uint64(v))
+	str := strconv.FormatUint(uint64(v), _base)
 	return s.format(base.S2B(&str))
 }
 
 func (s *Coder) Ts(v int64) *Coder {
-	str := base.FormatInt(v)
+	str := strconv.FormatInt(int64(v), _base)
 	s.buf = append(s.buf, str...)
 	s.buf = append(s.buf, recordSepChar)
 	return s

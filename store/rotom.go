@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -501,7 +502,7 @@ func (s *Store) load() {
 			_offset, line = parseWord(line, recordSepChar)
 			val, line = parseWord(line, recordSepChar)
 
-			offset, err := base.ParseUint(*base.B2S(_offset))
+			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
 			base.Assert1(err)
 
 			bm, err := s.getBitMap(*base.B2S(key))
@@ -515,7 +516,7 @@ func (s *Store) load() {
 
 			_offset, line = parseWord(line, recordSepChar)
 
-			offset, err := base.ParseUint(*base.B2S(_offset))
+			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
 			base.Assert1(err)
 
 			bm, err := s.getBitMap(*base.B2S(key))
@@ -643,13 +644,14 @@ func (s *Store) dump() {
 	os.Rename(s.TmpPath, s.Path)
 }
 
-// parseWord parse file content to record lines
+// parseWord parse file content to record lines.
+// one record line is like <len_key>:<key>\n<ts>\n<len_value>:<value>\n.
 func parseWord(line []byte, valid byte) (pre []byte, suf []byte) {
 	i := bytes.IndexByte(line, ':')
 	if i <= 0 {
 		panic(base.ErrParseRecordLine)
 	}
-	l, err := base.ParseInt(*base.B2S(line[:i]))
+	l, err := strconv.ParseInt(*base.B2S(line[:i]), _base, 64)
 	if err != nil {
 		panic(err)
 	}
@@ -671,7 +673,7 @@ func parseTs(line []byte) (int64, []byte) {
 		panic(base.ErrParseRecordLine)
 	}
 
-	ts, err := base.ParseInt(*base.B2S(line[:i]))
+	ts, err := strconv.ParseInt(*base.B2S(line[:i]), _base, 64)
 	if err != nil {
 		panic(err)
 	}
