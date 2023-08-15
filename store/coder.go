@@ -3,11 +3,14 @@ package store
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"sync"
 
 	"github.com/xgzlucario/rotom/base"
 )
+
+// Record like:
+// <SetTx><key_len>SEP<key><ts>SEP<value_len>SEP<value>SEP
+// SEP is seperator, now is byte(255)
 
 // _base is the base for integer conversion.
 const (
@@ -20,7 +23,7 @@ const (
 // coderPool is a pool of Coder objects to improve performance by reusing Coder instances.
 var coderPool = sync.Pool{
 	New: func() any {
-		return &Coder{buf: make([]byte, 0, 8)}
+		return &Coder{buf: make([]byte, 0)}
 	},
 }
 
@@ -42,9 +45,8 @@ func putCoder(obj *Coder) {
 
 func (s *Coder) String(v string) *Coder {
 	s.int(len(v))
-	s.buf = append(s.buf, ':')
 	s.buf = append(s.buf, v...)
-	s.buf = append(s.buf, recordSepChar)
+	s.buf = append(s.buf, SEP_CHAR)
 	return s
 }
 
@@ -55,23 +57,21 @@ func (s *Coder) Type(v RecordType) *Coder {
 
 func (s *Coder) Bytes(v []byte) *Coder {
 	s.int(len(v))
-	s.buf = append(s.buf, ':')
 	s.buf = append(s.buf, v...)
-	s.buf = append(s.buf, recordSepChar)
+	s.buf = append(s.buf, SEP_CHAR)
 	return s
 }
 
 func (s *Coder) int(v int) {
-	str := strconv.FormatInt(int64(v), _base)
-	s.buf = append(s.buf, str...)
+	s.buf = append(s.buf, base.FormatNumber(v)...)
+	s.buf = append(s.buf, SEP_CHAR)
 }
 
 // format encodes a byte slice into the Coder's buffer as a record.
 func (s *Coder) format(v []byte) *Coder {
 	s.int(len(v))
-	s.buf = append(s.buf, ':')
 	s.buf = append(s.buf, v...)
-	s.buf = append(s.buf, recordSepChar)
+	s.buf = append(s.buf, SEP_CHAR)
 	return s
 }
 
@@ -83,14 +83,12 @@ func (s *Coder) Bool(v bool) *Coder {
 }
 
 func (s *Coder) Uint(v uint) *Coder {
-	str := strconv.FormatUint(uint64(v), _base)
-	return s.format(base.S2B(&str))
+	return s.format(base.FormatNumber(v))
 }
 
 func (s *Coder) Ts(v int64) *Coder {
-	str := strconv.FormatInt(int64(v), _base)
-	s.buf = append(s.buf, str...)
-	s.buf = append(s.buf, recordSepChar)
+	s.buf = append(s.buf, base.FormatNumber(v)...)
+	s.buf = append(s.buf, SEP_CHAR)
 	return s
 }
 

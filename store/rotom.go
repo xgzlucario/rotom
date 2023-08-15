@@ -60,9 +60,9 @@ const (
 )
 
 const (
-	recordSepChar = byte('\n')
-	timeCarry     = 1000 * 1000 * 1000
-	NoTTL         = 0
+	SEP_CHAR  = byte(255)
+	timeCarry = 1000 * 1000 * 1000
+	NoTTL     = 0
 )
 
 // Type aliases for structx types.
@@ -443,7 +443,7 @@ func (s *Store) load() {
 
 		// parse key
 		var key []byte
-		key, line = parseWord(line, recordSepChar)
+		key, line = parseWord(line, SEP_CHAR)
 
 		switch op {
 		case OpSetTx:
@@ -454,7 +454,7 @@ func (s *Store) load() {
 			ts, line = parseTs(line)
 			ts *= timeCarry
 
-			val, line = parseWord(line, recordSepChar)
+			val, line = parseWord(line, SEP_CHAR)
 
 			// check if expired
 			if ts < cache.GetUnixNano() && ts != NoTTL {
@@ -487,8 +487,8 @@ func (s *Store) load() {
 			// field value
 			var field, val []byte
 
-			field, line = parseWord(line, recordSepChar)
-			val, line = parseWord(line, recordSepChar)
+			field, line = parseWord(line, SEP_CHAR)
+			val, line = parseWord(line, SEP_CHAR)
 
 			m, err := s.getMap(*base.B2S(key))
 			base.Assert1(err)
@@ -499,8 +499,8 @@ func (s *Store) load() {
 			// offset val
 			var _offset, val []byte
 
-			_offset, line = parseWord(line, recordSepChar)
-			val, line = parseWord(line, recordSepChar)
+			_offset, line = parseWord(line, SEP_CHAR)
+			val, line = parseWord(line, SEP_CHAR)
 
 			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
 			base.Assert1(err)
@@ -514,7 +514,7 @@ func (s *Store) load() {
 			// offset
 			var _offset []byte
 
-			_offset, line = parseWord(line, recordSepChar)
+			_offset, line = parseWord(line, SEP_CHAR)
 
 			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
 			base.Assert1(err)
@@ -528,8 +528,8 @@ func (s *Store) load() {
 			// src, dest, key is bitmap1
 			var src, dest []byte
 
-			src, line = parseWord(line, recordSepChar)
-			dest, line = parseWord(line, recordSepChar)
+			src, line = parseWord(line, SEP_CHAR)
+			dest, line = parseWord(line, SEP_CHAR)
 
 			bm1, err := s.getBitMap(*base.B2S(key))
 			base.Assert1(err)
@@ -572,7 +572,7 @@ func (s *Store) load() {
 			// field
 			var field []byte
 
-			field, line = parseWord(line, recordSepChar)
+			field, line = parseWord(line, SEP_CHAR)
 
 			m, err := s.getMap(*base.B2S(key))
 			base.Assert1(err)
@@ -668,7 +668,7 @@ func parseWord(line []byte, valid byte) (pre []byte, suf []byte) {
 
 // parseTs
 func parseTs(line []byte) (int64, []byte) {
-	i := bytes.IndexByte(line, recordSepChar)
+	i := bytes.IndexByte(line, SEP_CHAR)
 	if i <= 0 {
 		panic(base.ErrParseRecordLine)
 	}
