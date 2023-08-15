@@ -1,6 +1,29 @@
 package base
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+)
+
+func BenchmarkConv(b *testing.B) {
+	num := int64(123456789)
+
+	b.Run("std/10", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			strconv.FormatInt(num, 10)
+		}
+	})
+	b.Run("std/36", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			strconv.FormatInt(num, 36)
+		}
+	})
+	b.Run("formatNumber", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			FormatNumber(num)
+		}
+	})
+}
 
 func FuzzConv(f *testing.F) {
 	f.Fuzz(func(t *testing.T, n1 int, n2 int64, n3 uint, n4 uint64) {
