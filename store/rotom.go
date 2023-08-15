@@ -124,13 +124,18 @@ func Open(conf *Config) (*Store, error) {
 	db.load()
 
 	// Init
-	base.Go(db.SyncInterval, func() {
-		db.writeTo(db.buf, db.Path)
-	})
-
-	base.Go(db.RewriteInterval, func() {
-		db.dump()
-	})
+	go func() {
+		for {
+			time.Sleep(db.SyncInterval)
+			db.writeTo(db.buf, db.Path)
+		}
+	}()
+	go func() {
+		for {
+			time.Sleep(db.RewriteInterval)
+			db.dump()
+		}
+	}()
 
 	return db, nil
 }
@@ -146,17 +151,17 @@ func (db *Store) GetAny(key string) (any, int64, bool) {
 }
 
 // Set
-func (db *Store) Set(key string, val []byte) error {
-	return db.SetTx(key, val, NoTTL)
+func (db *Store) Set(key string, val []byte) {
+	db.SetTx(key, val, NoTTL)
 }
 
 // SetEx
-func (db *Store) SetEx(key string, val []byte, ttl time.Duration) error {
-	return db.SetTx(key, val, cache.GetUnixNano()+int64(ttl))
+func (db *Store) SetEx(key string, val []byte, ttl time.Duration) {
+	db.SetTx(key, val, cache.GetUnixNano()+int64(ttl))
 }
 
 // SetTx
-func (db *Store) SetTx(key string, val []byte, ts int64) error {
+func (db *Store) SetTx(key string, val []byte, ts int64) {
 	cd := NewCoder(OpSetTx).Type(RecordString).String(key).Ts(ts / timeCarry).Bytes(val)
 	db.m.SetTx(key, val, ts)
 
@@ -165,8 +170,6 @@ func (db *Store) SetTx(key string, val []byte, ts int64) error {
 	defer putCoder(cd)
 
 	db.buf.Write(cd.buf)
-
-	return nil
 }
 
 // Remove
@@ -491,7 +494,9 @@ func (s *Store) load() {
 			val, line = parseWord(line, SEP_CHAR)
 
 			m, err := s.getMap(*base.B2S(key))
-			base.Assert1(err)
+			if err != nil {
+				panic(err)
+			}
 
 			m.Set(*base.B2S(field), val)
 
@@ -503,10 +508,14 @@ func (s *Store) load() {
 			val, line = parseWord(line, SEP_CHAR)
 
 			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
-			base.Assert1(err)
+			if err != nil {
+				panic(err)
+			}
 
 			bm, err := s.getBitMap(*base.B2S(key))
-			base.Assert1(err)
+			if err != nil {
+				panic(err)
+			}
 
 			bm.SetTo(uint(offset), val[0] == _true)
 
@@ -517,10 +526,14 @@ func (s *Store) load() {
 			_offset, line = parseWord(line, SEP_CHAR)
 
 			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
-			base.Assert1(err)
+			if err != nil {
+				panic(err)
+			}
 
 			bm, err := s.getBitMap(*base.B2S(key))
-			base.Assert1(err)
+			if err != nil {
+				panic(err)
+			}
 
 			bm.Flip(uint(offset))
 
@@ -532,10 +545,14 @@ func (s *Store) load() {
 			dest, line = parseWord(line, SEP_CHAR)
 
 			bm1, err := s.getBitMap(*base.B2S(key))
-			base.Assert1(err)
+			if err != nil {
+				panic(err)
+			}
 
 			bm2, err := s.getBitMap(*base.B2S(src))
-			base.Assert1(err)
+			if err != nil {
+				panic(err)
+			}
 
 			if slices.Equal(key, dest) {
 				switch op {
@@ -575,7 +592,9 @@ func (s *Store) load() {
 			field, line = parseWord(line, SEP_CHAR)
 
 			m, err := s.getMap(*base.B2S(key))
-			base.Assert1(err)
+			if err != nil {
+				panic(err)
+			}
 
 			m.Delete(*base.B2S(field))
 

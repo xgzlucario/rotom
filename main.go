@@ -73,11 +73,11 @@ func main() {
 	}()
 
 	// Set
-	for i := 0; i < 10000*1000; i++ {
+	for i := 0; i < 10000; i++ {
 		count++
 		v := strconv.Itoa(i)
-		bc.SetEx(v, S2B(&v), time.Second)
-		// bc.HSet("mymap", v, S2B(&v))
+		// bc.SetEx(v, S2B(&v), time.Second)
+		bc.HSet("mymap", v, S2B(&v))
 	}
 
 	time.Sleep(time.Second * 3)
