@@ -3,10 +3,11 @@ package base
 import (
 	"strconv"
 	"testing"
+	"time"
 )
 
 func BenchmarkConv(b *testing.B) {
-	num := int64(123456789)
+	num := time.Now().UnixNano()
 
 	b.Run("std/10", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {

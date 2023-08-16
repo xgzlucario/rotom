@@ -12,12 +12,9 @@ import (
 // <SetTx><key_len>SEP<key><ts>SEP<value_len>SEP<value>SEP
 // SEP is seperator, now is byte(255)
 
-// _base is the base for integer conversion.
 const (
 	_true  = 'T'
 	_false = 'F'
-
-	_base = 36
 )
 
 // coderPool is a pool of Coder objects to improve performance by reusing Coder instances.

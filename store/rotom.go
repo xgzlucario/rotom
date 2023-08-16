@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -507,17 +506,13 @@ func (s *Store) load() {
 			_offset, line = parseWord(line, SEP_CHAR)
 			val, line = parseWord(line, SEP_CHAR)
 
-			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
-			if err != nil {
-				panic(err)
-			}
-
 			bm, err := s.getBitMap(*base.B2S(key))
 			if err != nil {
 				panic(err)
 			}
 
-			bm.SetTo(uint(offset), val[0] == _true)
+			offset := base.ParseNumber[uint](_offset)
+			bm.SetTo(offset, val[0] == _true)
 
 		case OpBitFlip:
 			// offset
@@ -525,17 +520,13 @@ func (s *Store) load() {
 
 			_offset, line = parseWord(line, SEP_CHAR)
 
-			offset, err := strconv.ParseUint(*base.B2S(_offset), _base, 64)
-			if err != nil {
-				panic(err)
-			}
-
 			bm, err := s.getBitMap(*base.B2S(key))
 			if err != nil {
 				panic(err)
 			}
 
-			bm.Flip(uint(offset))
+			offset := base.ParseNumber[uint](_offset)
+			bm.Flip(offset)
 
 		case OpBitAnd, OpBitOr, OpBitXor:
 			// src, dest, key is bitmap1
@@ -666,22 +657,20 @@ func (s *Store) dump() {
 // parseWord parse file content to record lines.
 // one record line is like <len_key>:<key>\n<ts>\n<len_value>:<value>\n.
 func parseWord(line []byte, valid byte) (pre []byte, suf []byte) {
-	i := bytes.IndexByte(line, ':')
+	i := bytes.IndexByte(line, SEP_CHAR)
 	if i <= 0 {
 		panic(base.ErrParseRecordLine)
 	}
-	l, err := strconv.ParseInt(*base.B2S(line[:i]), _base, 64)
-	if err != nil {
-		panic(err)
-	}
+
+	len := base.ParseNumber[int](line[:i])
 	i++
 
-	if line[i+int(l)] != valid {
+	if line[i+len] != valid {
 		panic(base.ErrParseRecordLine)
 	}
 
-	pre = line[i : i+int(l)]
-	suf = line[i+int(l)+1:]
+	pre = line[i : i+len]
+	suf = line[i+len+1:]
 	return
 }
 
@@ -692,12 +681,7 @@ func parseTs(line []byte) (int64, []byte) {
 		panic(base.ErrParseRecordLine)
 	}
 
-	ts, err := strconv.ParseInt(*base.B2S(line[:i]), _base, 64)
-	if err != nil {
-		panic(err)
-	}
-
-	return ts, line[i+1:]
+	return base.ParseNumber[int64](line[:i]), line[i+1:]
 }
 
 // getMap
