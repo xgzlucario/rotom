@@ -9,7 +9,7 @@ require (
 	github.com/bytedance/sonic v1.10.0
 	github.com/tidwall/hashmap v1.8.1
 	github.com/xgzlucario/GigaCache v0.0.0-20230811092559-33b8b2298fe8
-	golang.org/x/exp v0.0.0-20230811145659-89c5cff77bcb
+	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
 )
 
 require (

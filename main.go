@@ -25,7 +25,7 @@ func S2B(str *string) []byte {
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
-	bc, _ := store.Open(store.DefaultConfig)
+	db, _ := store.Open(store.DefaultConfig)
 
 	a := time.Now()
 
@@ -38,7 +38,7 @@ func main() {
 		for i := 0; ; i++ {
 			time.Sleep(time.Second / 10)
 
-			n := bc.Stat().Len / 1e3
+			n := db.Stat().Len / 1e3
 			if n > maxNum {
 				maxNum = n
 			}
@@ -56,7 +56,7 @@ func main() {
 			a := time.Now()
 			ph := strconv.Itoa(i)
 
-			val, _, ok := bc.Get(ph)
+			val, _, ok := db.Get(ph)
 			if ok && !bytes.Equal(S2B(&ph), val) {
 				panic("key and value not equal")
 
@@ -76,8 +76,7 @@ func main() {
 	for i := 0; i < 10000; i++ {
 		count++
 		v := strconv.Itoa(i)
-		bc.SetEx(v, S2B(&v), time.Hour)
-		// bc.HSet("mymap", v, S2B(&v))
+		db.SetEx(v, S2B(&v), time.Hour)
 	}
 
 	time.Sleep(time.Second * 3)

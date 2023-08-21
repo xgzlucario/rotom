@@ -76,8 +76,8 @@ type (
 
 var (
 	DefaultConfig = &Config{
-		Path:            "rotom.rdb",
-		TmpPath:         "rotom.aof",
+		Path:            "rotom.db",
+		TmpPath:         "rotom.db-tmp",
 		ShardCount:      1024,
 		SyncPolicy:      base.EverySecond,
 		SyncInterval:    time.Second,
@@ -103,12 +103,13 @@ type Config struct {
 type Store struct {
 	*Config
 
+	alive bool
 	buf   *bytes.Buffer
 	rwbuf *bytes.Buffer
 
 	m *cache.GigaCache[string]
 
-	sync.Mutex
+	sync.RWMutex
 }
 
 // Open opens a database specified by config.
@@ -120,23 +121,40 @@ func Open(conf *Config) (*Store, error) {
 		rwbuf:  bytes.NewBuffer(nil),
 		m:      cache.New[string](conf.ShardCount),
 	}
+
 	db.load()
+	db.alive = true
 
 	// Init
 	go func() {
 		for {
 			time.Sleep(db.SyncInterval)
+			if !db.alive {
+				return
+			}
 			db.writeTo(db.buf, db.Path)
 		}
 	}()
+
 	go func() {
 		for {
 			time.Sleep(db.RewriteInterval)
+			if !db.alive {
+				return
+			}
 			db.dump()
 		}
 	}()
 
 	return db, nil
+}
+
+// Close
+func (db *Store) Close() error {
+	_, err := db.writeTo(db.buf, db.Path)
+	db.alive = false
+
+	return err
 }
 
 // Get
@@ -165,10 +183,9 @@ func (db *Store) SetTx(key string, val []byte, ts int64) {
 	db.m.SetTx(key, val, ts)
 
 	db.Lock()
-	defer db.Unlock()
-	defer putCoder(cd)
-
 	db.buf.Write(cd.buf)
+	db.Unlock()
+	putCoder(cd)
 }
 
 // Remove
@@ -177,12 +194,18 @@ func (db *Store) Remove(key string) (any, bool) {
 	db.m.Delete(key)
 
 	db.Lock()
-	defer db.Unlock()
-	defer putCoder(cd)
-
 	db.buf.Write(cd.buf)
+	db.Unlock()
+	putCoder(cd)
 
 	return nil, true
+}
+
+// Scan
+func (db *Store) Scan(f func(string, any, int64) bool) {
+	db.RLock()
+	defer db.RUnlock()
+	db.m.Scan(f)
 }
 
 // Len
@@ -234,10 +257,9 @@ func (db *Store) HRemove(key, field string) error {
 	m.Delete(field)
 
 	db.Lock()
-	defer db.Unlock()
-	defer putCoder(cd)
-
 	db.buf.Write(cd.buf)
+	db.Unlock()
+	putCoder(cd)
 
 	return nil
 }
@@ -262,10 +284,9 @@ func (db *Store) BitSet(key string, offset uint, value bool) error {
 	bm.SetTo(offset, value)
 
 	db.Lock()
-	defer db.Unlock()
-	defer putCoder(cd)
-
 	db.buf.Write(cd.buf)
+	db.Unlock()
+	putCoder(cd)
 
 	return nil
 }
@@ -281,10 +302,9 @@ func (db *Store) BitFlip(key string, offset uint) error {
 	bm.Flip(offset)
 
 	db.Lock()
-	defer db.Unlock()
-	defer putCoder(cd)
-
 	db.buf.Write(cd.buf)
+	db.Unlock()
+	putCoder(cd)
 
 	return nil
 }
