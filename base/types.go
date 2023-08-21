@@ -6,6 +6,10 @@ import (
 
 type Ordered constraints.Ordered
 
+type Number interface {
+	~int | ~int32 | ~int64 | ~uint | ~uint32 | ~uint64
+}
+
 type Marshaler interface {
 	MarshalJSON() ([]byte, error)
 	UnmarshalJSON([]byte) error
