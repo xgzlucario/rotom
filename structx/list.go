@@ -1,8 +1,9 @@
 package structx
 
 import (
+	"slices"
+
 	"github.com/bytedance/sonic"
-	"golang.org/x/exp/slices"
 )
 
 // List

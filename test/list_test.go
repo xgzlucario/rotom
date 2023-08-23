@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
+	"slices"
+
 	"github.com/xgzlucario/rotom/structx"
-	"golang.org/x/exp/slices"
 )
 
 func TestList(t *testing.T) {
