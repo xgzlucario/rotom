@@ -8,10 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"slices"
+
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
-	"golang.org/x/exp/slices"
 )
 
 type Operation byte

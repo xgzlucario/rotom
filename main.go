@@ -10,6 +10,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
+	"github.com/brianvoe/gofakeit/v6"
 	"github.com/xgzlucario/rotom/store"
 )
 
@@ -73,11 +74,9 @@ func main() {
 	}()
 
 	// Set
-	for i := 0; i < 10000; i++ {
+	for i := 0; ; i++ {
 		count++
-		v := strconv.Itoa(i)
-		db.SetEx(v, S2B(&v), time.Hour)
+		val := gofakeit.Username()
+		db.SetEx(gofakeit.Phone(), S2B(&val), time.Second)
 	}
-
-	time.Sleep(time.Second * 3)
 }

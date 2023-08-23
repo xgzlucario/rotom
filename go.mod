@@ -1,11 +1,11 @@
 module github.com/xgzlucario/rotom
 
-go 1.20
+go 1.21
 
 require (
 	github.com/bits-and-blooms/bitset v1.8.0
 	github.com/bits-and-blooms/bloom v2.0.3+incompatible
-	github.com/brianvoe/gofakeit/v6 v6.23.0
+	github.com/brianvoe/gofakeit/v6 v6.23.1
 	github.com/bytedance/sonic v1.10.0
 	github.com/tidwall/hashmap v1.8.1
 	github.com/xgzlucario/GigaCache v0.0.0-20230811092559-33b8b2298fe8
