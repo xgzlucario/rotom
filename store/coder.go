@@ -29,9 +29,9 @@ type Coder struct {
 	buf []byte
 }
 
-func NewCoder(v Operation) *Coder {
+func NewCoder(v Operation, argsNum byte) *Coder {
 	obj := coderPool.Get().(*Coder)
-	obj.buf = append(obj.buf, byte(v))
+	obj.buf = append(obj.buf, byte(v), argsNum)
 	return obj
 }
 
@@ -41,10 +41,7 @@ func putCoder(obj *Coder) {
 }
 
 func (s *Coder) String(v string) *Coder {
-	s.int(len(v))
-	s.buf = append(s.buf, v...)
-	s.buf = append(s.buf, SEP_CHAR)
-	return s
+	return s.format(base.S2B(&v))
 }
 
 func (s *Coder) Type(v RecordType) *Coder {
@@ -53,23 +50,7 @@ func (s *Coder) Type(v RecordType) *Coder {
 }
 
 func (s *Coder) Bytes(v []byte) *Coder {
-	s.int(len(v))
-	s.buf = append(s.buf, v...)
-	s.buf = append(s.buf, SEP_CHAR)
-	return s
-}
-
-func (s *Coder) int(v int) {
-	s.buf = append(s.buf, base.FormatNumber(v)...)
-	s.buf = append(s.buf, SEP_CHAR)
-}
-
-// format encodes a byte slice into the Coder's buffer as a record.
-func (s *Coder) format(v []byte) *Coder {
-	s.int(len(v))
-	s.buf = append(s.buf, v...)
-	s.buf = append(s.buf, SEP_CHAR)
-	return s
+	return s.format(v)
 }
 
 func (s *Coder) Bool(v bool) *Coder {
@@ -83,8 +64,19 @@ func (s *Coder) Uint(v uint) *Coder {
 	return s.format(base.FormatNumber(v))
 }
 
-func (s *Coder) Ts(v int64) *Coder {
+func (s *Coder) Int(v int64) *Coder {
+	return s.format(base.FormatNumber(v))
+}
+
+func (s *Coder) int(v int) {
 	s.buf = append(s.buf, base.FormatNumber(v)...)
+	s.buf = append(s.buf, SEP_CHAR)
+}
+
+// format encodes a byte slice into the Coder's buffer as a record.
+func (s *Coder) format(v []byte) *Coder {
+	s.int(len(v))
+	s.buf = append(s.buf, v...)
 	s.buf = append(s.buf, SEP_CHAR)
 	return s
 }

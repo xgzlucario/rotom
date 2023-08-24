@@ -18,7 +18,7 @@ func B2S(buf []byte) *string {
 	return (*string)(unsafe.Pointer(&buf))
 }
 
-const RADIX = 255 - 1
+const RADIX = 255
 
 func FormatNumber[T Number](n T) []byte {
 	if n < 0 {
