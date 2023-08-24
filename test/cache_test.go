@@ -15,6 +15,7 @@ type vItem struct {
 	Ts  int64
 }
 
+// Test cache set operation
 func TestCacheSet(t *testing.T) {
 	cfg := store.DefaultConfig
 	dbkey := gofakeit.UUID()
