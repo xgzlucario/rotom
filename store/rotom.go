@@ -32,7 +32,6 @@ const (
 	OpBitXor
 
 	// TODO: Implement these operations.
-	OpIncr
 	OpLPush
 	OpLPop
 	OpRPush
@@ -373,11 +372,11 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	db.Unlock()
 
 	if key1 == dest {
-		bm1.Union(bm2)
+		bm1.Or(bm2)
 	} else if key2 == dest {
-		bm2.Union(bm1)
+		bm2.Or(bm1)
 	} else {
-		db.m.SetAny(dest, bm1.Clone().Union(bm2))
+		db.m.SetAny(dest, bm1.Clone().Or(bm2))
 	}
 
 	return nil
@@ -402,11 +401,11 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 	db.Unlock()
 
 	if key1 == dest {
-		bm1.Difference(bm2)
+		bm1.Xor(bm2)
 	} else if key2 == dest {
-		bm2.Difference(bm1)
+		bm2.Xor(bm1)
 	} else {
-		db.m.SetAny(dest, bm1.Clone().Difference(bm2))
+		db.m.SetAny(dest, bm1.Clone().Xor(bm2))
 	}
 
 	return nil
@@ -431,11 +430,11 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 	db.Unlock()
 
 	if key1 == dest {
-		bm1.Intersection(bm2)
+		bm1.And(bm2)
 	} else if key2 == dest {
-		bm2.Intersection(bm1)
+		bm2.And(bm1)
 	} else {
-		db.m.SetAny(dest, bm1.Clone().Intersection(bm2))
+		db.m.SetAny(dest, bm1.Clone().And(bm2))
 	}
 
 	return nil
@@ -506,8 +505,7 @@ func (s *Store) load() {
 		}
 
 		switch op {
-		case OpSetTx:
-			// check ttl
+		case OpSetTx: // key, ts, val
 			ts := base.ParseNumber[int64](args[1])
 			ts *= timeCarry
 
@@ -537,8 +535,7 @@ func (s *Store) load() {
 				panic(fmt.Errorf("%v: %d", base.ErrUnSupportDataType, recordType))
 			}
 
-		case OpHSet:
-			// key, field, val
+		case OpHSet: // key, field, val
 			m, err := s.getMap(*base.B2S(args[0]))
 			if err != nil {
 				panic(err)
@@ -546,8 +543,7 @@ func (s *Store) load() {
 
 			m.Set(*base.B2S(args[1]), args[2])
 
-		case OpBitSet:
-			// key, offset, val
+		case OpBitSet: // key, offset, val
 			bm, err := s.getBitMap(*base.B2S(args[0]))
 			if err != nil {
 				panic(err)
@@ -556,8 +552,7 @@ func (s *Store) load() {
 			offset := base.ParseNumber[uint](args[1])
 			bm.SetTo(offset, args[2][0] == _true)
 
-		case OpBitFlip:
-			// key, offset
+		case OpBitFlip: // key, offset
 			bm, err := s.getBitMap(*base.B2S(args[0]))
 			if err != nil {
 				panic(err)
@@ -565,8 +560,7 @@ func (s *Store) load() {
 
 			bm.Flip(base.ParseNumber[uint](args[1]))
 
-		case OpBitAnd, OpBitOr, OpBitXor:
-			// key src, dest, key is bitmap1
+		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
 			bm1, err := s.getBitMap(*base.B2S(args[0]))
 			if err != nil {
 				panic(err)
@@ -580,49 +574,45 @@ func (s *Store) load() {
 			if slices.Equal(args[0], args[2]) {
 				switch op {
 				case OpBitAnd:
-					bm1.Intersection(bm2)
+					bm1.And(bm2)
 				case OpBitOr:
-					bm1.Union(bm2)
+					bm1.Or(bm2)
 				case OpBitXor:
-					bm1.Difference(bm2)
+					bm1.Xor(bm2)
 				}
 
 			} else if slices.Equal(args[1], args[2]) {
 				switch op {
 				case OpBitAnd:
-					bm2.Intersection(bm1)
+					bm2.And(bm1)
 				case OpBitOr:
-					bm2.Union(bm1)
+					bm2.Or(bm1)
 				case OpBitXor:
-					bm2.Difference(bm1)
+					bm2.Xor(bm1)
 				}
 
 			} else {
 				switch op {
 				case OpBitAnd:
-					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().Intersection(bm2))
+					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().And(bm2))
 				case OpBitOr:
-					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().Union(bm2))
+					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().Or(bm2))
 				case OpBitXor:
-					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().Difference(bm2))
+					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().Xor(bm2))
 				}
 			}
 
-		case OpHRemove:
-			// key field
+		case OpHRemove: // key, field
 			m, err := s.getMap(*base.B2S(args[0]))
 			if err != nil {
 				panic(err)
 			}
-
 			m.Delete(*base.B2S(args[1]))
 
-		case OpRemove:
-			// key
+		case OpRemove: // key
 			s.Remove(*base.B2S(args[0]))
 
-		case OpMarshalBytes:
-			// val
+		case OpMarshalBytes: // val
 			if err := s.m.UnmarshalBytes(args[0]); err != nil {
 				panic(err)
 			}

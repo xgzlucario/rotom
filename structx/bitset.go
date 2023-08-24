@@ -45,8 +45,8 @@ func (bs *Bitset) Len() uint {
 	return bs.BitSet.Len()
 }
 
-// Union
-func (bs *Bitset) Union(bs2 *Bitset) *Bitset {
+// Or
+func (bs *Bitset) Or(bs2 *Bitset) *Bitset {
 	bs.Lock()
 	defer bs.Unlock()
 	bs.BitSet.InPlaceUnion(bs2.BitSet)
@@ -54,8 +54,8 @@ func (bs *Bitset) Union(bs2 *Bitset) *Bitset {
 	return bs
 }
 
-// Intersection
-func (bs *Bitset) Intersection(bs2 *Bitset) *Bitset {
+// And
+func (bs *Bitset) And(bs2 *Bitset) *Bitset {
 	bs.Lock()
 	defer bs.Unlock()
 	bs.BitSet.InPlaceIntersection(bs2.BitSet)
@@ -63,8 +63,8 @@ func (bs *Bitset) Intersection(bs2 *Bitset) *Bitset {
 	return bs
 }
 
-// Difference
-func (bs *Bitset) Difference(bs2 *Bitset) *Bitset {
+// Xor
+func (bs *Bitset) Xor(bs2 *Bitset) *Bitset {
 	bs.Lock()
 	defer bs.Unlock()
 	bs.BitSet.InPlaceSymmetricDifference(bs2.BitSet)
