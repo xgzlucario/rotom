@@ -82,13 +82,13 @@ type (
 var (
 	// Default configuration
 	DefaultConfig = &Config{
-		Path:            "rotom.db",
-		ShardCount:      1024,
-		SyncPolicy:      base.EverySecond,
-		SyncInterval:    time.Second,
-		RewriteInterval: time.Minute,
-		StatInterval:    time.Minute,
-		Logger:          slog.Default(),
+		Path:           "rotom.db",
+		ShardCount:     1024,
+		SyncPolicy:     base.EverySecond,
+		SyncInterval:   time.Second,
+		ShrinkInterval: time.Minute,
+		StatInterval:   time.Minute,
+		Logger:         slog.Default(),
 	}
 )
 
@@ -101,23 +101,21 @@ type Config struct {
 
 	SyncPolicy base.SyncPolicy // data sync policy.
 
-	SyncInterval    time.Duration // Interval of buffer writes to disk.
-	RewriteInterval time.Duration // Interval of rewrite db file to compress space.
-	StatInterval    time.Duration // Interval of monitor db status.
+	SyncInterval   time.Duration // Interval of buffer writes to disk.
+	ShrinkInterval time.Duration // Interval of shrink db file to compress space.
+	StatInterval   time.Duration // Interval of monitor db status.
 
 	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
 }
 
 // Store represents a key-value store.
 type Store struct {
-	*Config
-	alive bool
-	buf   *bytes.Buffer
-	rwbuf *bytes.Buffer
-
-	m *cache.GigaCache[string]
-
 	sync.RWMutex
+	*Config
+	closed bool
+	buf    *bytes.Buffer
+	rwbuf  *bytes.Buffer
+	m      *cache.GigaCache[string]
 }
 
 // Open opens a database specified by config.
@@ -131,7 +129,6 @@ func Open(conf *Config) (*Store, error) {
 	}
 	db.tmpPath = db.Path + ".tmp"
 	db.load()
-	db.alive = true
 
 	// Ticker to write buffer.
 	db.backend(db.SyncInterval, func() {
@@ -143,10 +140,10 @@ func Open(conf *Config) (*Store, error) {
 		db.Unlock()
 	})
 
-	// Ticker to rewrite db.
-	db.backend(db.RewriteInterval, func() {
+	// Ticker to shrink db.
+	db.backend(db.ShrinkInterval, func() {
 		db.Lock()
-		db.rewrite()
+		db.shrink()
 		db.Unlock()
 	})
 
@@ -160,7 +157,7 @@ func Open(conf *Config) (*Store, error) {
 	})
 
 	if db.Logger != nil {
-		db.Logger.Info("rotom is ready to go!")
+		db.Logger.Info("rotom is ready to go")
 	}
 
 	return db, nil
@@ -170,9 +167,11 @@ func Open(conf *Config) (*Store, error) {
 func (db *Store) Close() error {
 	db.Lock()
 	defer db.Unlock()
-
+	if db.closed {
+		return base.ErrDatabaseClosed
+	}
 	_, err := db.writeTo(db.buf, db.Path)
-	db.alive = false
+	db.closed = true
 
 	return err
 }
@@ -487,7 +486,10 @@ func (s *Store) load() {
 
 		// parse key
 		var key []byte
-		key, line = parseWord(line)
+		key, line, err = parseWord(line)
+		if err != nil {
+			break
+		}
 
 		switch op {
 		case OpSetTx:
@@ -495,10 +497,16 @@ func (s *Store) load() {
 			var val []byte
 			var ts int64
 
-			ts, line = parseTs(line)
+			ts, line, err = parseTs(line)
+			if err != nil {
+				break
+			}
 			ts *= timeCarry
 
-			val, line = parseWord(line)
+			val, line, err = parseWord(line)
+			if err != nil {
+				break
+			}
 
 			// check if expired
 			if ts < cache.GetUnixNano() && ts != NoTTL {
@@ -531,8 +539,15 @@ func (s *Store) load() {
 			// field value
 			var field, val []byte
 
-			field, line = parseWord(line)
-			val, line = parseWord(line)
+			field, line, err = parseWord(line)
+			if err != nil {
+				break
+			}
+
+			val, line, err = parseWord(line)
+			if err != nil {
+				break
+			}
 
 			m, err := s.getMap(*base.B2S(key))
 			if err != nil {
@@ -650,7 +665,7 @@ func (s *Store) load() {
 }
 
 // rewrite write data to the file.
-func (s *Store) rewrite() {
+func (s *Store) shrink() {
 	if s.SyncPolicy == base.Never {
 		return
 	}
@@ -705,33 +720,34 @@ func (s *Store) rewrite() {
 }
 
 // parseWord parse file content to record lines.
-func parseWord(line []byte) (pre []byte, suf []byte) {
+// exp:
+// input: <key_len>SEP<key_value>SEP<somthing...>
+// return: key_value, somthing..., error
+func parseWord(line []byte) ([]byte, []byte, error) {
 	i := bytes.IndexByte(line, SEP_CHAR)
 	if i <= 0 {
-		panic(base.ErrParseRecordLine)
+		return nil, nil, base.ErrParseRecordLine
 	}
 
-	len := base.ParseNumber[int](line[:i])
+	key_len := base.ParseNumber[int](line[:i])
 	i++
 
 	// valid
-	if line[i+len] != SEP_CHAR {
-		panic(base.ErrParseRecordLine)
+	if len(line) <= i+key_len || line[i+key_len] != SEP_CHAR {
+		return nil, nil, base.ErrParseRecordLine
 	}
 
-	pre = line[i : i+len]
-	suf = line[i+len+1:]
-	return
+	return line[i : i+key_len], line[i+key_len+1:], nil
 }
 
 // parseTs
-func parseTs(line []byte) (int64, []byte) {
+func parseTs(line []byte) (int64, []byte, error) {
 	i := bytes.IndexByte(line, SEP_CHAR)
 	if i <= 0 {
-		panic(base.ErrParseRecordLine)
+		return 0, nil, base.ErrParseRecordLine
 	}
 
-	return base.ParseNumber[int64](line[:i]), line[i+1:]
+	return base.ParseNumber[int64](line[:i]), line[i+1:], nil
 }
 
 // getMap
@@ -785,7 +801,7 @@ func (db *Store) backend(t time.Duration, f func()) {
 	go func() {
 		for {
 			time.Sleep(t)
-			if !db.alive {
+			if db.closed {
 				return
 			}
 			f()
