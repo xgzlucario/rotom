@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -207,6 +208,31 @@ func (db *Store) SetTx(key string, val []byte, ts int64) {
 	putCoder(cd)
 }
 
+// Incr
+func (db *Store) Incr(key string, incr float64) (res float64, err error) {
+	val, ts, ok := db.m.Get(key)
+	if ok {
+		f, err := strconv.ParseFloat(string(val), 64)
+		if err != nil {
+			return 0, err
+		}
+		res = f + incr
+		fstr := strconv.FormatFloat(res, 'f', 4, 64)
+
+		cd := NewCoder(OpSetTx, 3).Type(RecordString).String(key).Int(ts / timeCarry).String(fstr)
+		db.m.SetTx(key, []byte(fstr), ts)
+
+		db.Lock()
+		db.buf.Write(cd.buf)
+		db.Unlock()
+		putCoder(cd)
+
+		return res, nil
+	}
+
+	return 0, base.ErrKeyNotFound
+}
+
 // Remove
 func (db *Store) Remove(key string) (any, bool) {
 	cd := NewCoder(OpRemove, 1).String(key)
@@ -333,33 +359,27 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	cd := NewCoder(OpBitOr, 3).String(key1).String(key2).String(dest)
 	defer putCoder(cd)
 
-	// bm1
 	bm1, err := db.getBitMap(key1)
 	if err != nil {
 		return err
 	}
-
-	// bm2
 	bm2, err := db.getBitMap(key2)
 	if err != nil {
 		return err
 	}
 
+	db.Lock()
+	db.buf.Write(cd.buf)
+	db.Unlock()
+
 	if key1 == dest {
-		db.buf.Write(cd.buf)
 		bm1.Union(bm2)
-
 	} else if key2 == dest {
-		db.buf.Write(cd.buf)
 		bm2.Union(bm1)
-
 	} else {
-		db.Lock()
-		defer db.Unlock()
-
-		db.buf.Write(cd.buf)
 		db.m.SetAny(dest, bm1.Clone().Union(bm2))
 	}
+
 	return nil
 }
 
@@ -368,33 +388,27 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 	cd := NewCoder(OpBitXor, 3).String(key1).String(key2).String(dest)
 	defer putCoder(cd)
 
-	// bm1
 	bm1, err := db.getBitMap(key1)
 	if err != nil {
 		return err
 	}
-
-	// bm2
 	bm2, err := db.getBitMap(key2)
 	if err != nil {
 		return err
 	}
 
+	db.Lock()
+	db.buf.Write(cd.buf)
+	db.Unlock()
+
 	if key1 == dest {
-		db.buf.Write(cd.buf)
 		bm1.Difference(bm2)
-
 	} else if key2 == dest {
-		db.buf.Write(cd.buf)
 		bm2.Difference(bm1)
-
 	} else {
-		db.Lock()
-		defer db.Unlock()
-
-		db.buf.Write(cd.buf)
 		db.m.SetAny(dest, bm1.Clone().Difference(bm2))
 	}
+
 	return nil
 }
 
@@ -403,33 +417,27 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 	cd := NewCoder(OpBitAnd, 3).String(key1).String(key2).String(dest)
 	defer putCoder(cd)
 
-	// bm1
 	bm1, err := db.getBitMap(key1)
 	if err != nil {
 		return err
 	}
-
-	// bm2
 	bm2, err := db.getBitMap(key2)
 	if err != nil {
 		return err
 	}
 
+	db.Lock()
+	db.buf.Write(cd.buf)
+	db.Unlock()
+
 	if key1 == dest {
-		db.buf.Write(cd.buf)
 		bm1.Intersection(bm2)
-
 	} else if key2 == dest {
-		db.buf.Write(cd.buf)
 		bm2.Intersection(bm1)
-
 	} else {
-		db.Lock()
-		defer db.Unlock()
-
-		db.buf.Write(cd.buf)
 		db.m.SetAny(dest, bm1.Clone().Intersection(bm2))
 	}
+
 	return nil
 }
 
