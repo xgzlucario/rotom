@@ -44,7 +44,7 @@ const (
 	OpTrieSet
 	OpTrieRemove
 
-	OpMarshalBytes // Marshal bytes for gigacache.
+	OpMarshalBytes // Marshal bytes for GigaCache.
 )
 
 // Record types.
@@ -126,24 +126,29 @@ func Open(conf *Config) (*Store, error) {
 	db.load()
 	db.alive = true
 
-	// Init
+	// Initial to load db.
 	go func() {
 		for {
 			time.Sleep(db.SyncInterval)
 			if !db.alive {
 				return
 			}
-			db.writeTo(db.buf, db.Path)
+			db.Lock()
+			db.appendToFile(db.buf, db.Path)
+			db.Unlock()
 		}
 	}()
 
+	// Ticker to dump db.
 	go func() {
 		for {
 			time.Sleep(db.RewriteInterval)
 			if !db.alive {
 				return
 			}
+			db.Lock()
 			db.dump()
+			db.Unlock()
 		}
 	}()
 
@@ -152,7 +157,10 @@ func Open(conf *Config) (*Store, error) {
 
 // Close
 func (db *Store) Close() error {
-	_, err := db.writeTo(db.buf, db.Path)
+	db.Lock()
+	defer db.Unlock()
+
+	_, err := db.appendToFile(db.buf, db.Path)
 	db.alive = false
 
 	return err
@@ -421,11 +429,8 @@ func (db *Store) BitCount(key string) (uint, error) {
 	return bm.Len(), err
 }
 
-// writeTo writes the buffer into the file at the specified path.
-func (s *Store) writeTo(buf *bytes.Buffer, path string) (int64, error) {
-	s.Lock()
-	defer s.Unlock()
-
+// appendToFile writes the buffer into the file at the specified path.
+func (s *Store) appendToFile(buf *bytes.Buffer, path string) (int64, error) {
 	fs, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		return 0, err
@@ -466,7 +471,7 @@ func (s *Store) load() {
 
 		// parse key
 		var key []byte
-		key, line = parseWord(line, SEP_CHAR)
+		key, line = parseWord(line)
 
 		switch op {
 		case OpSetTx:
@@ -477,7 +482,7 @@ func (s *Store) load() {
 			ts, line = parseTs(line)
 			ts *= timeCarry
 
-			val, line = parseWord(line, SEP_CHAR)
+			val, line = parseWord(line)
 
 			// check if expired
 			if ts < cache.GetUnixNano() && ts != NoTTL {
@@ -510,8 +515,8 @@ func (s *Store) load() {
 			// field value
 			var field, val []byte
 
-			field, line = parseWord(line, SEP_CHAR)
-			val, line = parseWord(line, SEP_CHAR)
+			field, line = parseWord(line)
+			val, line = parseWord(line)
 
 			m, err := s.getMap(*base.B2S(key))
 			if err != nil {
@@ -524,8 +529,8 @@ func (s *Store) load() {
 			// offset val
 			var _offset, val []byte
 
-			_offset, line = parseWord(line, SEP_CHAR)
-			val, line = parseWord(line, SEP_CHAR)
+			_offset, line = parseWord(line)
+			val, line = parseWord(line)
 
 			bm, err := s.getBitMap(*base.B2S(key))
 			if err != nil {
@@ -539,7 +544,7 @@ func (s *Store) load() {
 			// offset
 			var _offset []byte
 
-			_offset, line = parseWord(line, SEP_CHAR)
+			_offset, line = parseWord(line)
 
 			bm, err := s.getBitMap(*base.B2S(key))
 			if err != nil {
@@ -553,8 +558,8 @@ func (s *Store) load() {
 			// src, dest, key is bitmap1
 			var src, dest []byte
 
-			src, line = parseWord(line, SEP_CHAR)
-			dest, line = parseWord(line, SEP_CHAR)
+			src, line = parseWord(line)
+			dest, line = parseWord(line)
 
 			bm1, err := s.getBitMap(*base.B2S(key))
 			if err != nil {
@@ -601,7 +606,7 @@ func (s *Store) load() {
 			// field
 			var field []byte
 
-			field, line = parseWord(line, SEP_CHAR)
+			field, line = parseWord(line)
 
 			m, err := s.getMap(*base.B2S(key))
 			if err != nil {
@@ -669,15 +674,14 @@ func (s *Store) dump() {
 	})
 
 	// Flush buffer to file
-	s.writeTo(s.rwbuf, s.TmpPath)
-	s.writeTo(s.buf, s.TmpPath)
+	s.appendToFile(s.rwbuf, s.TmpPath)
+	s.appendToFile(s.buf, s.TmpPath)
 
 	os.Rename(s.TmpPath, s.Path)
 }
 
 // parseWord parse file content to record lines.
-// one record line is like <len_key>:<key>\n<ts>\n<len_value>:<value>\n.
-func parseWord(line []byte, valid byte) (pre []byte, suf []byte) {
+func parseWord(line []byte) (pre []byte, suf []byte) {
 	i := bytes.IndexByte(line, SEP_CHAR)
 	if i <= 0 {
 		panic(base.ErrParseRecordLine)
@@ -686,7 +690,8 @@ func parseWord(line []byte, valid byte) (pre []byte, suf []byte) {
 	len := base.ParseNumber[int](line[:i])
 	i++
 
-	if line[i+len] != valid {
+	// valid
+	if line[i+len] != SEP_CHAR {
 		panic(base.ErrParseRecordLine)
 	}
 

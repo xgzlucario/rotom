@@ -76,7 +76,8 @@ func main() {
 	// Set
 	for i := 0; ; i++ {
 		count++
+		phone := gofakeit.Phone()
 		val := gofakeit.Username()
-		db.SetEx(gofakeit.Phone(), S2B(&val), time.Second)
+		db.SetEx(phone, S2B(&val), time.Second)
 	}
 }
