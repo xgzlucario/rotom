@@ -21,5 +21,5 @@ var (
 	ErrNotString   = errors.New("value is not string")
 	ErrNotNumberic = errors.New("value is not numberic")
 
-	ErrParseRecordLine = errors.New("parse record line error")
+	ErrParseRecordLine = errors.New("parse record line error, maybe db file is broken")
 )

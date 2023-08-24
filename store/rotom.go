@@ -4,11 +4,11 @@ package store
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"time"
-
-	"slices"
 
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
@@ -63,6 +63,10 @@ const (
 	SEP_CHAR  = byte(255)
 	timeCarry = 1000 * 1000 * 1000
 	NoTTL     = 0
+
+	KB = 1024
+	MB = 1024 * KB
+	GB = 1024 * MB
 )
 
 // Type aliases for structx types.
@@ -76,13 +80,15 @@ type (
 )
 
 var (
+	// Default configuration
 	DefaultConfig = &Config{
 		Path:            "rotom.db",
-		TmpPath:         "rotom.db-tmp",
 		ShardCount:      1024,
 		SyncPolicy:      base.EverySecond,
 		SyncInterval:    time.Second,
 		RewriteInterval: time.Minute,
+		StatInterval:    time.Minute,
+		Logger:          slog.Default(),
 	}
 )
 
@@ -90,20 +96,21 @@ var (
 type Config struct {
 	ShardCount int
 
-	Path    string
-	TmpPath string
+	Path    string // Path of db file.
+	tmpPath string
 
-	SyncPolicy base.SyncPolicy
+	SyncPolicy base.SyncPolicy // data sync policy.
 
-	// Interval of persistence.
-	SyncInterval    time.Duration
-	RewriteInterval time.Duration
+	SyncInterval    time.Duration // Interval of buffer writes to disk.
+	RewriteInterval time.Duration // Interval of rewrite db file to compress space.
+	StatInterval    time.Duration // Interval of monitor db status.
+
+	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
 }
 
 // Store represents a key-value store.
 type Store struct {
 	*Config
-
 	alive bool
 	buf   *bytes.Buffer
 	rwbuf *bytes.Buffer
@@ -122,35 +129,39 @@ func Open(conf *Config) (*Store, error) {
 		rwbuf:  bytes.NewBuffer(nil),
 		m:      cache.New[string](conf.ShardCount),
 	}
-
+	db.tmpPath = db.Path + ".tmp"
 	db.load()
 	db.alive = true
 
-	// Initial to load db.
-	go func() {
-		for {
-			time.Sleep(db.SyncInterval)
-			if !db.alive {
-				return
-			}
-			db.Lock()
-			db.appendToFile(db.buf, db.Path)
-			db.Unlock()
+	// Ticker to write buffer.
+	db.backend(db.SyncInterval, func() {
+		db.Lock()
+		if db.Logger != nil {
+			db.Logger.Info(fmt.Sprintf("write %s buffer to db file", formatSize(db.buf.Len())))
 		}
-	}()
+		db.writeTo(db.buf, db.Path)
+		db.Unlock()
+	})
 
-	// Ticker to dump db.
-	go func() {
-		for {
-			time.Sleep(db.RewriteInterval)
-			if !db.alive {
-				return
-			}
-			db.Lock()
-			db.dump()
-			db.Unlock()
+	// Ticker to rewrite db.
+	db.backend(db.RewriteInterval, func() {
+		db.Lock()
+		db.rewrite()
+		db.Unlock()
+	})
+
+	// Ticker to moniter stat.
+	db.backend(db.StatInterval, func() {
+		if db.Logger != nil {
+			db.RLock()
+			db.Logger.Info(fmt.Sprintf("db stat: %+v", db.Stat()))
+			db.RUnlock()
 		}
-	}()
+	})
+
+	if db.Logger != nil {
+		db.Logger.Info("rotom is ready to go!")
+	}
 
 	return db, nil
 }
@@ -160,7 +171,7 @@ func (db *Store) Close() error {
 	db.Lock()
 	defer db.Unlock()
 
-	_, err := db.appendToFile(db.buf, db.Path)
+	_, err := db.writeTo(db.buf, db.Path)
 	db.alive = false
 
 	return err
@@ -429,8 +440,12 @@ func (db *Store) BitCount(key string) (uint, error) {
 	return bm.Len(), err
 }
 
-// appendToFile writes the buffer into the file at the specified path.
-func (s *Store) appendToFile(buf *bytes.Buffer, path string) (int64, error) {
+// writeTo writes the buffer into the file at the specified path.
+func (s *Store) writeTo(buf *bytes.Buffer, path string) (int64, error) {
+	if buf.Len() == 0 {
+		return 0, nil
+	}
+
 	fs, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		return 0, err
@@ -448,12 +463,13 @@ func (s *Store) appendToFile(buf *bytes.Buffer, path string) (int64, error) {
 
 // load reads the persisted data from the shard file and loads it into memory.
 func (s *Store) load() {
-	s.Lock()
-	defer s.Unlock()
-
 	line, err := os.ReadFile(s.Path)
 	if err != nil {
 		return
+	}
+
+	if s.Logger != nil {
+		s.Logger.Info(fmt.Sprintf("start to load db size %s", formatSize(len(line))))
 	}
 
 	var op Operation
@@ -627,10 +643,14 @@ func (s *Store) load() {
 			panic(fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op))
 		}
 	}
+
+	if s.Logger != nil {
+		s.Logger.Info("db load complete")
+	}
 }
 
-// dump dumps the current state of the shard to the file.
-func (s *Store) dump() {
+// rewrite write data to the file.
+func (s *Store) rewrite() {
 	if s.SyncPolicy == base.Never {
 		return
 	}
@@ -674,10 +694,14 @@ func (s *Store) dump() {
 	})
 
 	// Flush buffer to file
-	s.appendToFile(s.rwbuf, s.TmpPath)
-	s.appendToFile(s.buf, s.TmpPath)
+	s.writeTo(s.rwbuf, s.tmpPath)
+	s.writeTo(s.buf, s.tmpPath)
 
-	os.Rename(s.TmpPath, s.Path)
+	os.Rename(s.tmpPath, s.Path)
+
+	if s.Logger != nil {
+		s.Logger.Info("rotom rewrite done")
+	}
 }
 
 // parseWord parse file content to record lines.
@@ -724,6 +748,7 @@ func (db *Store) getBitMap(key string) (bm BitMap, err error) {
 	})
 }
 
+// getOrCreate
 func getOrCreate[T any](s *Store, key string, vptr T, new func() T) (T, error) {
 	m, _, ok := s.m.GetAny(key)
 	if ok {
@@ -738,4 +763,32 @@ func getOrCreate[T any](s *Store, key string, vptr T, new func() T) (T, error) {
 	s.m.SetAny(key, vptr)
 
 	return vptr, nil
+}
+
+func formatSize(size int) string {
+	switch {
+	case size < KB:
+		return fmt.Sprintf("%dB", size)
+	case size < MB:
+		return fmt.Sprintf("%.1fKB", float64(size)/KB)
+	case size < GB:
+		return fmt.Sprintf("%.1fMB", float64(size)/MB)
+	default:
+		return fmt.Sprintf("%.1fGB", float64(size)/GB)
+	}
+}
+
+func (db *Store) backend(t time.Duration, f func()) {
+	if t <= 0 {
+		return
+	}
+	go func() {
+		for {
+			time.Sleep(t)
+			if !db.alive {
+				return
+			}
+			f()
+		}
+	}()
 }

@@ -20,7 +20,6 @@ func TestCacheSet(t *testing.T) {
 	cfg := store.DefaultConfig
 	dbkey := gofakeit.UUID()
 	cfg.Path = dbkey + ".db"
-	cfg.TmpPath = dbkey + ".db.tmp"
 
 	db, err := store.Open(store.DefaultConfig)
 	if err != nil {
