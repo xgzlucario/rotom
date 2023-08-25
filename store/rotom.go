@@ -110,7 +110,7 @@ type Config struct {
 
 // Store represents a key-value store.
 type Store struct {
-	sync.RWMutex
+	sync.RWMutex // gateway locker
 	*Config
 	closed bool
 	buf    *bytes.Buffer
@@ -133,11 +133,11 @@ func Open(conf *Config) (*Store, error) {
 	// Ticker to write buffer.
 	db.backend(db.SyncInterval, func() {
 		db.Lock()
-		if db.Logger != nil {
-			db.Logger.Info(fmt.Sprintf("write %s buffer to db file", formatSize(db.buf.Len())))
-		}
-		db.writeTo(db.buf, db.Path)
+		n, err := db.writeTo(db.buf, db.Path)
 		db.Unlock()
+		if err == nil && db.Logger != nil {
+			db.Logger.Info(fmt.Sprintf("write %s buffer to db file", formatSize(n)))
+		}
 	})
 
 	// Ticker to shrink db.
@@ -176,6 +176,14 @@ func (db *Store) Close() error {
 	return err
 }
 
+// writeCoder
+func (db *Store) writeCoder(cd *Coder) {
+	db.Lock()
+	db.buf.Write(cd.buf)
+	db.Unlock()
+	putCoder(cd)
+}
+
 // Get
 func (db *Store) Get(key string) ([]byte, int64, bool) {
 	return db.m.Get(key)
@@ -199,12 +207,9 @@ func (db *Store) SetEx(key string, val []byte, ttl time.Duration) {
 // SetTx
 func (db *Store) SetTx(key string, val []byte, ts int64) {
 	cd := NewCoder(OpSetTx, 3).Type(RecordString).String(key).Int(ts / timeCarry).Bytes(val)
-	db.m.SetTx(key, val, ts)
+	db.writeCoder(cd)
 
-	db.Lock()
-	db.buf.Write(cd.buf)
-	db.Unlock()
-	putCoder(cd)
+	db.m.SetTx(key, val, ts)
 }
 
 // Incr
@@ -219,12 +224,8 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 		fstr := strconv.FormatFloat(res, 'f', 4, 64)
 
 		cd := NewCoder(OpSetTx, 3).Type(RecordString).String(key).Int(ts / timeCarry).String(fstr)
+		db.writeCoder(cd)
 		db.m.SetTx(key, []byte(fstr), ts)
-
-		db.Lock()
-		db.buf.Write(cd.buf)
-		db.Unlock()
-		putCoder(cd)
 
 		return res, nil
 	}
@@ -233,22 +234,13 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 }
 
 // Remove
-func (db *Store) Remove(key string) (any, bool) {
-	cd := NewCoder(OpRemove, 1).String(key)
-	db.m.Delete(key)
-
-	db.Lock()
-	db.buf.Write(cd.buf)
-	db.Unlock()
-	putCoder(cd)
-
-	return nil, true
+func (db *Store) Remove(key string) bool {
+	db.writeCoder(NewCoder(OpRemove, 1).String(key))
+	return db.m.Delete(key)
 }
 
 // Scan
 func (db *Store) Scan(f func(string, any, int64) bool) {
-	db.RLock()
-	defer db.RUnlock()
 	db.m.Scan(f)
 }
 
@@ -273,37 +265,24 @@ func (db *Store) HGet(key, field string) ([]byte, error) {
 
 // HSet
 func (db *Store) HSet(key, field string, val []byte) error {
-	cd := NewCoder(OpHSet, 3).String(key).String(field).Bytes(val)
-
-	db.Lock()
-	defer db.Unlock()
-	defer putCoder(cd)
-
 	m, err := db.getMap(key)
 	if err != nil {
 		return err
 	}
-
+	db.writeCoder(NewCoder(OpHSet, 3).String(key).String(field).Bytes(val))
 	m.Set(field, val)
-	db.buf.Write(cd.buf)
 
 	return nil
 }
 
 // HRemove
 func (db *Store) HRemove(key, field string) error {
-	cd := NewCoder(OpHRemove, 2).String(key).String(field)
-
 	m, err := db.getMap(key)
 	if err != nil {
 		return err
 	}
+	db.writeCoder(NewCoder(OpHRemove, 2).String(key).String(field))
 	m.Delete(field)
-
-	db.Lock()
-	db.buf.Write(cd.buf)
-	db.Unlock()
-	putCoder(cd)
 
 	return nil
 }
@@ -323,7 +302,6 @@ func (db *Store) BitSet(key string, offset uint32, val bool) error {
 	if err != nil {
 		return err
 	}
-
 	// checked
 	if val {
 		if !bm.Add(offset) {
@@ -335,37 +313,25 @@ func (db *Store) BitSet(key string, offset uint32, val bool) error {
 		}
 	}
 
-	cd := NewCoder(OpBitSet, 3).String(key).Uint(offset).Bool(val)
-	db.Lock()
-	db.buf.Write(cd.buf)
-	db.Unlock()
-	putCoder(cd)
+	db.writeCoder(NewCoder(OpBitSet, 3).String(key).Uint(offset).Bool(val))
 
 	return nil
 }
 
 // BitFlip
 func (db *Store) BitFlip(key string, offset uint32) error {
-	cd := NewCoder(OpBitFlip, 2).String(key).Uint(offset)
-
 	bm, err := db.getBitMap(key)
 	if err != nil {
 		return err
 	}
+	db.writeCoder(NewCoder(OpBitFlip, 2).String(key).Uint(offset))
 	bm.Flip(uint64(offset))
-
-	db.Lock()
-	db.buf.Write(cd.buf)
-	db.Unlock()
-	putCoder(cd)
 
 	return nil
 }
 
 // BitOr
 func (db *Store) BitOr(key1, key2, dest string) error {
-	cd := NewCoder(OpBitOr, 3).String(key1).String(key2).String(dest)
-
 	bm1, err := db.getBitMap(key1)
 	if err != nil {
 		return err
@@ -375,10 +341,7 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 		return err
 	}
 
-	db.Lock()
-	db.buf.Write(cd.buf)
-	db.Unlock()
-	putCoder(cd)
+	db.writeCoder(NewCoder(OpBitOr, 3).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		bm1.Or(bm2)
@@ -393,8 +356,6 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 
 // BitXor
 func (db *Store) BitXor(key1, key2, dest string) error {
-	cd := NewCoder(OpBitXor, 3).String(key1).String(key2).String(dest)
-
 	bm1, err := db.getBitMap(key1)
 	if err != nil {
 		return err
@@ -404,10 +365,7 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 		return err
 	}
 
-	db.Lock()
-	db.buf.Write(cd.buf)
-	db.Unlock()
-	putCoder(cd)
+	db.writeCoder(NewCoder(OpBitXor, 3).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		bm1.Xor(bm2)
@@ -422,9 +380,6 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 
 // BitAnd
 func (db *Store) BitAnd(key1, key2, dest string) error {
-	cd := NewCoder(OpBitAnd, 3).String(key1).String(key2).String(dest)
-	defer putCoder(cd)
-
 	bm1, err := db.getBitMap(key1)
 	if err != nil {
 		return err
@@ -434,9 +389,7 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 		return err
 	}
 
-	db.Lock()
-	db.buf.Write(cd.buf)
-	db.Unlock()
+	db.writeCoder(NewCoder(OpBitAnd, 3).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		bm1.And(bm2)
@@ -751,7 +704,7 @@ func getOrCreate[T any](s *Store, key string, vptr T, new func() T) (T, error) {
 	return vptr, nil
 }
 
-func formatSize(size int) string {
+func formatSize[T base.Number](size T) string {
 	switch {
 	case size < KB:
 		return fmt.Sprintf("%dB", size)
