@@ -60,7 +60,7 @@ func (s *Coder) Bool(v bool) *Coder {
 	return s.format([]byte{_false})
 }
 
-func (s *Coder) Uint(v uint) *Coder {
+func (s *Coder) Uint(v uint32) *Coder {
 	return s.format(base.FormatNumber(v))
 }
 

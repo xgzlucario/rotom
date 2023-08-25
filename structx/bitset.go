@@ -3,82 +3,103 @@ package structx
 import (
 	"sync"
 
-	"github.com/bits-and-blooms/bitset"
+	"github.com/RoaringBitmap/roaring"
 )
 
-// Bitset
-type Bitset struct {
+// Bitmap
+type Bitmap struct {
 	sync.RWMutex
-	*bitset.BitSet
+	bm *roaring.Bitmap
 }
 
-func NewBitset() *Bitset {
-	return &Bitset{
-		sync.RWMutex{},
-		bitset.New(0),
-	}
+func NewBitmap() *Bitmap {
+	return &Bitmap{sync.RWMutex{}, roaring.New()}
 }
 
-// SetTo
-func (bs *Bitset) SetTo(i uint, v bool) *Bitset {
-	bs.Lock()
-	defer bs.Unlock()
-	bs.BitSet.SetTo(i, v)
+// Add
+func (b *Bitmap) Add(i uint32) bool {
+	b.Lock()
+	defer b.Unlock()
+	return b.bm.CheckedAdd(i)
+}
 
-	return bs
+// Remove
+func (b *Bitmap) Remove(i uint32) bool {
+	b.Lock()
+	defer b.Unlock()
+	return b.bm.CheckedRemove(i)
+}
+
+// Test
+func (b *Bitmap) Test(i uint32) bool {
+	b.RLock()
+	defer b.RUnlock()
+
+	return b.bm.Contains(i)
 }
 
 // Flip
-func (bs *Bitset) Flip(i uint) *Bitset {
-	bs.Lock()
-	defer bs.Unlock()
-	bs.BitSet.Flip(i)
-
-	return bs
+func (b *Bitmap) Flip(i uint64) {
+	b.Lock()
+	defer b.Unlock()
+	b.bm.Flip(i, i)
 }
 
 // Len
-func (bs *Bitset) Len() uint {
-	bs.RLock()
-	defer bs.RUnlock()
+func (b *Bitmap) Len() uint64 {
+	b.RLock()
+	defer b.RUnlock()
 
-	return bs.BitSet.Len()
+	return b.bm.Stats().Cardinality
 }
 
 // Or
-func (bs *Bitset) Or(bs2 *Bitset) *Bitset {
-	bs.Lock()
-	defer bs.Unlock()
-	bs.BitSet.InPlaceUnion(bs2.BitSet)
+func (b *Bitmap) Or(b2 *Bitmap) *Bitmap {
+	b.Lock()
+	defer b.Unlock()
+	b.bm.Or(b2.bm)
 
-	return bs
+	return b
 }
 
 // And
-func (bs *Bitset) And(bs2 *Bitset) *Bitset {
-	bs.Lock()
-	defer bs.Unlock()
-	bs.BitSet.InPlaceIntersection(bs2.BitSet)
+func (b *Bitmap) And(b2 *Bitmap) *Bitmap {
+	b.Lock()
+	defer b.Unlock()
+	b.bm.And(b2.bm)
 
-	return bs
+	return b
 }
 
 // Xor
-func (bs *Bitset) Xor(bs2 *Bitset) *Bitset {
-	bs.Lock()
-	defer bs.Unlock()
-	bs.BitSet.InPlaceSymmetricDifference(bs2.BitSet)
+func (b *Bitmap) Xor(b2 *Bitmap) *Bitmap {
+	b.Lock()
+	defer b.Unlock()
+	b.bm.Xor(b2.bm)
 
-	return bs
+	return b
 }
 
 // Clone
-func (bs *Bitset) Clone() *Bitset {
-	bs.RLock()
-	defer bs.RUnlock()
+func (b *Bitmap) Clone() *Bitmap {
+	b.RLock()
+	defer b.RUnlock()
 
-	return &Bitset{
-		sync.RWMutex{},
-		bs.BitSet.Clone(),
-	}
+	return &Bitmap{sync.RWMutex{}, b.bm.Clone()}
+}
+
+// MarshalBinary
+func (b *Bitmap) MarshalBinary() ([]byte, error) {
+	b.RLock()
+	defer b.RUnlock()
+
+	return b.bm.MarshalBinary()
+}
+
+// UnmarshalBinary
+func (b *Bitmap) UnmarshalBinary(data []byte) error {
+	b.Lock()
+	defer b.Unlock()
+
+	return b.bm.UnmarshalBinary(data)
 }

@@ -76,7 +76,7 @@ type (
 	Set    = structx.Set[string]
 	List   = *structx.List[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
-	BitMap = *structx.Bitset
+	BitMap = *structx.Bitmap
 )
 
 var (
@@ -309,7 +309,7 @@ func (db *Store) HRemove(key, field string) error {
 }
 
 // BitTest
-func (db *Store) BitTest(key string, offset uint) (bool, error) {
+func (db *Store) BitTest(key string, offset uint32) (bool, error) {
 	bm, err := db.getBitMap(key)
 	if err != nil {
 		return false, err
@@ -318,15 +318,24 @@ func (db *Store) BitTest(key string, offset uint) (bool, error) {
 }
 
 // BitSet
-func (db *Store) BitSet(key string, offset uint, value bool) error {
-	cd := NewCoder(OpBitSet, 3).String(key).Uint(offset).Bool(value)
-
+func (db *Store) BitSet(key string, offset uint32, val bool) error {
 	bm, err := db.getBitMap(key)
 	if err != nil {
 		return err
 	}
-	bm.SetTo(offset, value)
 
+	// checked
+	if val {
+		if !bm.Add(offset) {
+			return nil
+		}
+	} else {
+		if !bm.Remove(offset) {
+			return nil
+		}
+	}
+
+	cd := NewCoder(OpBitSet, 3).String(key).Uint(offset).Bool(val)
 	db.Lock()
 	db.buf.Write(cd.buf)
 	db.Unlock()
@@ -336,14 +345,14 @@ func (db *Store) BitSet(key string, offset uint, value bool) error {
 }
 
 // BitFlip
-func (db *Store) BitFlip(key string, offset uint) error {
+func (db *Store) BitFlip(key string, offset uint32) error {
 	cd := NewCoder(OpBitFlip, 2).String(key).Uint(offset)
 
 	bm, err := db.getBitMap(key)
 	if err != nil {
 		return err
 	}
-	bm.Flip(offset)
+	bm.Flip(uint64(offset))
 
 	db.Lock()
 	db.buf.Write(cd.buf)
@@ -356,7 +365,6 @@ func (db *Store) BitFlip(key string, offset uint) error {
 // BitOr
 func (db *Store) BitOr(key1, key2, dest string) error {
 	cd := NewCoder(OpBitOr, 3).String(key1).String(key2).String(dest)
-	defer putCoder(cd)
 
 	bm1, err := db.getBitMap(key1)
 	if err != nil {
@@ -370,6 +378,7 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	db.Lock()
 	db.buf.Write(cd.buf)
 	db.Unlock()
+	putCoder(cd)
 
 	if key1 == dest {
 		bm1.Or(bm2)
@@ -385,7 +394,6 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 // BitXor
 func (db *Store) BitXor(key1, key2, dest string) error {
 	cd := NewCoder(OpBitXor, 3).String(key1).String(key2).String(dest)
-	defer putCoder(cd)
 
 	bm1, err := db.getBitMap(key1)
 	if err != nil {
@@ -399,6 +407,7 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 	db.Lock()
 	db.buf.Write(cd.buf)
 	db.Unlock()
+	putCoder(cd)
 
 	if key1 == dest {
 		bm1.Xor(bm2)
@@ -441,7 +450,7 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 }
 
 // BitCount
-func (db *Store) BitCount(key string) (uint, error) {
+func (db *Store) BitCount(key string) (uint64, error) {
 	bm, err := db.getBitMap(key)
 	return bm.Len(), err
 }
@@ -549,16 +558,19 @@ func (s *Store) load() {
 				panic(err)
 			}
 
-			offset := base.ParseNumber[uint](args[1])
-			bm.SetTo(offset, args[2][0] == _true)
+			offset := base.ParseNumber[uint32](args[1])
+			if args[2][0] == _true {
+				bm.Add(offset)
+			} else {
+				bm.Remove(offset)
+			}
 
 		case OpBitFlip: // key, offset
 			bm, err := s.getBitMap(*base.B2S(args[0]))
 			if err != nil {
 				panic(err)
 			}
-
-			bm.Flip(base.ParseNumber[uint](args[1]))
+			bm.Flip(base.ParseNumber[uint64](args[1]))
 
 		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
 			bm1, err := s.getBitMap(*base.B2S(args[0]))
@@ -718,7 +730,7 @@ func (db *Store) getMap(key string) (m Map, err error) {
 // getBitMap
 func (db *Store) getBitMap(key string) (bm BitMap, err error) {
 	return getOrCreate(db, key, bm, func() BitMap {
-		return structx.NewBitset()
+		return structx.NewBitmap()
 	})
 }
 
