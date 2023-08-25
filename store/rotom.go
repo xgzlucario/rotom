@@ -72,7 +72,7 @@ const (
 // Type aliases for structx types.
 type (
 	String = []byte
-	Map    = structx.Map[string, []byte]
+	Map    = *structx.SyncMap[string, []byte]
 	Set    = structx.Set[string]
 	List   = *structx.List[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
@@ -87,7 +87,6 @@ var (
 		SyncPolicy:     base.EverySecond,
 		SyncInterval:   time.Second,
 		ShrinkInterval: time.Minute,
-		StatInterval:   time.Minute,
 		Logger:         slog.Default(),
 	}
 )
@@ -103,7 +102,6 @@ type Config struct {
 
 	SyncInterval   time.Duration // Interval of buffer writes to disk.
 	ShrinkInterval time.Duration // Interval of shrink db file to compress space.
-	StatInterval   time.Duration // Interval of monitor db status.
 
 	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
 }
@@ -130,7 +128,7 @@ func Open(conf *Config) (*Store, error) {
 	db.tmpPath = db.Path + ".tmp"
 	db.load()
 
-	// Ticker to write buffer.
+	// Ticker to write buffer to disk.
 	db.backend(db.SyncInterval, func() {
 		db.Lock()
 		n, err := db.writeTo(db.buf, db.Path)
@@ -145,15 +143,6 @@ func Open(conf *Config) (*Store, error) {
 		db.Lock()
 		db.shrink()
 		db.Unlock()
-	})
-
-	// Ticker to moniter stat.
-	db.backend(db.StatInterval, func() {
-		if db.Logger != nil {
-			db.RLock()
-			db.Logger.Info(fmt.Sprintf("db stat: %+v", db.Stat()))
-			db.RUnlock()
-		}
 	})
 
 	if db.Logger != nil {
@@ -251,12 +240,12 @@ func (db *Store) Stat() cache.CacheStat {
 
 // HGet
 func (db *Store) HGet(key, field string) ([]byte, error) {
-	hmap, err := db.getMap(key)
+	m, err := db.getMap(key)
 	if err != nil {
 		return nil, err
 	}
 
-	res, ok := hmap.Get(field)
+	res, ok := m.Get(field)
 	if !ok {
 		return nil, base.ErrFieldNotFound
 	}
@@ -285,6 +274,15 @@ func (db *Store) HRemove(key, field string) error {
 	m.Delete(field)
 
 	return nil
+}
+
+// HKeys
+func (db *Store) HKeys(key string) ([]string, error) {
+	m, err := db.getMap(key)
+	if err != nil {
+		return nil, err
+	}
+	return m.Keys(), nil
 }
 
 // BitTest
@@ -676,7 +674,7 @@ func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
 // getMap
 func (db *Store) getMap(key string) (m Map, err error) {
 	return getOrCreate(db, key, m, func() Map {
-		return structx.NewMap[string, []byte]()
+		return structx.NewSyncMap[string, []byte]()
 	})
 }
 
