@@ -84,6 +84,7 @@ var (
 	DefaultConfig = &Config{
 		Path:           "rotom.db",
 		ShardCount:     1024,
+		AppMode:        base.ServerMode,
 		SyncPolicy:     base.EverySecond,
 		SyncInterval:   time.Second,
 		ShrinkInterval: time.Minute,
@@ -98,7 +99,8 @@ type Config struct {
 	Path    string // Path of db file.
 	tmpPath string
 
-	SyncPolicy base.SyncPolicy // data sync policy.
+	AppMode    base.AppMode    // App mode.
+	SyncPolicy base.SyncPolicy // Data sync policy.
 
 	SyncInterval   time.Duration // Interval of buffer writes to disk.
 	ShrinkInterval time.Duration // Interval of shrink db file to compress space.
@@ -154,6 +156,11 @@ func Open(conf *Config) (*Store, error) {
 		db.shrink()
 		db.Unlock()
 	})
+
+	// Listen
+	if conf.AppMode == base.ServerMode {
+		go db.Listen()
+	}
 
 	if db.Logger != nil {
 		db.Logger.Info("rotom is ready to go")
@@ -347,6 +354,15 @@ func (db *Store) RPop(key string) (string, error) {
 	db.writeCoder(NewCoder(OpRPop, 1).String(key))
 
 	return res, nil
+}
+
+// LLen
+func (db *Store) LLen(key string) (int, error) {
+	ls, err := db.getList(key)
+	if err != nil {
+		return 0, err
+	}
+	return ls.Len(), nil
 }
 
 // BitTest
