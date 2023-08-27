@@ -24,6 +24,8 @@ func S2B(str *string) []byte {
 }
 
 func main() {
+	example()
+
 	go http.ListenAndServe("localhost:6060", nil)
 
 	db, _ := store.Open(store.DefaultConfig)
