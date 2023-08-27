@@ -24,7 +24,7 @@ func S2B(str *string) []byte {
 }
 
 func main() {
-	example()
+	// example()
 
 	go http.ListenAndServe("localhost:6060", nil)
 

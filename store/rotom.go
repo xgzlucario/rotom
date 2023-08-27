@@ -31,12 +31,12 @@ const (
 	OpBitAnd
 	OpBitXor
 
-	// TODO: Implement these operations.
 	OpLPush
 	OpLPop
 	OpRPush
 	OpRPop
 
+	// TODO: Implement these operations.
 	OpZSet
 	OpZIncr
 	OpZRemove
@@ -126,15 +126,25 @@ func Open(conf *Config) (*Store, error) {
 		m:      cache.New[string](conf.ShardCount),
 	}
 	db.tmpPath = db.Path + ".tmp"
-	db.load()
+
+	// load
+	if err := db.load(); err != nil {
+		if db.Logger != nil {
+			db.Logger.Error(fmt.Sprintf("db load error: %v", err))
+		}
+	}
 
 	// Ticker to write buffer to disk.
 	db.backend(db.SyncInterval, func() {
 		db.Lock()
 		n, err := db.writeTo(db.buf, db.Path)
 		db.Unlock()
-		if err == nil && db.Logger != nil {
-			db.Logger.Info(fmt.Sprintf("write %s buffer to db file", formatSize(n)))
+		if db.Logger != nil {
+			if err != nil {
+				db.Logger.Error(fmt.Sprintf("writeTo buffer error: %v", err))
+			} else {
+				db.Logger.Info(fmt.Sprintf("write %s buffer to db file", formatSize(n)))
+			}
 		}
 	})
 
@@ -285,6 +295,60 @@ func (db *Store) HKeys(key string) ([]string, error) {
 	return m.Keys(), nil
 }
 
+// LPush
+func (db *Store) LPush(key, item string) error {
+	ls, err := db.getList(key)
+	if err != nil {
+		return err
+	}
+	db.writeCoder(NewCoder(OpLPush, 2).String(key).String(item))
+	ls.LPush(item)
+
+	return nil
+}
+
+// RPush
+func (db *Store) RPush(key, item string) error {
+	ls, err := db.getList(key)
+	if err != nil {
+		return err
+	}
+	db.writeCoder(NewCoder(OpRPush, 2).String(key).String(item))
+	ls.RPush(item)
+
+	return nil
+}
+
+// LPop
+func (db *Store) LPop(key string) (string, error) {
+	ls, err := db.getList(key)
+	if err != nil {
+		return "", err
+	}
+	res, ok := ls.LPop()
+	if !ok {
+		return "", base.ErrListEmpty
+	}
+	db.writeCoder(NewCoder(OpLPop, 1).String(key))
+
+	return res, nil
+}
+
+// RPop
+func (db *Store) RPop(key string) (string, error) {
+	ls, err := db.getList(key)
+	if err != nil {
+		return "", err
+	}
+	res, ok := ls.RPop()
+	if !ok {
+		return "", base.ErrListEmpty
+	}
+	db.writeCoder(NewCoder(OpRPop, 1).String(key))
+
+	return res, nil
+}
+
 // BitTest
 func (db *Store) BitTest(key string, offset uint32) (bool, error) {
 	bm, err := db.getBitMap(key)
@@ -428,10 +492,13 @@ func (s *Store) writeTo(buf *bytes.Buffer, path string) (int64, error) {
 }
 
 // load reads the persisted data from the shard file and loads it into memory.
-func (s *Store) load() {
+func (s *Store) load() error {
 	line, err := os.ReadFile(s.Path)
 	if err != nil {
-		return
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
 	}
 
 	if s.Logger != nil {
@@ -461,10 +528,15 @@ func (s *Store) load() {
 		// parse args by operation
 		args, line, err = parseLine(line, argsNum)
 		if err != nil {
-			break
+			return err
 		}
 
 		switch op {
+		case OpMarshalBytes: // val
+			if err := s.m.UnmarshalBytes(args[0]); err != nil {
+				return err
+			}
+
 		case OpSetTx: // key, ts, val
 			ts := base.ParseNumber[int64](args[1])
 			ts *= timeCarry
@@ -480,33 +552,67 @@ func (s *Store) load() {
 			case RecordMap:
 				var m Map
 				if err := m.UnmarshalJSON(args[2]); err != nil {
-					panic(err)
+					return err
 				}
 				s.m.SetAny(*base.B2S(args[0]), m)
 
 			case RecordBitMap:
 				var m BitMap
 				if err := m.UnmarshalBinary(args[2]); err != nil {
-					panic(err)
+					return err
 				}
 				s.m.SetAny(*base.B2S(args[0]), m)
 
 			default:
-				panic(fmt.Errorf("%v: %d", base.ErrUnSupportDataType, recordType))
+				return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, recordType)
 			}
+
+		case OpRemove: // key
+			s.Remove(*base.B2S(args[0]))
 
 		case OpHSet: // key, field, val
 			m, err := s.getMap(*base.B2S(args[0]))
 			if err != nil {
-				panic(err)
+				return err
 			}
 
 			m.Set(*base.B2S(args[1]), args[2])
 
+		case OpHRemove: // key, field
+			m, err := s.getMap(*base.B2S(args[0]))
+			if err != nil {
+				return err
+			}
+			m.Delete(*base.B2S(args[1]))
+
+		case OpLPush, OpRPush: // key, item
+			ls, err := s.getList(*base.B2S(args[0]))
+			if err != nil {
+				return err
+			}
+
+			if op == OpLPush {
+				ls.LPush(*base.B2S(args[1]))
+			} else {
+				ls.RPush(*base.B2S(args[1]))
+			}
+
+		case OpLPop, OpRPop: // key
+			ls, err := s.getList(*base.B2S(args[0]))
+			if err != nil {
+				return err
+			}
+
+			if op == OpLPop {
+				ls.LPop()
+			} else {
+				ls.RPop()
+			}
+
 		case OpBitSet: // key, offset, val
 			bm, err := s.getBitMap(*base.B2S(args[0]))
 			if err != nil {
-				panic(err)
+				return err
 			}
 
 			offset := base.ParseNumber[uint32](args[1])
@@ -519,19 +625,19 @@ func (s *Store) load() {
 		case OpBitFlip: // key, offset
 			bm, err := s.getBitMap(*base.B2S(args[0]))
 			if err != nil {
-				panic(err)
+				return err
 			}
 			bm.Flip(base.ParseNumber[uint64](args[1]))
 
 		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
 			bm1, err := s.getBitMap(*base.B2S(args[0]))
 			if err != nil {
-				panic(err)
+				return err
 			}
 
 			bm2, err := s.getBitMap(*base.B2S(args[1]))
 			if err != nil {
-				panic(err)
+				return err
 			}
 
 			if slices.Equal(args[0], args[2]) {
@@ -565,29 +671,16 @@ func (s *Store) load() {
 				}
 			}
 
-		case OpHRemove: // key, field
-			m, err := s.getMap(*base.B2S(args[0]))
-			if err != nil {
-				panic(err)
-			}
-			m.Delete(*base.B2S(args[1]))
-
-		case OpRemove: // key
-			s.Remove(*base.B2S(args[0]))
-
-		case OpMarshalBytes: // val
-			if err := s.m.UnmarshalBytes(args[0]); err != nil {
-				panic(err)
-			}
-
 		default:
-			panic(fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op))
+			return fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op)
 		}
 	}
 
 	if s.Logger != nil {
 		s.Logger.Info("db load complete")
 	}
+
+	return nil
 }
 
 // rewrite write data to the file.
@@ -675,6 +768,13 @@ func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
 func (db *Store) getMap(key string) (m Map, err error) {
 	return getOrCreate(db, key, m, func() Map {
 		return structx.NewSyncMap[string, []byte]()
+	})
+}
+
+// getList
+func (db *Store) getList(key string) (m List, err error) {
+	return getOrCreate(db, key, m, func() List {
+		return structx.NewList[string]()
 	})
 }
 
