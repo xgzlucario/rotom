@@ -105,27 +105,30 @@ func TestBitmap(t *testing.T) {
 		panic(err)
 	}
 
-	db.BitSet("bm", 1, true)
-	db.BitSet("bm", 5, true)
-	db.BitSet("bm", 9, true)
+	// valid map
+	const num = 100 * 10000
+	vmap := map[uint32]struct{}{}
+
+	for i := 0; i < num; i++ {
+		offset := gofakeit.Uint32()
+
+		vmap[offset] = struct{}{}
+		db.BitSet("bm", offset, true)
+	}
+
+	// len
+	if c, err := db.BitCount("bm"); c != uint64(len(vmap)) || err != nil {
+		t.Fatal("bit len error")
+	}
 
 	test := func() {
-		// false
-		r, err := db.BitTest("bm", 4)
-		if r || err != nil {
-			t.Fatal("bit count error")
-		}
+		for i := uint32(0); i < num; i++ {
+			_, ok := vmap[i]
+			ok2, err := db.BitTest("bm", i)
 
-		// true
-		r, err = db.BitTest("bm", 5)
-		if !r || err != nil {
-			t.Fatal("bit count error")
-		}
-
-		// 3
-		c, err := db.BitCount("bm")
-		if c != 3 || err != nil {
-			t.Fatal("bit count error")
+			if ok != ok2 || err != nil {
+				t.Fatal("bit count error")
+			}
 		}
 	}
 

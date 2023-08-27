@@ -3,7 +3,7 @@ module github.com/xgzlucario/rotom
 go 1.21
 
 require (
-	github.com/RoaringBitmap/roaring v1.4.0
+	github.com/RoaringBitmap/roaring v1.5.0
 	github.com/brianvoe/gofakeit/v6 v6.23.2
 	github.com/bytedance/sonic v1.10.0
 	github.com/tidwall/hashmap v1.8.1
