@@ -94,6 +94,58 @@ func TestCacheSet(t *testing.T) {
 	}
 }
 
+// TestBitmap
+func TestBitmap(t *testing.T) {
+	cfg := store.DefaultConfig
+	dbkey := gofakeit.UUID()
+	cfg.Path = dbkey + ".db"
+
+	db, err := store.Open(store.DefaultConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	// valid map
+	const num = 100 * 10000
+	vmap := map[uint32]struct{}{}
+
+	for i := 0; i < num; i++ {
+		offset := gofakeit.Uint32()
+
+		vmap[offset] = struct{}{}
+		db.BitSet("bm", offset, true)
+	}
+
+	// len
+	if c, err := db.BitCount("bm"); c != uint64(len(vmap)) || err != nil {
+		t.Fatal("bit len error")
+	}
+
+	test := func() {
+		for i := uint32(0); i < num; i++ {
+			_, ok := vmap[i]
+			ok2, err := db.BitTest("bm", i)
+
+			if ok != ok2 || err != nil {
+				t.Fatal("bit count error")
+			}
+		}
+	}
+
+	test()
+
+	time.Sleep(time.Second * 3)
+	db.Close()
+
+	// load
+	db, err = store.Open(cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	test()
+}
+
 func FuzzTest(f *testing.F) {
 	db, err := store.Open(store.DefaultConfig)
 	if err != nil {

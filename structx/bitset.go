@@ -1,37 +1,97 @@
 package structx
 
 import (
-	"github.com/bits-and-blooms/bitset"
+	"sync"
+
+	"github.com/RoaringBitmap/roaring"
 )
 
-// Bitset
-type Bitset struct {
-	*bitset.BitSet
+// Bitmap
+type Bitmap struct {
+	sync.RWMutex
+	bm *roaring.Bitmap
 }
 
-func NewBitset() *Bitset {
-	return &Bitset{bitset.New(0)}
+func NewBitmap() *Bitmap {
+	return &Bitmap{sync.RWMutex{}, roaring.New()}
 }
 
-// Union
-func (bs1 *Bitset) Union(bs2 *Bitset) *Bitset {
-	bs1.BitSet.InPlaceUnion(bs2.BitSet)
-	return bs1
+// Add
+func (b *Bitmap) Add(i uint32) bool {
+	b.Lock()
+	defer b.Unlock()
+	return b.bm.CheckedAdd(i)
 }
 
-// Intersection
-func (bs1 *Bitset) Intersection(bs2 *Bitset) *Bitset {
-	bs1.BitSet.InPlaceIntersection(bs2.BitSet)
-	return bs1
+// Remove
+func (b *Bitmap) Remove(i uint32) bool {
+	b.Lock()
+	defer b.Unlock()
+	return b.bm.CheckedRemove(i)
 }
 
-// Difference
-func (bs1 *Bitset) Difference(bs2 *Bitset) *Bitset {
-	bs1.BitSet.InPlaceSymmetricDifference(bs2.BitSet)
-	return bs1
+// Test
+func (b *Bitmap) Test(i uint32) bool {
+	b.RLock()
+	defer b.RUnlock()
+	return b.bm.Contains(i)
+}
+
+// Flip
+func (b *Bitmap) Flip(i uint64) {
+	b.Lock()
+	defer b.Unlock()
+	b.bm.Flip(i, i)
+}
+
+// Len
+func (b *Bitmap) Len() uint64 {
+	b.RLock()
+	defer b.RUnlock()
+	return b.bm.Stats().Cardinality
+}
+
+// Or
+func (b *Bitmap) Or(b2 *Bitmap) *Bitmap {
+	b.Lock()
+	defer b.Unlock()
+	b.bm.Or(b2.bm)
+	return b
+}
+
+// And
+func (b *Bitmap) And(b2 *Bitmap) *Bitmap {
+	b.Lock()
+	defer b.Unlock()
+	b.bm.And(b2.bm)
+	return b
+}
+
+// Xor
+func (b *Bitmap) Xor(b2 *Bitmap) *Bitmap {
+	b.Lock()
+	defer b.Unlock()
+	b.bm.Xor(b2.bm)
+	return b
 }
 
 // Clone
-func (bs *Bitset) Clone() *Bitset {
-	return &Bitset{bs.BitSet.Clone()}
+func (b *Bitmap) Clone() *Bitmap {
+	b.RLock()
+	defer b.RUnlock()
+	return &Bitmap{sync.RWMutex{}, b.bm.Clone()}
+}
+
+// MarshalBinary
+func (b *Bitmap) MarshalBinary() ([]byte, error) {
+	b.RLock()
+	defer b.RUnlock()
+	return b.bm.MarshalBinary()
+}
+
+// UnmarshalBinary
+func (b *Bitmap) UnmarshalBinary(data []byte) error {
+	b.Lock()
+	defer b.Unlock()
+	return b.bm.UnmarshalBinary(data)
 }
