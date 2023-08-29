@@ -36,15 +36,14 @@ const (
 	OpRPush
 	OpRPop
 
+	OpMarshalBytes
+
 	// TODO: Implement these operations.
 	OpZSet
 	OpZIncr
 	OpZRemove
 
-	OpTrieSet
-	OpTrieRemove
-
-	OpMarshalBytes
+	OpRename
 )
 
 // Record types.
@@ -136,26 +135,28 @@ func Open(conf *Config) (*Store, error) {
 		}
 	}
 
-	// Ticker to write buffer to disk.
-	db.backend(db.SyncInterval, func() {
-		db.Lock()
-		n, err := db.writeTo(db.buf, db.Path)
-		db.Unlock()
-		if db.Logger != nil {
-			if err != nil {
-				db.Logger.Error(fmt.Sprintf("writeTo buffer error: %v", err))
-			} else {
-				db.Logger.Info(fmt.Sprintf("write %s buffer to db file", formatSize(n)))
+	if db.SyncPolicy != base.Never {
+		// Ticker to write buffer to disk.
+		db.backend(db.SyncInterval, func() {
+			db.Lock()
+			n, err := db.writeTo(db.buf, db.Path)
+			db.Unlock()
+			if db.Logger != nil {
+				if err != nil {
+					db.Logger.Error(fmt.Sprintf("writeTo buffer error: %v", err))
+				} else {
+					db.Logger.Info(fmt.Sprintf("write %s buffer to db file", formatSize(n)))
+				}
 			}
-		}
-	})
+		})
 
-	// Ticker to shrink db.
-	db.backend(db.ShrinkInterval, func() {
-		db.Lock()
-		db.shrink()
-		db.Unlock()
-	})
+		// Ticker to shrink db.
+		db.backend(db.ShrinkInterval, func() {
+			db.Lock()
+			db.shrink()
+			db.Unlock()
+		})
+	}
 
 	// Listen
 	if conf.AppMode == base.ServerMode {
@@ -182,12 +183,12 @@ func (db *Store) Close() error {
 	return err
 }
 
-// writeCoder
-func (db *Store) writeCoder(cd *Coder) {
+// encode
+func (db *Store) encode(cd *Encoder) {
 	db.Lock()
 	db.buf.Write(cd.buf)
 	db.Unlock()
-	putCoder(cd)
+	cd.recycle()
 }
 
 // Get
@@ -200,20 +201,20 @@ func (db *Store) GetAny(key string) (any, int64, bool) {
 	return db.m.GetAny(key)
 }
 
-// Set
+// Set store key-value pair.
 func (db *Store) Set(key string, val []byte) {
 	db.SetTx(key, val, NoTTL)
 }
 
-// SetEx
+// SetEx store key-value pair with ttl.
 func (db *Store) SetEx(key string, val []byte, ttl time.Duration) {
 	db.SetTx(key, val, cache.GetUnixNano()+int64(ttl))
 }
 
-// SetTx
+// SetTx store key-value pair with deadline.
 func (db *Store) SetTx(key string, val []byte, ts int64) {
-	cd := NewCoder(OpSetTx, 3).Type(RecordString).String(key).Int(ts / timeCarry).Bytes(val)
-	db.writeCoder(cd)
+	db.encode(NewEncoder(OpSetTx, 4).
+		Type(RecordString).String(key).Int(ts / timeCarry).Bytes(val))
 
 	db.m.SetTx(key, val, ts)
 }
@@ -229,8 +230,8 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 		res = f + incr
 		fstr := strconv.FormatFloat(res, 'f', 4, 64)
 
-		cd := NewCoder(OpSetTx, 3).Type(RecordString).String(key).Int(ts / timeCarry).String(fstr)
-		db.writeCoder(cd)
+		db.encode(NewEncoder(OpSetTx, 4).
+			Type(RecordString).String(key).Int(ts / timeCarry).String(fstr))
 		db.m.SetTx(key, []byte(fstr), ts)
 
 		return res, nil
@@ -241,7 +242,7 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 
 // Remove
 func (db *Store) Remove(key string) bool {
-	db.writeCoder(NewCoder(OpRemove, 1).String(key))
+	db.encode(NewEncoder(OpRemove, 1).String(key))
 	return db.m.Delete(key)
 }
 
@@ -275,7 +276,7 @@ func (db *Store) HSet(key, field string, val []byte) error {
 	if err != nil {
 		return err
 	}
-	db.writeCoder(NewCoder(OpHSet, 3).String(key).String(field).Bytes(val))
+	db.encode(NewEncoder(OpHSet, 3).String(key).String(field).Bytes(val))
 	m.Set(field, val)
 
 	return nil
@@ -287,7 +288,7 @@ func (db *Store) HRemove(key, field string) error {
 	if err != nil {
 		return err
 	}
-	db.writeCoder(NewCoder(OpHRemove, 2).String(key).String(field))
+	db.encode(NewEncoder(OpHRemove, 2).String(key).String(field))
 	m.Delete(field)
 
 	return nil
@@ -308,7 +309,7 @@ func (db *Store) LPush(key, item string) error {
 	if err != nil {
 		return err
 	}
-	db.writeCoder(NewCoder(OpLPush, 2).String(key).String(item))
+	db.encode(NewEncoder(OpLPush, 2).String(key).String(item))
 	ls.LPush(item)
 
 	return nil
@@ -320,7 +321,7 @@ func (db *Store) RPush(key, item string) error {
 	if err != nil {
 		return err
 	}
-	db.writeCoder(NewCoder(OpRPush, 2).String(key).String(item))
+	db.encode(NewEncoder(OpRPush, 2).String(key).String(item))
 	ls.RPush(item)
 
 	return nil
@@ -336,7 +337,7 @@ func (db *Store) LPop(key string) (string, error) {
 	if !ok {
 		return "", base.ErrListEmpty
 	}
-	db.writeCoder(NewCoder(OpLPop, 1).String(key))
+	db.encode(NewEncoder(OpLPop, 1).String(key))
 
 	return res, nil
 }
@@ -351,7 +352,7 @@ func (db *Store) RPop(key string) (string, error) {
 	if !ok {
 		return "", base.ErrListEmpty
 	}
-	db.writeCoder(NewCoder(OpRPop, 1).String(key))
+	db.encode(NewEncoder(OpRPop, 1).String(key))
 
 	return res, nil
 }
@@ -390,8 +391,7 @@ func (db *Store) BitSet(key string, offset uint32, val bool) error {
 			return nil
 		}
 	}
-
-	db.writeCoder(NewCoder(OpBitSet, 3).String(key).Uint(offset).Bool(val))
+	db.encode(NewEncoder(OpBitSet, 3).String(key).Uint(offset).Bool(val))
 
 	return nil
 }
@@ -402,7 +402,7 @@ func (db *Store) BitFlip(key string, offset uint32) error {
 	if err != nil {
 		return err
 	}
-	db.writeCoder(NewCoder(OpBitFlip, 2).String(key).Uint(offset))
+	db.encode(NewEncoder(OpBitFlip, 2).String(key).Uint(offset))
 	bm.Flip(uint64(offset))
 
 	return nil
@@ -418,8 +418,7 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	if err != nil {
 		return err
 	}
-
-	db.writeCoder(NewCoder(OpBitOr, 3).String(key1).String(key2).String(dest))
+	db.encode(NewEncoder(OpBitOr, 3).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		bm1.Or(bm2)
@@ -442,8 +441,7 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 	if err != nil {
 		return err
 	}
-
-	db.writeCoder(NewCoder(OpBitXor, 3).String(key1).String(key2).String(dest))
+	db.encode(NewEncoder(OpBitXor, 3).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		bm1.Xor(bm2)
@@ -466,8 +464,7 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 	if err != nil {
 		return err
 	}
-
-	db.writeCoder(NewCoder(OpBitAnd, 3).String(key1).String(key2).String(dest))
+	db.encode(NewEncoder(OpBitAnd, 3).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		bm1.And(bm2)
@@ -521,25 +518,14 @@ func (s *Store) load() error {
 		s.Logger.Info(fmt.Sprintf("start to load db size %s", formatSize(len(line))))
 	}
 
-	var op Operation
-	var recordType RecordType
-	var argsNum int
 	var args [][]byte
 
-	/*
-		record line is like:
-		<OP><argsNum><args...>
-	*/
+	// record line is like:
+	// <OP><argsNum><args...>
 	for len(line) > 2 {
-		op = Operation(line[0])
-		argsNum = int(line[1])
+		op := Operation(line[0])
+		argsNum := int(line[1])
 		line = line[2:]
-
-		// OpSetTx
-		if op == OpSetTx {
-			recordType = RecordType(line[0])
-			line = line[1:]
-		}
 
 		// parse args by operation
 		args, line, err = parseLine(line, argsNum)
@@ -553,34 +539,36 @@ func (s *Store) load() error {
 				return err
 			}
 
-		case OpSetTx: // key, ts, val
-			ts := base.ParseNumber[int64](args[1])
+		case OpSetTx: // type, key, ts, val
+			ts := base.ParseNumber[int64](args[2])
 			ts *= timeCarry
 
 			if ts < cache.GetUnixNano() && ts != NoTTL {
 				continue
 			}
 
-			switch recordType {
+			recType := RecordType(args[0][0])
+
+			switch recType {
 			case RecordString:
-				s.m.SetTx(*base.B2S(args[0]), args[2], ts)
+				s.m.SetTx(*base.B2S(args[1]), args[3], ts)
 
 			case RecordMap:
 				var m Map
-				if err := m.UnmarshalJSON(args[2]); err != nil {
+				if err := m.UnmarshalJSON(args[3]); err != nil {
 					return err
 				}
-				s.m.SetAny(*base.B2S(args[0]), m)
+				s.m.SetAny(*base.B2S(args[1]), m)
 
 			case RecordBitMap:
 				var m BitMap
-				if err := m.UnmarshalBinary(args[2]); err != nil {
+				if err := m.UnmarshalBinary(args[3]); err != nil {
 					return err
 				}
-				s.m.SetAny(*base.B2S(args[0]), m)
+				s.m.SetAny(*base.B2S(args[1]), m)
 
 			default:
-				return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, recordType)
+				return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, recType)
 			}
 
 		case OpRemove: // key
@@ -591,7 +579,6 @@ func (s *Store) load() error {
 			if err != nil {
 				return err
 			}
-
 			m.Set(*base.B2S(args[1]), args[2])
 
 		case OpHRemove: // key, field
@@ -709,32 +696,32 @@ func (s *Store) shrink() {
 	if err != nil {
 		panic(err)
 	}
-	cd := NewCoder(OpMarshalBytes, 1).Bytes(data)
+	cd := NewEncoder(OpMarshalBytes, 1).Bytes(data)
 	s.rwbuf.Write(cd.buf)
-	putCoder(cd)
+	cd.recycle()
 
 	// MarshalOthers
-	var record RecordType
+	var rec RecordType
 	s.m.Scan(func(key string, v any, i int64) bool {
 		switch v.(type) {
 		case String:
 			return true
 		case Map:
-			record = RecordMap
+			rec = RecordMap
 		case BitMap:
-			record = RecordBitMap
+			rec = RecordBitMap
 		case List:
-			record = RecordList
+			rec = RecordList
 		case Set:
-			record = RecordSet
+			rec = RecordSet
 		default:
 			panic(base.ErrUnSupportDataType)
 		}
 
 		// SetTx
-		if cd, err := NewCoder(OpSetTx, 3).Type(record).String(key).Int(i / timeCarry).Any(v); err == nil {
+		if cd, err := NewEncoder(OpSetTx, 4).Type(rec).String(key).Int(i / timeCarry).Any(v); err == nil {
 			s.rwbuf.Write(cd.buf)
-			putCoder(cd)
+			cd.recycle()
 		}
 
 		return true
