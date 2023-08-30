@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -9,14 +10,15 @@ import (
 )
 
 func (db *Store) Listen() error {
-	listener, err := net.Listen("tcp", ":7676")
+	addr := fmt.Sprintf("%s:%d", db.ListenIP, db.ListenPort)
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return err
+		panic(err)
 	}
 	defer listener.Close()
 
 	if db.Logger != nil {
-		db.Logger.Info("listening on tcp port 7676...")
+		db.Logger.Info(fmt.Sprintf("listening on %s...", addr))
 	}
 
 	for {

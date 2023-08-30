@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"slices"
 	"strconv"
@@ -88,6 +89,8 @@ var (
 		SyncInterval:   time.Second,
 		ShrinkInterval: time.Minute,
 		Logger:         slog.Default(),
+		ListenIP:       net.IPv4(0, 0, 0, 0),
+		ListenPort:     7676,
 	}
 )
 
@@ -105,6 +108,10 @@ type Config struct {
 	ShrinkInterval time.Duration // Interval of shrink db file to compress space.
 
 	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
+
+	// Only effect when AppMode is server mode.
+	ListenIP   net.IP
+	ListenPort int
 }
 
 // Store represents a key-value store.

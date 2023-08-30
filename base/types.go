@@ -39,7 +39,7 @@ const (
 	Always
 )
 
-// AppMode for Rotom run mode.
+// AppMode for run mode.
 type AppMode byte
 
 const (
