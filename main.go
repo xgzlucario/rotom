@@ -23,9 +23,7 @@ func S2B(str *string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&byteSliceHeader))
 }
 
-func main() {
-	// example()
-
+func stressTest() {
 	go http.ListenAndServe("localhost:6060", nil)
 
 	db, _ := store.Open(store.DefaultConfig)
@@ -82,4 +80,15 @@ func main() {
 		val := gofakeit.Username()
 		db.SetEx(phone, S2B(&val), time.Second*5)
 	}
+}
+
+func main() {
+	go http.ListenAndServe("localhost:6060", nil)
+
+	db, _ := store.Open(store.DefaultConfig)
+	if db == nil {
+
+	}
+
+	select {}
 }

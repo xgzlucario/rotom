@@ -4,32 +4,19 @@ import (
 	"io"
 	"log"
 	"net"
-	"os"
 
-	"github.com/bytedance/sonic"
+	"github.com/xgzlucario/rotom/base"
 )
 
-var count uint64
-
-type Request struct {
-	OP      Operation  `json:"O"`
-	RecType RecordType `json:"R"`
-	Args    []string   `json:"A"`
-}
-
 func (db *Store) Listen() error {
-	if err := os.Remove("rotom.socket"); err != nil && !os.IsNotExist(err) {
-		log.Fatal(err)
-	}
-
-	listener, err := net.Listen("unix", "rotom.socket")
+	listener, err := net.Listen("tcp", ":7676")
 	if err != nil {
 		return err
 	}
 	defer listener.Close()
 
 	if db.Logger != nil {
-		db.Logger.Info("listening on unix socket...")
+		db.Logger.Info("listening on tcp port 7676...")
 	}
 
 	for {
@@ -37,24 +24,41 @@ func (db *Store) Listen() error {
 		if err != nil {
 			return err
 		}
-		go handleEvent(conn)
+		go db.handleEvent(conn)
 	}
 }
 
-func handleEvent(conn net.Conn) {
+func (db *Store) handleEvent(conn net.Conn) {
 	defer conn.Close()
 
-	buf, err := io.ReadAll(conn)
+	line, err := io.ReadAll(conn)
 	if err != nil {
 		log.Println("Error reading:", err)
 		return
 	}
 
-	var req Request
-	if err := sonic.Unmarshal(buf, &req); err != nil {
-		panic(err)
-	}
+	var args [][]byte
 
-	count++
-	log.Println("Received data:", req, count)
+	for len(line) > 2 {
+		op := Operation(line[0])
+		argsNum := int(line[1])
+		line = line[2:]
+
+		// parse args by operation
+		args, line, err = parseLine(line, argsNum)
+		if err != nil {
+			panic(err)
+		}
+
+		switch op {
+		case OpSetTx: // type, key, ts, val
+			recType := RecordType(args[0][0])
+
+			switch recType {
+			case RecordString:
+				ts := base.ParseNumber[int64](args[2])
+				db.SetTx(*base.B2S(args[1]), args[2], ts)
+			}
+		}
+	}
 }

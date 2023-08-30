@@ -144,7 +144,7 @@ func Open(conf *Config) (*Store, error) {
 			if db.Logger != nil {
 				if err != nil {
 					db.Logger.Error(fmt.Sprintf("writeTo buffer error: %v", err))
-				} else {
+				} else if n > 0 {
 					db.Logger.Info(fmt.Sprintf("write %s buffer to db file", formatSize(n)))
 				}
 			}

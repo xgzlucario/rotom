@@ -81,6 +81,10 @@ func (s *Encoder) Any(v any) (*Encoder, error) {
 	return s, err
 }
 
+func (s *Encoder) Content() []byte {
+	return s.buf
+}
+
 func (s *Encoder) encode(v any) ([]byte, error) {
 	switch v := v.(type) {
 	case String:
