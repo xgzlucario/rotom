@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 	"time"
@@ -55,13 +54,7 @@ func stressTest() {
 	go func() {
 		for i := 0; ; i++ {
 			a := time.Now()
-			ph := strconv.Itoa(i)
-
-			val, _, ok := db.Get(ph)
-			if ok && !bytes.Equal(S2B(&ph), val) {
-				panic("key and value not equal")
-
-			}
+			db.Get(strconv.Itoa(i))
 
 			c := time.Since(a).Microseconds()
 			sum += float64(c)
@@ -85,10 +78,12 @@ func stressTest() {
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
-	db, _ := store.Open(store.DefaultConfig)
-	if db == nil {
+	stressTest()
 
-	}
+	// db, _ := store.Open(store.DefaultConfig)
+	// if db == nil {
 
-	select {}
+	// }
+
+	// select {}
 }

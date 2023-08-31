@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/sourcegraph/conc/pool"
+	"github.com/xgzlucario/rotom/store"
 )
 
 func main() {
@@ -20,9 +22,16 @@ func main() {
 			}
 			defer conn.Close()
 
+			now := time.Now()
+
 			for j := 0; j < 10000/50; j++ {
+				num := strconv.Itoa(j)
+				cd := store.NewEncoder(store.OpSetTx, 4).
+					Type(store.RecordString).String(num).
+					Int(now.Add(time.Minute).UnixNano()).String("test")
+
 				// 发送请求
-				_, err := conn.Write([]byte("ping"))
+				_, err := conn.Write(cd.Content())
 				if err != nil {
 					fmt.Println("发送请求失败:", err)
 					return
