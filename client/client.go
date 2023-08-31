@@ -2,62 +2,43 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
-	"strconv"
 	"time"
 
-	"github.com/xgzlucario/rotom/store"
+	"github.com/sourcegraph/conc/pool"
 )
 
-func command() {
-	start := time.Now()
-
-	for i := 0; i < 10000; i++ {
-		conn, err := net.Dial("tcp", ":7676")
-		if err != nil {
-			log.Fatal("Error connecting:", err)
-		}
-
-		k := strconv.Itoa(i)
-
-		_, err = conn.Write(store.NewEncoder(store.OpSetTx, 4).
-			Type(store.RecordString).String(k).Int(time.Now().Add(time.Second * 5).UnixNano()).
-			String(k).Content())
-
-		if err != nil {
-			log.Fatal(err)
-		}
-		conn.Close()
-	}
-	fmt.Println("command", time.Since(start))
-}
-
-func bulkCommand() {
-	start := time.Now()
-
-	// 仅创建一次连接
-	conn, err := net.Dial("tcp", ":7676")
-	if err != nil {
-		log.Fatal("Error connecting:", err)
-	}
-	defer conn.Close() // 确保连接最终会被关闭
-
-	for i := 0; i < 10000; i++ {
-		k := strconv.Itoa(i)
-
-		_, err = conn.Write(store.NewEncoder(store.OpSetTx, 4).
-			Type(store.RecordString).String(k).Int(time.Now().Add(time.Second * 5).UnixNano()).
-			String(k).Content())
-
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	fmt.Println("bulk", time.Since(start))
-}
-
 func main() {
-	command()
-	bulkCommand()
+	start := time.Now()
+
+	p := pool.New().WithMaxGoroutines(50)
+	for i := 0; i < 50; i++ {
+		p.Go(func() {
+			conn, err := net.Dial("tcp", ":7676")
+			if err != nil {
+				panic(err)
+			}
+			defer conn.Close()
+
+			for j := 0; j < 10000/50; j++ {
+				// 发送请求
+				_, err := conn.Write([]byte("ping"))
+				if err != nil {
+					fmt.Println("发送请求失败:", err)
+					return
+				}
+
+				// 接收响应
+				buf := make([]byte, 1024)
+				size, err := conn.Read(buf)
+				if size == 0 || err != nil {
+					fmt.Println("接收响应失败:", err)
+					return
+				}
+			}
+		})
+	}
+	p.Wait()
+
+	fmt.Println("10000 requests cost:", time.Since(start))
 }
