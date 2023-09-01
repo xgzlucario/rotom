@@ -4,16 +4,20 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/bytedance/sonic"
 	"github.com/sourcegraph/conc/pool"
-	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 )
 
 func main() {
+	cmd()
+	bulk()
+}
+
+func cmd() {
 	start := time.Now()
 
 	p := pool.New().WithMaxGoroutines(50)
@@ -28,10 +32,10 @@ func main() {
 			now := time.Now()
 
 			for j := 0; j < 10000/50; j++ {
-				num := gofakeit.Phone()
-				cd := store.NewEncoder(store.OpSetTx, 4).
-					Type(store.RecordString).String(num).
-					Int(now.Add(time.Minute).UnixNano()).String("test")
+				k := strconv.Itoa(i)
+				cd := store.NewCodec(store.OpSetTx, 4).
+					Type(store.V_STRING).String(k).
+					Int(now.Add(time.Minute).UnixNano()).String(k)
 
 				res, err := GetAndRead(conn, cd.Content())
 				if err != nil {
@@ -41,20 +45,48 @@ func main() {
 					panic("resp not except")
 				}
 			}
-
-			// Get Length
-			cd := store.NewEncoder(store.ReqLen, 1).String("")
-			res, err := GetAndRead(conn, cd.Content())
-			if err != nil {
-				panic(err)
-			}
-			fmt.Println(res, base.ParseNumber[int](res.Data))
 		})
 	}
 	p.Wait()
 
 	fmt.Println("10000 requests cost:", time.Since(start))
 	fmt.Printf("qps: %.2f req/sec\n", float64(10000)/time.Since(start).Seconds())
+}
+
+func bulk() {
+	start := time.Now()
+
+	p := pool.New().WithMaxGoroutines(50)
+	for i := 0; i < 50; i++ {
+		p.Go(func() {
+			conn, err := net.Dial("tcp", ":7676")
+			if err != nil {
+				panic(err)
+			}
+			defer conn.Close()
+
+			now := time.Now()
+			buffer := make([]byte, 0, 1024)
+
+			for j := 0; j < 10000/50; j++ {
+				k := strconv.Itoa(i)
+				cd := store.NewCodec(store.OpSetTx, 4).
+					Type(store.V_STRING).String(k).
+					Int(now.Add(time.Minute).UnixNano()).String(k)
+
+				buffer = append(buffer, cd.Content()...)
+			}
+
+			_, err = GetAndRead(conn, buffer)
+			if err != nil {
+				panic(err)
+			}
+		})
+	}
+	p.Wait()
+
+	fmt.Println("bulk 10000 requests cost:", time.Since(start))
+	fmt.Printf("bulk qps: %.2f req/sec\n", float64(10000)/time.Since(start).Seconds())
 }
 
 // GetAndRead
@@ -72,6 +104,7 @@ func GetAndRead(conn net.Conn, content []byte) (*store.Resp, error) {
 
 	var res store.Resp
 	if err := sonic.Unmarshal(buf[:n], &res); err != nil {
+		fmt.Println(string(buf[:n]))
 		panic(err)
 	}
 

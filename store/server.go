@@ -76,10 +76,10 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 		case ReqLLen:
 
 		case OpSetTx: // type, key, ts, val
-			recType := RecordType(args[0][0])
+			recType := VType(args[0][0])
 
 			switch recType {
-			case RecordString:
+			case V_STRING:
 				ts := base.ParseNumber[int64](args[2])
 				db.SetTx(*base.B2S(args[1]), args[3], ts)
 			}
