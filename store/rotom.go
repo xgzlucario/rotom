@@ -5,13 +5,13 @@ import (
 	"bytes"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"slices"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/panjf2000/gnet/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/structx"
@@ -91,13 +91,10 @@ var (
 	DefaultConfig = &Config{
 		Path:           "rotom.db",
 		ShardCount:     1024,
-		AppMode:        base.ServerMode,
 		SyncPolicy:     base.EverySecond,
 		SyncInterval:   time.Second,
 		ShrinkInterval: time.Minute,
 		Logger:         slog.Default(),
-		ListenIP:       net.IPv4(0, 0, 0, 0),
-		ListenPort:     7676,
 	}
 )
 
@@ -108,17 +105,12 @@ type Config struct {
 	Path    string // Path of db file.
 	tmpPath string
 
-	AppMode    base.AppMode    // App mode.
 	SyncPolicy base.SyncPolicy // Data sync policy.
 
 	SyncInterval   time.Duration // Interval of buffer writes to disk.
 	ShrinkInterval time.Duration // Interval of shrink db file to compress space.
 
 	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
-
-	// Only effect when AppMode is server mode.
-	ListenIP   net.IP
-	ListenPort int
 }
 
 // Store represents a key-value store.
@@ -172,16 +164,20 @@ func Open(conf *Config) (*Store, error) {
 		})
 	}
 
-	// Listen
-	if conf.AppMode == base.ServerMode {
-		go db.Listen()
-	}
-
 	if db.Logger != nil {
 		db.Logger.Info("rotom is ready to go")
 	}
 
 	return db, nil
+}
+
+// Listen
+func (db *Store) Listen(addr string) error {
+	if db.Logger != nil {
+		db.Logger.Info(fmt.Sprintf("listening on %s...", addr))
+	}
+
+	return gnet.Run(&RotomEngine{db: db}, addr, gnet.WithMulticore(true))
 }
 
 // Close

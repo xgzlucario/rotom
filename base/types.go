@@ -38,11 +38,3 @@ const (
 	EverySecond
 	Always
 )
-
-// AppMode for run mode.
-type AppMode byte
-
-const (
-	DefaultMode AppMode = iota // Run for pakage import
-	ServerMode                 // Run server and listen
-)

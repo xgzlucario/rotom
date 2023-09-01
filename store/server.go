@@ -1,7 +1,6 @@
 package store
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/bytedance/sonic"
@@ -45,20 +44,6 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 	}
 
 	return gnet.None
-}
-
-// Listen
-func (db *Store) Listen() {
-	addr := fmt.Sprintf("tcp://%s:%d", db.ListenIP, db.ListenPort)
-
-	if db.Logger != nil {
-		db.Logger.Info(fmt.Sprintf("listening on %s...", addr))
-	}
-
-	err := gnet.Run(&RotomEngine{db: db}, addr, gnet.WithMulticore(true))
-	if err != nil {
-		panic(err)
-	}
 }
 
 // handleEvent

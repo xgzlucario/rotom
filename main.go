@@ -80,10 +80,9 @@ func main() {
 
 	// stressTest()
 
-	db, _ := store.Open(store.DefaultConfig)
-	if db == nil {
-
+	db, err := store.Open(store.DefaultConfig)
+	if err != nil {
+		panic(err)
 	}
-
-	select {}
+	db.Listen("0.0.0.0:7676")
 }
