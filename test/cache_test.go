@@ -7,6 +7,7 @@ import (
 
 	"github.com/brianvoe/gofakeit/v6"
 	cache "github.com/xgzlucario/GigaCache"
+	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 )
 
@@ -18,10 +19,10 @@ type vItem struct {
 // Test cache set operation
 func TestCacheSet(t *testing.T) {
 	cfg := store.DefaultConfig
-	dbkey := gofakeit.UUID()
-	cfg.Path = dbkey + ".db"
+	cfg.Path = gofakeit.UUID() + ".db"
+	cfg.AppMode = base.DefaultMode
 
-	db, err := store.Open(store.DefaultConfig)
+	db, err := store.Open(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -97,10 +98,10 @@ func TestCacheSet(t *testing.T) {
 // TestBitmap
 func TestBitmap(t *testing.T) {
 	cfg := store.DefaultConfig
-	dbkey := gofakeit.UUID()
-	cfg.Path = dbkey + ".db"
+	cfg.Path = gofakeit.UUID() + ".db"
+	cfg.AppMode = base.DefaultMode
 
-	db, err := store.Open(store.DefaultConfig)
+	db, err := store.Open(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -147,7 +148,11 @@ func TestBitmap(t *testing.T) {
 }
 
 func FuzzTest(f *testing.F) {
-	db, err := store.Open(store.DefaultConfig)
+	cfg := store.DefaultConfig
+	cfg.Path = gofakeit.UUID() + ".db"
+	cfg.AppMode = base.DefaultMode
+
+	db, err := store.Open(cfg)
 	if err != nil {
 		panic(err)
 	}

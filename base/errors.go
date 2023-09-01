@@ -24,4 +24,7 @@ var (
 	ErrParseRecordLine = errors.New("parse record line error, maybe db file is broken")
 
 	ErrDatabaseClosed = errors.New("database closed")
+
+	// List
+	ErrListEmpty = errors.New("list is empty")
 )

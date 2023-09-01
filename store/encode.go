@@ -8,86 +8,84 @@ import (
 	"github.com/xgzlucario/rotom/base"
 )
 
-// Record like:
-// <SetTx><key_len>SEP<key><ts>SEP<value_len>SEP<value>SEP
-// SEP is seperator, now is byte(255)
-
 const (
 	_true  = 'T'
 	_false = 'F'
 )
 
-// coderPool is a pool of Coder objects to improve performance by reusing Coder instances.
-var coderPool = sync.Pool{
+var encoderPool = sync.Pool{
 	New: func() any {
-		return &Coder{buf: make([]byte, 0)}
+		return &Encoder{buf: make([]byte, 0)}
 	},
 }
 
-// Coder is the primary type for encoding data into a specific format.
-type Coder struct {
+// Encoder is the primary type for encoding data into a specific format.
+type Encoder struct {
 	buf []byte
 }
 
-func NewCoder(v Operation, argsNum byte) *Coder {
-	obj := coderPool.Get().(*Coder)
+func NewEncoder(v Operation, argsNum byte) *Encoder {
+	obj := encoderPool.Get().(*Encoder)
 	obj.buf = append(obj.buf, byte(v), argsNum)
 	return obj
 }
 
-func putCoder(obj *Coder) {
-	obj.buf = obj.buf[:0]
-	coderPool.Put(obj)
+func (s *Encoder) recycle() {
+	s.buf = s.buf[:0]
+	encoderPool.Put(s)
 }
 
-func (s *Coder) String(v string) *Coder {
+func (s *Encoder) String(v string) *Encoder {
 	return s.format(base.S2B(&v))
 }
 
-func (s *Coder) Type(v RecordType) *Coder {
-	s.buf = append(s.buf, byte(v))
-	return s
+func (s *Encoder) Type(v RecordType) *Encoder {
+	return s.format([]byte{byte(v)})
 }
 
-func (s *Coder) Bytes(v []byte) *Coder {
+func (s *Encoder) Bytes(v []byte) *Encoder {
 	return s.format(v)
 }
 
-func (s *Coder) Bool(v bool) *Coder {
+func (s *Encoder) Bool(v bool) *Encoder {
 	if v {
 		return s.format([]byte{_true})
 	}
 	return s.format([]byte{_false})
 }
 
-func (s *Coder) Uint(v uint32) *Coder {
+func (s *Encoder) Uint(v uint32) *Encoder {
 	return s.format(base.FormatNumber(v))
 }
 
-func (s *Coder) Int(v int64) *Coder {
+func (s *Encoder) Int(v int64) *Encoder {
 	return s.format(base.FormatNumber(v))
 }
 
-func (s *Coder) int(v int) {
+func (s *Encoder) length(v int) {
 	s.buf = append(s.buf, base.FormatNumber(v)...)
 	s.buf = append(s.buf, SEP_CHAR)
 }
 
 // format encodes a byte slice into the Coder's buffer as a record.
-func (s *Coder) format(v []byte) *Coder {
-	s.int(len(v))
+func (s *Encoder) format(v []byte) *Encoder {
+	s.length(len(v))
 	s.buf = append(s.buf, v...)
 	s.buf = append(s.buf, SEP_CHAR)
 	return s
 }
 
-func (s *Coder) Any(v any) (*Coder, error) {
+func (s *Encoder) Any(v any) (*Encoder, error) {
 	buf, err := s.encode(v)
 	s.format(buf)
 	return s, err
 }
 
-func (s *Coder) encode(v any) ([]byte, error) {
+func (s *Encoder) Content() []byte {
+	return s.buf
+}
+
+func (s *Encoder) encode(v any) ([]byte, error) {
 	switch v := v.(type) {
 	case String:
 		return v, nil

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 	"time"
@@ -23,7 +22,7 @@ func S2B(str *string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&byteSliceHeader))
 }
 
-func main() {
+func stressTest() {
 	go http.ListenAndServe("localhost:6060", nil)
 
 	db, _ := store.Open(store.DefaultConfig)
@@ -55,13 +54,7 @@ func main() {
 	go func() {
 		for i := 0; ; i++ {
 			a := time.Now()
-			ph := strconv.Itoa(i)
-
-			val, _, ok := db.Get(ph)
-			if ok && !bytes.Equal(S2B(&ph), val) {
-				panic("key and value not equal")
-
-			}
+			db.Get(strconv.Itoa(i))
 
 			c := time.Since(a).Microseconds()
 			sum += float64(c)
@@ -80,4 +73,17 @@ func main() {
 		val := gofakeit.Username()
 		db.SetEx(phone, S2B(&val), time.Second*5)
 	}
+}
+
+func main() {
+	go http.ListenAndServe("localhost:6060", nil)
+
+	// stressTest()
+
+	db, _ := store.Open(store.DefaultConfig)
+	if db == nil {
+
+	}
+
+	select {}
 }
