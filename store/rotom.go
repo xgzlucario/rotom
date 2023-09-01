@@ -21,6 +21,7 @@ import (
 type Operation byte
 
 const (
+	// cmd
 	OpSetTx Operation = iota
 	OpRemove
 	OpHSet
@@ -39,7 +40,13 @@ const (
 
 	OpMarshalBytes
 
-	// TODO: Implement these operations.
+	// Request
+	ReqPing
+	ReqLen
+	ReqHLen
+	ReqLLen
+
+	// TODO
 	OpZSet
 	OpZIncr
 	OpZRemove

@@ -10,7 +10,8 @@ import (
 )
 
 var (
-	RESP_OK = []byte("OK")
+	RESP_OK   = []byte("ok")
+	RESP_PONG = []byte("pong")
 )
 
 type RotomEngine struct {
@@ -76,6 +77,19 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 		}
 
 		switch op {
+		case ReqPing:
+			return RESP_PONG, nil
+
+		case ReqLen:
+			stat := db.Stat()
+			return base.FormatNumber(stat.Len), nil
+
+			// TODO
+		case ReqHLen:
+
+			// TODO
+		case ReqLLen:
+
 		case OpSetTx: // type, key, ts, val
 			recType := RecordType(args[0][0])
 

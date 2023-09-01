@@ -78,12 +78,12 @@ func stressTest() {
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
-	stressTest()
+	// stressTest()
 
-	// db, _ := store.Open(store.DefaultConfig)
-	// if db == nil {
+	db, _ := store.Open(store.DefaultConfig)
+	if db == nil {
 
-	// }
+	}
 
-	// select {}
+	select {}
 }
