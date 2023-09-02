@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sync"
 
+	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 )
 
@@ -15,7 +16,7 @@ const (
 
 var codecPool = sync.Pool{
 	New: func() any {
-		return &Codec{buf: make([]byte, 0)}
+		return &Codec{buf: make([]byte, 0, 8)}
 	},
 }
 
@@ -24,6 +25,7 @@ type Codec struct {
 	buf []byte
 }
 
+// NewCodec
 func NewCodec(v Operation, argsNum byte) *Codec {
 	obj := codecPool.Get().(*Codec)
 	obj.buf = append(obj.buf, byte(v), argsNum)
@@ -55,16 +57,16 @@ func (s *Codec) Bool(v bool) *Codec {
 }
 
 func (s *Codec) Uint(v uint32) *Codec {
-	return s.format(base.FormatNumber(v))
+	return s.format(cache.FormatNumber(v))
 }
 
 func (s *Codec) Int(v int64) *Codec {
-	return s.format(base.FormatNumber(v))
+	return s.format(cache.FormatNumber(v))
 }
 
 // format encodes a byte slice into the Coder's buffer as a record.
 func (s *Codec) format(v []byte) *Codec {
-	s.buf = append(s.buf, base.FormatNumber(len(v))...)
+	s.buf = append(s.buf, cache.FormatNumber(len(v))...)
 	s.buf = append(s.buf, SEP_CHAR)
 	s.buf = append(s.buf, v...)
 	return s
@@ -72,8 +74,11 @@ func (s *Codec) format(v []byte) *Codec {
 
 func (s *Codec) Any(v any) (*Codec, error) {
 	buf, err := s.encode(v)
+	if err != nil {
+		return nil, err
+	}
 	s.format(buf)
-	return s, err
+	return s, nil
 }
 
 func (s *Codec) Content() []byte {

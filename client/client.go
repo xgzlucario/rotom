@@ -12,6 +12,11 @@ import (
 	"github.com/xgzlucario/rotom/store"
 )
 
+const (
+	DATA_NUM   = 100 * 10000
+	CLIENT_NUM = 1000
+)
+
 func main() {
 	cmd()
 	bulk()
@@ -19,9 +24,9 @@ func main() {
 
 func cmd() {
 	start := time.Now()
+	p := pool.New()
 
-	p := pool.New().WithMaxGoroutines(50)
-	for i := 0; i < 50; i++ {
+	for i := 0; i < CLIENT_NUM; i++ {
 		p.Go(func() {
 			conn, err := net.Dial("tcp", ":7676")
 			if err != nil {
@@ -31,7 +36,7 @@ func cmd() {
 
 			now := time.Now()
 
-			for j := 0; j < 10000/50; j++ {
+			for j := 0; j < DATA_NUM/CLIENT_NUM; j++ {
 				k := strconv.Itoa(i)
 				cd := store.NewCodec(store.OpSetTx, 4).
 					Type(store.V_STRING).String(k).
@@ -41,7 +46,7 @@ func cmd() {
 				if err != nil {
 					panic(err)
 				}
-				if !bytes.Equal(res.Data, store.RESP_OK) {
+				if !bytes.Equal(res.Data, []byte("ok")) {
 					panic("resp not except")
 				}
 			}
@@ -49,15 +54,15 @@ func cmd() {
 	}
 	p.Wait()
 
-	fmt.Println("10000 requests cost:", time.Since(start))
-	fmt.Printf("qps: %.2f req/sec\n", float64(10000)/time.Since(start).Seconds())
+	fmt.Printf("%d requests cost: %v\n", DATA_NUM, time.Since(start))
+	fmt.Printf("qps: %.2f req/sec\n", DATA_NUM/time.Since(start).Seconds())
 }
 
 func bulk() {
 	start := time.Now()
+	p := pool.New()
 
-	p := pool.New().WithMaxGoroutines(50)
-	for i := 0; i < 50; i++ {
+	for i := 0; i < CLIENT_NUM; i++ {
 		p.Go(func() {
 			conn, err := net.Dial("tcp", ":7676")
 			if err != nil {
@@ -68,7 +73,7 @@ func bulk() {
 			now := time.Now()
 			buffer := make([]byte, 0, 1024)
 
-			for j := 0; j < 10000/50; j++ {
+			for j := 0; j < DATA_NUM/CLIENT_NUM; j++ {
 				k := strconv.Itoa(i)
 				cd := store.NewCodec(store.OpSetTx, 4).
 					Type(store.V_STRING).String(k).
@@ -85,8 +90,8 @@ func bulk() {
 	}
 	p.Wait()
 
-	fmt.Println("bulk 10000 requests cost:", time.Since(start))
-	fmt.Printf("bulk qps: %.2f req/sec\n", float64(10000)/time.Since(start).Seconds())
+	fmt.Printf("bulk %d requests cost: %v\n", DATA_NUM, time.Since(start))
+	fmt.Printf("bulk qps: %.2f req/sec\n", DATA_NUM/time.Since(start).Seconds())
 }
 
 // GetAndRead

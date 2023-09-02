@@ -5,12 +5,17 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/panjf2000/gnet/v2"
+	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 )
 
-var (
-	RESP_OK   = []byte("ok")
-	RESP_PONG = []byte("pong")
+// Respnse code inplements.
+type RespCode int
+
+const (
+	RES_SUCCESS RespCode = iota + 1
+	RES_ERROR
+	RES_TIMEOUT
 )
 
 type RotomEngine struct {
@@ -19,8 +24,9 @@ type RotomEngine struct {
 }
 
 type Resp struct {
-	Data  []byte `json:"d"`
-	Error error  `json:"e"`
+	Data []byte   `json:"data"`
+	Msg  []byte   `json:"msg"`
+	Code RespCode `json:"code"`
 }
 
 // OnTraffic
@@ -32,12 +38,19 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 
 	// handle event
 	msg, err := e.db.handleEvent(buf)
-	data, err := sonic.Marshal(&Resp{Data: msg, Error: err})
+	var resp Resp
+	if err != nil {
+		resp = Resp{Data: nil, Msg: []byte(err.Error()), Code: RES_ERROR}
+	} else {
+		resp = Resp{Data: msg, Msg: nil, Code: RES_SUCCESS}
+	}
+
+	data, err := sonic.Marshal(resp)
 	if err != nil {
 		return gnet.Close
 	}
 
-	// send response
+	// send resp
 	_, err = conn.Write(data)
 	if err != nil {
 		return gnet.Close
@@ -63,11 +76,11 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 
 		switch op {
 		case ReqPing:
-			return RESP_PONG, nil
+			return []byte("pong"), nil
 
 		case ReqLen:
 			stat := db.Stat()
-			return base.FormatNumber(stat.Len), nil
+			return cache.FormatNumber(stat.Len), nil
 
 			// TODO
 		case ReqHLen:
@@ -80,7 +93,7 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 
 			switch recType {
 			case V_STRING:
-				ts := base.ParseNumber[int64](args[2])
+				ts := cache.ParseNumber[int64](args[2])
 				db.SetTx(*base.B2S(args[1]), args[3], ts)
 			}
 
@@ -89,5 +102,5 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 		}
 	}
 
-	return RESP_OK, nil
+	return []byte("ok"), nil
 }

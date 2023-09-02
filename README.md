@@ -2,8 +2,18 @@
 
 ## 介绍
 
-​		这里是 Rotom，一个 Go 编写的高性能 Key-Value 内存数据库，基于 RDB + AOF 二进制持久化策略，内置数据类型 String，Map，Set，List，ZSet，BitMap 等，目前只支持在 Golang 中以包引入的方式使用，未来会推出服务端（有可能）。
+​		这里是 Rotom，一个 Go 编写的类似于 Redis 的支持多线程的高性能 Key-Value 内存数据库，内置数据类型 String，Map，Set，List，ZSet，BitMap 等，支持持久化存储，可以在 Golang 中以包引入的方式使用，也可以作为网络服务器使用（暂不支持所有命令）。
+
+目前支持的功能：
+
+1. 支持 Set, SetTX, HSet, BitSet 等二十多种命令
+2. 微秒级别的过期时间（ttl）
+3. 底层基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，能够规避GC开销，比 stdmap 性能更强，支持多线程
+4. 基于 RDB + AOF 混合的持久化策略
+5. 支持**包引入**或**服务器**启动
+
 ## 如何使用
+
 在使用之前，请先安装 Rotom 到你的项目中：
 ```bash
 go get github.com/xgzlucario/rotom
@@ -24,7 +34,7 @@ import (
 	"github.com/xgzlucario/rotom/store"
 )
 
-func test() {
+func main() {
 	db, err := store.Open(store.DefaultConfig)
 	if err != nil {
 		panic(err)
@@ -34,16 +44,13 @@ func test() {
 	// Set
 	for i := 0; i < 10000; i++ {
 		phone := gofakeit.Phone()
-		user := gofakeit.Username()
-
+        user := []byte(gofakeit.Username())
 		// Set bytes
-		db.Set(phone, []byte(user))
-
+		db.Set(phone, user)
 		// Or set with ttl
-		db.SetEx(phone, []byte(user), time.Minute)
-
+		db.SetEx(phone, user, time.Minute)
 		// Or set with deadline
-		db.SetTx(phone, []byte(user), time.Now().Add(time.Minute).UnixNano())
+		db.SetTx(phone, user, time.Now().Add(time.Minute).UnixNano())
 	}
     
     fmt.Println("now db length is", db.Stat().Len)
@@ -52,32 +59,55 @@ func test() {
 	key := gofakeit.Phone()
 	user, ttl, ok := db.Get(key)
 	if ok {
-		fmt.Println(string(user), ttl)
-	} else {
-		fmt.Println("key", key, "is not exist or expired")
+        // ...
 	}
 }
 ```
-输出：
+## 性能
+
+Rotom 具有超强的多线程性能，比 Redis 快数倍。
+
+### 测试环境
 
 ```
-now db length is 10000
-key 9241392733 is not exist or expired
+goos: linux
+goarch: amd64
+pkg: github.com/xgzlucario/GigaCache
+cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ```
 
-## 原理
+### Rotom
 
-Rotom 是一个**日志型**数据库，将**操作记录**以 **Append** 方式写入日志文件，以**顺序IO**落盘以获得相比随机IO更快的写盘速度。每条操作记录的格式化遵循以下规则：
+使用 1000 个 clients 插入 100 万条数据，1.2s 完成，qps 达到 81.6 万，批量插入 363 万。
 
-| OP 操作类型                    | ARGS_NUM 参数个数     | ARGS 参数                    |
-| ------------------------------ | --------------------- | ---------------------------- |
-| SET、HSET、BITSET，cost 1 byte | 参数个数，cost 1 byte | 数据内容，cost virable bytes |
+```bash
+$ go run client/client.go
+1000000 requests cost: 1.225103421s
+qps: 816244.16 req/sec
+bulk 1000000 requests cost: 275.450697ms
+bulk qps: 3630018.60 req/sec
+```
 
-举个例子，例如操作 **SET xgz 12345**：
+### Redis
 
-|             | OP      | TYPE    | ARGS_NUM           | KEY_VALUE | VAL_VALUE |
-| ----------- | ------- | ------- | ------------------ | --------- | --------- |
-| **Example** | byte(0) | byte(0) | byte(2)            | 3:xgz     | 5:12345   |
-| **Means**   | SET     | String  | 2 args（key, val） | Key       | Val       |
+使用 1000 个 clients 插入 100 万条数据，使用 8 个线程，3.5s 完成，qps 28.5 万，批量插入未测试
 
-OP byte(0) 表示这是 SET 操作，TYPE byte(0) 表示类型为 String，ARGS_NUM byte(2) 表示参数个数为 2（key, val），KEY 用 `len_of_value:value` 的方式表示，定位 value 的结束点，VAL 同理。以上就表示出了一条 SET 操作。
+```bash
+$ redis-benchmark -t set -r 100000000 -n 1000000 -c 1000 --threads 8
+====== SET ======
+  1000000 requests completed in 3.51 seconds
+  1000 parallel clients
+  3 bytes payload
+  keep alive: 1
+  host configuration "save": 3600 1 300 100 60 10000
+  host configuration "appendonly": no
+  multi-thread: yes
+  threads: 8
+  
+Summary:
+  throughput summary: 284900.28 requests per second
+  latency summary (msec):
+          avg       min       p50       p95       p99       max
+        3.238     1.360     3.119     4.319     6.239    11.879
+```
+

@@ -550,7 +550,7 @@ func (s *Store) load() error {
 			}
 
 		case OpSetTx: // type, key, ts, val
-			ts := base.ParseNumber[int64](args[2])
+			ts := cache.ParseNumber[int64](args[2])
 			ts *= timeCarry
 
 			if ts < cache.GetUnixNano() && ts != NoTTL {
@@ -628,7 +628,7 @@ func (s *Store) load() error {
 				return err
 			}
 
-			offset := base.ParseNumber[uint32](args[1])
+			offset := cache.ParseNumber[uint32](args[1])
 			if args[2][0] == _true {
 				bm.Add(offset)
 			} else {
@@ -640,7 +640,7 @@ func (s *Store) load() error {
 			if err != nil {
 				return err
 			}
-			bm.Flip(base.ParseNumber[uint64](args[1]))
+			bm.Flip(cache.ParseNumber[uint64](args[1]))
 
 		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
 			bm1, err := s.getBitMap(*base.B2S(args[0]))
@@ -762,7 +762,7 @@ func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
 			return nil, nil, base.ErrParseRecordLine
 		}
 
-		key_len := base.ParseNumber[int](line[:i])
+		key_len := cache.ParseNumber[int](line[:i])
 		i++
 
 		// valid

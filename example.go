@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-	"unsafe"
 
 	"net/http"
 	_ "net/http/pprof"
@@ -12,15 +11,6 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/xgzlucario/rotom/store"
 )
-
-// String convert to bytes unsafe
-func S2B(str *string) []byte {
-	strHeader := (*[2]uintptr)(unsafe.Pointer(str))
-	byteSliceHeader := [3]uintptr{
-		strHeader[0], strHeader[1], strHeader[1],
-	}
-	return *(*[]byte)(unsafe.Pointer(&byteSliceHeader))
-}
 
 func stressTest() {
 	go http.ListenAndServe("localhost:6060", nil)
@@ -71,7 +61,7 @@ func stressTest() {
 		count++
 		phone := gofakeit.Phone()
 		val := gofakeit.Username()
-		db.SetEx(phone, S2B(&val), time.Second*5)
+		db.SetEx(phone, []byte(val), time.Second*5)
 	}
 }
 
