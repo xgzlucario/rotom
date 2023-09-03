@@ -9,7 +9,7 @@ import (
 	"github.com/xgzlucario/rotom/base"
 )
 
-// Respnse code inplements.
+// Response code inplements.
 type RespCode int
 
 const (
@@ -61,45 +61,40 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 
 // handleEvent
 func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
-	var args [][]byte
+	op := Operation(line[0])
+	argsNum := int(line[1])
 
-	for len(line) > 2 {
-		op := Operation(line[0])
-		argsNum := int(line[1])
-		line = line[2:]
+	// parse args by operation
+	args, _, err := parseLine(line[2:], argsNum)
+	if err != nil {
+		return nil, err
+	}
 
-		// parse args by operation
-		args, line, err = parseLine(line, argsNum)
-		if err != nil {
-			return nil, err
+	switch op {
+	case ReqPing:
+		return []byte("pong"), nil
+
+	case ReqLen:
+		stat := db.Stat()
+		return cache.FormatNumber(stat.Len), nil
+
+	case ReqGet:
+		v, _, ok := db.Get(*base.B2S(args[0]))
+		if ok {
+			return v, nil
 		}
 
-		switch op {
-		case ReqPing:
-			return []byte("pong"), nil
+	case OpSetTx: // type, key, ts, val
+		recType := VType(args[0][0])
 
-		case ReqLen:
-			stat := db.Stat()
-			return cache.FormatNumber(stat.Len), nil
-
-			// TODO
-		case ReqHLen:
-
-			// TODO
-		case ReqLLen:
-
-		case OpSetTx: // type, key, ts, val
-			recType := VType(args[0][0])
-
-			switch recType {
-			case V_STRING:
-				ts := cache.ParseNumber[int64](args[2])
-				db.SetTx(*base.B2S(args[1]), args[3], ts)
-			}
-
-		default:
-			return nil, base.ErrUnknownOperationType
+		switch recType {
+		case V_STRING:
+			ts := cache.ParseNumber[int64](args[2])
+			db.SetTx(*base.B2S(args[1]), args[3], ts)
 		}
+
+	default:
+		return nil, base.ErrUnknownOperationType
 	}
 
 	return []byte("ok"), nil

@@ -42,6 +42,7 @@ const (
 
 	// Request
 	ReqPing
+	ReqGet
 	ReqLen
 	ReqHLen
 	ReqLLen
@@ -54,7 +55,7 @@ const (
 	OpRename
 )
 
-// VType means value type of key.
+// VType is value type.
 type VType byte
 
 const (
@@ -115,7 +116,7 @@ type Config struct {
 
 // Store represents a key-value store.
 type Store struct {
-	sync.RWMutex // gateway locker
+	sync.RWMutex
 	*Config
 	closed bool
 	buf    *bytes.Buffer

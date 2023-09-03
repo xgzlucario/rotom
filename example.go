@@ -74,5 +74,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	db.Listen("0.0.0.0:7676")
+
+	if err := db.Listen("0.0.0.0:7676"); err != nil {
+		panic(err)
+	}
 }
