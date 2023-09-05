@@ -3,30 +3,24 @@ package store
 import (
 	"io"
 
-	"github.com/bytedance/sonic"
 	"github.com/panjf2000/gnet/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 )
 
 // Response code inplements.
-type RespCode int
+type RespCode byte
 
 const (
 	RES_SUCCESS RespCode = iota + 1
 	RES_ERROR
 	RES_TIMEOUT
+	RES_LIMITED
 )
 
 type RotomEngine struct {
 	db *Store
 	gnet.BuiltinEventEngine
-}
-
-type Resp struct {
-	Data []byte   `json:"data"`
-	Msg  []byte   `json:"msg"`
-	Code RespCode `json:"code"`
 }
 
 // OnTraffic
@@ -38,20 +32,17 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 
 	// handle event
 	msg, err := e.db.handleEvent(buf)
-	var resp Resp
+	var cd *Codec
 	if err != nil {
-		resp = Resp{Data: nil, Msg: []byte(err.Error()), Code: RES_ERROR}
-	} else {
-		resp = Resp{Data: msg, Msg: nil, Code: RES_SUCCESS}
-	}
+		cd = NewCodec(OpRequest, 2).Int(int64(RES_ERROR)).String(err.Error())
 
-	data, err := sonic.Marshal(resp)
-	if err != nil {
-		return gnet.Close
+	} else {
+		cd = NewCodec(OpRequest, 2).Int(int64(RES_SUCCESS)).Bytes(msg)
 	}
+	defer cd.recycle()
 
 	// send resp
-	_, err = conn.Write(data)
+	_, err = conn.Write(cd.Content())
 	if err != nil {
 		return gnet.Close
 	}
@@ -83,6 +74,7 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 		if ok {
 			return v, nil
 		}
+		return nil, base.ErrKeyNotFound
 
 	case OpSetTx: // type, key, ts, val
 		recType := VType(args[0][0])

@@ -9,7 +9,7 @@ require (
 	github.com/panjf2000/gnet/v2 v2.3.1
 	github.com/sourcegraph/conc v0.3.0
 	github.com/tidwall/hashmap v1.8.1
-	github.com/xgzlucario/GigaCache v0.0.0-20230823103051-4f7128e20392
+	github.com/xgzlucario/GigaCache v0.0.0-20230902143747-eff55903d54a
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63
 )
 
@@ -24,8 +24,8 @@ require (
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.25.0 // indirect
-	golang.org/x/arch v0.4.0 // indirect
+	golang.org/x/arch v0.5.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )

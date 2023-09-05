@@ -1,13 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"net"
 	"strconv"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/xgzlucario/rotom/store"
 )
@@ -18,7 +16,9 @@ const (
 )
 
 func main() {
-	cmd()
+	for {
+		cmd()
+	}
 }
 
 func cmd() {
@@ -41,12 +41,9 @@ func cmd() {
 					Type(store.V_STRING).String(k).
 					Int(now.Add(time.Minute).UnixNano()).String(k)
 
-				res, err := getAndRead(conn, cd.Content())
+				_, err := getAndRead(conn, cd.Content())
 				if err != nil {
 					panic(err)
-				}
-				if !bytes.Equal(res.Data, []byte("ok")) {
-					panic("resp not except")
 				}
 			}
 		})
@@ -57,23 +54,17 @@ func cmd() {
 	fmt.Printf("qps: %.2f req/sec\n", DATA_NUM/time.Since(start).Seconds())
 }
 
-func getAndRead(conn net.Conn, content []byte) (*store.Resp, error) {
+func getAndRead(conn net.Conn, content []byte) (int, error) {
 	_, err := conn.Write(content)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	buf := make([]byte, 1024)
 	n, err := conn.Read(buf)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	var res store.Resp
-	if err := sonic.Unmarshal(buf[:n], &res); err != nil {
-		fmt.Println(string(buf[:n]))
-		panic(err)
-	}
-
-	return &res, nil
+	return n, nil
 }

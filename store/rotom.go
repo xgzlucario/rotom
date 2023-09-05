@@ -39,6 +39,7 @@ const (
 	OpRPop
 
 	OpMarshalBytes
+	OpRequest
 
 	// Request
 	ReqPing
