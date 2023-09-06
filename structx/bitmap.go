@@ -44,6 +44,13 @@ func (b *Bitmap) Flip(i uint64) {
 	b.bm.Flip(i, i)
 }
 
+// ToArray
+func (b *Bitmap) ToArray() []uint32 {
+	b.Lock()
+	defer b.Unlock()
+	return b.bm.ToArray()
+}
+
 // Len
 func (b *Bitmap) Len() uint64 {
 	b.RLock()

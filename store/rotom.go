@@ -38,6 +38,9 @@ const (
 	OpRPush
 	OpRPop
 
+	OpJsonSet
+	OpJsonDelete
+
 	OpMarshalBytes
 	OpRequest
 
@@ -66,6 +69,7 @@ const (
 	V_LIST
 	V_ZSET
 	V_BITMAP
+	V_JSON
 )
 
 const (
@@ -256,6 +260,17 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 func (db *Store) Remove(key string) bool {
 	db.encode(NewCodec(OpRemove, 1).String(key))
 	return db.m.Delete(key)
+}
+
+// Keys
+func (db *Store) Keys() []string {
+	keys := make([]string, 0)
+	db.m.Scan(func(k string, _ any, _ int64) bool {
+		keys = append(keys, k)
+		return true
+	})
+
+	return keys
 }
 
 // Scan
@@ -487,6 +502,16 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 	}
 
 	return nil
+}
+
+// BitArray
+func (db *Store) BitArray(key string) ([]uint32, error) {
+	bm, err := db.getBitMap(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return bm.ToArray(), nil
 }
 
 // BitCount
