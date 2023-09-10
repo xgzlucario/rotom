@@ -1,209 +1,103 @@
 package structx
 
-import (
-	"slices"
+// List
+type List[T any] struct {
+	len     int
+	rb      int
+	buckets []*LBucket[T]
+}
 
-	"github.com/bytedance/sonic"
+type LBucket[T any] struct {
+	data []T
+}
+
+const (
+	bucketLength = 128
 )
 
-// List
-type List[T comparable] struct {
-	array[T]
+// isFull
+func (b *LBucket[T]) isFull() bool {
+	return len(b.data) == bucketLength
 }
 
 // NewList
-func NewList[T comparable](values ...T) *List[T] {
-	return &List[T]{slices.Clone(values)}
-}
-
-// LPush
-func (ls *List[T]) LPush(values ...T) {
-	ls.array = append(values, ls.array...)
+func NewList[T any]() *List[T] {
+	b := &LBucket[T]{
+		data: make([]T, 0, bucketLength),
+	}
+	return &List[T]{
+		buckets: []*LBucket[T]{b},
+	}
 }
 
 // RPush
-func (ls *List[T]) RPush(values ...T) {
-	ls.array = append(ls.array, values...)
-}
-
-// Insert
-func (ls *List[T]) Insert(i int, values ...T) {
-	ls.array = slices.Insert(ls.array, i, values...)
-}
-
-// LPop
-func (ls *List[T]) LPop() (val T, ok bool) {
-	if len(ls.array) == 0 {
-		return
+func (l *List[T]) RPush(elem T) {
+	b := l.buckets[l.rb]
+	if b.isFull() {
+		l.rb++
+		b = &LBucket[T]{
+			data: make([]T, 0, bucketLength),
+		}
+		l.buckets = append(l.buckets, b)
 	}
-	val = ls.array[0]
-	ls.array = ls.array[1:]
-	return val, true
+
+	b.data = append(b.data, elem)
+	l.len++
+}
+
+// LPush
+func (l *List[T]) LPush(elem T) {
+	b := l.buckets[0]
+	if b.isFull() {
+		b = &LBucket[T]{
+			data: make([]T, 0, bucketLength),
+		}
+		l.buckets = append([]*LBucket[T]{b}, l.buckets...)
+		l.rb++
+
+		b.data = append(b.data, elem)
+
+	} else {
+		b.data = append([]T{elem}, b.data...)
+	}
+
+	l.len++
 }
 
 // RPop
-func (ls *List[T]) RPop() (val T, ok bool) {
-	n := len(ls.array)
-	if n == 0 {
-		return
-	}
-	val = ls.array[n-1]
-	ls.array = ls.array[:n-1]
-	return val, true
+func (l *List[T]) RPop() (T, bool) {
+	var v T
+	return v, true
 }
 
-// RemoveFirst remove elem
-func (ls *List[T]) RemoveFirst(elem T) bool {
-	for i, v := range ls.array {
-		if v == elem {
-			ls.remove(i)
-			return true
-		}
-	}
-	return false
-}
-
-// RemoveIndex remove elem by index
-func (ls *List[T]) RemoveIndex(i int) bool {
-	if i > 0 && i < len(ls.array) {
-		ls.remove(i)
-		return true
-	}
-	return false
-}
-
-// remove with zero memory allocation
-func (ls *List[T]) remove(i int) {
-	if i > len(ls.array)/2 {
-		ls.Bottom(i)
-		ls.RPop()
-
-	} else {
-		ls.Top(i)
-		ls.LPop()
-	}
-}
-
-// Max return max with less return t1 < t2
-func (ls *List[T]) Max(less func(t1, t2 T) bool) T {
-	max := ls.array[0]
-	for _, v := range ls.array {
-		if less(max, v) {
-			max = v
-		}
-	}
-	return max
-}
-
-// Min return min with less return t1 < t2
-func (ls *List[T]) Min(less func(t1, t2 T) bool) T {
-	min := ls.array[0]
-	for _, v := range ls.array {
-		if less(v, min) {
-			min = v
-		}
-	}
-	return min
-}
-
-// Sort
-func (ls *List[T]) Sort(f func(T, T) int) *List[T] {
-	slices.SortFunc(ls.array, f)
-	return ls
-}
-
-// IsSorted
-func (ls *List[T]) IsSorted(f func(T, T) int) bool {
-	return slices.IsSortedFunc(ls.array, f)
-}
-
-// array
-type array[T comparable] []T
-
-// Swap
-func (s array[T]) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-
-// Len
-func (s array[T]) Len() int {
-	return len(s)
-}
-
-// Capacity
-func (s array[T]) Capacity() int {
-	return cap(s)
-}
-
-// Top move value to the top
-func (s array[T]) Top(i int) {
-	for j := i; j > 0; j-- {
-		s.Swap(j, j-1)
-	}
-}
-
-// Bottom move value to the bottom
-func (s array[T]) Bottom(i int) {
-	for j := i; j < s.Len()-1; j++ {
-		s.Swap(j, j+1)
-	}
-}
-
-// Index return the element of index
-func (s array[T]) Index(i int) T {
-	return s[i]
-}
-
-// Find return the index of element
-func (s array[T]) Find(elem T) int {
-	return slices.Index(s, elem)
-}
-
-// LShift Shift all elements of the array left
-// exp: [1, 2, 3] => [2, 3, 1]
-func (s array[T]) LShift() {
-	s.Bottom(0)
-}
-
-// RShift Shift all elements of the array right
-// exp: [1, 2, 3] => [3, 1, 2]
-func (s array[T]) RShift() {
-	s.Top(s.Len() - 1)
-}
-
-// Reverse
-func (s array[T]) Reverse() {
-	l, r := 0, s.Len()-1
-	for l < r {
-		s.Swap(l, r)
-		l++
-		r--
-	}
-}
-
-// Copy
-func (s array[T]) Copy() array[T] {
-	return slices.Clone(s)
+// LPop
+func (l *List[T]) LPop() (T, bool) {
+	var v T
+	return v, true
 }
 
 // Range
-func (s array[T]) Range(f func(T) bool) {
-	for _, v := range s {
-		if f(v) {
-			return
+func (l *List[T]) Range(f func(elem T) bool) {
+	for _, b := range l.buckets {
+		for _, v := range b.data {
+			if !f(v) {
+				return
+			}
 		}
 	}
 }
 
-// Values return slice of array
-func (s array[T]) Values() []T {
-	return s
+// Len
+func (l *List[T]) Len() int {
+	return l.len
 }
 
-func (s *List[T]) MarshalJSON() ([]byte, error) {
-	return sonic.Marshal(s.array)
+// MarshalJSON
+func (l *List[T]) MarshalJSON() ([]byte, error) {
+	return nil, nil
 }
 
-func (s *List[T]) UnmarshalJSON(src []byte) error {
-	return sonic.Unmarshal(src, &s.array)
+// UnmarshalJSON
+func (l *List[T]) UnmarshalJSON(b []byte) error {
+	return nil
 }
