@@ -3,7 +3,7 @@ package structx
 // List
 type List[T any] struct {
 	len     int
-	rb      int
+	tail    int
 	buckets []*LBucket[T]
 }
 
@@ -20,6 +20,11 @@ func (b *LBucket[T]) isFull() bool {
 	return len(b.data) == bucketLength
 }
 
+// isEmpty
+func (b *LBucket[T]) isEmpty() bool {
+	return len(b.data) == 0
+}
+
 // NewList
 func NewList[T any]() *List[T] {
 	b := &LBucket[T]{
@@ -32,9 +37,10 @@ func NewList[T any]() *List[T] {
 
 // RPush
 func (l *List[T]) RPush(elem T) {
-	b := l.buckets[l.rb]
+	b := l.buckets[l.tail]
+
 	if b.isFull() {
-		l.rb++
+		l.tail++
 		b = &LBucket[T]{
 			data: make([]T, 0, bucketLength),
 		}
@@ -48,12 +54,13 @@ func (l *List[T]) RPush(elem T) {
 // LPush
 func (l *List[T]) LPush(elem T) {
 	b := l.buckets[0]
+
 	if b.isFull() {
 		b = &LBucket[T]{
 			data: make([]T, 0, bucketLength),
 		}
 		l.buckets = append([]*LBucket[T]{b}, l.buckets...)
-		l.rb++
+		l.tail++
 
 		b.data = append(b.data, elem)
 
@@ -65,15 +72,70 @@ func (l *List[T]) LPush(elem T) {
 }
 
 // RPop
-func (l *List[T]) RPop() (T, bool) {
-	var v T
-	return v, true
+func (l *List[T]) RPop() (val T, ok bool) {
+	if l.len == 0 {
+		return
+	}
+
+L:
+	b := l.buckets[l.tail]
+
+	if !b.isEmpty() {
+		val = b.data[len(b.data)-1]
+		b.data = b.data[:len(b.data)-1]
+		l.len--
+
+		return val, true
+
+	} else {
+		// delete bucket
+		clear(b.data)
+		l.buckets = l.buckets[:l.tail]
+		l.tail--
+		goto L
+	}
 }
 
 // LPop
-func (l *List[T]) LPop() (T, bool) {
-	var v T
-	return v, true
+func (l *List[T]) LPop() (val T, ok bool) {
+	if l.len == 0 {
+		return
+	}
+
+L:
+	b := l.buckets[0]
+
+	if !b.isEmpty() {
+		val = b.data[0]
+		b.data = b.data[1:]
+		l.len--
+
+		return val, true
+
+	} else {
+		// delete bucket
+		clear(b.data)
+		l.buckets = l.buckets[1:]
+		l.tail--
+		goto L
+	}
+}
+
+// Index
+func (l *List[T]) Index(i int) (val T, ok bool) {
+	if i < 0 || i >= l.len {
+		return
+	}
+
+	var sum int
+	for _, b := range l.buckets {
+		if sum+len(b.data) > i {
+			return b.data[i-sum], true
+		}
+		sum += len(b.data)
+	}
+
+	return
 }
 
 // Range
