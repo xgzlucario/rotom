@@ -35,4 +35,10 @@ func TestJson(t *testing.T) {
 	if ok {
 		t.Fatalf("get xgz2 should not exist")
 	}
+
+	// Delete
+	err := j.Delete("xgz")
+	if err != nil {
+		t.Fatalf("delete xgz failed: %v", err)
+	}
 }

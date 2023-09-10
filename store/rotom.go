@@ -208,13 +208,19 @@ func (db *Store) encode(cd *Codec) {
 }
 
 // Get
-func (db *Store) Get(key string) ([]byte, int64, bool) {
+func (db *Store) Get(key string) (any, int64, bool) {
 	return db.m.Get(key)
 }
 
-// GetAny
-func (db *Store) GetAny(key string) (any, int64, bool) {
-	return db.m.GetAny(key)
+// GetBytes
+func (db *Store) GetBytes(key string) ([]byte, int64, bool) {
+	r, t, ok := db.m.Get(key)
+	if ok {
+		if r, ok := r.([]byte); ok {
+			return r, t, true
+		}
+	}
+	return nil, 0, false
 }
 
 // Set store key-value pair.
@@ -238,8 +244,9 @@ func (db *Store) SetTx(key string, val []byte, ts int64) {
 // Incr
 func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 	val, ts, ok := db.m.Get(key)
+	bytes, _ := val.([]byte)
 	if ok {
-		f, err := strconv.ParseFloat(string(val), 64)
+		f, err := strconv.ParseFloat(string(bytes), 64)
 		if err != nil {
 			return 0, err
 		}
@@ -452,7 +459,7 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	} else if key2 == dest {
 		bm2.Or(bm1)
 	} else {
-		db.m.SetAny(dest, bm1.Clone().Or(bm2))
+		db.m.Set(dest, bm1.Clone().Or(bm2))
 	}
 
 	return nil
@@ -475,7 +482,7 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 	} else if key2 == dest {
 		bm2.Xor(bm1)
 	} else {
-		db.m.SetAny(dest, bm1.Clone().Xor(bm2))
+		db.m.Set(dest, bm1.Clone().Xor(bm2))
 	}
 
 	return nil
@@ -498,7 +505,7 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 	} else if key2 == dest {
 		bm2.And(bm1)
 	} else {
-		db.m.SetAny(dest, bm1.Clone().And(bm2))
+		db.m.Set(dest, bm1.Clone().And(bm2))
 	}
 
 	return nil
@@ -577,7 +584,7 @@ func (s *Store) load() error {
 			}
 
 		case OpSetTx: // type, key, ts, val
-			ts := cache.ParseNumber[int64](args[2])
+			ts := base.ParseNumber[int64](args[2])
 			ts *= timeCarry
 
 			if ts < cache.GetUnixNano() && ts != NoTTL {
@@ -595,14 +602,14 @@ func (s *Store) load() error {
 				if err := m.UnmarshalJSON(args[3]); err != nil {
 					return err
 				}
-				s.m.SetAny(*base.B2S(args[1]), m)
+				s.m.Set(*base.B2S(args[1]), m)
 
 			case V_BITMAP:
 				var m BitMap
 				if err := m.UnmarshalBinary(args[3]); err != nil {
 					return err
 				}
-				s.m.SetAny(*base.B2S(args[1]), m)
+				s.m.Set(*base.B2S(args[1]), m)
 
 			default:
 				return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, vType)
@@ -655,7 +662,7 @@ func (s *Store) load() error {
 				return err
 			}
 
-			offset := cache.ParseNumber[uint32](args[1])
+			offset := base.ParseNumber[uint32](args[1])
 			if args[2][0] == _true {
 				bm.Add(offset)
 			} else {
@@ -667,7 +674,7 @@ func (s *Store) load() error {
 			if err != nil {
 				return err
 			}
-			bm.Flip(cache.ParseNumber[uint64](args[1]))
+			bm.Flip(base.ParseNumber[uint64](args[1]))
 
 		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
 			bm1, err := s.getBitMap(*base.B2S(args[0]))
@@ -703,11 +710,11 @@ func (s *Store) load() error {
 			} else {
 				switch op {
 				case OpBitAnd:
-					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().And(bm2))
+					s.m.Set(*base.B2S(args[2]), bm1.Clone().And(bm2))
 				case OpBitOr:
-					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().Or(bm2))
+					s.m.Set(*base.B2S(args[2]), bm1.Clone().Or(bm2))
 				case OpBitXor:
-					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().Xor(bm2))
+					s.m.Set(*base.B2S(args[2]), bm1.Clone().Xor(bm2))
 				}
 			}
 
@@ -789,7 +796,7 @@ func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
 			return nil, nil, base.ErrParseRecordLine
 		}
 
-		key_len := cache.ParseNumber[int](line[:i])
+		key_len := base.ParseNumber[int](line[:i])
 		i++
 
 		// valid
@@ -828,7 +835,7 @@ func (db *Store) getBitMap(key string) (bm BitMap, err error) {
 
 // getOrCreate
 func getOrCreate[T any](s *Store, key string, vptr T, new func() T) (T, error) {
-	m, _, ok := s.m.GetAny(key)
+	m, _, ok := s.m.Get(key)
 	if ok {
 		m, ok := m.(T)
 		if ok {
@@ -838,7 +845,7 @@ func getOrCreate[T any](s *Store, key string, vptr T, new func() T) (T, error) {
 	}
 
 	vptr = new()
-	s.m.SetAny(key, vptr)
+	s.m.Set(key, vptr)
 
 	return vptr, nil
 }

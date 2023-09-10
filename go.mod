@@ -6,12 +6,12 @@ require (
 	github.com/RoaringBitmap/roaring v1.5.0
 	github.com/brianvoe/gofakeit/v6 v6.23.2
 	github.com/bytedance/sonic v1.10.0
-	github.com/panjf2000/gnet/v2 v2.3.1
+	github.com/panjf2000/gnet/v2 v2.3.2
 	github.com/sourcegraph/conc v0.3.0
 	github.com/tidwall/gjson v1.16.0
 	github.com/tidwall/hashmap v1.8.1
 	github.com/tidwall/sjson v1.2.5
-	github.com/xgzlucario/GigaCache v0.0.0-20230902143747-eff55903d54a
+	github.com/xgzlucario/GigaCache v0.0.0-20230910102950-fe0b891a2207
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 )
 

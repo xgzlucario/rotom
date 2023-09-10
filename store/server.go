@@ -4,7 +4,6 @@ import (
 	"io"
 
 	"github.com/panjf2000/gnet/v2"
-	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 )
 
@@ -67,12 +66,12 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 
 	case ReqLen:
 		stat := db.Stat()
-		return cache.FormatNumber(stat.Len), nil
+		return base.FormatNumber(stat.Len), nil
 
 	case ReqGet:
 		v, _, ok := db.Get(*base.B2S(args[0]))
 		if ok {
-			return v, nil
+			return v.([]byte), nil
 		}
 		return nil, base.ErrKeyNotFound
 
@@ -81,7 +80,7 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 
 		switch recType {
 		case V_STRING:
-			ts := cache.ParseNumber[int64](args[2])
+			ts := base.ParseNumber[int64](args[2])
 			db.SetTx(*base.B2S(args[1]), args[3], ts)
 		}
 

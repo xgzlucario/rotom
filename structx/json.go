@@ -41,6 +41,12 @@ func (j *Json) SetAny(path string, val interface{}) (err error) {
 	return
 }
 
+// Delete
+func (j *Json) Delete(path string) (err error) {
+	j.data, err = sjson.DeleteBytes(j.data, path)
+	return
+}
+
 // Content
 func (j *Json) Content() []byte {
 	return j.data
