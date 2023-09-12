@@ -25,6 +25,5 @@ var (
 
 	ErrDatabaseClosed = errors.New("database closed")
 
-	// List
-	ErrListEmpty = errors.New("list is empty")
+	ErrEmptyList = errors.New("list is empty")
 )

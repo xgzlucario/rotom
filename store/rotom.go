@@ -21,7 +21,6 @@ import (
 type Operation byte
 
 const (
-	// cmd
 	OpSetTx Operation = iota
 	OpRemove
 	OpHSet
@@ -44,7 +43,6 @@ const (
 	OpMarshalBytes
 	OpRequest
 
-	// Request
 	ReqPing
 	ReqGet
 	ReqLen
@@ -292,7 +290,7 @@ func (db *Store) Stat() cache.CacheStat {
 
 // HGet
 func (db *Store) HGet(key, field string) ([]byte, error) {
-	m, err := db.getMap(key)
+	m, err := db.fetchMap(key)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +304,7 @@ func (db *Store) HGet(key, field string) ([]byte, error) {
 
 // HSet
 func (db *Store) HSet(key, field string, val []byte) error {
-	m, err := db.getMap(key)
+	m, err := db.fetchMap(key)
 	if err != nil {
 		return err
 	}
@@ -318,7 +316,7 @@ func (db *Store) HSet(key, field string, val []byte) error {
 
 // HRemove
 func (db *Store) HRemove(key, field string) error {
-	m, err := db.getMap(key)
+	m, err := db.fetchMap(key)
 	if err != nil {
 		return err
 	}
@@ -330,7 +328,7 @@ func (db *Store) HRemove(key, field string) error {
 
 // HKeys
 func (db *Store) HKeys(key string) ([]string, error) {
-	m, err := db.getMap(key)
+	m, err := db.fetchMap(key)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +337,7 @@ func (db *Store) HKeys(key string) ([]string, error) {
 
 // LPush
 func (db *Store) LPush(key, item string) error {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return err
 	}
@@ -351,7 +349,7 @@ func (db *Store) LPush(key, item string) error {
 
 // RPush
 func (db *Store) RPush(key, item string) error {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return err
 	}
@@ -363,13 +361,13 @@ func (db *Store) RPush(key, item string) error {
 
 // LPop
 func (db *Store) LPop(key string) (string, error) {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return "", err
 	}
 	res, ok := ls.LPop()
 	if !ok {
-		return "", base.ErrListEmpty
+		return "", base.ErrEmptyList
 	}
 	db.encode(NewCodec(OpLPop, 1).String(key))
 
@@ -378,13 +376,13 @@ func (db *Store) LPop(key string) (string, error) {
 
 // RPop
 func (db *Store) RPop(key string) (string, error) {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return "", err
 	}
 	res, ok := ls.RPop()
 	if !ok {
-		return "", base.ErrListEmpty
+		return "", base.ErrEmptyList
 	}
 	db.encode(NewCodec(OpRPop, 1).String(key))
 
@@ -393,7 +391,7 @@ func (db *Store) RPop(key string) (string, error) {
 
 // LLen
 func (db *Store) LLen(key string) (int, error) {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return 0, err
 	}
@@ -402,7 +400,7 @@ func (db *Store) LLen(key string) (int, error) {
 
 // BitTest
 func (db *Store) BitTest(key string, offset uint32) (bool, error) {
-	bm, err := db.getBitMap(key)
+	bm, err := db.fetchBitMap(key)
 	if err != nil {
 		return false, err
 	}
@@ -411,7 +409,7 @@ func (db *Store) BitTest(key string, offset uint32) (bool, error) {
 
 // BitSet
 func (db *Store) BitSet(key string, offset uint32, val bool) error {
-	bm, err := db.getBitMap(key)
+	bm, err := db.fetchBitMap(key)
 	if err != nil {
 		return err
 	}
@@ -432,7 +430,7 @@ func (db *Store) BitSet(key string, offset uint32, val bool) error {
 
 // BitFlip
 func (db *Store) BitFlip(key string, offset uint32) error {
-	bm, err := db.getBitMap(key)
+	bm, err := db.fetchBitMap(key)
 	if err != nil {
 		return err
 	}
@@ -444,11 +442,11 @@ func (db *Store) BitFlip(key string, offset uint32) error {
 
 // BitOr
 func (db *Store) BitOr(key1, key2, dest string) error {
-	bm1, err := db.getBitMap(key1)
+	bm1, err := db.fetchBitMap(key1)
 	if err != nil {
 		return err
 	}
-	bm2, err := db.getBitMap(key2)
+	bm2, err := db.fetchBitMap(key2)
 	if err != nil {
 		return err
 	}
@@ -467,11 +465,11 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 
 // BitXor
 func (db *Store) BitXor(key1, key2, dest string) error {
-	bm1, err := db.getBitMap(key1)
+	bm1, err := db.fetchBitMap(key1)
 	if err != nil {
 		return err
 	}
-	bm2, err := db.getBitMap(key2)
+	bm2, err := db.fetchBitMap(key2)
 	if err != nil {
 		return err
 	}
@@ -490,11 +488,11 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 
 // BitAnd
 func (db *Store) BitAnd(key1, key2, dest string) error {
-	bm1, err := db.getBitMap(key1)
+	bm1, err := db.fetchBitMap(key1)
 	if err != nil {
 		return err
 	}
-	bm2, err := db.getBitMap(key2)
+	bm2, err := db.fetchBitMap(key2)
 	if err != nil {
 		return err
 	}
@@ -513,7 +511,7 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 
 // BitArray
 func (db *Store) BitArray(key string) ([]uint32, error) {
-	bm, err := db.getBitMap(key)
+	bm, err := db.fetchBitMap(key)
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +521,7 @@ func (db *Store) BitArray(key string) ([]uint32, error) {
 
 // BitCount
 func (db *Store) BitCount(key string) (uint64, error) {
-	bm, err := db.getBitMap(key)
+	bm, err := db.fetchBitMap(key)
 	return bm.Len(), err
 }
 
@@ -619,21 +617,21 @@ func (s *Store) load() error {
 			s.Remove(*base.B2S(args[0]))
 
 		case OpHSet: // key, field, val
-			m, err := s.getMap(*base.B2S(args[0]))
+			m, err := s.fetchMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
 			m.Set(*base.B2S(args[1]), args[2])
 
 		case OpHRemove: // key, field
-			m, err := s.getMap(*base.B2S(args[0]))
+			m, err := s.fetchMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
 			m.Delete(*base.B2S(args[1]))
 
 		case OpLPush, OpRPush: // key, item
-			ls, err := s.getList(*base.B2S(args[0]))
+			ls, err := s.fetchList(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
@@ -645,7 +643,7 @@ func (s *Store) load() error {
 			}
 
 		case OpLPop, OpRPop: // key
-			ls, err := s.getList(*base.B2S(args[0]))
+			ls, err := s.fetchList(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
@@ -657,7 +655,7 @@ func (s *Store) load() error {
 			}
 
 		case OpBitSet: // key, offset, val
-			bm, err := s.getBitMap(*base.B2S(args[0]))
+			bm, err := s.fetchBitMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
@@ -670,19 +668,19 @@ func (s *Store) load() error {
 			}
 
 		case OpBitFlip: // key, offset
-			bm, err := s.getBitMap(*base.B2S(args[0]))
+			bm, err := s.fetchBitMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
 			bm.Flip(base.ParseNumber[uint64](args[1]))
 
 		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
-			bm1, err := s.getBitMap(*base.B2S(args[0]))
+			bm1, err := s.fetchBitMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
 
-			bm2, err := s.getBitMap(*base.B2S(args[1]))
+			bm2, err := s.fetchBitMap(*base.B2S(args[1]))
 			if err != nil {
 				return err
 			}
@@ -812,39 +810,40 @@ func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
 	return res, line, nil
 }
 
-// getMap
-func (db *Store) getMap(key string) (m Map, err error) {
-	return getOrCreate(db, key, m, func() Map {
+// fetchMap
+func (db *Store) fetchMap(key string) (m Map, err error) {
+	return fetch(db, key, func() Map {
 		return structx.NewSyncMap[string, []byte]()
 	})
 }
 
-// getList
-func (db *Store) getList(key string) (m List, err error) {
-	return getOrCreate(db, key, m, func() List {
+// fetchList
+func (db *Store) fetchList(key string) (m List, err error) {
+	return fetch(db, key, func() List {
 		return structx.NewList[string]()
 	})
 }
 
-// getBitMap
-func (db *Store) getBitMap(key string) (bm BitMap, err error) {
-	return getOrCreate(db, key, bm, func() BitMap {
+// fetchBitMap
+func (db *Store) fetchBitMap(key string) (bm BitMap, err error) {
+	return fetch(db, key, func() BitMap {
 		return structx.NewBitmap()
 	})
 }
 
-// getOrCreate
-func getOrCreate[T any](s *Store, key string, vptr T, new func() T) (T, error) {
+// fetch
+func fetch[T any](s *Store, key string, new func() T) (T, error) {
 	m, _, ok := s.m.Get(key)
 	if ok {
 		m, ok := m.(T)
 		if ok {
 			return m, nil
 		}
-		return vptr, base.ErrWrongType
+		var v T
+		return v, base.ErrWrongType
 	}
 
-	vptr = new()
+	vptr := new()
 	s.m.Set(key, vptr)
 
 	return vptr, nil

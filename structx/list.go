@@ -1,7 +1,10 @@
 package structx
 
+import "sync"
+
 // List
 type List[T any] struct {
+	sync.RWMutex
 	len     int
 	tail    int
 	buckets []*LBucket[T]
@@ -15,16 +18,6 @@ const (
 	bucketLength = 128
 )
 
-// isFull
-func (b *LBucket[T]) isFull() bool {
-	return len(b.data) == bucketLength
-}
-
-// isEmpty
-func (b *LBucket[T]) isEmpty() bool {
-	return len(b.data) == 0
-}
-
 // NewList
 func NewList[T any]() *List[T] {
 	b := &LBucket[T]{
@@ -37,6 +30,8 @@ func NewList[T any]() *List[T] {
 
 // RPush
 func (l *List[T]) RPush(elem T) {
+	l.Lock()
+	defer l.Unlock()
 	b := l.buckets[l.tail]
 
 	if b.isFull() {
@@ -53,6 +48,8 @@ func (l *List[T]) RPush(elem T) {
 
 // LPush
 func (l *List[T]) LPush(elem T) {
+	l.Lock()
+	defer l.Unlock()
 	b := l.buckets[0]
 
 	if b.isFull() {
@@ -73,6 +70,8 @@ func (l *List[T]) LPush(elem T) {
 
 // RPop
 func (l *List[T]) RPop() (val T, ok bool) {
+	l.Lock()
+	defer l.Unlock()
 	if l.len == 0 {
 		return
 	}
@@ -98,6 +97,8 @@ L:
 
 // LPop
 func (l *List[T]) LPop() (val T, ok bool) {
+	l.Lock()
+	defer l.Unlock()
 	if l.len == 0 {
 		return
 	}
@@ -123,6 +124,9 @@ L:
 
 // Index
 func (l *List[T]) Index(i int) (val T, ok bool) {
+	l.RLock()
+	defer l.RUnlock()
+
 	if i < 0 || i >= l.len {
 		return
 	}
@@ -140,6 +144,9 @@ func (l *List[T]) Index(i int) (val T, ok bool) {
 
 // Range
 func (l *List[T]) Range(f func(elem T) bool) {
+	l.RLock()
+	defer l.RUnlock()
+
 	for _, b := range l.buckets {
 		for _, v := range b.data {
 			if !f(v) {
@@ -151,15 +158,34 @@ func (l *List[T]) Range(f func(elem T) bool) {
 
 // Len
 func (l *List[T]) Len() int {
+	l.RLock()
+	defer l.RUnlock()
+
 	return l.len
 }
 
 // MarshalJSON
 func (l *List[T]) MarshalJSON() ([]byte, error) {
+	l.RLock()
+	defer l.RUnlock()
+
 	return nil, nil
 }
 
 // UnmarshalJSON
 func (l *List[T]) UnmarshalJSON(b []byte) error {
+	l.Lock()
+	defer l.Unlock()
+
 	return nil
+}
+
+// isFull
+func (b *LBucket[T]) isFull() bool {
+	return len(b.data) == bucketLength
+}
+
+// isEmpty
+func (b *LBucket[T]) isEmpty() bool {
+	return len(b.data) == 0
 }

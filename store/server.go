@@ -84,6 +84,24 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 			db.SetTx(*base.B2S(args[1]), args[3], ts)
 		}
 
+	case OpLPush: // key, item
+		db.LPush(*base.B2S(args[0]), *base.B2S(args[1]))
+
+	case OpRPush: // key, item
+		db.RPush(*base.B2S(args[0]), *base.B2S(args[1]))
+
+	case OpLPop: // key
+		r, err := db.LPop(*base.B2S(args[0]))
+		return base.S2B(&r), err
+
+	case OpRPop: // key
+		r, err := db.RPop(*base.B2S(args[0]))
+		return base.S2B(&r), err
+
+	case ReqLLen: // key
+		num, err := db.LLen(*base.B2S(args[0]))
+		return base.FormatNumber(num), err
+
 	default:
 		return nil, base.ErrUnknownOperationType
 	}
