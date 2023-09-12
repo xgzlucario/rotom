@@ -1,5 +1,7 @@
 # Rotom
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/xgzlucario/rotom)](https://goreportcard.com/report/github.com/xgzlucario/rotom) [![Go Reference](https://pkg.go.dev/badge/github.com/xgzlucario/rotom.svg)](https://pkg.go.dev/github.com/xgzlucario/rotom) ![](https://img.shields.io/badge/go-1.21.0-orange.svg) ![](https://img.shields.io/github/languages/code-size/xgzlucario/rotom.svg) 
+
 ## 介绍
 
 ​		这里是 Rotom，一个 Go 编写的类似于 Redis 的支持多线程的高性能 Key-Value 内存数据库，内置数据类型 String，Map，Set，List，ZSet，BitMap 等，支持持久化存储，可以在 Golang 中以包引入的方式使用，也可以作为网络服务器使用（暂不支持所有命令）。
@@ -78,25 +80,23 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 
 ### Rotom
 
-使用 1000 个 clients 插入 100 万条数据，1.2s 完成，qps 达到 81.6 万，批量插入 363 万。
+使用 200 个 clients 插入共 100 万数据，1.11s 完成，qps 达到 89.5 万。
 
 ```bash
 $ go run client/client.go
-1000000 requests cost: 1.225103421s
-qps: 816244.16 req/sec
-bulk 1000000 requests cost: 275.450697ms
-bulk qps: 3630018.60 req/sec
+1000000 requests cost: 1.116634772s
+qps: 895467.92 req/sec
 ```
 
 ### Redis
 
-使用 1000 个 clients 插入 100 万条数据，使用 8 个线程，3.5s 完成，qps 28.5 万，批量插入未测试
+使用 200 个 clients 插入共 100 万数据，使用 8 个线程，4.26s 完成，qps 23.5 万。
 
 ```bash
-$ redis-benchmark -t set -r 100000000 -n 1000000 -c 1000 --threads 8
+$ redis-benchmark -t set -r 100000000 -n 1000000 -c 200 --threads 8
 ====== SET ======
-  1000000 requests completed in 3.51 seconds
-  1000 parallel clients
+  1000000 requests completed in 4.26 seconds
+  200 parallel clients
   3 bytes payload
   keep alive: 1
   host configuration "save": 3600 1 300 100 60 10000
@@ -105,9 +105,9 @@ $ redis-benchmark -t set -r 100000000 -n 1000000 -c 1000 --threads 8
   threads: 8
   
 Summary:
-  throughput summary: 284900.28 requests per second
+  throughput summary: 234962.41 requests per second
   latency summary (msec):
           avg       min       p50       p95       p99       max
-        3.238     1.360     3.119     4.319     6.239    11.879
+        0.823     0.040     0.783     1.247     1.623     8.407
 ```
 

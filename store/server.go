@@ -3,30 +3,23 @@ package store
 import (
 	"io"
 
-	"github.com/bytedance/sonic"
 	"github.com/panjf2000/gnet/v2"
-	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 )
 
-// Respnse code inplements.
-type RespCode int
+// Response code inplements.
+type RespCode byte
 
 const (
 	RES_SUCCESS RespCode = iota + 1
 	RES_ERROR
 	RES_TIMEOUT
+	RES_LIMITED
 )
 
 type RotomEngine struct {
 	db *Store
 	gnet.BuiltinEventEngine
-}
-
-type Resp struct {
-	Data []byte   `json:"data"`
-	Msg  []byte   `json:"msg"`
-	Code RespCode `json:"code"`
 }
 
 // OnTraffic
@@ -38,20 +31,17 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 
 	// handle event
 	msg, err := e.db.handleEvent(buf)
-	var resp Resp
+	var cd *Codec
 	if err != nil {
-		resp = Resp{Data: nil, Msg: []byte(err.Error()), Code: RES_ERROR}
-	} else {
-		resp = Resp{Data: msg, Msg: nil, Code: RES_SUCCESS}
-	}
+		cd = NewCodec(OpRequest, 2).Int(int64(RES_ERROR)).String(err.Error())
 
-	data, err := sonic.Marshal(resp)
-	if err != nil {
-		return gnet.Close
+	} else {
+		cd = NewCodec(OpRequest, 2).Int(int64(RES_SUCCESS)).Bytes(msg)
 	}
+	defer cd.recycle()
 
 	// send resp
-	_, err = conn.Write(data)
+	_, err = conn.Write(cd.Content())
 	if err != nil {
 		return gnet.Close
 	}
@@ -61,45 +51,59 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 
 // handleEvent
 func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
-	var args [][]byte
+	op := Operation(line[0])
+	argsNum := int(line[1])
 
-	for len(line) > 2 {
-		op := Operation(line[0])
-		argsNum := int(line[1])
-		line = line[2:]
+	// parse args by operation
+	args, _, err := parseLine(line[2:], argsNum)
+	if err != nil {
+		return nil, err
+	}
 
-		// parse args by operation
-		args, line, err = parseLine(line, argsNum)
-		if err != nil {
-			return nil, err
+	switch op {
+	case ReqPing:
+		return []byte("pong"), nil
+
+	case ReqLen:
+		stat := db.Stat()
+		return base.FormatNumber(stat.Len), nil
+
+	case ReqGet:
+		v, _, ok := db.Get(*base.B2S(args[0]))
+		if ok {
+			return v.([]byte), nil
+		}
+		return nil, base.ErrKeyNotFound
+
+	case OpSetTx: // type, key, ts, val
+		recType := VType(args[0][0])
+
+		switch recType {
+		case V_STRING:
+			ts := base.ParseNumber[int64](args[2])
+			db.SetTx(*base.B2S(args[1]), args[3], ts)
 		}
 
-		switch op {
-		case ReqPing:
-			return []byte("pong"), nil
+	case OpLPush: // key, item
+		db.LPush(*base.B2S(args[0]), *base.B2S(args[1]))
 
-		case ReqLen:
-			stat := db.Stat()
-			return cache.FormatNumber(stat.Len), nil
+	case OpRPush: // key, item
+		db.RPush(*base.B2S(args[0]), *base.B2S(args[1]))
 
-			// TODO
-		case ReqHLen:
+	case OpLPop: // key
+		r, err := db.LPop(*base.B2S(args[0]))
+		return base.S2B(&r), err
 
-			// TODO
-		case ReqLLen:
+	case OpRPop: // key
+		r, err := db.RPop(*base.B2S(args[0]))
+		return base.S2B(&r), err
 
-		case OpSetTx: // type, key, ts, val
-			recType := VType(args[0][0])
+	case ReqLLen: // key
+		num, err := db.LLen(*base.B2S(args[0]))
+		return base.FormatNumber(num), err
 
-			switch recType {
-			case V_STRING:
-				ts := cache.ParseNumber[int64](args[2])
-				db.SetTx(*base.B2S(args[1]), args[3], ts)
-			}
-
-		default:
-			return nil, base.ErrUnknownOperationType
-		}
+	default:
+		return nil, base.ErrUnknownOperationType
 	}
 
 	return []byte("ok"), nil

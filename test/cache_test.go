@@ -51,7 +51,7 @@ func TestCacheSet(t *testing.T) {
 			}
 
 		} else {
-			val, ts, ok := db.Get(k)
+			val, ts, ok := db.GetBytes(k)
 			if !ok || !bytes.Equal(val, v.Val) || ts != v.Ts {
 				t.Fatalf("set: %v %v %v get: %v %v %v",
 					k, string(v.Val), v.Ts,
@@ -83,7 +83,7 @@ func TestCacheSet(t *testing.T) {
 			}
 
 		} else {
-			val, ts, ok := db.Get(k)
+			val, ts, ok := db.GetBytes(k)
 			if !ok || !bytes.Equal(val, v.Val) || ts != v.Ts {
 				t.Fatalf("set: %v %v %v get: %v %v %v",
 					k, string(v.Val), v.Ts,
@@ -157,7 +157,7 @@ func FuzzTest(f *testing.F) {
 		db.SetTx(key, val, ts)
 		now := cache.GetUnixNano()
 
-		v, ttl, ok := db.Get(key)
+		v, ttl, ok := db.GetBytes(key)
 
 		// no ttl
 		if ts == 0 {

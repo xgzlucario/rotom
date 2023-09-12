@@ -1,89 +1,98 @@
 package test
 
 import (
-	"encoding/json"
+	"math/rand"
 	"testing"
-
-	"slices"
 
 	"github.com/xgzlucario/rotom/structx"
 )
 
 func TestList(t *testing.T) {
-	t.Parallel()
+	ls := structx.NewList[int]()
+	valid := make([]int, 0, 1024)
 
-	list := structx.NewList(1, 2, 3, 4, 5)
-
-	// Test LPush
-	list.LPush(0)
-	if list.Len() != 6 || list.Index(0) != 0 {
-		t.Errorf("LPush error: %v\n", list.Values())
+	// test empty pop
+	_, ok := ls.LPop()
+	if ok {
+		t.Fatal("list should be empty")
 	}
-
-	// Test RPush
-	list.RPush(6)
-	if list.Len() != 7 || list.Index(6) != 6 {
-		t.Errorf("RPush error: %v\n", list.Values())
+	_, ok = ls.RPop()
+	if ok {
+		t.Fatal("list should be empty")
 	}
 
-	// Test Insert
-	list.Insert(3, 99)
-	if list.Len() != 8 || list.Index(3) != 99 {
-		t.Errorf("Insert error: %v\n", list.Values())
+	// random insert
+	for i := 0; i < 1000; i++ {
+		elem := rand.Int()
+		if i%2 == 0 {
+			ls.RPush(elem)
+			valid = append(valid, elem)
+
+		} else {
+			ls.LPush(elem)
+			valid = append([]int{elem}, valid...)
+		}
 	}
 
-	// Test LPop
-	val, ok := list.LPop()
-	if !ok || val != 0 || list.Len() != 7 {
-		t.Errorf("LPop error: %v\n", list.Values())
+	// test len
+	if ls.Len() != 1000 {
+		t.Fatal("list len error")
 	}
 
-	// Test RPop
-	val, ok = list.RPop()
-	if !ok || val != 6 || list.Len() != 6 {
-		t.Errorf("RPop error: %v\n", list.Values())
+	// test range
+	i := 0
+	ls.Range(func(elem int) bool {
+		if elem != valid[i] {
+			t.Fatal("list range error")
+		}
+		i++
+		return true
+	})
+
+	// test index
+	for i := 0; i < 1000; i++ {
+		index := rand.Intn(ls.Len())
+
+		elem, ok := ls.Index(index)
+		if !ok {
+			t.Fatal("index error")
+		}
+		if elem != valid[index] {
+			t.Fatal("index error")
+		}
 	}
 
-	// Test RemoveFirst
-	if !list.RemoveFirst(3) || list.Len() != 5 {
-		t.Errorf("RemoveFirst error: %v\n", list.Values())
-	}
-	if list.RemoveFirst(7) || list.Len() != 5 {
-		t.Errorf("RemoveFirst error: %v\n", list.Values())
-	}
+	// test pop
+	for i := 0; i < 1000; i++ {
+		if i%2 == 0 {
+			elem, ok := ls.LPop()
+			if !ok || elem != valid[0] {
+				t.Fatalf("list lpop: %d %d", elem, valid[0])
+			}
+			valid = valid[1:]
 
-	// Test RemoveIndex
-	if !list.RemoveIndex(2) || list.Len() != 4 {
-		t.Errorf("RemoveIndex error: %v\n", list.Values())
+		} else {
+			elem, ok := ls.RPop()
+			if !ok || elem != valid[len(valid)-1] {
+				t.Fatalf("list rpop: %d %d", elem, valid[len(valid)-1])
+			}
+			valid = valid[:len(valid)-1]
+		}
 	}
-	if list.RemoveIndex(7) || list.Len() != 4 {
-		t.Errorf("RemoveIndex error: %v\n", list.Values())
-	}
+}
 
-	// Test Max and Min
-	max := list.Max(func(a, b int) bool { return a < b })
-	if max != 5 {
-		t.Errorf("Max error: %v\n", max)
-	}
-	min := list.Min(func(a, b int) bool { return a < b })
-	if min != 1 {
-		t.Errorf("Min error: %v\n", min)
-	}
+func BenchmarkList(b *testing.B) {
+	b.Run("ziplist/RPush", func(b *testing.B) {
+		ls := structx.NewList[int]()
+		for i := 0; i < b.N; i++ {
+			ls.RPush(i)
+		}
+	})
 
-	// Test Sort
-	list.Sort(func(a, b int) int { return a - b })
-	if !list.IsSorted(func(a, b int) int { return a - b }) {
-		t.Errorf("Sort error: %v\n", list.Values())
-	}
-
-	// Test JSON
-	bytes, err := json.Marshal(list)
-	if err != nil {
-		t.Errorf("MarshalJSON error: %v", err)
-	}
-	unmarshaledList := structx.NewList(0)
-	err = json.Unmarshal(bytes, unmarshaledList)
-	if err != nil || !slices.Equal(list.Values(), unmarshaledList.Values()) {
-		t.Errorf("UnmarshalJSON error: %v\n%v\n%v", err, list.Values(), unmarshaledList.Values())
-	}
+	b.Run("ziplist/LPush", func(b *testing.B) {
+		ls := structx.NewList[int]()
+		for i := 0; i < b.N; i++ {
+			ls.LPush(i)
+		}
+	})
 }

@@ -21,7 +21,6 @@ import (
 type Operation byte
 
 const (
-	// cmd
 	OpSetTx Operation = iota
 	OpRemove
 	OpHSet
@@ -38,10 +37,14 @@ const (
 	OpRPush
 	OpRPop
 
-	OpMarshalBytes
+	OpJsonSet
+	OpJsonDelete
 
-	// Request
+	OpMarshalBytes
+	OpRequest
+
 	ReqPing
+	ReqGet
 	ReqLen
 	ReqHLen
 	ReqLLen
@@ -54,7 +57,7 @@ const (
 	OpRename
 )
 
-// VType means value type of key.
+// VType is value type.
 type VType byte
 
 const (
@@ -64,6 +67,7 @@ const (
 	V_LIST
 	V_ZSET
 	V_BITMAP
+	V_JSON
 )
 
 const (
@@ -115,7 +119,7 @@ type Config struct {
 
 // Store represents a key-value store.
 type Store struct {
-	sync.RWMutex // gateway locker
+	sync.RWMutex
 	*Config
 	closed bool
 	buf    *bytes.Buffer
@@ -202,13 +206,19 @@ func (db *Store) encode(cd *Codec) {
 }
 
 // Get
-func (db *Store) Get(key string) ([]byte, int64, bool) {
+func (db *Store) Get(key string) (any, int64, bool) {
 	return db.m.Get(key)
 }
 
-// GetAny
-func (db *Store) GetAny(key string) (any, int64, bool) {
-	return db.m.GetAny(key)
+// GetBytes
+func (db *Store) GetBytes(key string) ([]byte, int64, bool) {
+	r, t, ok := db.m.Get(key)
+	if ok {
+		if r, ok := r.([]byte); ok {
+			return r, t, true
+		}
+	}
+	return nil, 0, false
 }
 
 // Set store key-value pair.
@@ -232,8 +242,9 @@ func (db *Store) SetTx(key string, val []byte, ts int64) {
 // Incr
 func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 	val, ts, ok := db.m.Get(key)
+	bytes, _ := val.([]byte)
 	if ok {
-		f, err := strconv.ParseFloat(string(val), 64)
+		f, err := strconv.ParseFloat(string(bytes), 64)
 		if err != nil {
 			return 0, err
 		}
@@ -256,6 +267,17 @@ func (db *Store) Remove(key string) bool {
 	return db.m.Delete(key)
 }
 
+// Keys
+func (db *Store) Keys() []string {
+	keys := make([]string, 0)
+	db.m.Scan(func(k string, _ any, _ int64) bool {
+		keys = append(keys, k)
+		return true
+	})
+
+	return keys
+}
+
 // Scan
 func (db *Store) Scan(f func(string, any, int64) bool) {
 	db.m.Scan(f)
@@ -268,7 +290,7 @@ func (db *Store) Stat() cache.CacheStat {
 
 // HGet
 func (db *Store) HGet(key, field string) ([]byte, error) {
-	m, err := db.getMap(key)
+	m, err := db.fetchMap(key)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +304,7 @@ func (db *Store) HGet(key, field string) ([]byte, error) {
 
 // HSet
 func (db *Store) HSet(key, field string, val []byte) error {
-	m, err := db.getMap(key)
+	m, err := db.fetchMap(key)
 	if err != nil {
 		return err
 	}
@@ -294,7 +316,7 @@ func (db *Store) HSet(key, field string, val []byte) error {
 
 // HRemove
 func (db *Store) HRemove(key, field string) error {
-	m, err := db.getMap(key)
+	m, err := db.fetchMap(key)
 	if err != nil {
 		return err
 	}
@@ -306,7 +328,7 @@ func (db *Store) HRemove(key, field string) error {
 
 // HKeys
 func (db *Store) HKeys(key string) ([]string, error) {
-	m, err := db.getMap(key)
+	m, err := db.fetchMap(key)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +337,7 @@ func (db *Store) HKeys(key string) ([]string, error) {
 
 // LPush
 func (db *Store) LPush(key, item string) error {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return err
 	}
@@ -327,7 +349,7 @@ func (db *Store) LPush(key, item string) error {
 
 // RPush
 func (db *Store) RPush(key, item string) error {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return err
 	}
@@ -339,13 +361,13 @@ func (db *Store) RPush(key, item string) error {
 
 // LPop
 func (db *Store) LPop(key string) (string, error) {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return "", err
 	}
 	res, ok := ls.LPop()
 	if !ok {
-		return "", base.ErrListEmpty
+		return "", base.ErrEmptyList
 	}
 	db.encode(NewCodec(OpLPop, 1).String(key))
 
@@ -354,13 +376,13 @@ func (db *Store) LPop(key string) (string, error) {
 
 // RPop
 func (db *Store) RPop(key string) (string, error) {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return "", err
 	}
 	res, ok := ls.RPop()
 	if !ok {
-		return "", base.ErrListEmpty
+		return "", base.ErrEmptyList
 	}
 	db.encode(NewCodec(OpRPop, 1).String(key))
 
@@ -369,7 +391,7 @@ func (db *Store) RPop(key string) (string, error) {
 
 // LLen
 func (db *Store) LLen(key string) (int, error) {
-	ls, err := db.getList(key)
+	ls, err := db.fetchList(key)
 	if err != nil {
 		return 0, err
 	}
@@ -378,7 +400,7 @@ func (db *Store) LLen(key string) (int, error) {
 
 // BitTest
 func (db *Store) BitTest(key string, offset uint32) (bool, error) {
-	bm, err := db.getBitMap(key)
+	bm, err := db.fetchBitMap(key)
 	if err != nil {
 		return false, err
 	}
@@ -387,7 +409,7 @@ func (db *Store) BitTest(key string, offset uint32) (bool, error) {
 
 // BitSet
 func (db *Store) BitSet(key string, offset uint32, val bool) error {
-	bm, err := db.getBitMap(key)
+	bm, err := db.fetchBitMap(key)
 	if err != nil {
 		return err
 	}
@@ -408,7 +430,7 @@ func (db *Store) BitSet(key string, offset uint32, val bool) error {
 
 // BitFlip
 func (db *Store) BitFlip(key string, offset uint32) error {
-	bm, err := db.getBitMap(key)
+	bm, err := db.fetchBitMap(key)
 	if err != nil {
 		return err
 	}
@@ -420,11 +442,11 @@ func (db *Store) BitFlip(key string, offset uint32) error {
 
 // BitOr
 func (db *Store) BitOr(key1, key2, dest string) error {
-	bm1, err := db.getBitMap(key1)
+	bm1, err := db.fetchBitMap(key1)
 	if err != nil {
 		return err
 	}
-	bm2, err := db.getBitMap(key2)
+	bm2, err := db.fetchBitMap(key2)
 	if err != nil {
 		return err
 	}
@@ -435,7 +457,7 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	} else if key2 == dest {
 		bm2.Or(bm1)
 	} else {
-		db.m.SetAny(dest, bm1.Clone().Or(bm2))
+		db.m.Set(dest, bm1.Clone().Or(bm2))
 	}
 
 	return nil
@@ -443,11 +465,11 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 
 // BitXor
 func (db *Store) BitXor(key1, key2, dest string) error {
-	bm1, err := db.getBitMap(key1)
+	bm1, err := db.fetchBitMap(key1)
 	if err != nil {
 		return err
 	}
-	bm2, err := db.getBitMap(key2)
+	bm2, err := db.fetchBitMap(key2)
 	if err != nil {
 		return err
 	}
@@ -458,7 +480,7 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 	} else if key2 == dest {
 		bm2.Xor(bm1)
 	} else {
-		db.m.SetAny(dest, bm1.Clone().Xor(bm2))
+		db.m.Set(dest, bm1.Clone().Xor(bm2))
 	}
 
 	return nil
@@ -466,11 +488,11 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 
 // BitAnd
 func (db *Store) BitAnd(key1, key2, dest string) error {
-	bm1, err := db.getBitMap(key1)
+	bm1, err := db.fetchBitMap(key1)
 	if err != nil {
 		return err
 	}
-	bm2, err := db.getBitMap(key2)
+	bm2, err := db.fetchBitMap(key2)
 	if err != nil {
 		return err
 	}
@@ -481,15 +503,25 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 	} else if key2 == dest {
 		bm2.And(bm1)
 	} else {
-		db.m.SetAny(dest, bm1.Clone().And(bm2))
+		db.m.Set(dest, bm1.Clone().And(bm2))
 	}
 
 	return nil
 }
 
+// BitArray
+func (db *Store) BitArray(key string) ([]uint32, error) {
+	bm, err := db.fetchBitMap(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return bm.ToArray(), nil
+}
+
 // BitCount
 func (db *Store) BitCount(key string) (uint64, error) {
-	bm, err := db.getBitMap(key)
+	bm, err := db.fetchBitMap(key)
 	return bm.Len(), err
 }
 
@@ -550,7 +582,7 @@ func (s *Store) load() error {
 			}
 
 		case OpSetTx: // type, key, ts, val
-			ts := cache.ParseNumber[int64](args[2])
+			ts := base.ParseNumber[int64](args[2])
 			ts *= timeCarry
 
 			if ts < cache.GetUnixNano() && ts != NoTTL {
@@ -568,14 +600,14 @@ func (s *Store) load() error {
 				if err := m.UnmarshalJSON(args[3]); err != nil {
 					return err
 				}
-				s.m.SetAny(*base.B2S(args[1]), m)
+				s.m.Set(*base.B2S(args[1]), m)
 
 			case V_BITMAP:
 				var m BitMap
 				if err := m.UnmarshalBinary(args[3]); err != nil {
 					return err
 				}
-				s.m.SetAny(*base.B2S(args[1]), m)
+				s.m.Set(*base.B2S(args[1]), m)
 
 			default:
 				return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, vType)
@@ -585,21 +617,21 @@ func (s *Store) load() error {
 			s.Remove(*base.B2S(args[0]))
 
 		case OpHSet: // key, field, val
-			m, err := s.getMap(*base.B2S(args[0]))
+			m, err := s.fetchMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
 			m.Set(*base.B2S(args[1]), args[2])
 
 		case OpHRemove: // key, field
-			m, err := s.getMap(*base.B2S(args[0]))
+			m, err := s.fetchMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
 			m.Delete(*base.B2S(args[1]))
 
 		case OpLPush, OpRPush: // key, item
-			ls, err := s.getList(*base.B2S(args[0]))
+			ls, err := s.fetchList(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
@@ -611,7 +643,7 @@ func (s *Store) load() error {
 			}
 
 		case OpLPop, OpRPop: // key
-			ls, err := s.getList(*base.B2S(args[0]))
+			ls, err := s.fetchList(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
@@ -623,12 +655,12 @@ func (s *Store) load() error {
 			}
 
 		case OpBitSet: // key, offset, val
-			bm, err := s.getBitMap(*base.B2S(args[0]))
+			bm, err := s.fetchBitMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
 
-			offset := cache.ParseNumber[uint32](args[1])
+			offset := base.ParseNumber[uint32](args[1])
 			if args[2][0] == _true {
 				bm.Add(offset)
 			} else {
@@ -636,19 +668,19 @@ func (s *Store) load() error {
 			}
 
 		case OpBitFlip: // key, offset
-			bm, err := s.getBitMap(*base.B2S(args[0]))
+			bm, err := s.fetchBitMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
-			bm.Flip(cache.ParseNumber[uint64](args[1]))
+			bm.Flip(base.ParseNumber[uint64](args[1]))
 
 		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
-			bm1, err := s.getBitMap(*base.B2S(args[0]))
+			bm1, err := s.fetchBitMap(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
 
-			bm2, err := s.getBitMap(*base.B2S(args[1]))
+			bm2, err := s.fetchBitMap(*base.B2S(args[1]))
 			if err != nil {
 				return err
 			}
@@ -676,11 +708,11 @@ func (s *Store) load() error {
 			} else {
 				switch op {
 				case OpBitAnd:
-					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().And(bm2))
+					s.m.Set(*base.B2S(args[2]), bm1.Clone().And(bm2))
 				case OpBitOr:
-					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().Or(bm2))
+					s.m.Set(*base.B2S(args[2]), bm1.Clone().Or(bm2))
 				case OpBitXor:
-					s.m.SetAny(*base.B2S(args[2]), bm1.Clone().Xor(bm2))
+					s.m.Set(*base.B2S(args[2]), bm1.Clone().Xor(bm2))
 				}
 			}
 
@@ -762,7 +794,7 @@ func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
 			return nil, nil, base.ErrParseRecordLine
 		}
 
-		key_len := cache.ParseNumber[int](line[:i])
+		key_len := base.ParseNumber[int](line[:i])
 		i++
 
 		// valid
@@ -778,40 +810,41 @@ func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
 	return res, line, nil
 }
 
-// getMap
-func (db *Store) getMap(key string) (m Map, err error) {
-	return getOrCreate(db, key, m, func() Map {
+// fetchMap
+func (db *Store) fetchMap(key string) (m Map, err error) {
+	return fetch(db, key, func() Map {
 		return structx.NewSyncMap[string, []byte]()
 	})
 }
 
-// getList
-func (db *Store) getList(key string) (m List, err error) {
-	return getOrCreate(db, key, m, func() List {
+// fetchList
+func (db *Store) fetchList(key string) (m List, err error) {
+	return fetch(db, key, func() List {
 		return structx.NewList[string]()
 	})
 }
 
-// getBitMap
-func (db *Store) getBitMap(key string) (bm BitMap, err error) {
-	return getOrCreate(db, key, bm, func() BitMap {
+// fetchBitMap
+func (db *Store) fetchBitMap(key string) (bm BitMap, err error) {
+	return fetch(db, key, func() BitMap {
 		return structx.NewBitmap()
 	})
 }
 
-// getOrCreate
-func getOrCreate[T any](s *Store, key string, vptr T, new func() T) (T, error) {
-	m, _, ok := s.m.GetAny(key)
+// fetch
+func fetch[T any](s *Store, key string, new func() T) (T, error) {
+	m, _, ok := s.m.Get(key)
 	if ok {
 		m, ok := m.(T)
 		if ok {
 			return m, nil
 		}
-		return vptr, base.ErrWrongType
+		var v T
+		return v, base.ErrWrongType
 	}
 
-	vptr = new()
-	s.m.SetAny(key, vptr)
+	vptr := new()
+	s.m.Set(key, vptr)
 
 	return vptr, nil
 }
