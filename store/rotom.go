@@ -435,24 +435,17 @@ func (db *Store) BitTest(key string, offset uint32) (bool, error) {
 }
 
 // BitSet
-func (db *Store) BitSet(key string, offset uint32, val bool) error {
+func (db *Store) BitSet(key string, offset uint32, val bool) (bool, error) {
 	bm, err := db.fetchBitMap(key)
 	if err != nil {
-		return err
-	}
-	// checked
-	if val {
-		if !bm.Add(offset) {
-			return nil
-		}
-	} else {
-		if !bm.Remove(offset) {
-			return nil
-		}
+		return false, err
 	}
 	db.encode(NewCodec(OpBitSet, 3).String(key).Uint(offset).Bool(val))
 
-	return nil
+	if val {
+		return bm.Add(offset), nil
+	}
+	return bm.Remove(offset), nil
 }
 
 // BitFlip
@@ -542,7 +535,6 @@ func (db *Store) BitArray(key string) ([]uint32, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return bm.ToArray(), nil
 }
 
