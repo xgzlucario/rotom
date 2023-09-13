@@ -23,26 +23,30 @@ type Operation byte
 const (
 	OpSetTx Operation = iota
 	OpRemove
+	OpRename
+
+	// map
 	OpHSet
 	OpHRemove
 
+	// list
+	OpLPush
+	OpLPop
+	OpRPush
+	OpRPop
+
+	// bitmap
 	OpBitSet
 	OpBitFlip
 	OpBitOr
 	OpBitAnd
 	OpBitXor
 
-	OpLPush
-	OpLPop
-	OpRPush
-	OpRPop
-
-	OpJsonSet
-	OpJsonDelete
-
+	// common
 	OpMarshalBytes
-	OpRequest
+	OpResponse
 
+	// request
 	ReqPing
 	ReqGet
 	ReqLen
@@ -54,7 +58,8 @@ const (
 	OpZIncr
 	OpZRemove
 
-	OpRename
+	OpJsonSet
+	OpJsonDelete
 )
 
 // VType is value type.
@@ -199,6 +204,9 @@ func (db *Store) Close() error {
 
 // encode
 func (db *Store) encode(cd *Codec) {
+	if db.SyncPolicy == base.Never {
+		return
+	}
 	db.Lock()
 	db.buf.Write(cd.buf)
 	db.Unlock()
@@ -241,8 +249,7 @@ func (db *Store) SetTx(key string, val []byte, ts int64) {
 
 // Incr
 func (db *Store) Incr(key string, incr float64) (res float64, err error) {
-	val, ts, ok := db.m.Get(key)
-	bytes, _ := val.([]byte)
+	bytes, ts, ok := db.GetBytes(key)
 	if ok {
 		f, err := strconv.ParseFloat(string(bytes), 64)
 		if err != nil {
@@ -253,7 +260,7 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 
 		db.encode(NewCodec(OpSetTx, 4).
 			Type(V_STRING).String(key).Int(ts / timeCarry).String(fstr))
-		db.m.SetTx(key, []byte(fstr), ts)
+		db.m.SetTx(key, base.S2B(&fstr), ts)
 
 		return res, nil
 	}
@@ -265,6 +272,17 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 func (db *Store) Remove(key string) bool {
 	db.encode(NewCodec(OpRemove, 1).String(key))
 	return db.m.Delete(key)
+}
+
+// Rename
+func (db *Store) Rename(old, new string) bool {
+	db.encode(NewCodec(OpRename, 2).String(old).String(new))
+	v, ts, ok := db.Get(old)
+	if ok {
+		db.m.SetTx(new, v, ts)
+	}
+
+	return ok
 }
 
 // Keys
@@ -283,7 +301,7 @@ func (db *Store) Scan(f func(string, any, int64) bool) {
 	db.m.Scan(f)
 }
 
-// Len
+// Stat
 func (db *Store) Stat() cache.CacheStat {
 	return db.m.Stat()
 }
@@ -300,6 +318,15 @@ func (db *Store) HGet(key, field string) ([]byte, error) {
 		return nil, base.ErrFieldNotFound
 	}
 	return res, nil
+}
+
+// HLen
+func (db *Store) HLen(key string) (int, error) {
+	m, err := db.fetchMap(key)
+	if err != nil {
+		return 0, err
+	}
+	return m.Len(), nil
 }
 
 // HSet
@@ -522,6 +549,9 @@ func (db *Store) BitArray(key string) ([]uint32, error) {
 // BitCount
 func (db *Store) BitCount(key string) (uint64, error) {
 	bm, err := db.fetchBitMap(key)
+	if err != nil {
+		return 0, err
+	}
 	return bm.Len(), err
 }
 
@@ -614,7 +644,13 @@ func (s *Store) load() error {
 			}
 
 		case OpRemove: // key
-			s.Remove(*base.B2S(args[0]))
+			s.m.Delete(*base.B2S(args[0]))
+
+		case OpRename: // old, new
+			v, ts, ok := s.Get(*base.B2S(args[0]))
+			if ok {
+				s.m.SetTx(*base.B2S(args[1]), v, ts)
+			}
 
 		case OpHSet: // key, field, val
 			m, err := s.fetchMap(*base.B2S(args[0]))

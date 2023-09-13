@@ -62,31 +62,41 @@ func NewSyncMap[K comparable, V any]() *SyncMap[K, V] {
 }
 
 // Get
-func (m *SyncMap[K, V]) Get(key K) (V, bool) {
+func (m *SyncMap[K, V]) Get(key K) (v V, ok bool) {
 	m.RLock()
-	defer m.RUnlock()
-	return m.m.Get(key)
+	v, ok = m.m.Get(key)
+	m.RUnlock()
+	return
 }
 
 // Set
 func (m *SyncMap[K, V]) Set(key K, value V) {
 	m.Lock()
-	defer m.Unlock()
 	m.m.Set(key, value)
+	m.Unlock()
 }
 
 // Delete
 func (m *SyncMap[K, V]) Delete(key K) {
 	m.Lock()
-	defer m.Unlock()
 	m.m.Delete(key)
+	m.Unlock()
 }
 
 // Keys
-func (m *SyncMap[K, V]) Keys() []K {
+func (m *SyncMap[K, V]) Keys() (k []K) {
 	m.RLock()
-	defer m.RUnlock()
-	return m.m.Keys()
+	k = m.m.Keys()
+	m.RUnlock()
+	return
+}
+
+// Len
+func (m *SyncMap[K, V]) Len() (n int) {
+	m.RLock()
+	n = m.m.Len()
+	m.RUnlock()
+	return
 }
 
 // MarshalJSON
