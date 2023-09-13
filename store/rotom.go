@@ -617,6 +617,13 @@ func (s *Store) load() error {
 			case V_STRING:
 				s.m.SetTx(*base.B2S(args[1]), args[3], ts)
 
+			case V_LIST:
+				var ls List
+				if err := ls.UnmarshalJSON(args[3]); err != nil {
+					return err
+				}
+				s.m.Set(*base.B2S(args[1]), ls)
+
 			case V_MAP:
 				var m Map
 				if err := m.UnmarshalJSON(args[3]); err != nil {
