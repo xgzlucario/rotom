@@ -38,7 +38,7 @@ func cmd() {
 				now := time.Now()
 
 				cd := store.NewCodec(store.OpSetTx, 4).
-					Type(store.V_STRING).String(k).
+					Type(store.TypeString).String(k).
 					Int(now.Add(time.Minute).UnixNano()).String(k)
 
 				_, err := getAndRead(conn, cd.Content())

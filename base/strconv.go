@@ -23,7 +23,7 @@ const (
 	RADIX = VALID - 1
 )
 
-func FormatNumber[T Number](n T) []byte {
+func FormatInt[T Integer](n T) []byte {
 	if n < 0 {
 		panic("negative number")
 	}
@@ -40,7 +40,7 @@ func FormatNumber[T Number](n T) []byte {
 	return sb
 }
 
-func ParseNumber[T Number](b []byte) T {
+func ParseInt[T Integer](b []byte) T {
 	var n T
 	for i := len(b) - 1; i >= 0; i-- {
 		n = n*RADIX + T(b[i])

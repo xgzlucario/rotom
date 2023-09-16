@@ -66,7 +66,7 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 
 	case ReqLen:
 		stat := db.Stat()
-		return base.FormatNumber(stat.Len), nil
+		return base.FormatInt(stat.Len), nil
 
 	case ReqGet:
 		v, _, ok := db.Get(*base.B2S(args[0]))
@@ -79,8 +79,8 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 		recType := VType(args[0][0])
 
 		switch recType {
-		case V_STRING:
-			ts := base.ParseNumber[int64](args[2])
+		case TypeString:
+			ts := base.ParseInt[int64](args[2])
 			db.SetTx(*base.B2S(args[1]), args[3], ts)
 		}
 
@@ -100,7 +100,7 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 
 	case ReqLLen: // key
 		num, err := db.LLen(*base.B2S(args[0]))
-		return base.FormatNumber(num), err
+		return base.FormatInt(num), err
 
 	default:
 		return nil, base.ErrUnknownOperationType

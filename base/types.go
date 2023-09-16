@@ -7,6 +7,10 @@ import (
 type Ordered constraints.Ordered
 
 type Number interface {
+	Integer | float64 | float32
+}
+
+type Integer interface {
 	~int | ~int32 | ~int64 | ~uint | ~uint32 | ~uint64
 }
 

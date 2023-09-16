@@ -42,6 +42,11 @@ const (
 	OpBitAnd
 	OpBitXor
 
+	// zset
+	OpZSet
+	OpZIncr
+	OpZRemove
+
 	// common
 	OpMarshalBytes
 	OpResponse
@@ -54,10 +59,6 @@ const (
 	ReqLLen
 
 	// TODO
-	OpZSet
-	OpZIncr
-	OpZRemove
-
 	OpJsonSet
 	OpJsonDelete
 )
@@ -66,13 +67,13 @@ const (
 type VType byte
 
 const (
-	V_STRING VType = iota + 1
-	V_MAP
-	V_SET
-	V_LIST
-	V_ZSET
-	V_BITMAP
-	V_JSON
+	TypeString VType = iota + 1
+	TypeMap
+	TypeSet
+	TypeList
+	TypeZSet
+	TypeBitmap
+	TypeJson
 )
 
 const (
@@ -242,7 +243,7 @@ func (db *Store) SetEx(key string, val []byte, ttl time.Duration) {
 // SetTx store key-value pair with deadline.
 func (db *Store) SetTx(key string, val []byte, ts int64) {
 	db.encode(NewCodec(OpSetTx, 4).
-		Type(V_STRING).String(key).Int(ts / timeCarry).Bytes(val))
+		Type(TypeString).String(key).Int(ts / timeCarry).Bytes(val))
 
 	db.m.SetTx(key, val, ts)
 }
@@ -259,7 +260,7 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 		fstr := strconv.FormatFloat(res, 'f', 4, 64)
 
 		db.encode(NewCodec(OpSetTx, 4).
-			Type(V_STRING).String(key).Int(ts / timeCarry).String(fstr))
+			Type(TypeString).String(key).Int(ts / timeCarry).String(fstr))
 		db.m.SetTx(key, base.S2B(&fstr), ts)
 
 		return res, nil
@@ -547,6 +548,41 @@ func (db *Store) BitCount(key string) (uint64, error) {
 	return bm.Len(), err
 }
 
+// ZAdd
+func (db *Store) ZAdd(zset, key string, score float64, val []byte) error {
+	zs, err := db.fetchZSet(zset)
+	if err != nil {
+		return err
+	}
+	db.encode(NewCodec(OpZSet, 4).String(zset).String(key).Float(score).Bytes(val))
+	zs.SetWithScore(key, score, val)
+
+	return nil
+}
+
+// ZIncr
+func (db *Store) ZIncr(zset, key string, incr float64) (float64, error) {
+	zs, err := db.fetchZSet(zset)
+	if err != nil {
+		return 0, err
+	}
+	db.encode(NewCodec(OpZIncr, 3).String(zset).String(key).Float(incr))
+
+	return zs.Incr(key, incr), nil
+}
+
+// ZRemove
+func (db *Store) ZRemove(zset, key string) error {
+	zs, err := db.fetchZSet(zset)
+	if err != nil {
+		return err
+	}
+	db.encode(NewCodec(OpZRemove, 2).String(zset).String(key))
+	zs.Delete(key)
+
+	return nil
+}
+
 // writeTo writes the buffer into the file at the specified path.
 func (s *Store) writeTo(buf *bytes.Buffer, path string) (int64, error) {
 	if buf.Len() == 0 {
@@ -604,7 +640,7 @@ func (s *Store) load() error {
 			}
 
 		case OpSetTx: // type, key, ts, val
-			ts := base.ParseNumber[int64](args[2])
+			ts := base.ParseInt[int64](args[2])
 			ts *= timeCarry
 
 			if ts < cache.GetUnixNano() && ts != NoTTL {
@@ -614,24 +650,24 @@ func (s *Store) load() error {
 			vType := VType(args[0][0])
 
 			switch vType {
-			case V_STRING:
+			case TypeString:
 				s.m.SetTx(*base.B2S(args[1]), args[3], ts)
 
-			case V_LIST:
+			case TypeList:
 				var ls List
 				if err := ls.UnmarshalJSON(args[3]); err != nil {
 					return err
 				}
 				s.m.Set(*base.B2S(args[1]), ls)
 
-			case V_MAP:
+			case TypeMap:
 				var m Map
 				if err := m.UnmarshalJSON(args[3]); err != nil {
 					return err
 				}
 				s.m.Set(*base.B2S(args[1]), m)
 
-			case V_BITMAP:
+			case TypeBitmap:
 				var m BitMap
 				if err := m.UnmarshalBinary(args[3]); err != nil {
 					return err
@@ -665,29 +701,33 @@ func (s *Store) load() error {
 			}
 			m.Delete(*base.B2S(args[1]))
 
-		case OpLPush, OpRPush: // key, item
+		case OpLPush: // key, item
 			ls, err := s.fetchList(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
+			ls.LPush(*base.B2S(args[1]))
 
-			if op == OpLPush {
-				ls.LPush(*base.B2S(args[1]))
-			} else {
-				ls.RPush(*base.B2S(args[1]))
-			}
-
-		case OpLPop, OpRPop: // key
+		case OpRPush: // key, item
 			ls, err := s.fetchList(*base.B2S(args[0]))
 			if err != nil {
 				return err
 			}
+			ls.RPush(*base.B2S(args[1]))
 
-			if op == OpLPop {
-				ls.LPop()
-			} else {
-				ls.RPop()
+		case OpLPop: // key
+			ls, err := s.fetchList(*base.B2S(args[0]))
+			if err != nil {
+				return err
 			}
+			ls.LPop()
+
+		case OpRPop: // key
+			ls, err := s.fetchList(*base.B2S(args[0]))
+			if err != nil {
+				return err
+			}
+			ls.RPop()
 
 		case OpBitSet: // key, offset, val
 			bm, err := s.fetchBitMap(*base.B2S(args[0]))
@@ -695,7 +735,7 @@ func (s *Store) load() error {
 				return err
 			}
 
-			offset := base.ParseNumber[uint32](args[1])
+			offset := base.ParseInt[uint32](args[1])
 			if args[2][0] == _true {
 				bm.Add(offset)
 			} else {
@@ -707,7 +747,7 @@ func (s *Store) load() error {
 			if err != nil {
 				return err
 			}
-			bm.Flip(base.ParseNumber[uint64](args[1]))
+			bm.Flip(base.ParseInt[uint64](args[1]))
 
 		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
 			bm1, err := s.fetchBitMap(*base.B2S(args[0]))
@@ -751,6 +791,35 @@ func (s *Store) load() error {
 				}
 			}
 
+		case OpZSet: // key field score val
+			zs, err := s.fetchZSet(*base.B2S(args[0]))
+			if err != nil {
+				return err
+			}
+			s, err := strconv.ParseFloat(*base.B2S(args[2]), 64)
+			if err != nil {
+				return err
+			}
+			zs.SetWithScore(*base.B2S(args[1]), s, args[3])
+
+		case OpZIncr: // key field incr
+			zs, err := s.fetchZSet(*base.B2S(args[0]))
+			if err != nil {
+				return err
+			}
+			s, err := strconv.ParseFloat(*base.B2S(args[2]), 64)
+			if err != nil {
+				return err
+			}
+			zs.Incr(*base.B2S(args[1]), s)
+
+		case OpZRemove: // key field
+			zs, err := s.fetchZSet(*base.B2S(args[0]))
+			if err != nil {
+				return err
+			}
+			zs.Delete(*base.B2S(args[1]))
+
 		default:
 			return fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op)
 		}
@@ -785,13 +854,13 @@ func (s *Store) shrink() {
 		case String:
 			return true
 		case Map:
-			rec = V_STRING
+			rec = TypeString
 		case BitMap:
-			rec = V_BITMAP
+			rec = TypeBitmap
 		case List:
-			rec = V_LIST
+			rec = TypeList
 		case Set:
-			rec = V_SET
+			rec = TypeSet
 		default:
 			panic(base.ErrUnSupportDataType)
 		}
@@ -829,7 +898,7 @@ func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
 			return nil, nil, base.ErrParseRecordLine
 		}
 
-		key_len := base.ParseNumber[int](line[:i])
+		key_len := base.ParseInt[int](line[:i])
 		i++
 
 		// valid
@@ -852,6 +921,13 @@ func (db *Store) fetchMap(key string) (m Map, err error) {
 	})
 }
 
+// fetchSet
+func (db *Store) fetchSet(key string) (s Set, err error) {
+	return fetch(db, key, func() Set {
+		return structx.NewSet[string]()
+	})
+}
+
 // fetchList
 func (db *Store) fetchList(key string) (m List, err error) {
 	return fetch(db, key, func() List {
@@ -863,6 +939,13 @@ func (db *Store) fetchList(key string) (m List, err error) {
 func (db *Store) fetchBitMap(key string) (bm BitMap, err error) {
 	return fetch(db, key, func() BitMap {
 		return structx.NewBitmap()
+	})
+}
+
+// fetchZSet
+func (db *Store) fetchZSet(key string) (z ZSet, err error) {
+	return fetch(db, key, func() ZSet {
+		return structx.NewZSet[string, float64, []byte]()
 	})
 }
 
@@ -884,7 +967,7 @@ func fetch[T any](s *Store, key string, new func() T) (T, error) {
 	return vptr, nil
 }
 
-func formatSize[T base.Number](size T) string {
+func formatSize[T base.Integer](size T) string {
 	switch {
 	case size < KB:
 		return fmt.Sprintf("%dB", size)

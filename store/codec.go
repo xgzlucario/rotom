@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync"
 
 	"github.com/xgzlucario/rotom/base"
@@ -56,16 +57,20 @@ func (s *Codec) Bool(v bool) *Codec {
 }
 
 func (s *Codec) Uint(v uint32) *Codec {
-	return s.format(base.FormatNumber(v))
+	return s.format(base.FormatInt(v))
 }
 
 func (s *Codec) Int(v int64) *Codec {
-	return s.format(base.FormatNumber(v))
+	return s.format(base.FormatInt(v))
+}
+
+func (s *Codec) Float(f float64) *Codec {
+	return s.format(strconv.AppendFloat(nil, f, 'f', -1, 64))
 }
 
 // format encodes a byte slice into the Coder's buffer as a record.
 func (s *Codec) format(v []byte) *Codec {
-	s.buf = append(s.buf, base.FormatNumber(len(v))...)
+	s.buf = append(s.buf, base.FormatInt(len(v))...)
 	s.buf = append(s.buf, SEP_CHAR)
 	s.buf = append(s.buf, v...)
 	return s

@@ -11,7 +11,7 @@ require (
 	github.com/tidwall/gjson v1.16.0
 	github.com/tidwall/hashmap v1.8.1
 	github.com/tidwall/sjson v1.2.5
-	github.com/xgzlucario/GigaCache v0.0.0-20230910102950-fe0b891a2207
+	github.com/xgzlucario/GigaCache v0.0.0-20230915181310-52a55c164303
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 )
 
@@ -27,7 +27,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.25.0 // indirect
+	go.uber.org/zap v1.26.0 // indirect
 	golang.org/x/arch v0.5.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
 	golang.org/x/sys v0.12.0 // indirect
