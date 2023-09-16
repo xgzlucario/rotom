@@ -115,10 +115,39 @@ func (m *SyncMap[K, V]) UnmarshalJSON(src []byte) error {
 
 // ==================== Set ====================
 type Set[K comparable] struct {
-	*hashmap.Set[K]
+	mu sync.RWMutex
+	s  *hashmap.Set[K]
 }
 
 // NewSet
 func NewSet[K comparable]() Set[K] {
-	return Set[K]{&hashmap.Set[K]{}}
+	return Set[K]{sync.RWMutex{}, &hashmap.Set[K]{}}
+}
+
+// Add
+func (s *Set[K]) Add(key K) {
+	s.mu.Lock()
+	s.s.Insert(key)
+	s.mu.Unlock()
+}
+
+// Remove
+func (s *Set[K]) Remove(key K) {
+	s.mu.Lock()
+	s.s.Delete(key)
+	s.mu.Unlock()
+}
+
+// Has
+func (s *Set[K]) Has(key K) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.s.Contains(key)
+}
+
+// Len
+func (s *Set[K]) Len() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.s.Len()
 }

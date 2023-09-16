@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"unsafe"
 
 	"github.com/xgzlucario/rotom/base"
 )
@@ -38,7 +39,7 @@ func (s *Codec) recycle() {
 }
 
 func (s *Codec) String(v string) *Codec {
-	return s.format(base.S2B(&v))
+	return s.format(s2b(&v))
 }
 
 func (s *Codec) Type(v VType) *Codec {
@@ -102,4 +103,18 @@ func (s *Codec) encode(v any) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("%v: %v", base.ErrUnSupportDataType, reflect.TypeOf(v))
 	}
+}
+
+// String convert to bytes unsafe
+func s2b(str *string) []byte {
+	strHeader := (*[2]uintptr)(unsafe.Pointer(str))
+	byteSliceHeader := [3]uintptr{
+		strHeader[0], strHeader[1], strHeader[1],
+	}
+	return *(*[]byte)(unsafe.Pointer(&byteSliceHeader))
+}
+
+// Bytes convert to string unsafe
+func b2s(buf []byte) *string {
+	return (*string)(unsafe.Pointer(&buf))
 }

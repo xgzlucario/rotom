@@ -21,13 +21,15 @@ import (
 type Operation byte
 
 const (
-	OpSetTx Operation = iota
-	OpRemove
-	OpRename
+	OpSetTx Operation = iota + 1
 
 	// map
 	OpHSet
 	OpHRemove
+
+	// set
+	OpSAdd
+	OpSRemove
 
 	// list
 	OpLPush
@@ -47,7 +49,13 @@ const (
 	OpZIncr
 	OpZRemove
 
+	// json
+	OpJSet
+	OpJRemove
+
 	// common
+	OpRemove
+	OpRename
 	OpMarshalBytes
 	OpResponse
 
@@ -57,10 +65,6 @@ const (
 	ReqLen
 	ReqHLen
 	ReqLLen
-
-	// TODO
-	OpJsonSet
-	OpJsonDelete
 )
 
 // VType is value type.
@@ -261,7 +265,7 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 
 		db.encode(NewCodec(OpSetTx, 4).
 			Type(TypeString).String(key).Int(ts / timeCarry).String(fstr))
-		db.m.SetTx(key, base.S2B(&fstr), ts)
+		db.m.SetTx(key, s2b(&fstr), ts)
 
 		return res, nil
 	}
@@ -361,6 +365,48 @@ func (db *Store) HKeys(key string) ([]string, error) {
 		return nil, err
 	}
 	return m.Keys(), nil
+}
+
+// SAdd
+func (db *Store) SAdd(key string, item string) error {
+	s, err := db.fetchSet(key)
+	if err != nil {
+		return err
+	}
+	db.encode(NewCodec(OpSAdd, 2).String(key).String(item))
+	s.Add(item)
+
+	return nil
+}
+
+// SRemove
+func (db *Store) SRemove(key string, item string) error {
+	s, err := db.fetchSet(key)
+	if err != nil {
+		return err
+	}
+	db.encode(NewCodec(OpSRemove, 2).String(key).String(item))
+	s.Remove(item)
+
+	return nil
+}
+
+// SHas
+func (db *Store) SHas(key string, item string) (bool, error) {
+	s, err := db.fetchSet(key)
+	if err != nil {
+		return false, err
+	}
+	return s.Has(item), nil
+}
+
+// SLen
+func (db *Store) SLen(key string) (int, error) {
+	s, err := db.fetchSet(key)
+	if err != nil {
+		return 0, err
+	}
+	return s.Len(), nil
 }
 
 // LPush
@@ -640,9 +686,7 @@ func (s *Store) load() error {
 			}
 
 		case OpSetTx: // type, key, ts, val
-			ts := base.ParseInt[int64](args[2])
-			ts *= timeCarry
-
+			ts := base.ParseInt[int64](args[2]) * timeCarry
 			if ts < cache.GetUnixNano() && ts != NoTTL {
 				continue
 			}
@@ -651,86 +695,86 @@ func (s *Store) load() error {
 
 			switch vType {
 			case TypeString:
-				s.m.SetTx(*base.B2S(args[1]), args[3], ts)
+				s.m.SetTx(*b2s(args[1]), args[3], ts)
 
 			case TypeList:
 				var ls List
 				if err := ls.UnmarshalJSON(args[3]); err != nil {
 					return err
 				}
-				s.m.Set(*base.B2S(args[1]), ls)
+				s.m.Set(*b2s(args[1]), ls)
 
 			case TypeMap:
 				var m Map
 				if err := m.UnmarshalJSON(args[3]); err != nil {
 					return err
 				}
-				s.m.Set(*base.B2S(args[1]), m)
+				s.m.Set(*b2s(args[1]), m)
 
 			case TypeBitmap:
 				var m BitMap
 				if err := m.UnmarshalBinary(args[3]); err != nil {
 					return err
 				}
-				s.m.Set(*base.B2S(args[1]), m)
+				s.m.Set(*b2s(args[1]), m)
 
 			default:
 				return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, vType)
 			}
 
 		case OpRemove: // key
-			s.m.Delete(*base.B2S(args[0]))
+			s.m.Delete(*b2s(args[0]))
 
 		case OpRename: // old, new
-			v, ts, ok := s.Get(*base.B2S(args[0]))
+			v, ts, ok := s.Get(*b2s(args[0]))
 			if ok {
-				s.m.SetTx(*base.B2S(args[1]), v, ts)
+				s.m.SetTx(*b2s(args[1]), v, ts)
 			}
 
 		case OpHSet: // key, field, val
-			m, err := s.fetchMap(*base.B2S(args[0]))
+			m, err := s.fetchMap(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
-			m.Set(*base.B2S(args[1]), args[2])
+			m.Set(*b2s(args[1]), args[2])
 
 		case OpHRemove: // key, field
-			m, err := s.fetchMap(*base.B2S(args[0]))
+			m, err := s.fetchMap(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
-			m.Delete(*base.B2S(args[1]))
+			m.Delete(*b2s(args[1]))
 
 		case OpLPush: // key, item
-			ls, err := s.fetchList(*base.B2S(args[0]))
+			ls, err := s.fetchList(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
-			ls.LPush(*base.B2S(args[1]))
+			ls.LPush(*b2s(args[1]))
 
 		case OpRPush: // key, item
-			ls, err := s.fetchList(*base.B2S(args[0]))
+			ls, err := s.fetchList(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
-			ls.RPush(*base.B2S(args[1]))
+			ls.RPush(*b2s(args[1]))
 
 		case OpLPop: // key
-			ls, err := s.fetchList(*base.B2S(args[0]))
+			ls, err := s.fetchList(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
 			ls.LPop()
 
 		case OpRPop: // key
-			ls, err := s.fetchList(*base.B2S(args[0]))
+			ls, err := s.fetchList(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
 			ls.RPop()
 
 		case OpBitSet: // key, offset, val
-			bm, err := s.fetchBitMap(*base.B2S(args[0]))
+			bm, err := s.fetchBitMap(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
@@ -743,19 +787,19 @@ func (s *Store) load() error {
 			}
 
 		case OpBitFlip: // key, offset
-			bm, err := s.fetchBitMap(*base.B2S(args[0]))
+			bm, err := s.fetchBitMap(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
 			bm.Flip(base.ParseInt[uint64](args[1]))
 
 		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
-			bm1, err := s.fetchBitMap(*base.B2S(args[0]))
+			bm1, err := s.fetchBitMap(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
 
-			bm2, err := s.fetchBitMap(*base.B2S(args[1]))
+			bm2, err := s.fetchBitMap(*b2s(args[1]))
 			if err != nil {
 				return err
 			}
@@ -783,42 +827,42 @@ func (s *Store) load() error {
 			} else {
 				switch op {
 				case OpBitAnd:
-					s.m.Set(*base.B2S(args[2]), bm1.Clone().And(bm2))
+					s.m.Set(*b2s(args[2]), bm1.Clone().And(bm2))
 				case OpBitOr:
-					s.m.Set(*base.B2S(args[2]), bm1.Clone().Or(bm2))
+					s.m.Set(*b2s(args[2]), bm1.Clone().Or(bm2))
 				case OpBitXor:
-					s.m.Set(*base.B2S(args[2]), bm1.Clone().Xor(bm2))
+					s.m.Set(*b2s(args[2]), bm1.Clone().Xor(bm2))
 				}
 			}
 
 		case OpZSet: // key field score val
-			zs, err := s.fetchZSet(*base.B2S(args[0]))
+			zs, err := s.fetchZSet(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
-			s, err := strconv.ParseFloat(*base.B2S(args[2]), 64)
+			s, err := strconv.ParseFloat(*b2s(args[2]), 64)
 			if err != nil {
 				return err
 			}
-			zs.SetWithScore(*base.B2S(args[1]), s, args[3])
+			zs.SetWithScore(*b2s(args[1]), s, args[3])
 
 		case OpZIncr: // key field incr
-			zs, err := s.fetchZSet(*base.B2S(args[0]))
+			zs, err := s.fetchZSet(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
-			s, err := strconv.ParseFloat(*base.B2S(args[2]), 64)
+			s, err := strconv.ParseFloat(*b2s(args[2]), 64)
 			if err != nil {
 				return err
 			}
-			zs.Incr(*base.B2S(args[1]), s)
+			zs.Incr(*b2s(args[1]), s)
 
 		case OpZRemove: // key field
-			zs, err := s.fetchZSet(*base.B2S(args[0]))
+			zs, err := s.fetchZSet(*b2s(args[0]))
 			if err != nil {
 				return err
 			}
-			zs.Delete(*base.B2S(args[1]))
+			zs.Delete(*b2s(args[1]))
 
 		default:
 			return fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op)
