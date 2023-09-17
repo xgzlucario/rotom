@@ -30,6 +30,9 @@ const (
 	// set
 	OpSAdd
 	OpSRemove
+	OpSUnion
+	OpSInter
+	OpSDiff
 
 	// list
 	OpLPush
@@ -48,10 +51,6 @@ const (
 	OpZSet
 	OpZIncr
 	OpZRemove
-
-	// json
-	OpJSet
-	OpJRemove
 
 	// common
 	OpRemove
@@ -77,7 +76,6 @@ const (
 	TypeList
 	TypeZSet
 	TypeBitmap
-	TypeJson
 )
 
 const (
@@ -397,16 +395,85 @@ func (db *Store) SHas(key string, item string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return s.Has(item), nil
+	return s.Contains(item), nil
 }
 
-// SLen
-func (db *Store) SLen(key string) (int, error) {
+// SCard
+func (db *Store) SCard(key string) (int, error) {
 	s, err := db.fetchSet(key)
 	if err != nil {
 		return 0, err
 	}
-	return s.Len(), nil
+	return s.Cardinality(), nil
+}
+
+// SUnion
+func (db *Store) SUnion(key1, key2, dest string) error {
+	s1, err := db.fetchSet(key1)
+	if err != nil {
+		return err
+	}
+	s2, err := db.fetchSet(key2)
+	if err != nil {
+		return err
+	}
+	db.encode(NewCodec(OpSUnion, 3).String(key1).String(key2).String(dest))
+
+	if key1 == dest {
+		s1.Union(s2)
+	} else if key2 == dest {
+		s2.Union(s1)
+	} else {
+		db.m.Set(dest, s1.Clone().Union(s2))
+	}
+
+	return nil
+}
+
+// SInter
+func (db *Store) SInter(key1, key2, dest string) error {
+	s1, err := db.fetchSet(key1)
+	if err != nil {
+		return err
+	}
+	s2, err := db.fetchSet(key2)
+	if err != nil {
+		return err
+	}
+	db.encode(NewCodec(OpSInter, 3).String(key1).String(key2).String(dest))
+
+	if key1 == dest {
+		s1.Intersect(s2)
+	} else if key2 == dest {
+		s2.Intersect(s1)
+	} else {
+		db.m.Set(dest, s1.Clone().Intersect(s2))
+	}
+
+	return nil
+}
+
+// SDiff
+func (db *Store) SDiff(key1, key2, dest string) error {
+	s1, err := db.fetchSet(key1)
+	if err != nil {
+		return err
+	}
+	s2, err := db.fetchSet(key2)
+	if err != nil {
+		return err
+	}
+	db.encode(NewCodec(OpSDiff, 3).String(key1).String(key2).String(dest))
+
+	if key1 == dest {
+		s1.Difference(s2)
+	} else if key2 == dest {
+		s2.Difference(s1)
+	} else {
+		db.m.Set(dest, s1.Clone().Difference(s2))
+	}
+
+	return nil
 }
 
 // LPush
