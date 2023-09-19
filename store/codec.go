@@ -33,7 +33,7 @@ func NewCodec(v Operation, argsNum byte) *Codec {
 	return obj
 }
 
-func (s *Codec) recycle() {
+func (s *Codec) Recycle() {
 	s.buf = s.buf[:0]
 	codecPool.Put(s)
 }

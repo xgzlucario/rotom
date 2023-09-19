@@ -22,6 +22,7 @@ var (
 	ErrNotNumberic = errors.New("value is not numberic")
 
 	ErrParseRecordLine = errors.New("parse record line error, db file is broken")
+	ErrInvalidResponse = errors.New("invalid response")
 
 	ErrDatabaseClosed = errors.New("database closed")
 

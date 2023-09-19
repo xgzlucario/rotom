@@ -33,15 +33,15 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 	msg, err := e.db.handleEvent(buf)
 	var cd *Codec
 	if err != nil {
-		cd = NewCodec(OpResponse, 2).Int(int64(RES_ERROR)).String(err.Error())
+		cd = NewCodec(Response, 2).Int(int64(RES_ERROR)).String(err.Error())
 
 	} else {
-		cd = NewCodec(OpResponse, 2).Int(int64(RES_SUCCESS)).Bytes(msg)
+		cd = NewCodec(Response, 2).Int(int64(RES_SUCCESS)).Bytes(msg)
 	}
-	defer cd.recycle()
 
 	// send resp
 	_, err = conn.Write(cd.Content())
+	cd.Recycle()
 	if err != nil {
 		return gnet.Close
 	}

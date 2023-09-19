@@ -56,7 +56,8 @@ const (
 	OpRemove
 	OpRename
 	OpMarshalBytes
-	OpResponse
+
+	Response
 
 	// request
 	ReqPing
@@ -213,7 +214,7 @@ func (db *Store) encode(cd *Codec) {
 	db.Lock()
 	db.buf.Write(cd.buf)
 	db.Unlock()
-	cd.recycle()
+	cd.Recycle()
 }
 
 // Get
@@ -956,7 +957,7 @@ func (s *Store) shrink() {
 
 	cd := NewCodec(OpMarshalBytes, 1).Bytes(data)
 	s.rwbuf.Write(cd.buf)
-	cd.recycle()
+	cd.Recycle()
 
 	// MarshalOthers
 	var rec VType
@@ -979,7 +980,7 @@ func (s *Store) shrink() {
 		// SetTx
 		if cd, err := NewCodec(OpSetTx, 4).Type(rec).String(key).Int(i / timeCarry).Any(v); err == nil {
 			s.rwbuf.Write(cd.buf)
-			cd.recycle()
+			cd.Recycle()
 		}
 
 		return true
