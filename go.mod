@@ -7,10 +7,10 @@ require (
 	github.com/brianvoe/gofakeit/v6 v6.23.2
 	github.com/bytedance/sonic v1.10.1
 	github.com/deckarep/golang-set/v2 v2.3.1
-	github.com/panjf2000/gnet/v2 v2.3.2
+	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/sourcegraph/conc v0.3.0
 	github.com/tidwall/hashmap v1.8.1
-	github.com/xgzlucario/GigaCache v0.0.0-20230915181310-52a55c164303
+	github.com/xgzlucario/GigaCache v0.0.0-20230917160354-2ef5cb3c3258
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 )
 
