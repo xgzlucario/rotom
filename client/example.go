@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sourcegraph/conc/pool"
+	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 )
 
@@ -35,6 +36,9 @@ func cmd() {
 	start := time.Now()
 	p := pool.New()
 
+	validContent := store.NewCodec(store.Response, 2).
+		Int(int64(store.RES_SUCCESS)).String("ok").Content()
+
 	for i := 0; i < CLIENT_NUM; i++ {
 		p.Go(func() {
 			conn, err := net.Dial("tcp", ":7676")
@@ -53,7 +57,9 @@ func cmd() {
 
 				// Write your logic here.
 				send(conn, cd.Content(), func(res []byte) error {
-					// fmt.Println(string(res))
+					if !bytes.Equal(res, validContent) {
+						panic(base.ErrInvalidResponse)
+					}
 					return nil
 				})
 
