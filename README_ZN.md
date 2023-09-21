@@ -2,31 +2,31 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/xgzlucario/rotom)](https://goreportcard.com/report/github.com/xgzlucario/rotom) [![Go Reference](https://pkg.go.dev/badge/github.com/xgzlucario/rotom.svg)](https://pkg.go.dev/github.com/xgzlucario/rotom) ![](https://img.shields.io/badge/go-1.21.0-orange.svg) ![](https://img.shields.io/github/languages/code-size/xgzlucario/rotom.svg) 
 
-English | [中文](README_ZN.md)
+[English](README.md) | 中文
 
-## 📃Introduction
+## 📃介绍
 
-​	This is Rotom, a high-performance Key-Value memory database written in Go. Its multithreaded performance is several times better than Redis. It has built-in multiple commonly used data types, supports persistent storage, and can be used in Golang as an imported package or as a server (the client part is under development and does not support all commands yet).
+​		这里是 Rotom，一个 Go 编写高性能 Key-Value 内存数据库，多线程性能数倍于 Redis，内置多种常用数据类型，支持持久化存储，可以在 Golang 中以包引入的方式使用，也可以作为服务器使用（客户端部分正在开发中，暂不支持所有命令）。
 
-Features:
+目前支持的功能：
 
-1. Built-in data types like String, Map, Set, List, ZSet, BitMap, etc., supporting more than 20 commands.
-2. Microsecond-level expiration time (ttl).
-3. Based on , it can avoid GC overhead and have stronger multithreaded performance.
-4. RDB + AOF hybrid persistence strategy.
-5. Supports being **imported** or **server** startup.
+1. 内置数据类型 String，Map，Set，List，ZSet，BitMap 等，支持 20 多种命令
+2. 微秒级别的过期时间（ttl）
+3. 底层基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，能规避GC开销，多线程性能更强
+4. 基于 RDB + AOF 混合的持久化策略
+5. 支持**包引入**或**服务器**启动
 
-## 🚚Usage
+## 🚚如何使用
 
-Before using, please install Rotom into your project first:
+在使用之前，请先安装 Rotom 到你的项目中：
 ```bash
 go get github.com/xgzlucario/rotom
 ```
-And install the gofakeit library for generating some random data:
+并安装 gofakeit 库，用于生成一些随机数据：
 ```bash
 go get github.com/brianvoe/gofakeit/v6
 ```
-Run the sample program:
+运行示例程序：
 ```go
 package main
 
@@ -63,7 +63,7 @@ func main() {
 	// ...
 }
 ```
-Or start as a **server** and listen to port 7676:
+或者以**服务器**方式启动并监听 7676 端口：
 
 ```go
 package main
@@ -87,11 +87,11 @@ func main() {
 }
 ```
 
-## 🚀Performance
+## 🚀性能
 
-Rotom has very fast performance, which is several times faster than Redis.
+Rotom 具有超强的多线程性能，比 Redis 快数倍。
 
-### Test Environment
+### 测试环境
 
 ```
 goos: linux
@@ -102,7 +102,7 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 
 ### Rotom
 
-200 clients inserting a total of 1 million data, completed in 586ms, reaching a qps of 1.7 million.
+使用 200 个 clients 插入共 100 万数据，586ms 完成，qps 达到 170 万。
 
 ```bash
 $ go run client/*.go
@@ -112,7 +112,7 @@ qps: 1705590.11 req/sec
 
 ### Redis
 
-200 clients inserting a total of 1 million data, using 8 threads, completed in 4.26s, reaching a qps of 235,000.
+使用 200 个 clients 插入共 100 万数据，使用 8 个线程，4.26s 完成，qps 23.5 万。
 
 ```bash
 $ redis-benchmark -t set -r 100000000 -n 1000000 -c 200 --threads 8

@@ -49,8 +49,8 @@ github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS
 github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
-github.com/xgzlucario/GigaCache v0.0.0-20230917160354-2ef5cb3c3258 h1:xCTghWB2i8Vjb0s1LITr32hmNJ4+VA4K6+cBjRmEafY=
-github.com/xgzlucario/GigaCache v0.0.0-20230917160354-2ef5cb3c3258/go.mod h1:Vpk8bf5ffSeMmSSJpRrbMoxajT6FD+SzKYanEnOPUDM=
+github.com/xgzlucario/GigaCache v0.0.0-20230921063414-5aece8b157c7 h1:BZN4KxjxdPM7Q6/UnhSVlGuor1bgPYqXV3itsfj6TsA=
+github.com/xgzlucario/GigaCache v0.0.0-20230921063414-5aece8b157c7/go.mod h1:Vpk8bf5ffSeMmSSJpRrbMoxajT6FD+SzKYanEnOPUDM=
 github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
 github.com/zeebo/assert v1.3.1/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
 github.com/zeebo/xxh3 v1.0.2 h1:xZmwmqxHZA8AI603jOQ0tMqmBr9lPeFwGg6d+xy9DC0=
