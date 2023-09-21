@@ -95,4 +95,28 @@ func BenchmarkList(b *testing.B) {
 			ls.LPush(i)
 		}
 	})
+
+	getList := func() *structx.List[int] {
+		ls := structx.NewList[int]()
+		for i := 0; i < 1000*10000; i++ {
+			ls.RPush(i)
+		}
+		return ls
+	}
+
+	b.Run("ziplist/RPop", func(b *testing.B) {
+		ls := getList()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ls.RPop()
+		}
+	})
+
+	b.Run("ziplist/LPop", func(b *testing.B) {
+		ls := getList()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ls.LPop()
+		}
+	})
 }

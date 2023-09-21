@@ -3,7 +3,9 @@ package store
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"sync"
+	"unsafe"
 
 	"github.com/xgzlucario/rotom/base"
 )
@@ -31,13 +33,13 @@ func NewCodec(v Operation, argsNum byte) *Codec {
 	return obj
 }
 
-func (s *Codec) recycle() {
+func (s *Codec) Recycle() {
 	s.buf = s.buf[:0]
 	codecPool.Put(s)
 }
 
 func (s *Codec) String(v string) *Codec {
-	return s.format(base.S2B(&v))
+	return s.format(s2b(&v))
 }
 
 func (s *Codec) Type(v VType) *Codec {
@@ -56,16 +58,20 @@ func (s *Codec) Bool(v bool) *Codec {
 }
 
 func (s *Codec) Uint(v uint32) *Codec {
-	return s.format(base.FormatNumber(v))
+	return s.format(base.FormatInt(v))
 }
 
 func (s *Codec) Int(v int64) *Codec {
-	return s.format(base.FormatNumber(v))
+	return s.format(base.FormatInt(v))
+}
+
+func (s *Codec) Float(f float64) *Codec {
+	return s.format(strconv.AppendFloat(nil, f, 'f', -1, 64))
 }
 
 // format encodes a byte slice into the Coder's buffer as a record.
 func (s *Codec) format(v []byte) *Codec {
-	s.buf = append(s.buf, base.FormatNumber(len(v))...)
+	s.buf = append(s.buf, base.FormatInt(len(v))...)
 	s.buf = append(s.buf, SEP_CHAR)
 	s.buf = append(s.buf, v...)
 	return s
@@ -97,4 +103,18 @@ func (s *Codec) encode(v any) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("%v: %v", base.ErrUnSupportDataType, reflect.TypeOf(v))
 	}
+}
+
+// String convert to bytes unsafe
+func s2b(str *string) []byte {
+	strHeader := (*[2]uintptr)(unsafe.Pointer(str))
+	byteSliceHeader := [3]uintptr{
+		strHeader[0], strHeader[1], strHeader[1],
+	}
+	return *(*[]byte)(unsafe.Pointer(&byteSliceHeader))
+}
+
+// Bytes convert to string unsafe
+func b2s(buf []byte) *string {
+	return (*string)(unsafe.Pointer(&buf))
 }

@@ -33,15 +33,15 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 	msg, err := e.db.handleEvent(buf)
 	var cd *Codec
 	if err != nil {
-		cd = NewCodec(OpRequest, 2).Int(int64(RES_ERROR)).String(err.Error())
+		cd = NewCodec(Response, 2).Int(int64(RES_ERROR)).String(err.Error())
 
 	} else {
-		cd = NewCodec(OpRequest, 2).Int(int64(RES_SUCCESS)).Bytes(msg)
+		cd = NewCodec(Response, 2).Int(int64(RES_SUCCESS)).Bytes(msg)
 	}
-	defer cd.recycle()
 
 	// send resp
 	_, err = conn.Write(cd.Content())
+	cd.Recycle()
 	if err != nil {
 		return gnet.Close
 	}
@@ -66,10 +66,10 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 
 	case ReqLen:
 		stat := db.Stat()
-		return base.FormatNumber(stat.Len), nil
+		return base.FormatInt(stat.Len), nil
 
 	case ReqGet:
-		v, _, ok := db.Get(*base.B2S(args[0]))
+		v, _, ok := db.Get(*b2s(args[0]))
 		if ok {
 			return v.([]byte), nil
 		}
@@ -79,28 +79,28 @@ func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 		recType := VType(args[0][0])
 
 		switch recType {
-		case V_STRING:
-			ts := base.ParseNumber[int64](args[2])
-			db.SetTx(*base.B2S(args[1]), args[3], ts)
+		case TypeString:
+			ts := base.ParseInt[int64](args[2])
+			db.SetTx(*b2s(args[1]), args[3], ts)
 		}
 
 	case OpLPush: // key, item
-		db.LPush(*base.B2S(args[0]), *base.B2S(args[1]))
+		db.LPush(*b2s(args[0]), *b2s(args[1]))
 
 	case OpRPush: // key, item
-		db.RPush(*base.B2S(args[0]), *base.B2S(args[1]))
+		db.RPush(*b2s(args[0]), *b2s(args[1]))
 
 	case OpLPop: // key
-		r, err := db.LPop(*base.B2S(args[0]))
-		return base.S2B(&r), err
+		r, err := db.LPop(*b2s(args[0]))
+		return s2b(&r), err
 
 	case OpRPop: // key
-		r, err := db.RPop(*base.B2S(args[0]))
-		return base.S2B(&r), err
+		r, err := db.RPop(*b2s(args[0]))
+		return s2b(&r), err
 
 	case ReqLLen: // key
-		num, err := db.LLen(*base.B2S(args[0]))
-		return base.FormatNumber(num), err
+		num, err := db.LLen(*b2s(args[0]))
+		return base.FormatInt(num), err
 
 	default:
 		return nil, base.ErrUnknownOperationType
