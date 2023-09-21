@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/sourcegraph/conc/pool"
+	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 )
@@ -19,11 +19,7 @@ const (
 )
 
 var (
-	bpool = sync.Pool{
-		New: func() any {
-			return bytes.NewBuffer(make([]byte, 1024))
-		},
-	}
+	bpool = cache.NewBytePoolCap(1000, 1024, 1024)
 )
 
 func main() {
@@ -48,8 +44,8 @@ func cmd() {
 			defer conn.Close()
 
 			for j := 0; j < DATA_NUM/CLIENT_NUM; j++ {
-				k := strconv.Itoa(i)
 				now := time.Now()
+				k := strconv.FormatInt(now.UnixNano(), 36)
 
 				cd := store.NewCodec(store.OpSetTx, 4).
 					Type(store.TypeString).String(k).
@@ -80,13 +76,13 @@ func send(conn net.Conn, req []byte, callback func([]byte) error) error {
 		return err
 	}
 
-	buf := bpool.Get().(*bytes.Buffer)
+	buf := bpool.Get()
 	defer bpool.Put(buf)
 
-	n, err := conn.Read(buf.Bytes())
+	n, err := conn.Read(buf)
 	if err != nil {
 		return err
 	}
 
-	return callback(buf.Bytes()[:n])
+	return callback(buf[:n])
 }

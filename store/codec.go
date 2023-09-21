@@ -17,7 +17,7 @@ const (
 
 var codecPool = sync.Pool{
 	New: func() any {
-		return &Codec{buf: make([]byte, 0, 8)}
+		return &Codec{buf: make([]byte, 0, 16)}
 	},
 }
 
