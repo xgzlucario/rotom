@@ -1,8 +1,6 @@
 package store
 
 import (
-	"io"
-
 	"github.com/panjf2000/gnet/v2"
 	"github.com/xgzlucario/rotom/base"
 )
@@ -24,7 +22,7 @@ type RotomEngine struct {
 
 // OnTraffic
 func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
-	buf, err := io.ReadAll(conn)
+	buf, err := conn.Next(-1)
 	if err != nil {
 		return gnet.Close
 	}

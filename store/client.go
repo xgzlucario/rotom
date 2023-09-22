@@ -5,13 +5,18 @@ import (
 	"time"
 
 	cache "github.com/xgzlucario/GigaCache"
+	"github.com/xgzlucario/rotom/base"
 	"golang.org/x/exp/slices"
 )
 
 var (
-	bpool = cache.NewBytePoolCap(1000, 1024, 1024)
+	// Since there is a limit to the number of concurrent clients,
+	// which is usually not very large (less than 512),
+	// use bpool to reuse the buffer.
+	bpool = cache.NewBytePoolCap(512, 1024, 1024)
 )
 
+// Client defines the client that connects to the server.
 type Client struct {
 	c net.Conn
 	b []byte
@@ -45,6 +50,25 @@ func (c *Client) SetTx(key string, val []byte, ts int64) (res []byte, err error)
 	res, err = c.send(b.Content())
 	b.Recycle()
 	return
+}
+
+// Get
+func (c *Client) Get(key string) (res []byte, err error) {
+	b := NewCodec(ReqGet, 1).String(key)
+	res, err = c.send(b.Content())
+	b.Recycle()
+	return
+}
+
+// Len
+func (c *Client) Len() (int64, error) {
+	b := NewCodec(ReqLen, 0)
+	bytes, err := c.send(b.Content())
+	b.Recycle()
+	if err != nil {
+		return 0, err
+	}
+	return base.ParseInt[int64](bytes), nil
 }
 
 // Close
