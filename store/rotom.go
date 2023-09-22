@@ -21,7 +21,8 @@ import (
 type Operation byte
 
 const (
-	OpSetTx Operation = iota + 1
+	OpSet Operation = iota + 1
+	OpSetTx
 
 	// map
 	OpHSet
@@ -235,7 +236,9 @@ func (db *Store) GetBytes(key string) ([]byte, int64, bool) {
 
 // Set store key-value pair.
 func (db *Store) Set(key string, val []byte) {
-	db.SetTx(key, val, NoTTL)
+	db.encode(NewCodec(OpSetTx, 3).Type(TypeString).String(key).Bytes(val))
+
+	db.m.Set(key, val)
 }
 
 // SetEx store key-value pair with ttl.
