@@ -26,8 +26,7 @@ func cmd() {
 	start := time.Now()
 	p := pool.New()
 
-	validContent := store.NewCodec(store.Response, 2).
-		Int(int64(store.RES_SUCCESS)).String("ok").Content()
+	validator := store.NewCodec(store.Response).Int(int64(store.RES_SUCCESS)).String("ok").B
 
 	for i := 0; i < CLIENT_NUM; i++ {
 		p.Go(func() {
@@ -46,7 +45,7 @@ func cmd() {
 				if err != nil {
 					panic(err)
 				}
-				if !bytes.Equal(res, validContent) {
+				if !bytes.Equal(res, validator) {
 					panic(base.ErrInvalidResponse)
 				}
 			}

@@ -3,7 +3,7 @@ run:
 	go build -ldflags="-s -w" -o rotom
 	./rotom
 
-run2:
+rundb:
 	go build -ldflags="-s -w" -o rotom
 	./rotom
 

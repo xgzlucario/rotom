@@ -11,20 +11,15 @@ import (
 
 var (
 	// Since there is a limit to the number of concurrent clients,
-	// which is usually not very large (less than 512),
+	// which is usually not very large,
 	// use bpool to reuse the buffer.
-	bpool = cache.NewBytePoolCap(512, 1024, 1024)
+	bpool = cache.NewBytePoolCap(1000, 512, 512)
 )
 
 // Client defines the client that connects to the server.
 type Client struct {
 	c net.Conn
 	b []byte
-}
-
-// ResetBytePool
-func ResetBytePool(maxSize, width, capwidth int) {
-	bpool = cache.NewBytePoolCap(maxSize, width, capwidth)
 }
 
 // NewClient
@@ -35,40 +30,52 @@ func NewClient(addr string) (c *Client, err error) {
 }
 
 // Set
-func (c *Client) Set(key string, val []byte) (res []byte, err error) {
+func (c *Client) Set(key string, val []byte) ([]byte, error) {
 	return c.SetTx(key, val, NoTTL)
 }
 
 // SetEx
-func (c *Client) SetEx(key string, val []byte, ttl time.Duration) (res []byte, err error) {
+func (c *Client) SetEx(key string, val []byte, ttl time.Duration) ([]byte, error) {
 	return c.SetTx(key, val, cache.GetUnixNano()+int64(ttl))
 }
 
 // SetTx
-func (c *Client) SetTx(key string, val []byte, ts int64) (res []byte, err error) {
-	b := NewCodec(OpSetTx, 4).Type(TypeString).String(key).Int(ts).Bytes(val)
-	res, err = c.send(b.Content())
-	b.Recycle()
-	return
+func (c *Client) SetTx(key string, val []byte, ts int64) ([]byte, error) {
+	return c.do(NewCodec(OpSetTx).Type(TypeString).String(key).Int(ts).Bytes(val))
+}
+
+// Remove
+func (c *Client) Remove(key string) ([]byte, error) {
+	return c.do(NewCodec(OpRemove).String(key))
+}
+
+// Rename
+func (c *Client) Rename(key, newKey string) ([]byte, error) {
+	return c.do(NewCodec(OpRename).String(key).String(newKey))
 }
 
 // Get
-func (c *Client) Get(key string) (res []byte, err error) {
-	b := NewCodec(ReqGet, 1).String(key)
-	res, err = c.send(b.Content())
-	b.Recycle()
-	return
+func (c *Client) Get(key string) ([]byte, error) {
+	return c.do(NewCodec(ReqGet).String(key))
 }
 
 // Len
-func (c *Client) Len() (int64, error) {
-	b := NewCodec(ReqLen, 0)
-	bytes, err := c.send(b.Content())
-	b.Recycle()
+func (c *Client) Len() (int, error) {
+	bytes, err := c.do(NewCodec(ReqLen))
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int64](bytes), nil
+	return base.ParseInt[int](bytes), nil
+}
+
+// HSet
+func (c *Client) HSet(key, field string, val []byte) ([]byte, error) {
+	return c.do(NewCodec(OpHSet).String(key).String(field).Bytes(val))
+}
+
+// HRemove
+func (c *Client) HRemove(key, field string) ([]byte, error) {
+	return c.do(NewCodec(OpHRemove).String(key).String(field))
 }
 
 // Close
@@ -76,9 +83,11 @@ func (c *Client) Close() error {
 	return c.c.Close()
 }
 
-// send post request and handle response.
-func (c *Client) send(req []byte) ([]byte, error) {
-	_, err := c.c.Write(req)
+// do send request and return response.
+func (c *Client) do(cd *Codec) ([]byte, error) {
+	_, err := c.c.Write(cd.B)
+	cd.Recycle()
+
 	if err != nil {
 		return nil, err
 	}

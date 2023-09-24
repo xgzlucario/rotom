@@ -17,24 +17,24 @@ const (
 
 var codecPool = sync.Pool{
 	New: func() any {
-		return &Codec{buf: make([]byte, 0, 16)}
+		return &Codec{B: make([]byte, 0, 16)}
 	},
 }
 
 // Codec is the primary type for encoding data into a specific format.
 type Codec struct {
-	buf []byte
+	B []byte
 }
 
 // NewCodec
-func NewCodec(v Operation, argsNum byte) *Codec {
+func NewCodec(v Operation) *Codec {
 	obj := codecPool.Get().(*Codec)
-	obj.buf = append(obj.buf, byte(v), argsNum)
+	obj.B = append(obj.B, byte(v))
 	return obj
 }
 
 func (s *Codec) Recycle() {
-	s.buf = s.buf[:0]
+	s.B = s.B[:0]
 	codecPool.Put(s)
 }
 
@@ -71,9 +71,9 @@ func (s *Codec) Float(f float64) *Codec {
 
 // format encodes a byte slice into the Coder's buffer as a record.
 func (s *Codec) format(v []byte) *Codec {
-	s.buf = append(s.buf, base.FormatInt(len(v))...)
-	s.buf = append(s.buf, SEP_CHAR)
-	s.buf = append(s.buf, v...)
+	s.B = append(s.B, base.FormatInt(len(v))...)
+	s.B = append(s.B, SEP_CHAR)
+	s.B = append(s.B, v...)
 	return s
 }
 
@@ -84,10 +84,6 @@ func (s *Codec) Any(v any) (*Codec, error) {
 	}
 	s.format(buf)
 	return s, nil
-}
-
-func (s *Codec) Content() []byte {
-	return s.buf
 }
 
 func (s *Codec) encode(v any) ([]byte, error) {

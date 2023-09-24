@@ -1,8 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	_ "net/http/pprof"
+	"runtime"
+	"runtime/debug"
+	"time"
 
 	"github.com/xgzlucario/rotom/store"
 )
@@ -20,24 +24,28 @@ func main() {
 	}
 
 	// Monitor
-	// go func() {
-	// 	var memStats runtime.MemStats
-	// 	for {
-	// 		time.Sleep(time.Second * 5)
-	// 		runtime.ReadMemStats(&memStats)
+	go func() {
+		var stats debug.GCStats
+		var memStats runtime.MemStats
 
-	// 		// print GC stats
-	// 		fmt.Printf("[GC] times: %d, alloc: %.2f GB, heapObj: %d k, pause: %v ms\n",
-	// 			memStats.NumGC,
-	// 			float64(memStats.Alloc)/GB,
-	// 			memStats.HeapObjects/1e3,
-	// 			memStats.PauseNs[(memStats.NumGC+255)%256]/1000,
-	// 		)
+		for {
+			time.Sleep(time.Second * 5)
 
-	// 		// print db stats
-	// 		fmt.Println("[Stat]", db.Stat())
-	// 	}
-	// }()
+			debug.ReadGCStats(&stats)
+			runtime.ReadMemStats(&memStats)
+
+			// print GC stats
+			fmt.Printf("[GC] times: %d, alloc: %.2f GB, heapObj: %d k, pause: %v\n",
+				stats.NumGC,
+				float64(memStats.Alloc)/GB,
+				memStats.HeapObjects/1e3,
+				stats.PauseTotal/time.Duration(stats.NumGC),
+			)
+
+			// print db stats
+			fmt.Println("[Stat]", db.Stat())
+		}
+	}()
 
 	if err := db.Listen("0.0.0.0:7676"); err != nil {
 		panic(err)
