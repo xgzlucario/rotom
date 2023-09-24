@@ -33,14 +33,14 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 	msg, err := e.db.handleEvent(buf)
 	var cd *Codec
 	if err != nil {
-		cd = NewCodec(Response, 2).Int(int64(RES_ERROR)).String(err.Error())
+		cd = NewCodec(Response).Int(int64(RES_ERROR)).String(err.Error())
 
 	} else {
-		cd = NewCodec(Response, 2).Int(int64(RES_SUCCESS)).Bytes(msg)
+		cd = NewCodec(Response).Int(int64(RES_SUCCESS)).Bytes(msg)
 	}
 
 	// send resp
-	_, err = conn.Write(cd.Content())
+	_, err = conn.Write(cd.B)
 	cd.Recycle()
 	if err != nil {
 		return gnet.Close
@@ -52,10 +52,10 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 // handleEvent
 func (db *Store) handleEvent(line []byte) (msg []byte, err error) {
 	op := Operation(line[0])
-	argsNum := int(line[1])
+	argsNum := cmdTable[op]
 
 	// parse args by operation
-	args, _, err := parseLine(line[2:], argsNum)
+	args, _, err := parseLine(line[1:], argsNum)
 	if err != nil {
 		return nil, err
 	}

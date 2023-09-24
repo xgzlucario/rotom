@@ -22,50 +22,80 @@ type Operation byte
 
 const (
 	OpSetTx Operation = iota + 1
-
+	OpRemove
+	OpRename
+	OpMarshalBytes
 	// map
 	OpHSet
 	OpHRemove
-
 	// set
 	OpSAdd
 	OpSRemove
 	OpSUnion
 	OpSInter
 	OpSDiff
-
 	// list
 	OpLPush
 	OpLPop
 	OpRPush
 	OpRPop
-
 	// bitmap
 	OpBitSet
 	OpBitFlip
 	OpBitOr
 	OpBitAnd
 	OpBitXor
-
 	// zset
 	OpZSet
 	OpZIncr
 	OpZRemove
-
-	// common
-	OpRemove
-	OpRename
-	OpMarshalBytes
-
-	Response
-
 	// request
+	Response
 	ReqPing
 	ReqGet
 	ReqLen
 	ReqHLen
 	ReqLLen
 )
+
+// cmdTable defines the number of parameters required for the operation.
+var cmdTable = map[Operation]int{
+	OpSetTx:        4,
+	OpRemove:       1,
+	OpRename:       2,
+	OpMarshalBytes: 1,
+	// map
+	OpHSet:    3,
+	OpHRemove: 2,
+	// set
+	OpSAdd:    2,
+	OpSRemove: 2,
+	OpSUnion:  3,
+	OpSInter:  3,
+	OpSDiff:   3,
+	// list
+	OpLPush: 2,
+	OpLPop:  1,
+	OpRPush: 2,
+	OpRPop:  1,
+	// bitmap
+	OpBitSet:  3,
+	OpBitFlip: 2,
+	OpBitOr:   3,
+	OpBitAnd:  3,
+	OpBitXor:  3,
+	// zset
+	OpZSet:    4,
+	OpZIncr:   3,
+	OpZRemove: 2,
+	// request
+	Response: 2,
+	ReqPing:  0,
+	ReqGet:   1,
+	ReqLen:   0,
+	ReqHLen:  1,
+	ReqLLen:  1,
+}
 
 // VType is value type.
 type VType byte
@@ -212,7 +242,7 @@ func (db *Store) encode(cd *Codec) {
 		return
 	}
 	db.Lock()
-	db.buf.Write(cd.buf)
+	db.buf.Write(cd.B)
 	db.Unlock()
 	cd.Recycle()
 }
@@ -245,9 +275,7 @@ func (db *Store) SetEx(key string, val []byte, ttl time.Duration) {
 
 // SetTx store key-value pair with deadline.
 func (db *Store) SetTx(key string, val []byte, ts int64) {
-	db.encode(NewCodec(OpSetTx, 4).
-		Type(TypeString).String(key).Int(ts / timeCarry).Bytes(val))
-
+	db.encode(NewCodec(OpSetTx).Type(TypeString).String(key).Int(ts / timeCarry).Bytes(val))
 	db.m.SetTx(key, val, ts)
 }
 
@@ -262,8 +290,7 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 		res = f + incr
 		fstr := strconv.FormatFloat(res, 'f', 4, 64)
 
-		db.encode(NewCodec(OpSetTx, 4).
-			Type(TypeString).String(key).Int(ts / timeCarry).String(fstr))
+		db.encode(NewCodec(OpSetTx).Type(TypeString).String(key).Int(ts / timeCarry).String(fstr))
 		db.m.SetTx(key, s2b(&fstr), ts)
 
 		return res, nil
@@ -274,13 +301,13 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 
 // Remove
 func (db *Store) Remove(key string) bool {
-	db.encode(NewCodec(OpRemove, 1).String(key))
+	db.encode(NewCodec(OpRemove).String(key))
 	return db.m.Delete(key)
 }
 
 // Rename
 func (db *Store) Rename(old, new string) bool {
-	db.encode(NewCodec(OpRename, 2).String(old).String(new))
+	db.encode(NewCodec(OpRename).String(old).String(new))
 	v, ts, ok := db.Get(old)
 	if ok {
 		db.m.SetTx(new, v, ts)
@@ -339,7 +366,7 @@ func (db *Store) HSet(key, field string, val []byte) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpHSet, 3).String(key).String(field).Bytes(val))
+	db.encode(NewCodec(OpHSet).String(key).String(field).Bytes(val))
 	m.Set(field, val)
 
 	return nil
@@ -351,7 +378,7 @@ func (db *Store) HRemove(key, field string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpHRemove, 2).String(key).String(field))
+	db.encode(NewCodec(OpHRemove).String(key).String(field))
 	m.Delete(field)
 
 	return nil
@@ -372,7 +399,7 @@ func (db *Store) SAdd(key string, item string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpSAdd, 2).String(key).String(item))
+	db.encode(NewCodec(OpSAdd).String(key).String(item))
 	s.Add(item)
 
 	return nil
@@ -384,7 +411,7 @@ func (db *Store) SRemove(key string, item string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpSRemove, 2).String(key).String(item))
+	db.encode(NewCodec(OpSRemove).String(key).String(item))
 	s.Remove(item)
 
 	return nil
@@ -418,7 +445,7 @@ func (db *Store) SUnion(key1, key2, dest string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpSUnion, 3).String(key1).String(key2).String(dest))
+	db.encode(NewCodec(OpSUnion).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		s1.Union(s2)
@@ -441,7 +468,7 @@ func (db *Store) SInter(key1, key2, dest string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpSInter, 3).String(key1).String(key2).String(dest))
+	db.encode(NewCodec(OpSInter).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		s1.Intersect(s2)
@@ -464,7 +491,7 @@ func (db *Store) SDiff(key1, key2, dest string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpSDiff, 3).String(key1).String(key2).String(dest))
+	db.encode(NewCodec(OpSDiff).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		s1.Difference(s2)
@@ -483,7 +510,7 @@ func (db *Store) LPush(key, item string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpLPush, 2).String(key).String(item))
+	db.encode(NewCodec(OpLPush).String(key).String(item))
 	ls.LPush(item)
 
 	return nil
@@ -495,7 +522,7 @@ func (db *Store) RPush(key, item string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpRPush, 2).String(key).String(item))
+	db.encode(NewCodec(OpRPush).String(key).String(item))
 	ls.RPush(item)
 
 	return nil
@@ -511,7 +538,7 @@ func (db *Store) LPop(key string) (string, error) {
 	if !ok {
 		return "", base.ErrEmptyList
 	}
-	db.encode(NewCodec(OpLPop, 1).String(key))
+	db.encode(NewCodec(OpLPop).String(key))
 
 	return res, nil
 }
@@ -526,7 +553,7 @@ func (db *Store) RPop(key string) (string, error) {
 	if !ok {
 		return "", base.ErrEmptyList
 	}
-	db.encode(NewCodec(OpRPop, 1).String(key))
+	db.encode(NewCodec(OpRPop).String(key))
 
 	return res, nil
 }
@@ -555,7 +582,7 @@ func (db *Store) BitSet(key string, offset uint32, val bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	db.encode(NewCodec(OpBitSet, 3).String(key).Uint(offset).Bool(val))
+	db.encode(NewCodec(OpBitSet).String(key).Uint(offset).Bool(val))
 
 	if val {
 		return bm.Add(offset), nil
@@ -569,7 +596,7 @@ func (db *Store) BitFlip(key string, offset uint32) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpBitFlip, 2).String(key).Uint(offset))
+	db.encode(NewCodec(OpBitFlip).String(key).Uint(offset))
 	bm.Flip(uint64(offset))
 
 	return nil
@@ -585,7 +612,7 @@ func (db *Store) BitOr(key1, key2, dest string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpBitOr, 3).String(key1).String(key2).String(dest))
+	db.encode(NewCodec(OpBitOr).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		bm1.Or(bm2)
@@ -608,7 +635,7 @@ func (db *Store) BitXor(key1, key2, dest string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpBitXor, 3).String(key1).String(key2).String(dest))
+	db.encode(NewCodec(OpBitXor).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		bm1.Xor(bm2)
@@ -631,7 +658,7 @@ func (db *Store) BitAnd(key1, key2, dest string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpBitAnd, 3).String(key1).String(key2).String(dest))
+	db.encode(NewCodec(OpBitAnd).String(key1).String(key2).String(dest))
 
 	if key1 == dest {
 		bm1.And(bm2)
@@ -668,7 +695,7 @@ func (db *Store) ZAdd(zset, key string, score float64, val []byte) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpZSet, 4).String(zset).String(key).Float(score).Bytes(val))
+	db.encode(NewCodec(OpZSet).String(zset).String(key).Float(score).Bytes(val))
 	zs.SetWithScore(key, score, val)
 
 	return nil
@@ -680,7 +707,7 @@ func (db *Store) ZIncr(zset, key string, incr float64) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	db.encode(NewCodec(OpZIncr, 3).String(zset).String(key).Float(incr))
+	db.encode(NewCodec(OpZIncr).String(zset).String(key).Float(incr))
 
 	return zs.Incr(key, incr), nil
 }
@@ -691,7 +718,7 @@ func (db *Store) ZRemove(zset, key string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpZRemove, 2).String(zset).String(key))
+	db.encode(NewCodec(OpZRemove).String(zset).String(key))
 	zs.Delete(key)
 
 	return nil
@@ -738,8 +765,8 @@ func (s *Store) load() error {
 	// <OP><argsNum><args...>
 	for len(line) > 2 {
 		op := Operation(line[0])
-		argsNum := int(line[1])
-		line = line[2:]
+		argsNum := cmdTable[op]
+		line = line[1:]
 
 		// parse args by operation
 		args, line, err = parseLine(line, argsNum)
@@ -955,8 +982,8 @@ func (s *Store) shrink() {
 		panic(err)
 	}
 
-	cd := NewCodec(OpMarshalBytes, 1).Bytes(data)
-	s.rwbuf.Write(cd.buf)
+	cd := NewCodec(OpMarshalBytes).Bytes(data)
+	s.rwbuf.Write(cd.B)
 	cd.Recycle()
 
 	// MarshalOthers
@@ -978,8 +1005,8 @@ func (s *Store) shrink() {
 		}
 
 		// SetTx
-		if cd, err := NewCodec(OpSetTx, 4).Type(rec).String(key).Int(i / timeCarry).Any(v); err == nil {
-			s.rwbuf.Write(cd.buf)
+		if cd, err := NewCodec(OpSetTx).Type(rec).String(key).Int(i / timeCarry).Any(v); err == nil {
+			s.rwbuf.Write(cd.B)
 			cd.Recycle()
 		}
 

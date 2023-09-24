@@ -102,12 +102,12 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 
 ### Rotom
 
-200 clients inserting a total of 1 million data, completed in 586ms, reaching a qps of 1.7 million.
+200 clients inserting a total of 1 million data, completed in 663ms, reaching a qps of 1.5 million.
 
 ```bash
 $ go run client/*.go
-1000000 requests cost: 586.286354ms
-qps: 1705590.11 req/sec
+1000000 requests cost: 663.97797ms
+qps: 1506028.48 req/sec
 ```
 
 ### Redis
