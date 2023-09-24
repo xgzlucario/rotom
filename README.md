@@ -12,7 +12,7 @@ Features:
 
 1. Built-in data types like String, Map, Set, List, ZSet, BitMap, etc., supporting more than 20 commands.
 2. Microsecond-level expiration time (ttl).
-3. Based on , it can avoid GC overhead and have stronger multithreaded performance.
+3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), it can avoid GC overhead and have stronger multithreaded performance.
 4. RDB + AOF hybrid persistence strategy.
 5. Supports being **imported** or **server** startup.
 
