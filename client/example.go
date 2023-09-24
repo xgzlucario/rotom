@@ -59,11 +59,11 @@ func cmd() {
 	p.Wait()
 
 	fmt.Printf("%d requests cost: %v\n", DATA_NUM, time.Since(start))
-	fmt.Printf("qps: %.2f req/sec\n", DATA_NUM/time.Since(start).Seconds())
+	fmt.Printf("[qps] %.2f req/sec\n", DATA_NUM/time.Since(start).Seconds())
 
 	// P99
 	Sort(delays)
-	fmt.Printf("[P99 SET] avg: %v | min: %v | p50: %v | p95: %v | p99: %v | max: %v\n",
+	fmt.Printf("[latency] avg: %v | min: %v | p50: %v | p95: %v | p99: %v | max: %v\n",
 		time.Duration(Avg(delays)),
 		time.Duration(Min(delays)),
 		time.Duration(CalculatePercentile(delays, 50)),
