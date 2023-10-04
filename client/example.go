@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sourcegraph/conc/pool"
+	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/store"
 )
@@ -27,7 +28,7 @@ func cmd() {
 	p := pool.New()
 
 	validator := store.NewCodec(store.Response).Int(int64(store.RES_SUCCESS)).String("ok").B
-	delays := make([]float64, 0, DATA_NUM)
+	delays := cache.NewPercentile()
 
 	for i := 0; i < CLIENT_NUM; i++ {
 		p.Go(func() {
@@ -52,24 +53,24 @@ func cmd() {
 				}
 
 				// stat
-				delays = append(delays, float64(time.Since(now)))
+				delays.Add(float64(time.Since(now)))
 			}
 		})
 	}
 	p.Wait()
 
+	// QPS
 	fmt.Printf("%d requests cost: %v\n", DATA_NUM, time.Since(start))
 	fmt.Printf("[qps] %.2f req/sec\n", DATA_NUM/time.Since(start).Seconds())
 
 	// P99
-	Sort(delays)
 	fmt.Printf("[latency] avg: %v | min: %v | p50: %v | p95: %v | p99: %v | max: %v\n",
-		time.Duration(Avg(delays)),
-		time.Duration(Min(delays)),
-		time.Duration(CalculatePercentile(delays, 50)),
-		time.Duration(CalculatePercentile(delays, 95)),
-		time.Duration(CalculatePercentile(delays, 99)),
-		time.Duration(Max(delays)))
+		time.Duration(delays.Avg()),
+		time.Duration(delays.Min()),
+		time.Duration(delays.Percentile(50)),
+		time.Duration(delays.Percentile(90)),
+		time.Duration(delays.Percentile(99)),
+		time.Duration(delays.Max()))
 
 	fmt.Println()
 }

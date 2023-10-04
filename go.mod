@@ -10,12 +10,12 @@ require (
 	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/sourcegraph/conc v0.3.0
 	github.com/tidwall/hashmap v1.8.1
-	github.com/xgzlucario/GigaCache v0.0.0-20230923181219-e42d2f90d590
+	github.com/xgzlucario/GigaCache v0.0.0-20231003164254-3abea42004a6
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
 )
 
 require (
-	github.com/bits-and-blooms/bitset v1.8.0 // indirect
+	github.com/bits-and-blooms/bitset v1.9.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
 	github.com/chenzhuoyu/iasm v0.9.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect

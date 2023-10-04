@@ -288,7 +288,7 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 			return 0, err
 		}
 		res = f + incr
-		fstr := strconv.FormatFloat(res, 'f', 4, 64)
+		fstr := strconv.FormatFloat(res, 'f', -1, 64)
 
 		db.encode(NewCodec(OpSetTx).Type(TypeString).String(key).Int(ts / timeCarry).String(fstr))
 		db.m.SetTx(key, s2b(&fstr), ts)

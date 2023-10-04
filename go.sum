@@ -1,8 +1,8 @@
 github.com/RoaringBitmap/roaring v1.5.0 h1:V0VCSiHjroItEYCM3guC8T83ehi5QMt3oM9EefTTOms=
 github.com/RoaringBitmap/roaring v1.5.0/go.mod h1:plvDsJQpxOC5bw8LRteu/MLWHsHez/3y6cubLI4/1yE=
 github.com/bits-and-blooms/bitset v1.2.0/go.mod h1:gIdJ4wp64HaoK2YrL1Q5/N7Y16edYb8uY+O0FJTyyDA=
-github.com/bits-and-blooms/bitset v1.8.0 h1:FD+XqgOZDUxxZ8hzoBFuV9+cGWY9CslN6d5MS5JVb4c=
-github.com/bits-and-blooms/bitset v1.8.0/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
+github.com/bits-and-blooms/bitset v1.9.0 h1:g1YivPG8jOtrN013Fe8OBXubkiTwvm7/vG2vXz03ANU=
+github.com/bits-and-blooms/bitset v1.9.0/go.mod h1:7hO7Gc7Pp1vODcmWvKMRA9BNmbv6a/7QIWpPxHddWR8=
 github.com/brianvoe/gofakeit/v6 v6.23.2 h1:lVde18uhad5wII/f5RMVFLtdQNE0HaGFuBUXmYKk8i8=
 github.com/brianvoe/gofakeit/v6 v6.23.2/go.mod h1:Ow6qC71xtwm79anlwKRlWZW6zVq9D2XHE4QSSMP/rU8=
 github.com/bytedance/sonic v1.5.0/go.mod h1:ED5hyg4y6t3/9Ku1R6dU/4KyJ48DZ4jPhfY1O2AihPM=
@@ -49,8 +49,12 @@ github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS
 github.com/twitchyliquid64/golang-asm v0.15.1/go.mod h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
-github.com/xgzlucario/GigaCache v0.0.0-20230923181219-e42d2f90d590 h1:o96N6X0jFMXXFMapBnnME5fEWmuXh1CWqZQIm/sCAY8=
-github.com/xgzlucario/GigaCache v0.0.0-20230923181219-e42d2f90d590/go.mod h1:Vpk8bf5ffSeMmSSJpRrbMoxajT6FD+SzKYanEnOPUDM=
+github.com/xgzlucario/GigaCache v0.0.0-20231001171024-2306e29a3509 h1:pNQlUxyReRQ4sSu5CeAaGnHOziBqaPFBDYN0bPc+dEA=
+github.com/xgzlucario/GigaCache v0.0.0-20231001171024-2306e29a3509/go.mod h1:dbDXsqXXfTptHhFuYfohnJiJi8sdgXoVIsaVYYY2PDE=
+github.com/xgzlucario/GigaCache v0.0.0-20231001171536-ef4d0bc8fac7 h1:YpA2RKZ1UIITwZ3/GhITcxXRVm5vDT8d77A5gV+Kdy4=
+github.com/xgzlucario/GigaCache v0.0.0-20231001171536-ef4d0bc8fac7/go.mod h1:Vpk8bf5ffSeMmSSJpRrbMoxajT6FD+SzKYanEnOPUDM=
+github.com/xgzlucario/GigaCache v0.0.0-20231003164254-3abea42004a6 h1:fpVPzbojD/Bq6ryNNkQfvaqkTw8fwiV+0EnDrJtsoVA=
+github.com/xgzlucario/GigaCache v0.0.0-20231003164254-3abea42004a6/go.mod h1:dbDXsqXXfTptHhFuYfohnJiJi8sdgXoVIsaVYYY2PDE=
 github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
 github.com/zeebo/assert v1.3.1/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
 github.com/zeebo/xxh3 v1.0.2 h1:xZmwmqxHZA8AI603jOQ0tMqmBr9lPeFwGg6d+xy9DC0=
