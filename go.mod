@@ -3,15 +3,15 @@ module github.com/xgzlucario/rotom
 go 1.21
 
 require (
-	github.com/RoaringBitmap/roaring v1.5.0
+	github.com/RoaringBitmap/roaring v1.6.0
 	github.com/brianvoe/gofakeit/v6 v6.23.2
 	github.com/bytedance/sonic v1.10.1
 	github.com/deckarep/golang-set/v2 v2.3.1
 	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/sourcegraph/conc v0.3.0
 	github.com/tidwall/hashmap v1.8.1
-	github.com/xgzlucario/GigaCache v0.0.0-20231003164254-3abea42004a6
-	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
+	github.com/xgzlucario/GigaCache v0.0.0-20231007035146-92fe4231a73e
+	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 )
 
 require (
@@ -26,7 +26,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.26.0 // indirect
 	golang.org/x/arch v0.5.0 // indirect
-	golang.org/x/sync v0.3.0 // indirect
-	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/sync v0.4.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
