@@ -53,6 +53,7 @@ const (
 	Response
 	ReqPing
 	ReqGet
+	ReqRanGet
 	ReqLen
 	ReqHLen
 	ReqLLen
@@ -89,12 +90,13 @@ var cmdTable = map[Operation]int{
 	OpZIncr:   3,
 	OpZRemove: 2,
 	// request
-	Response: 2,
-	ReqPing:  0,
-	ReqGet:   1,
-	ReqLen:   0,
-	ReqHLen:  1,
-	ReqLLen:  1,
+	Response:  2,
+	ReqPing:   0,
+	ReqGet:    1,
+	ReqRanGet: 0,
+	ReqLen:    0,
+	ReqHLen:   1,
+	ReqLLen:   1,
 }
 
 // VType is value type.
@@ -252,6 +254,11 @@ func (db *Store) Get(key string) (any, int64, bool) {
 	return db.m.Get(key)
 }
 
+// RandomGet
+func (db *Store) RandomGet() (string, any, int64, bool) {
+	return db.m.RandomGet()
+}
+
 // GetBytes
 func (db *Store) GetBytes(key string) ([]byte, int64, bool) {
 	r, t, ok := db.m.Get(key)
@@ -288,7 +295,7 @@ func (db *Store) Incr(key string, incr float64) (res float64, err error) {
 			return 0, err
 		}
 		res = f + incr
-		fstr := strconv.FormatFloat(res, 'f', 4, 64)
+		fstr := strconv.FormatFloat(res, 'f', -1, 64)
 
 		db.encode(NewCodec(OpSetTx).Type(TypeString).String(key).Int(ts / timeCarry).String(fstr))
 		db.m.SetTx(key, s2b(&fstr), ts)
@@ -308,23 +315,12 @@ func (db *Store) Remove(key string) bool {
 // Rename
 func (db *Store) Rename(old, new string) bool {
 	db.encode(NewCodec(OpRename).String(old).String(new))
-	v, ts, ok := db.Get(old)
-	if ok {
-		db.m.SetTx(new, v, ts)
-	}
-
-	return ok
+	return db.m.Rename(old, new)
 }
 
 // Keys
 func (db *Store) Keys() []string {
-	keys := make([]string, 0)
-	db.m.Scan(func(k string, _ any, _ int64) bool {
-		keys = append(keys, k)
-		return true
-	})
-
-	return keys
+	return db.m.Keys()
 }
 
 // Scan
@@ -821,10 +817,7 @@ func (s *Store) load() error {
 			s.m.Delete(*b2s(args[0]))
 
 		case OpRename: // old, new
-			v, ts, ok := s.Get(*b2s(args[0]))
-			if ok {
-				s.m.SetTx(*b2s(args[1]), v, ts)
-			}
+			s.m.Rename(*b2s(args[0]), *b2s(args[1]))
 
 		case OpHSet: // key, field, val
 			m, err := s.fetchMap(*b2s(args[0]))
@@ -930,7 +923,7 @@ func (s *Store) load() error {
 				}
 			}
 
-		case OpZSet: // key field score val
+		case OpZSet: // key, field, score, val
 			zs, err := s.fetchZSet(*b2s(args[0]))
 			if err != nil {
 				return err
@@ -941,7 +934,7 @@ func (s *Store) load() error {
 			}
 			zs.SetWithScore(*b2s(args[1]), s, args[3])
 
-		case OpZIncr: // key field incr
+		case OpZIncr: // key, field, incr
 			zs, err := s.fetchZSet(*b2s(args[0]))
 			if err != nil {
 				return err
@@ -952,7 +945,7 @@ func (s *Store) load() error {
 			}
 			zs.Incr(*b2s(args[1]), s)
 
-		case OpZRemove: // key field
+		case OpZRemove: // key, field
 			zs, err := s.fetchZSet(*b2s(args[0]))
 			if err != nil {
 				return err
