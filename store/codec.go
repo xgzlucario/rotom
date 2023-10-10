@@ -94,7 +94,7 @@ func (s *Codec) encode(v any) ([]byte, error) {
 		return v.MarshalBinary()
 	case base.Gober:
 		return v.GobEncode()
-	case base.Marshaler:
+	case base.Jsoner:
 		return v.MarshalJSON()
 	default:
 		return nil, fmt.Errorf("%v: %v", base.ErrUnSupportDataType, reflect.TypeOf(v))

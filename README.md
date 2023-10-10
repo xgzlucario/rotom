@@ -102,13 +102,13 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 
 ### Rotom
 
-200 clients inserting a total of 1 million data, completed in 663ms, reaching a qps of 1.5 million, P99 latency is 1.2ms.
+200 clients inserting a total of 1 million data, completed in 628ms, reaching a qps of 1.59 million, p99 latency is 1.1ms.
 
 ```bash
 $ go run client/*.go
-1000000 requests cost: 663.97797ms
-[qps] 1506028.48 req/sec
-[latency] avg: 119.645µs | min: 4.052µs | p50: 49.464µs | p95: 425.006µs | p99: 1.195428ms | max: 17.713702ms
+1000000 requests cost: 628.747032ms
+[qps] 1590415.82 req/sec
+[latency] avg: 115.852µs | min: 3.837µs | p50: 49.395µs | p95: 216.273µs | p99: 1.155185ms | max: 15.9881ms
 ```
 
 ### Redis

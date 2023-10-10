@@ -40,7 +40,7 @@ func cmd() {
 
 			for j := 0; j < DATA_NUM/CLIENT_NUM; j++ {
 				now := time.Now()
-				addnow := now.Add(time.Second).UnixNano()
+				addnow := now.Add(time.Second * 5).UnixNano()
 				k := strconv.FormatInt(addnow, 36)
 
 				// send
