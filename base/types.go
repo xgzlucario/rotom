@@ -14,7 +14,7 @@ type Integer interface {
 	~int | ~int32 | ~int64 | ~uint | ~uint32 | ~uint64
 }
 
-type Marshaler interface {
+type Jsoner interface {
 	MarshalJSON() ([]byte, error)
 	UnmarshalJSON([]byte) error
 }

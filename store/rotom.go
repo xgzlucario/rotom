@@ -216,7 +216,7 @@ func Open(conf *Config) (*Store, error) {
 	return db, nil
 }
 
-// Listen
+// Listen bind and listen to the specified tcp address.
 func (db *Store) Listen(addr string) error {
 	if db.Logger != nil {
 		db.Logger.Info(fmt.Sprintf("listening on %s...", addr))
@@ -225,7 +225,7 @@ func (db *Store) Listen(addr string) error {
 	return gnet.Run(&RotomEngine{db: db}, addr, gnet.WithMulticore(true))
 }
 
-// Close
+// Close closes the database.
 func (db *Store) Close() error {
 	db.Lock()
 	defer db.Unlock()
@@ -254,11 +254,6 @@ func (db *Store) Get(key string) (any, int64, bool) {
 	return db.m.Get(key)
 }
 
-// RandomGet
-func (db *Store) RandomGet() (string, any, int64, bool) {
-	return db.m.RandomGet()
-}
-
 // GetBytes
 func (db *Store) GetBytes(key string) ([]byte, int64, bool) {
 	r, t, ok := db.m.Get(key)
@@ -268,6 +263,11 @@ func (db *Store) GetBytes(key string) ([]byte, int64, bool) {
 		}
 	}
 	return nil, 0, false
+}
+
+// RandomGet
+func (db *Store) RandomGet() (string, any, int64, bool) {
+	return db.m.RandomGet()
 }
 
 // Set store key-value pair.
@@ -970,21 +970,10 @@ func (s *Store) shrink() {
 		return
 	}
 
-	data, err := s.m.MarshalBytes()
-	if err != nil {
-		panic(err)
-	}
-
-	cd := NewCodec(OpMarshalBytes).Bytes(data)
-	s.rwbuf.Write(cd.B)
-	cd.Recycle()
-
-	// MarshalOthers
 	var rec VType
-	s.m.Scan(func(key string, v any, i int64) bool {
+	// Marshal any
+	data, err := s.m.MarshalBytesFunc(func(key string, v any, i int64) {
 		switch v.(type) {
-		case String:
-			return true
 		case Map:
 			rec = TypeString
 		case BitMap:
@@ -1002,9 +991,15 @@ func (s *Store) shrink() {
 			s.rwbuf.Write(cd.B)
 			cd.Recycle()
 		}
-
-		return true
 	})
+	if err != nil {
+		panic(err)
+	}
+
+	// Marshal bytes
+	cd := NewCodec(OpMarshalBytes).Bytes(data)
+	s.rwbuf.Write(cd.B)
+	cd.Recycle()
 
 	// Flush buffer to file
 	s.writeTo(s.rwbuf, s.tmpPath)
@@ -1114,7 +1109,7 @@ func formatSize[T base.Integer](size T) string {
 
 func (db *Store) backend(t time.Duration, f func()) {
 	if t <= 0 {
-		return
+		panic("invalid interval")
 	}
 	go func() {
 		for {

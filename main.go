@@ -35,9 +35,10 @@ func main() {
 			runtime.ReadMemStats(&memStats)
 
 			// print GC stats
-			fmt.Printf("[GC] times: %d, alloc: %.2f GB, heapObj: %d k, pause: %v\n",
+			fmt.Printf("[GC] times: %d, alloc: %.2f GB, sys: %.2f GB, heapObj: %d k, pause: %v\n",
 				stats.NumGC,
 				float64(memStats.Alloc)/GB,
+				float64(memStats.Sys)/GB,
 				memStats.HeapObjects/1e3,
 				stats.PauseTotal/time.Duration(stats.NumGC),
 			)

@@ -5,12 +5,12 @@ go 1.21
 require (
 	github.com/RoaringBitmap/roaring v1.6.0
 	github.com/brianvoe/gofakeit/v6 v6.23.2
-	github.com/bytedance/sonic v1.10.1
+	github.com/bytedance/sonic v1.10.2
 	github.com/deckarep/golang-set/v2 v2.3.1
 	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/sourcegraph/conc v0.3.0
 	github.com/tidwall/hashmap v1.8.1
-	github.com/xgzlucario/GigaCache v0.0.0-20231007035146-92fe4231a73e
+	github.com/xgzlucario/GigaCache v0.0.0-20231010041426-3f6a9e5d18b7
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 )
 
