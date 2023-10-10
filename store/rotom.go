@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/panjf2000/gnet/v2"
@@ -159,7 +160,7 @@ type Config struct {
 
 // Store represents a key-value store.
 type Store struct {
-	*base.LfLocker
+	sync.Mutex
 	*Config
 	closed bool
 	buf    *bytes.Buffer
@@ -171,11 +172,10 @@ type Store struct {
 // The file will be created automatically if not exist.
 func Open(conf *Config) (*Store, error) {
 	db := &Store{
-		LfLocker: base.NewLfLocker(),
-		Config:   conf,
-		buf:      bytes.NewBuffer(nil),
-		rwbuf:    bytes.NewBuffer(nil),
-		m:        cache.New[string](conf.ShardCount),
+		Config: conf,
+		buf:    bytes.NewBuffer(nil),
+		rwbuf:  bytes.NewBuffer(nil),
+		m:      cache.New[string](conf.ShardCount),
 	}
 	db.tmpPath = db.Path + ".tmp"
 

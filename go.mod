@@ -10,7 +10,7 @@ require (
 	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/sourcegraph/conc v0.3.0
 	github.com/tidwall/hashmap v1.8.1
-	github.com/xgzlucario/GigaCache v0.0.0-20231010041426-3f6a9e5d18b7
+	github.com/xgzlucario/GigaCache v0.0.0-20231010065614-a83db10a525f
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 )
 
