@@ -1,14 +1,12 @@
-package test
+package structx
 
 import (
 	"math/rand"
 	"testing"
-
-	"github.com/xgzlucario/rotom/structx"
 )
 
 func TestList(t *testing.T) {
-	ls := structx.NewList[int]()
+	ls := NewList[int]()
 	valid := make([]int, 0, 1024)
 
 	// test empty pop
@@ -83,21 +81,21 @@ func TestList(t *testing.T) {
 
 func BenchmarkList(b *testing.B) {
 	b.Run("ziplist/RPush", func(b *testing.B) {
-		ls := structx.NewList[int]()
+		ls := NewList[int]()
 		for i := 0; i < b.N; i++ {
 			ls.RPush(i)
 		}
 	})
 
 	b.Run("ziplist/LPush", func(b *testing.B) {
-		ls := structx.NewList[int]()
+		ls := NewList[int]()
 		for i := 0; i < b.N; i++ {
 			ls.LPush(i)
 		}
 	})
 
-	getList := func() *structx.List[int] {
-		ls := structx.NewList[int]()
+	getList := func() *List[int] {
+		ls := NewList[int]()
 		for i := 0; i < 1000*10000; i++ {
 			ls.RPush(i)
 		}

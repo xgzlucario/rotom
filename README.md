@@ -6,7 +6,7 @@ English | [中文](README_ZN.md) | [doc](https://www.yuque.com/1ucario/devdoc/nt
 
 ## 📃Introduction
 
-​	This is Rotom, a high-performance Key-Value memory database written in Go. Its multithreaded performance is several times better than Redis. It has built-in multiple commonly used data types, supports persistent storage, and can be used in Golang as an imported package or as a server (the client part is under development and does not support all commands yet).
+​This is Rotom, a high-performance Key-Value memory database written in Go. It has built-in multiple commonly used data types, supports persistent storage, and can be used in Golang as an imported package or as a server (the client part is under development and does not support all commands yet).
 
 Features:
 
@@ -35,11 +35,11 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
-	"github.com/xgzlucario/rotom/store"
+	"github.com/xgzlucario/rotom"
 )
 
 func main() {
-	db, err := store.Open(store.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -70,13 +70,13 @@ package main
 
 import (
 	"net/http"
-	"github.com/xgzlucario/rotom/store"
+	"github.com/xgzlucario/rotom"
 )
 
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
-	db, err := store.Open(store.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultConfig)
 	if err != nil {
 		panic(err)
 	}

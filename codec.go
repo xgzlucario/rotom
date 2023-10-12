@@ -1,4 +1,4 @@
-package store
+package rotom
 
 import (
 	"fmt"
@@ -38,7 +38,7 @@ func (s *Codec) Recycle() {
 	codecPool.Put(s)
 }
 
-func (s *Codec) String(v string) *Codec {
+func (s *Codec) Str(v string) *Codec {
 	return s.format(s2b(&v))
 }
 
@@ -72,7 +72,7 @@ func (s *Codec) Float(f float64) *Codec {
 // format encodes a byte slice into the Coder's buffer as a record.
 func (s *Codec) format(v []byte) *Codec {
 	s.B = append(s.B, base.FormatInt(len(v))...)
-	s.B = append(s.B, SEP_CHAR)
+	s.B = append(s.B, SepChar)
 	s.B = append(s.B, v...)
 	return s
 }

@@ -19,86 +19,94 @@ func NewBitmap() *Bitmap {
 // Add
 func (b *Bitmap) Add(i uint32) bool {
 	b.Lock()
-	defer b.Unlock()
-	return b.bm.CheckedAdd(i)
+	ok := b.bm.CheckedAdd(i)
+	b.Unlock()
+	return ok
 }
 
 // Remove
 func (b *Bitmap) Remove(i uint32) bool {
 	b.Lock()
-	defer b.Unlock()
-	return b.bm.CheckedRemove(i)
+	ok := b.bm.CheckedRemove(i)
+	b.Unlock()
+	return ok
 }
 
 // Test
 func (b *Bitmap) Test(i uint32) bool {
-	b.RLock()
-	defer b.RUnlock()
-	return b.bm.Contains(i)
+	b.Lock()
+	ok := b.bm.Contains(i)
+	b.Unlock()
+	return ok
 }
 
 // Flip
 func (b *Bitmap) Flip(i uint64) {
 	b.Lock()
-	defer b.Unlock()
 	b.bm.Flip(i, i)
+	b.Unlock()
 }
 
 // ToArray
 func (b *Bitmap) ToArray() []uint32 {
 	b.Lock()
-	defer b.Unlock()
-	return b.bm.ToArray()
+	arr := b.bm.ToArray()
+	b.Unlock()
+	return arr
 }
 
 // Len
 func (b *Bitmap) Len() uint64 {
 	b.RLock()
-	defer b.RUnlock()
-	return b.bm.Stats().Cardinality
+	len := b.bm.Stats().Cardinality
+	b.RUnlock()
+	return len
 }
 
 // Or
 func (b *Bitmap) Or(b2 *Bitmap) *Bitmap {
 	b.Lock()
-	defer b.Unlock()
 	b.bm.Or(b2.bm)
+	b.Unlock()
 	return b
 }
 
 // And
 func (b *Bitmap) And(b2 *Bitmap) *Bitmap {
 	b.Lock()
-	defer b.Unlock()
 	b.bm.And(b2.bm)
+	b.Unlock()
 	return b
 }
 
 // Xor
 func (b *Bitmap) Xor(b2 *Bitmap) *Bitmap {
 	b.Lock()
-	defer b.Unlock()
 	b.bm.Xor(b2.bm)
+	b.Unlock()
 	return b
 }
 
 // Clone
 func (b *Bitmap) Clone() *Bitmap {
 	b.RLock()
-	defer b.RUnlock()
-	return &Bitmap{sync.RWMutex{}, b.bm.Clone()}
+	b2 := &Bitmap{sync.RWMutex{}, b.bm.Clone()}
+	b.RUnlock()
+	return b2
 }
 
 // MarshalBinary
 func (b *Bitmap) MarshalBinary() ([]byte, error) {
 	b.RLock()
-	defer b.RUnlock()
-	return b.bm.MarshalBinary()
+	src, err := b.bm.MarshalBinary()
+	b.RUnlock()
+	return src, err
 }
 
 // UnmarshalBinary
 func (b *Bitmap) UnmarshalBinary(data []byte) error {
 	b.Lock()
-	defer b.Unlock()
-	return b.bm.UnmarshalBinary(data)
+	err := b.bm.UnmarshalBinary(data)
+	b.Unlock()
+	return err
 }

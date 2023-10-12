@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/xgzlucario/rotom/store"
+	"github.com/xgzlucario/rotom"
 )
 
 const (
@@ -18,7 +18,7 @@ const (
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
-	db, err := store.Open(store.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultConfig)
 	if err != nil {
 		panic(err)
 	}

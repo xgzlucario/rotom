@@ -1,4 +1,4 @@
-package store
+package rotom
 
 import (
 	"net"
@@ -41,22 +41,22 @@ func (c *Client) SetEx(key string, val []byte, ttl time.Duration) ([]byte, error
 
 // SetTx
 func (c *Client) SetTx(key string, val []byte, ts int64) ([]byte, error) {
-	return c.do(NewCodec(OpSetTx).Type(TypeString).String(key).Int(ts).Bytes(val))
+	return c.do(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts).Bytes(val))
 }
 
 // Remove
 func (c *Client) Remove(key string) ([]byte, error) {
-	return c.do(NewCodec(OpRemove).String(key))
+	return c.do(NewCodec(OpRemove).Str(key))
 }
 
 // Rename
 func (c *Client) Rename(key, newKey string) ([]byte, error) {
-	return c.do(NewCodec(OpRename).String(key).String(newKey))
+	return c.do(NewCodec(OpRename).Str(key).Str(newKey))
 }
 
 // Get
 func (c *Client) Get(key string) ([]byte, error) {
-	return c.do(NewCodec(ReqGet).String(key))
+	return c.do(NewCodec(ReqGet).Str(key))
 }
 
 // Len
@@ -70,12 +70,12 @@ func (c *Client) Len() (int, error) {
 
 // HSet
 func (c *Client) HSet(key, field string, val []byte) ([]byte, error) {
-	return c.do(NewCodec(OpHSet).String(key).String(field).Bytes(val))
+	return c.do(NewCodec(OpHSet).Str(key).Str(field).Bytes(val))
 }
 
 // HRemove
 func (c *Client) HRemove(key, field string) ([]byte, error) {
-	return c.do(NewCodec(OpHRemove).String(key).String(field))
+	return c.do(NewCodec(OpHRemove).Str(key).Str(field))
 }
 
 // Close

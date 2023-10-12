@@ -6,11 +6,13 @@ require (
 	github.com/RoaringBitmap/roaring v1.6.0
 	github.com/brianvoe/gofakeit/v6 v6.23.2
 	github.com/bytedance/sonic v1.10.2
+	github.com/bytedance/sonic v1.10.2
 	github.com/deckarep/golang-set/v2 v2.3.1
 	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/sourcegraph/conc v0.3.0
+	github.com/stretchr/testify v1.8.4
 	github.com/tidwall/hashmap v1.8.1
-	github.com/xgzlucario/GigaCache v0.0.0-20231010041426-3f6a9e5d18b7
+	github.com/xgzlucario/GigaCache v0.0.0-20231010065614-a83db10a525f
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 )
 
@@ -18,8 +20,10 @@ require (
 	github.com/bits-and-blooms/bitset v1.9.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
 	github.com/chenzhuoyu/iasm v0.9.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
@@ -29,4 +33,5 @@ require (
 	golang.org/x/sync v0.4.0 // indirect
 	golang.org/x/sys v0.13.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
