@@ -7,6 +7,7 @@ import (
 var (
 	ErrKeyNotFound = errors.New("key not found")
 	ErrKeyIsEmpty  = errors.New("key is empty")
+	ErrTypeAssert  = errors.New("type assert error")
 
 	ErrOutOfBounds = errors.New("index out of bounds")
 

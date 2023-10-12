@@ -255,14 +255,15 @@ func (db *Store) Get(key string) (any, int64, bool) {
 }
 
 // GetBytes
-func (db *Store) GetBytes(key string) ([]byte, int64, bool) {
+func (db *Store) GetBytes(key string) ([]byte, int64, error) {
 	r, t, ok := db.m.Get(key)
 	if ok {
 		if r, ok := r.([]byte); ok {
-			return r, t, true
+			return r, t, nil
 		}
+		return nil, 0, base.ErrTypeAssert
 	}
-	return nil, 0, false
+	return nil, 0, base.ErrKeyNotFound
 }
 
 // RandomGet
@@ -288,22 +289,22 @@ func (db *Store) SetTx(key string, val []byte, ts int64) {
 
 // Incr
 func (db *Store) Incr(key string, incr float64) (res float64, err error) {
-	bytes, ts, ok := db.GetBytes(key)
-	if ok {
-		f, err := strconv.ParseFloat(string(bytes), 64)
-		if err != nil {
-			return 0, err
-		}
-		res = f + incr
-		fstr := strconv.FormatFloat(res, 'f', -1, 64)
-
-		db.encode(NewCodec(OpSetTx).Type(TypeString).String(key).Int(ts / timeCarry).String(fstr))
-		db.m.SetTx(key, s2b(&fstr), ts)
-
-		return res, nil
+	bytes, ts, err := db.GetBytes(key)
+	if err != nil {
+		return 0, err
 	}
 
-	return 0, base.ErrKeyNotFound
+	f, err := strconv.ParseFloat(*b2s(bytes), 64)
+	if err != nil {
+		return 0, err
+	}
+	res = f + incr
+	fstr := strconv.FormatFloat(res, 'f', -1, 64)
+
+	db.encode(NewCodec(OpSetTx).Type(TypeString).String(key).Int(ts / timeCarry).String(fstr))
+	db.m.SetTx(key, s2b(&fstr), ts)
+
+	return res, nil
 }
 
 // Remove

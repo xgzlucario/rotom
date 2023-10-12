@@ -35,11 +35,11 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
-	"github.com/xgzlucario/rotom/store"
+	"github.com/xgzlucario/rotom"
 )
 
 func main() {
-	db, err := store.Open(store.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -70,13 +70,13 @@ package main
 
 import (
 	"net/http"
-	"github.com/xgzlucario/rotom/store"
+	"github.com/xgzlucario/rotom"
 )
 
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
-	db, err := store.Open(store.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultConfig)
 	if err != nil {
 		panic(err)
 	}
