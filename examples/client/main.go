@@ -27,7 +27,7 @@ func cmd() {
 	start := time.Now()
 	p := pool.New()
 
-	validator := rotom.NewCodec(rotom.Response).Int(int64(rotom.RES_SUCCESS)).String("ok").B
+	validator := rotom.NewCodec(rotom.Response).Int(int64(rotom.RES_SUCCESS)).Str("ok").B
 	delays := cache.NewPercentile()
 
 	for i := 0; i < CLIENT_NUM; i++ {
