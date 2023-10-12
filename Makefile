@@ -1,10 +1,10 @@
 run:
 	rm -f rotom.db
-	go build -ldflags="-s -w" -o rotom
+	cd examples/rotom && go build -ldflags="-s -w" -o ../../rotom
 	./rotom
 
-rundb:
-	go build -ldflags="-s -w" -o rotom
+run-db:
+	cd examples/rotom && go build -ldflags="-s -w" -o ../../rotom
 	./rotom
 
 gc-trace-run:

@@ -134,7 +134,7 @@ type (
 var (
 	// Default configuration
 	DefaultConfig = &Config{
-		Path:           "rotom.e",
+		Path:           "rotom.db",
 		ShardCount:     1024,
 		SyncPolicy:     base.EverySecond,
 		SyncInterval:   time.Second,
@@ -152,8 +152,8 @@ type Config struct {
 
 	SyncPolicy base.SyncPolicy // Data sync policy.
 
-	SyncInterval   time.Duration // Interval of buffer writes to disk.
-	ShrinkInterval time.Duration // Interval of shrink db file to compress space.
+	SyncInterval   time.Duration // Job for db sync to disk.
+	ShrinkInterval time.Duration // Job for shrink db file size.
 
 	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
 }
@@ -193,7 +193,7 @@ func Open(conf *Config) (*Engine, error) {
 			if err != nil {
 				e.logError(fmt.Sprintf("writeTo buffer error: %v", err))
 			} else {
-				e.logInfo(fmt.Sprintf("write %s buffer to e file", formatSize(n)))
+				e.logInfo(fmt.Sprintf("write %s buffer to db file", formatSize(n)))
 			}
 		})
 
