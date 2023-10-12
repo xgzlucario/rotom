@@ -8,8 +8,8 @@ import (
 
 	"github.com/sourcegraph/conc/pool"
 	cache "github.com/xgzlucario/GigaCache"
+	"github.com/xgzlucario/rotom"
 	"github.com/xgzlucario/rotom/base"
-	"github.com/xgzlucario/rotom/store"
 )
 
 const (
@@ -27,12 +27,12 @@ func cmd() {
 	start := time.Now()
 	p := pool.New()
 
-	validator := store.NewCodec(store.Response).Int(int64(store.RES_SUCCESS)).String("ok").B
+	validator := rotom.NewCodec(rotom.Response).Int(int64(rotom.RES_SUCCESS)).String("ok").B
 	delays := cache.NewPercentile()
 
 	for i := 0; i < CLIENT_NUM; i++ {
 		p.Go(func() {
-			cli, err := store.NewClient(":7676")
+			cli, err := rotom.NewClient(":7676")
 			if err != nil {
 				panic(err)
 			}

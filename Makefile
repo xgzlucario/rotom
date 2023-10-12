@@ -12,9 +12,10 @@ gc-trace-run:
 	GODEBUG=gctrace=1 go run main.go
 
 test-cover:
-	cd test
 	go test -coverprofile=coverage.out
-	go tool cover -html=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
+	rm coverage.out
+	rm *.db
 
 pprof:
 	go tool pprof -http=:18081 "http://localhost:6060/debug/pprof/profile?seconds=60"

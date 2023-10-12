@@ -1,5 +1,5 @@
-// Package store provides an in-memory key-value database.
-package store
+// Package rotom provides an in-memory key-value database.
+package rotom
 
 import (
 	"bytes"

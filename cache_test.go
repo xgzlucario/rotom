@@ -1,4 +1,4 @@
-package test
+package rotom
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 
 	"github.com/brianvoe/gofakeit/v6"
 	cache "github.com/xgzlucario/GigaCache"
-	"github.com/xgzlucario/rotom/store"
 )
 
 type vItem struct {
@@ -17,10 +16,10 @@ type vItem struct {
 
 // Test cache set operation
 func TestCacheSet(t *testing.T) {
-	cfg := store.DefaultConfig
+	cfg := DefaultConfig
 	cfg.Path = gofakeit.UUID() + ".db"
 
-	db, err := store.Open(cfg)
+	db, err := Open(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -64,7 +63,7 @@ func TestCacheSet(t *testing.T) {
 	db.Close()
 
 	// load
-	db, err = store.Open(cfg)
+	db, err = Open(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -95,10 +94,10 @@ func TestCacheSet(t *testing.T) {
 
 // TestBitmap
 func TestBitmap(t *testing.T) {
-	cfg := store.DefaultConfig
+	cfg := DefaultConfig
 	cfg.Path = gofakeit.UUID() + ".db"
 
-	db, err := store.Open(cfg)
+	db, err := Open(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -136,7 +135,7 @@ func TestBitmap(t *testing.T) {
 	db.Close()
 
 	// load
-	db, err = store.Open(cfg)
+	db, err = Open(cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -145,10 +144,10 @@ func TestBitmap(t *testing.T) {
 }
 
 func FuzzTest(f *testing.F) {
-	cfg := store.DefaultConfig
+	cfg := DefaultConfig
 	cfg.Path = gofakeit.UUID() + ".db"
 
-	db, err := store.Open(cfg)
+	db, err := Open(cfg)
 	if err != nil {
 		panic(err)
 	}
