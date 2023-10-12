@@ -59,8 +59,8 @@ func TestCacheSet(t *testing.T) {
 		}
 	}
 
-	time.Sleep(time.Second * 3)
-	db.Close()
+	err = db.Close()
+	assert.Nil(err)
 
 	// load
 	db, err = Open(cfg)
@@ -97,15 +97,14 @@ func TestBitmap(t *testing.T) {
 	db, err := Open(cfg)
 	assert.Nil(err)
 
-	// valid map
+	// valid
 	const num = 100 * 10000
-	vmap := map[uint32]struct{}{}
+	vmap := make(map[uint32]struct{}, num)
 
 	for i := 0; i < num; i++ {
-		offset := gofakeit.Uint32()
-
-		vmap[offset] = struct{}{}
-		db.BitSet("bm", offset, true)
+		n := gofakeit.Uint32()
+		vmap[n] = struct{}{}
+		db.BitSet("bm", n, true)
 	}
 
 	// len
@@ -115,18 +114,18 @@ func TestBitmap(t *testing.T) {
 
 	test := func() {
 		for i := uint32(0); i < num; i++ {
-			_, ok := vmap[i]
+			_, ok1 := vmap[i]
 			ok2, err := db.BitTest("bm", i)
 
-			assert.Equal(ok, ok2)
 			assert.Nil(err)
+			assert.Equal(ok1, ok2)
 		}
 	}
 
 	test()
 
-	time.Sleep(time.Second * 3)
-	db.Close()
+	err = db.Close()
+	assert.Nil(err)
 
 	// load
 	db, err = Open(cfg)
