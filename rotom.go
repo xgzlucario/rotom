@@ -181,7 +181,7 @@ func Open(conf *Config) (*Engine, error) {
 
 	// load db from disk.
 	if err := e.load(); err != nil {
-		e.log(Error, fmt.Sprintf("db load error: %v", err))
+		e.logError(fmt.Sprintf("db load error: %v", err))
 	}
 
 	if e.SyncPolicy != base.Never {
@@ -191,9 +191,9 @@ func Open(conf *Config) (*Engine, error) {
 			n, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()
 			if err != nil {
-				e.log(Error, fmt.Sprintf("writeTo buffer error: %v", err))
+				e.logError(fmt.Sprintf("writeTo buffer error: %v", err))
 			} else {
-				e.log(Info, fmt.Sprintf("write %s buffer to e file", formatSize(n)))
+				e.logInfo(fmt.Sprintf("write %s buffer to e file", formatSize(n)))
 			}
 		})
 
@@ -205,14 +205,14 @@ func Open(conf *Config) (*Engine, error) {
 		})
 	}
 
-	e.log(Info, "rotom is ready to go")
+	e.logInfo("rotom is ready to go")
 
 	return e, nil
 }
 
 // Listen bind and listen to the specified tcp address.
 func (e *Engine) Listen(addr string) error {
-	e.log(Info, fmt.Sprintf("listening on %s...", addr))
+	e.logInfo(fmt.Sprintf("listening on %s...", addr))
 	return gnet.Run(&RotomEngine{db: e}, addr, gnet.WithMulticore(true))
 }
 
@@ -743,7 +743,7 @@ func (e *Engine) load() error {
 		return err
 	}
 
-	e.log(Info, fmt.Sprintf("start to load e size %s", formatSize(len(line))))
+	e.logInfo(fmt.Sprintf("start to load e size %s", formatSize(len(line))))
 
 	var args [][]byte
 
@@ -947,7 +947,7 @@ func (e *Engine) load() error {
 		}
 	}
 
-	e.log(Info, "db load complete")
+	e.logInfo("db load complete")
 
 	return nil
 }
@@ -995,7 +995,7 @@ func (e *Engine) shrink() {
 
 	os.Rename(e.tmpPath, e.Path)
 
-	e.log(Info, "rotom rewrite done")
+	e.logInfo("rotom rewrite done")
 }
 
 // parseLine parse file content to record lines.
@@ -1108,23 +1108,14 @@ func (e *Engine) backend(t time.Duration, f func()) {
 	}()
 }
 
-type LogLevel byte
-
-const (
-	Info LogLevel = iota + 1
-	Warn
-	Error
-)
-
-func (e *Engine) log(level LogLevel, msg string) {
+func (e *Engine) logInfo(msg string) {
 	if e.Logger != nil {
-		switch level {
-		case Info:
-			e.Logger.Info(msg)
-		case Warn:
-			e.Logger.Warn(msg)
-		case Error:
-			e.Logger.Error(msg)
-		}
+		e.Logger.Info(msg)
+	}
+}
+
+func (e *Engine) logError(msg string) {
+	if e.Logger != nil {
+		e.Logger.Error(msg)
 	}
 }
