@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"sync"
@@ -181,8 +183,13 @@ func Open(conf *Config) (*Engine, error) {
 
 	// load db from disk.
 	if err := e.load(); err != nil {
-		e.logError(fmt.Sprintf("db load error: %v", err))
+		e.logError("db load error: %v", err)
 	}
+
+	// monitor
+	e.backend(time.Minute, func() {
+		e.printRuntimeStats()
+	})
 
 	if e.SyncPolicy != base.Never {
 		// sync buffer to disk.
@@ -191,9 +198,9 @@ func Open(conf *Config) (*Engine, error) {
 			n, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()
 			if err != nil {
-				e.logError(fmt.Sprintf("writeTo buffer error: %v", err))
-			} else {
-				e.logInfo(fmt.Sprintf("write %s buffer to db file", formatSize(n)))
+				e.logError("writeTo buffer error: %v", err)
+			} else if n > 0 {
+				e.logInfo("write %s buffer to db file", formatSize(n))
 			}
 		})
 
@@ -212,7 +219,7 @@ func Open(conf *Config) (*Engine, error) {
 
 // Listen bind and listen to the specified tcp address.
 func (e *Engine) Listen(addr string) error {
-	e.logInfo(fmt.Sprintf("listening on %s...", addr))
+	e.logInfo("listening on %s...", addr)
 	return gnet.Run(&RotomEngine{db: e}, addr, gnet.WithMulticore(true))
 }
 
@@ -743,7 +750,7 @@ func (e *Engine) load() error {
 		return err
 	}
 
-	e.logInfo(fmt.Sprintf("start to load e size %s", formatSize(len(line))))
+	e.logInfo("start to load e size %s", formatSize(len(line)))
 
 	var args [][]byte
 
@@ -1108,14 +1115,45 @@ func (e *Engine) backend(t time.Duration, f func()) {
 	}()
 }
 
-func (e *Engine) logInfo(msg string) {
-	if e.Logger != nil {
+func (e *Engine) printRuntimeStats() {
+	if e.Logger == nil {
+		return
+	}
+
+	var stats debug.GCStats
+	var memStats runtime.MemStats
+
+	debug.ReadGCStats(&stats)
+	runtime.ReadMemStats(&memStats)
+
+	e.Logger.
+		With("alloc", formatSize(memStats.Alloc)).
+		With("sys", formatSize(memStats.Sys)).
+		With("gctime", stats.NumGC).
+		With("gcpause", stats.PauseTotal/time.Duration(stats.NumGC)).
+		Info("[Runtime]")
+}
+
+func (e *Engine) logInfo(msg string, args ...any) {
+	if e.Logger == nil {
+		return
+	}
+
+	if len(args) == 0 {
 		e.Logger.Info(msg)
+	} else {
+		e.Logger.Info(fmt.Sprintf(msg, args...))
 	}
 }
 
-func (e *Engine) logError(msg string) {
-	if e.Logger != nil {
+func (e *Engine) logError(msg string, args ...any) {
+	if e.Logger == nil {
+		return
+	}
+
+	if len(args) == 0 {
 		e.Logger.Error(msg)
+	} else {
+		e.Logger.Error(fmt.Sprintf(msg, args...))
 	}
 }

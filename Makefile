@@ -1,13 +1,14 @@
 run:
 	rm -f rotom.db
-	cd examples/rotom && go build -ldflags="-s -w" -o ../../rotom
-	./rotom
+	go run examples/rotom/*.go
 
 run-db:
-	cd examples/rotom && go build -ldflags="-s -w" -o ../../rotom
-	./rotom
+	go run examples/rotom/*.go
 
-gc-trace-run:
+run-client:
+	go run examples/client/*.go
+
+run-gc:
 	rm -f rotom.db
 	GODEBUG=gctrace=1 go run main.go
 
