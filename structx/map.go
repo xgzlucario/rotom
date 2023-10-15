@@ -4,17 +4,17 @@ import (
 	"sync"
 
 	"github.com/bytedance/sonic"
-	"github.com/tidwall/hashmap"
+	"github.com/dolthub/swiss"
 )
 
-// ==================== Map ====================
+// Map
 type Map[K comparable, V any] struct {
-	*hashmap.Map[K, V]
+	*swiss.Map[K, V]
 }
 
 // NewMap
 func NewMap[K comparable, V any]() Map[K, V] {
-	return Map[K, V]{&hashmap.Map[K, V]{}}
+	return Map[K, V]{swiss.NewMap[K, V](8)}
 }
 
 type entry[K comparable, V any] struct {
@@ -25,13 +25,13 @@ type entry[K comparable, V any] struct {
 // MarshalJSON
 func (m *Map[K, V]) MarshalJSON() ([]byte, error) {
 	e := entry[K, V]{
-		K: make([]K, 0, m.Len()),
-		V: make([]V, 0, m.Len()),
+		K: make([]K, 0, m.Count()),
+		V: make([]V, 0, m.Count()),
 	}
-	m.Scan(func(key K, value V) bool {
-		e.K = append(e.K, key)
-		e.V = append(e.V, value)
-		return true
+	m.Iter(func(k K, v V) bool {
+		e.K = append(e.K, k)
+		e.V = append(e.V, v)
+		return false
 	})
 
 	return sonic.Marshal(e)
@@ -45,12 +45,12 @@ func (m *Map[K, V]) UnmarshalJSON(src []byte) error {
 	}
 
 	for i, k := range e.K {
-		m.Set(k, e.V[i])
+		m.Put(k, e.V[i])
 	}
 	return nil
 }
 
-// ================== SyncMap ==================
+// SyncMap
 type SyncMap[K comparable, V any] struct {
 	m Map[K, V]
 	sync.RWMutex
@@ -72,7 +72,7 @@ func (m *SyncMap[K, V]) Get(key K) (v V, ok bool) {
 // Set
 func (m *SyncMap[K, V]) Set(key K, value V) {
 	m.Lock()
-	m.m.Set(key, value)
+	m.m.Put(key, value)
 	m.Unlock()
 }
 
@@ -84,9 +84,13 @@ func (m *SyncMap[K, V]) Delete(key K) {
 }
 
 // Keys
-func (m *SyncMap[K, V]) Keys() (k []K) {
+func (m *SyncMap[K, V]) Keys() (keys []K) {
 	m.RLock()
-	k = m.m.Keys()
+	keys = make([]K, 0, m.m.Count())
+	m.m.Iter(func(k K, _ V) bool {
+		keys = append(keys, k)
+		return false
+	})
 	m.RUnlock()
 	return
 }
@@ -94,7 +98,7 @@ func (m *SyncMap[K, V]) Keys() (k []K) {
 // Len
 func (m *SyncMap[K, V]) Len() (n int) {
 	m.RLock()
-	n = m.m.Len()
+	n = m.m.Count()
 	m.RUnlock()
 	return
 }

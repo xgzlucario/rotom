@@ -127,7 +127,7 @@ const (
 type (
 	String = []byte
 	Map    = *structx.SyncMap[string, []byte]
-	Set    = structx.Set[string]
+	Set    = *structx.Set[string]
 	List   = *structx.List[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
 	BitMap = *structx.Bitmap

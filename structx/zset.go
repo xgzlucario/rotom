@@ -4,23 +4,23 @@ import "github.com/xgzlucario/rotom/base"
 
 // ZSet
 type ZSet[K, S base.Ordered, V any] struct {
-	data Map[K, *zsNode[S, V]]
+	data Map[K, *znode[S, V]]
 	tree *RBTree[S, K]
 }
 
-type zsNode[S base.Ordered, V any] struct {
+type znode[S base.Ordered, V any] struct {
 	S S
 	V V
 }
 
-type zsIter[S base.Ordered, V any] struct {
+type ziter[S base.Ordered, V any] struct {
 	n *rbnode[S, V]
 }
 
 // NewZSet
 func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
 	return &ZSet[K, S, V]{
-		data: NewMap[K, *zsNode[S, V]](),
+		data: NewMap[K, *znode[S, V]](),
 		tree: NewRBTree[S, K](),
 	}
 }
@@ -43,8 +43,8 @@ func (z *ZSet[K, S, V]) Set(key K, value V) {
 		item.V = value
 
 	} else {
-		item = &zsNode[S, V]{V: value}
-		z.data.Set(key, item)
+		item = &znode[S, V]{V: value}
+		z.data.Put(key, item)
 		z.tree.Insert(item.S, key)
 	}
 }
@@ -56,13 +56,13 @@ func (z *ZSet[K, S, V]) SetScore(key K, score S) {
 		z.updateScore(item, key, score)
 
 	} else {
-		z.data.Set(key, &zsNode[S, V]{S: score})
+		z.data.Put(key, &znode[S, V]{S: score})
 		z.tree.Insert(score, key)
 	}
 }
 
 // update score of key
-func (z *ZSet[K, S, V]) updateScore(node *zsNode[S, V], key K, score S) {
+func (z *ZSet[K, S, V]) updateScore(node *znode[S, V], key K, score S) {
 	z.tree.Delete(node.S)
 	node.S = score
 	z.tree.Insert(score, key)
@@ -76,7 +76,7 @@ func (z *ZSet[K, S, V]) SetWithScore(key K, score S, value V) {
 		z.updateScore(item, key, score)
 
 	} else {
-		z.data.Set(key, &zsNode[S, V]{S: score, V: value})
+		z.data.Put(key, &znode[S, V]{S: score, V: value})
 		z.tree.Insert(score, key)
 	}
 }
@@ -89,7 +89,7 @@ func (z *ZSet[K, S, V]) Incr(key K, score S) S {
 		return item.S
 
 	} else {
-		z.data.Set(key, &zsNode[S, V]{S: score})
+		z.data.Put(key, &znode[S, V]{S: score})
 		z.tree.Insert(score, key)
 		return score
 	}
@@ -97,8 +97,9 @@ func (z *ZSet[K, S, V]) Incr(key K, score S) S {
 
 // Delete
 func (z *ZSet[K, S, V]) Delete(key K) (v V, ok bool) {
-	item, ok := z.data.Delete(key)
+	item, ok := z.data.Get(key)
 	if ok {
+		z.data.Delete(key)
 		z.tree.Delete(item.S)
 		return item.V, ok
 	}
@@ -111,27 +112,27 @@ func (z *ZSet[K, S, V]) Size() int {
 }
 
 // Iter return an iterator by score ASC
-func (z *ZSet[K, S, V]) Iter() *zsIter[S, K] {
-	return &zsIter[S, K]{z.tree.Iterator()}
+func (z *ZSet[K, S, V]) Iter() *ziter[S, K] {
+	return &ziter[S, K]{z.tree.Iterator()}
 }
 
 // Score
-func (z *zsIter[S, K]) Score() S {
+func (z *ziter[S, K]) Score() S {
 	return z.n.Key
 }
 
 // Key
-func (z *zsIter[S, K]) Key() K {
+func (z *ziter[S, K]) Key() K {
 	return z.n.Value
 }
 
 // Valid
-func (z *zsIter[S, K]) Valid() bool {
+func (z *ziter[S, K]) Valid() bool {
 	return z.n != nil
 }
 
 // Next
-func (z *zsIter[S, K]) Next() {
+func (z *ziter[S, K]) Next() {
 	z.n = z.n.Next()
 }
 
@@ -146,9 +147,9 @@ func (z *ZSet[K, S, V]) UnmarshalJSON(src []byte) error {
 		return err
 	}
 
-	z.data.Scan(func(k K, item *zsNode[S, V]) bool {
+	z.data.Iter(func(k K, item *znode[S, V]) bool {
 		z.tree.Insert(item.S, k)
-		return true
+		return false
 	})
 
 	return nil
