@@ -418,7 +418,7 @@ func (e *Engine) SHas(key string, item string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return s.Contains(item), nil
+	return s.Has(item), nil
 }
 
 // SCard
@@ -427,7 +427,7 @@ func (e *Engine) SCard(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return s.Cardinality(), nil
+	return s.Len(), nil
 }
 
 // SUnion

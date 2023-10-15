@@ -77,10 +77,11 @@ func (m *SyncMap[K, V]) Set(key K, value V) {
 }
 
 // Delete
-func (m *SyncMap[K, V]) Delete(key K) {
+func (m *SyncMap[K, V]) Delete(key K) bool {
 	m.Lock()
-	m.m.Delete(key)
+	ok := m.m.Delete(key)
 	m.Unlock()
+	return ok
 }
 
 // Keys

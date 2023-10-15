@@ -32,26 +32,21 @@ func (s *Set[T]) Add(v T) bool {
 // Remove
 func (s *Set[T]) Remove(v T) bool {
 	s.Lock()
-	defer s.Unlock()
-
-	if !s.m.Has(v) {
-		return false
-	}
-	s.m.Delete(v)
-
-	return true
+	ok := s.m.Delete(v)
+	s.Unlock()
+	return ok
 }
 
-// Contains
-func (s *Set[T]) Contains(v T) bool {
+// Has
+func (s *Set[T]) Has(v T) bool {
 	s.RLock()
 	ok := s.m.Has(v)
 	s.RUnlock()
 	return ok
 }
 
-// Cardinality
-func (s *Set[T]) Cardinality() int {
+// Len
+func (s *Set[T]) Len() int {
 	s.RLock()
 	n := s.m.Count()
 	s.RUnlock()
