@@ -13,7 +13,7 @@ type Bitmap struct {
 }
 
 func NewBitmap() *Bitmap {
-	return &Bitmap{sync.RWMutex{}, roaring.New()}
+	return &Bitmap{bm: roaring.New()}
 }
 
 // Add

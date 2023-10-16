@@ -1,6 +1,7 @@
 package structx
 
 import (
+	"encoding/json"
 	"sync"
 
 	"github.com/dolthub/swiss"
@@ -12,21 +13,34 @@ type Set[T comparable] struct {
 }
 
 // NewSet
-func NewSet[T comparable]() *Set[T] {
-	return &Set[T]{sync.RWMutex{}, swiss.NewMap[T, struct{}](8)}
+func NewSet[T comparable](args ...T) *Set[T] {
+	defaultCap := 8
+	if len(args) > defaultCap {
+		defaultCap = len(args)
+	}
+
+	s := &Set[T]{m: swiss.NewMap[T, struct{}](uint32(defaultCap))}
+	for _, v := range args {
+		s.m.Put(v, struct{}{})
+	}
+	return s
 }
 
-// Add
-func (s *Set[T]) Add(v T) bool {
-	s.Lock()
-	defer s.Unlock()
-
+func (s *Set[T]) add(v T) bool {
 	if s.m.Has(v) {
 		return false
 	}
 	s.m.Put(v, struct{}{})
 
 	return true
+}
+
+// Add
+func (s *Set[T]) Add(v T) bool {
+	s.Lock()
+	ok := s.add(v)
+	s.Unlock()
+	return ok
 }
 
 // Remove
@@ -53,25 +67,39 @@ func (s *Set[T]) Len() int {
 	return n
 }
 
+// ToSlice
+func (s *Set[T]) ToSlice() []T {
+	s.RLock()
+	defer s.RUnlock()
+
+	sl := make([]T, 0, s.m.Count())
+	s.m.Iter(func(k T, _ struct{}) bool {
+		sl = append(sl, k)
+		return false
+	})
+
+	return sl
+}
+
 // Clone
 func (s *Set[T]) Clone() *Set[T] {
 	s.RLock()
 	defer s.RUnlock()
 
-	cl := NewSet[T]()
+	m := swiss.NewMap[T, struct{}](uint32(s.m.Count()))
 	s.m.Iter(func(k T, _ struct{}) bool {
-		cl.Add(k)
+		m.Put(k, struct{}{})
 		return false
 	})
 
-	return cl
+	return &Set[T]{m: m}
 }
 
 // Union
 func (s *Set[T]) Union(other *Set[T]) *Set[T] {
 	s.Lock()
 	other.m.Iter(func(k T, _ struct{}) bool {
-		s.Add(k)
+		s.m.Put(k, struct{}{})
 		return false
 	})
 	s.Unlock()
@@ -82,12 +110,16 @@ func (s *Set[T]) Union(other *Set[T]) *Set[T] {
 // Intersect
 func (s *Set[T]) Intersect(other *Set[T]) *Set[T] {
 	s.Lock()
-	other.m.Iter(func(k T, _ struct{}) bool {
-		if !s.m.Has(k) {
-			s.Remove(k)
+	other.RLock()
+
+	s.m.Iter(func(k T, _ struct{}) bool {
+		if !other.m.Has(k) {
+			s.m.Delete(k)
 		}
 		return false
 	})
+
+	other.RUnlock()
 	s.Unlock()
 
 	return s
@@ -96,11 +128,35 @@ func (s *Set[T]) Intersect(other *Set[T]) *Set[T] {
 // Difference
 func (s *Set[T]) Difference(other *Set[T]) *Set[T] {
 	s.Lock()
+	other.RLock()
+
 	other.m.Iter(func(k T, _ struct{}) bool {
-		s.Remove(k)
+		if s.m.Has(k) {
+			s.m.Delete(k)
+		} else {
+			s.m.Put(k, struct{}{})
+		}
 		return false
 	})
+
+	other.RUnlock()
 	s.Unlock()
 
 	return s
+}
+
+// MarshalJSON
+func (s *Set[T]) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.ToSlice())
+}
+
+// UnmarshalJSON
+func (s *Set[T]) UnmarshalJSON(src []byte) error {
+	var tmp []T
+	if err := json.Unmarshal(src, &tmp); err != nil {
+		return err
+	}
+
+	*s = *NewSet(tmp...)
+	return nil
 }
