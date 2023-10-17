@@ -69,13 +69,10 @@ func main() {
 package main
 
 import (
-	"net/http"
 	"github.com/xgzlucario/rotom"
 )
 
 func main() {
-	go http.ListenAndServe("localhost:6060", nil)
-
 	db, err := rotom.Open(rotom.DefaultConfig)
 	if err != nil {
 		panic(err)
