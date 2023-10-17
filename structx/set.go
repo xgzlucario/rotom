@@ -152,11 +152,18 @@ func (s *Set[T]) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON
 func (s *Set[T]) UnmarshalJSON(src []byte) error {
+	s.Lock()
+	defer s.Unlock()
+
 	var tmp []T
 	if err := json.Unmarshal(src, &tmp); err != nil {
 		return err
 	}
 
-	*s = *NewSet(tmp...)
+	s.m = swiss.NewMap[T, struct{}](uint32(len(tmp)))
+	for _, v := range tmp {
+		s.m.Put(v, struct{}{})
+	}
+
 	return nil
 }
