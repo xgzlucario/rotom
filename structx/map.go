@@ -13,13 +13,27 @@ type Map[K comparable, V any] struct {
 }
 
 // NewMap
-func NewMap[K comparable, V any]() Map[K, V] {
-	return Map[K, V]{swiss.NewMap[K, V](8)}
+func NewMap[K comparable, V any](size ...int) Map[K, V] {
+	defaultCap := 8
+	if len(size) > 0 {
+		defaultCap = size[0]
+	}
+	return Map[K, V]{swiss.NewMap[K, V](uint32(defaultCap))}
 }
 
 type entry[K comparable, V any] struct {
 	K []K
 	V []V
+}
+
+// Clone
+func (m *Map[K, V]) Clone() Map[K, V] {
+	m2 := NewMap[K, V](m.Count())
+	m.Iter(func(k K, v V) bool {
+		m2.Put(k, v)
+		return false
+	})
+	return m2
 }
 
 // MarshalJSON
@@ -57,8 +71,8 @@ type SyncMap[K comparable, V any] struct {
 }
 
 // NewSyncMap
-func NewSyncMap[K comparable, V any]() *SyncMap[K, V] {
-	return &SyncMap[K, V]{NewMap[K, V](), sync.RWMutex{}}
+func NewSyncMap[K comparable, V any](size ...int) *SyncMap[K, V] {
+	return &SyncMap[K, V]{m: NewMap[K, V](size...)}
 }
 
 // Get
@@ -102,6 +116,14 @@ func (m *SyncMap[K, V]) Len() (n int) {
 	n = m.m.Count()
 	m.RUnlock()
 	return
+}
+
+// Clone
+func (m *SyncMap[K, V]) Clone() *SyncMap[K, V] {
+	m.RLock()
+	m2 := &SyncMap[K, V]{m: m.m.Clone()}
+	m.RUnlock()
+	return m2
 }
 
 // MarshalJSON

@@ -11,7 +11,7 @@ import (
 func TestMap(t *testing.T) {
 	assert := assert.New(t)
 
-	m := NewSyncMap[string, int]()
+	m := NewSyncMap[string, int](8)
 	valid := map[string]int{}
 
 	for i := 0; i < 10000; i++ {
@@ -50,4 +50,8 @@ func TestMap(t *testing.T) {
 	// unmarshal error
 	err = m2.UnmarshalJSON([]byte("fake news"))
 	assert.NotNil(err)
+
+	// clone
+	ml := m.Clone()
+	assert.ElementsMatch(ml.Keys(), m.Keys())
 }

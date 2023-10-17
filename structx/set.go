@@ -3,13 +3,11 @@ package structx
 import (
 	"encoding/json"
 	"sync"
-
-	"github.com/dolthub/swiss"
 )
 
 type Set[T comparable] struct {
 	sync.RWMutex
-	m *swiss.Map[T, struct{}]
+	m Map[T, struct{}]
 }
 
 // NewSet
@@ -19,7 +17,7 @@ func NewSet[T comparable](args ...T) *Set[T] {
 		defaultCap = len(args)
 	}
 
-	s := &Set[T]{m: swiss.NewMap[T, struct{}](uint32(defaultCap))}
+	s := &Set[T]{m: NewMap[T, struct{}](defaultCap)}
 	for _, v := range args {
 		s.m.Put(v, struct{}{})
 	}
@@ -86,13 +84,7 @@ func (s *Set[T]) Clone() *Set[T] {
 	s.RLock()
 	defer s.RUnlock()
 
-	m := swiss.NewMap[T, struct{}](uint32(s.m.Count()))
-	s.m.Iter(func(k T, _ struct{}) bool {
-		m.Put(k, struct{}{})
-		return false
-	})
-
-	return &Set[T]{m: m}
+	return &Set[T]{m: s.m.Clone()}
 }
 
 // Union
@@ -160,7 +152,7 @@ func (s *Set[T]) UnmarshalJSON(src []byte) error {
 		return err
 	}
 
-	s.m = swiss.NewMap[T, struct{}](uint32(len(tmp)))
+	s.m = NewMap[T, struct{}](len(tmp))
 	for _, v := range tmp {
 		s.m.Put(v, struct{}{})
 	}
