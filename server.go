@@ -52,10 +52,9 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 // handleEvent
 func (e *Engine) handleEvent(line []byte) (msg []byte, err error) {
 	op := Operation(line[0])
-	argsNum := cmdTable[op]
 
 	// parse args by operation
-	args, _, err := parseLine(line[1:], argsNum)
+	args, _, err := parseLine(line[1:], cmdTable[op].ArgsNum)
 	if err != nil {
 		return nil, err
 	}

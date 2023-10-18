@@ -23,7 +23,7 @@ import (
 type Operation byte
 
 const (
-	OpSetTx Operation = iota + 1
+	OpSetTx Operation = iota
 	OpRemove
 	OpRename
 	OpMarshalBytes
@@ -61,44 +61,50 @@ const (
 	ReqLLen
 )
 
+// Cmd
+type Cmd struct {
+	Op      Operation
+	ArgsNum int
+}
+
 // cmdTable defines the number of parameters required for the operation.
-var cmdTable = map[Operation]int{
-	OpSetTx:        4,
-	OpRemove:       1,
-	OpRename:       2,
-	OpMarshalBytes: 1,
+var cmdTable = []Cmd{
+	{OpSetTx, 4},
+	{OpRemove, 1},
+	{OpRename, 2},
+	{OpMarshalBytes, 1},
 	// map
-	OpHSet:    3,
-	OpHRemove: 2,
+	{OpHSet, 3},
+	{OpHRemove, 2},
 	// set
-	OpSAdd:    2,
-	OpSRemove: 2,
-	OpSUnion:  3,
-	OpSInter:  3,
-	OpSDiff:   3,
+	{OpSAdd, 2},
+	{OpSRemove, 2},
+	{OpSUnion, 3},
+	{OpSInter, 3},
+	{OpSDiff, 3},
 	// list
-	OpLPush: 2,
-	OpLPop:  1,
-	OpRPush: 2,
-	OpRPop:  1,
+	{OpLPush, 2},
+	{OpLPop, 1},
+	{OpRPush, 2},
+	{OpRPop, 1},
 	// bitmap
-	OpBitSet:  3,
-	OpBitFlip: 2,
-	OpBitOr:   3,
-	OpBitAnd:  3,
-	OpBitXor:  3,
+	{OpBitSet, 3},
+	{OpBitFlip, 2},
+	{OpBitOr, 3},
+	{OpBitAnd, 3},
+	{OpBitXor, 3},
 	// zset
-	OpZSet:    4,
-	OpZIncr:   3,
-	OpZRemove: 2,
+	{OpZSet, 4},
+	{OpZIncr, 3},
+	{OpZRemove, 2},
 	// request
-	Response:  2,
-	ReqPing:   0,
-	ReqGet:    1,
-	ReqRanGet: 0,
-	ReqLen:    0,
-	ReqHLen:   1,
-	ReqLLen:   1,
+	{Response, 2},
+	{ReqPing, 0},
+	{ReqGet, 1},
+	{ReqRanGet, 0},
+	{ReqLen, 0},
+	{ReqHLen, 1},
+	{ReqLLen, 1},
 }
 
 // VType is value type for OpSet.
@@ -765,7 +771,7 @@ func (e *Engine) load() error {
 	// <OP><argsNum><args...>
 	for len(line) > 2 {
 		op := Operation(line[0])
-		argsNum := cmdTable[op]
+		argsNum := cmdTable[op].ArgsNum
 		line = line[1:]
 
 		// parse args by operation
