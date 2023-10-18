@@ -134,14 +134,21 @@ type (
 )
 
 var (
-	// Default configuration
+	// Default config for db
 	DefaultConfig = &Config{
 		Path:           "rotom.db",
 		ShardCount:     1024,
-		SyncPolicy:     base.EverySecond,
+		SyncPolicy:     base.EveryInterval,
 		SyncInterval:   time.Second,
 		ShrinkInterval: time.Minute,
 		Logger:         slog.Default(),
+	}
+
+	// No persistent config
+	NoPersistentConfig = &Config{
+		ShardCount: 1024,
+		SyncPolicy: base.Never,
+		Logger:     slog.Default(),
 	}
 )
 
@@ -186,7 +193,7 @@ func Open(conf *Config) (*Engine, error) {
 		e.logError("db load error: %v", err)
 	}
 
-	// monitor
+	// runtime monitor.
 	e.backend(time.Minute, func() {
 		e.printRuntimeStats()
 	})

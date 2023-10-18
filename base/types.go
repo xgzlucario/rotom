@@ -34,6 +34,5 @@ type SyncPolicy byte
 
 const (
 	Never SyncPolicy = iota
-	EverySecond
-	Always
+	EveryInterval
 )

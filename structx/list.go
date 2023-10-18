@@ -127,7 +127,7 @@ func (l *List[T]) Index(i int) (val T, ok bool) {
 	l.RLock()
 	defer l.RUnlock()
 
-	if i < 0 || i >= l.len {
+	if i < 0 {
 		return
 	}
 
