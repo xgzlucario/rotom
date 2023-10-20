@@ -142,12 +142,13 @@ type (
 var (
 	// Default config for db
 	DefaultConfig = &Config{
-		Path:           "rotom.db",
-		ShardCount:     1024,
-		SyncPolicy:     base.EveryInterval,
-		SyncInterval:   time.Second,
-		ShrinkInterval: time.Minute,
-		Logger:         slog.Default(),
+		Path:             "rotom.db",
+		ShardCount:       1024,
+		SyncPolicy:       base.EveryInterval,
+		SyncInterval:     time.Second,
+		ShrinkInterval:   time.Minute,
+		RunSkipLoadError: true,
+		Logger:           slog.Default(),
 	}
 
 	// No persistent config
@@ -169,6 +170,8 @@ type Config struct {
 
 	SyncInterval   time.Duration // Job for db sync to disk.
 	ShrinkInterval time.Duration // Job for shrink db file size.
+
+	RunSkipLoadError bool // Starts when loading database file error.
 
 	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
 }
@@ -197,6 +200,7 @@ func Open(conf *Config) (*Engine, error) {
 	// load db from disk.
 	if err := e.load(); err != nil {
 		e.logError("db load error: %v", err)
+		return nil, err
 	}
 
 	// runtime monitor.
@@ -289,7 +293,7 @@ func (e *Engine) Set(key string, val []byte) {
 
 // SetEx store key-value pair with ttl.
 func (e *Engine) SetEx(key string, val []byte, ttl time.Duration) {
-	e.SetTx(key, val, cache.GetUnixNano()+int64(ttl))
+	e.SetTx(key, val, cache.GetClock()+int64(ttl))
 }
 
 // SetTx store key-value pair with deadline.
@@ -771,6 +775,12 @@ func (e *Engine) load() error {
 	// <OP><argsNum><args...>
 	for len(line) > 2 {
 		op := Operation(line[0])
+
+		// if operation valid
+		if int(op) >= len(cmdTable) {
+			return base.ErrParseRecordLine
+		}
+
 		argsNum := cmdTable[op].ArgsNum
 		line = line[1:]
 
@@ -788,7 +798,7 @@ func (e *Engine) load() error {
 
 		case OpSetTx: // type, key, ts, val
 			ts := base.ParseInt[int64](args[2]) * timeCarry
-			if ts < cache.GetUnixNano() && ts != NoTTL {
+			if ts < cache.GetClock() && ts != NoTTL {
 				continue
 			}
 

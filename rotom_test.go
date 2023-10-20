@@ -1,6 +1,7 @@
 package rotom
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -13,6 +14,60 @@ import (
 type vItem struct {
 	Val []byte
 	Ts  int64
+}
+
+var (
+	nilBytes []byte
+)
+
+func TestDB(t *testing.T) {
+	assert := assert.New(t)
+
+	cfg := DefaultConfig
+	cfg.Path = gofakeit.UUID() + ".db"
+
+	db, err := Open(cfg)
+	assert.Nil(err)
+	assert.NotNil(db)
+
+	// Set
+	db.Set("foo", []byte("bar"))
+	db.Set("num", []byte("1"))
+	db.HSet("hm", "foo", []byte("bar"))
+
+	// Get
+	val, ts, err := db.GetBytes("hm")
+	assert.Equal(val, nilBytes)
+	assert.Equal(ts, int64(0))
+	assert.Equal(err, base.ErrTypeAssert)
+
+	val, ts, err = db.GetBytes("none")
+	assert.Equal(val, nilBytes)
+	assert.Equal(ts, int64(0))
+	assert.Equal(err, base.ErrKeyNotFound)
+
+	// Incr
+	res, err := db.Incr("hm", 3.5)
+	assert.Equal(res, float64(0))
+	assert.Equal(err, base.ErrTypeAssert)
+
+	res, err = db.Incr("foo", 3.5)
+	assert.Equal(res, float64(0))
+	assert.NotNil(err)
+
+	res, err = db.Incr("num", 3.5)
+	assert.Equal(res, 4.5)
+	assert.Nil(err)
+
+	// close
+	assert.Nil(db.Close())
+	assert.NotNil(db.Close())
+
+	// load error
+	os.WriteFile(cfg.Path, []byte("fake data"), 0644)
+	db, err = Open(cfg)
+	assert.NotNil(err)
+	assert.Nil(db)
 }
 
 // Test cache set operation
@@ -44,7 +99,7 @@ func TestCacheSet(t *testing.T) {
 	// get
 	for k, v := range kvdata {
 		// expired
-		if v.Ts < cache.GetUnixNano() {
+		if v.Ts < cache.GetClock() {
 			val, ts, ok := db.Get(k)
 			assert.Equal(val, nil)
 			assert.Equal(ts, int64(0))
@@ -72,7 +127,7 @@ func TestCacheSet(t *testing.T) {
 		v.Ts *= (1000 * 1000 * 1000)
 
 		// expired
-		if v.Ts < cache.GetUnixNano() {
+		if v.Ts < cache.GetClock() {
 			_, _, ok := db.Get(k)
 			assert.False(ok)
 
@@ -132,6 +187,61 @@ func TestBitmap(t *testing.T) {
 	test()
 }
 
+func TestMap(t *testing.T) {
+	assert := assert.New(t)
+
+	cfg := DefaultConfig
+	cfg.Path = gofakeit.UUID() + ".db"
+
+	db, err := Open(cfg)
+	if err != nil {
+		panic(err)
+	}
+
+	// valid
+	vmap := make(map[string][]byte, 10000)
+
+	for i := 0; i < 10000; i++ {
+		k := gofakeit.UUID()
+		v := []byte(gofakeit.Username())
+
+		db.HSet("hm", k, v)
+		vmap[k] = v
+	}
+
+	// len
+	c, err := db.HLen("hm")
+	assert.Nil(err)
+	assert.Equal(c, len(vmap))
+
+	// remove
+	for k := range vmap {
+		err := db.HRemove("hm", k)
+		delete(vmap, k)
+		assert.Nil(err)
+		break
+	}
+
+	test := func() {
+		for k, v := range vmap {
+			res, err := db.HGet("hm", k)
+			assert.Equal(res, v)
+			assert.Nil(err)
+		}
+	}
+
+	test()
+
+	err = db.Close()
+	assert.Nil(err)
+
+	// load
+	db, err = Open(cfg)
+	assert.Nil(err)
+
+	test()
+}
+
 func FuzzSet(f *testing.F) {
 	db, err := Open(NoPersistentConfig)
 	if err != nil {
@@ -141,7 +251,7 @@ func FuzzSet(f *testing.F) {
 	f.Fuzz(func(t *testing.T, key string, val []byte, ts int64) {
 		assert := assert.New(t)
 		db.SetTx(key, val, ts)
-		now := cache.GetUnixNano()
+		now := cache.GetClock()
 
 		v, ttl, err := db.GetBytes(key)
 
