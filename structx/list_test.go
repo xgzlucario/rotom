@@ -82,9 +82,14 @@ func TestList(t *testing.T) {
 
 func TestListMarshal(t *testing.T) {
 	ls := NewList[int]()
+	assert := assert.New(t)
 
-	ls.MarshalJSON()
-	ls.UnmarshalJSON([]byte("T"))
+	src, err := ls.MarshalJSON()
+	assert.Nil(src)
+	assert.Nil(err)
+
+	err = ls.UnmarshalJSON([]byte("T"))
+	assert.Nil(err)
 }
 
 func BenchmarkList(b *testing.B) {
