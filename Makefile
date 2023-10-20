@@ -13,13 +13,15 @@ run-gc:
 	GODEBUG=gctrace=1 go run main.go
 
 test-cover:
-	go test -coverprofile=c.out
-	go tool cover -html=c.out -o coverage.html
-	rm c.out
+	go test -coverprofile=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
 	rm *.db
 
 test-cover-structx:
-	cd structx && bash -c "go test -coverprofile=c.out && go tool cover -html=c.out -o coverage.html && rm c.out"
+	cd structx && bash -c "
+	go test -coverprofile=coverage.out 
+	&& go tool cover -html=coverage.out -o coverage.html
+	"
 
 pprof:
 	go tool pprof -http=:18081 "http://localhost:6060/debug/pprof/profile?seconds=60"
