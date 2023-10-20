@@ -296,3 +296,61 @@ func TestHMap(t *testing.T) {
 		assert.Equal(err, base.ErrWrongType)
 	}
 }
+
+func TestSet(t *testing.T) {
+	assert := assert.New(t)
+
+	db, err := Open(NoPersistentConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	for i := 0; i < 10000; i++ {
+		// gen random data
+		key := gofakeit.UUID()
+		field := gofakeit.UUID()
+		op := gofakeit.Number(0, 100)
+
+		// test
+		err := db.SAdd(key, field)
+		assert.Nil(err)
+
+		ok, err := db.SHas(key, field)
+		assert.True(ok)
+		assert.Nil(err)
+
+		if op%3 == 0 {
+			err = db.SRemove(key, field)
+			assert.Nil(err)
+
+			ok, err := db.SHas(key, field)
+			assert.False(ok)
+			assert.Nil(err)
+		}
+	}
+
+	// err test
+	db.Set("str", []byte(""))
+	{
+		// add
+		err := db.SAdd("str", "foo")
+		assert.Equal(err, base.ErrWrongType)
+	}
+	{
+		// card
+		res, err := db.SCard("str")
+		assert.Equal(res, 0)
+		assert.Equal(err, base.ErrWrongType)
+	}
+	{
+		// has
+		ok, err := db.SHas("str", "foo")
+		assert.False(ok)
+		assert.Equal(err, base.ErrWrongType)
+	}
+	{
+		// remove
+		err := db.SRemove("str", "foo")
+		assert.Equal(err, base.ErrWrongType)
+	}
+}
