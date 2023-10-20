@@ -1,23 +1,24 @@
 package structx
 
 import (
+	"math"
 	"math/rand"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestList(t *testing.T) {
+	assert := assert.New(t)
 	ls := NewList[int]()
 	valid := make([]int, 0, 1024)
 
 	// test empty pop
 	_, ok := ls.LPop()
-	if ok {
-		t.Fatal("list should be empty")
-	}
+	assert.False(ok)
+
 	_, ok = ls.RPop()
-	if ok {
-		t.Fatal("list should be empty")
-	}
+	assert.False(ok)
 
 	// random insert
 	for i := 0; i < 1000; i++ {
@@ -33,18 +34,14 @@ func TestList(t *testing.T) {
 	}
 
 	// test len
-	if ls.Len() != 1000 {
-		t.Fatal("list len error")
-	}
+	assert.Equal(ls.Len(), 1000)
 
 	// test range
 	i := 0
 	ls.Range(func(elem int) bool {
-		if elem != valid[i] {
-			t.Fatal("list range error")
-		}
+		assert.Equal(elem, valid[i])
 		i++
-		return true
+		return i < 500
 	})
 
 	// test index
@@ -52,31 +49,42 @@ func TestList(t *testing.T) {
 		index := rand.Intn(ls.Len())
 
 		elem, ok := ls.Index(index)
-		if !ok {
-			t.Fatal("index error")
-		}
-		if elem != valid[index] {
-			t.Fatal("index error")
-		}
+		assert.True(ok)
+		assert.Equal(elem, valid[index])
 	}
+
+	val, ok := ls.Index(-1)
+	assert.False(ok)
+	assert.Equal(val, 0)
+
+	val, ok = ls.Index(math.MaxInt)
+	assert.False(ok)
+	assert.Equal(val, 0)
 
 	// test pop
 	for i := 0; i < 1000; i++ {
 		if i%2 == 0 {
 			elem, ok := ls.LPop()
-			if !ok || elem != valid[0] {
-				t.Fatalf("list lpop: %d %d", elem, valid[0])
-			}
+			assert.True(ok)
+			assert.Equal(elem, valid[0])
+
 			valid = valid[1:]
 
 		} else {
 			elem, ok := ls.RPop()
-			if !ok || elem != valid[len(valid)-1] {
-				t.Fatalf("list rpop: %d %d", elem, valid[len(valid)-1])
-			}
+			assert.True(ok)
+			assert.Equal(elem, valid[len(valid)-1])
+
 			valid = valid[:len(valid)-1]
 		}
 	}
+}
+
+func TestListMarshal(t *testing.T) {
+	ls := NewList[int]()
+
+	ls.MarshalJSON()
+	ls.UnmarshalJSON([]byte("T"))
 }
 
 func BenchmarkList(b *testing.B) {

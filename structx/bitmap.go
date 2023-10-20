@@ -13,7 +13,7 @@ type Bitmap struct {
 }
 
 func NewBitmap() *Bitmap {
-	return &Bitmap{sync.RWMutex{}, roaring.New()}
+	return &Bitmap{bm: roaring.New()}
 }
 
 // Add
@@ -90,7 +90,7 @@ func (b *Bitmap) Xor(b2 *Bitmap) *Bitmap {
 // Clone
 func (b *Bitmap) Clone() *Bitmap {
 	b.RLock()
-	b2 := &Bitmap{sync.RWMutex{}, b.bm.Clone()}
+	b2 := &Bitmap{bm: b.bm.Clone()}
 	b.RUnlock()
 	return b2
 }

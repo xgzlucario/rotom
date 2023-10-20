@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"sync"
@@ -21,7 +23,7 @@ import (
 type Operation byte
 
 const (
-	OpSetTx Operation = iota + 1
+	OpSetTx Operation = iota
 	OpRemove
 	OpRename
 	OpMarshalBytes
@@ -59,44 +61,50 @@ const (
 	ReqLLen
 )
 
+// Cmd
+type Cmd struct {
+	Op      Operation
+	ArgsNum int
+}
+
 // cmdTable defines the number of parameters required for the operation.
-var cmdTable = map[Operation]int{
-	OpSetTx:        4,
-	OpRemove:       1,
-	OpRename:       2,
-	OpMarshalBytes: 1,
+var cmdTable = []Cmd{
+	{OpSetTx, 4},
+	{OpRemove, 1},
+	{OpRename, 2},
+	{OpMarshalBytes, 1},
 	// map
-	OpHSet:    3,
-	OpHRemove: 2,
+	{OpHSet, 3},
+	{OpHRemove, 2},
 	// set
-	OpSAdd:    2,
-	OpSRemove: 2,
-	OpSUnion:  3,
-	OpSInter:  3,
-	OpSDiff:   3,
+	{OpSAdd, 2},
+	{OpSRemove, 2},
+	{OpSUnion, 3},
+	{OpSInter, 3},
+	{OpSDiff, 3},
 	// list
-	OpLPush: 2,
-	OpLPop:  1,
-	OpRPush: 2,
-	OpRPop:  1,
+	{OpLPush, 2},
+	{OpLPop, 1},
+	{OpRPush, 2},
+	{OpRPop, 1},
 	// bitmap
-	OpBitSet:  3,
-	OpBitFlip: 2,
-	OpBitOr:   3,
-	OpBitAnd:  3,
-	OpBitXor:  3,
+	{OpBitSet, 3},
+	{OpBitFlip, 2},
+	{OpBitOr, 3},
+	{OpBitAnd, 3},
+	{OpBitXor, 3},
 	// zset
-	OpZSet:    4,
-	OpZIncr:   3,
-	OpZRemove: 2,
+	{OpZSet, 4},
+	{OpZIncr, 3},
+	{OpZRemove, 2},
 	// request
-	Response:  2,
-	ReqPing:   0,
-	ReqGet:    1,
-	ReqRanGet: 0,
-	ReqLen:    0,
-	ReqHLen:   1,
-	ReqLLen:   1,
+	{Response, 2},
+	{ReqPing, 0},
+	{ReqGet, 1},
+	{ReqRanGet, 0},
+	{ReqLen, 0},
+	{ReqHLen, 1},
+	{ReqLLen, 1},
 }
 
 // VType is value type for OpSet.
@@ -125,21 +133,28 @@ const (
 type (
 	String = []byte
 	Map    = *structx.SyncMap[string, []byte]
-	Set    = structx.Set[string]
+	Set    = *structx.Set[string]
 	List   = *structx.List[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
 	BitMap = *structx.Bitmap
 )
 
 var (
-	// Default configuration
+	// Default config for db
 	DefaultConfig = &Config{
 		Path:           "rotom.db",
 		ShardCount:     1024,
-		SyncPolicy:     base.EverySecond,
+		SyncPolicy:     base.EveryInterval,
 		SyncInterval:   time.Second,
 		ShrinkInterval: time.Minute,
 		Logger:         slog.Default(),
+	}
+
+	// No persistent config
+	NoPersistentConfig = &Config{
+		ShardCount: 1024,
+		SyncPolicy: base.Never,
+		Logger:     slog.Default(),
 	}
 )
 
@@ -181,8 +196,13 @@ func Open(conf *Config) (*Engine, error) {
 
 	// load db from disk.
 	if err := e.load(); err != nil {
-		e.logError(fmt.Sprintf("db load error: %v", err))
+		e.logError("db load error: %v", err)
 	}
+
+	// runtime monitor.
+	e.backend(time.Minute, func() {
+		e.printRuntimeStats()
+	})
 
 	if e.SyncPolicy != base.Never {
 		// sync buffer to disk.
@@ -191,9 +211,9 @@ func Open(conf *Config) (*Engine, error) {
 			n, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()
 			if err != nil {
-				e.logError(fmt.Sprintf("writeTo buffer error: %v", err))
-			} else {
-				e.logInfo(fmt.Sprintf("write %s buffer to db file", formatSize(n)))
+				e.logError("writeTo buffer error: %v", err)
+			} else if n > 0 {
+				e.logInfo("write %s buffer to db file", formatSize(n))
 			}
 		})
 
@@ -212,7 +232,7 @@ func Open(conf *Config) (*Engine, error) {
 
 // Listen bind and listen to the specified tcp address.
 func (e *Engine) Listen(addr string) error {
-	e.logInfo(fmt.Sprintf("listening on %s...", addr))
+	e.logInfo("listening on %s...", addr)
 	return gnet.Run(&RotomEngine{db: e}, addr, gnet.WithMulticore(true))
 }
 
@@ -411,7 +431,7 @@ func (e *Engine) SHas(key string, item string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return s.Contains(item), nil
+	return s.Has(item), nil
 }
 
 // SCard
@@ -420,7 +440,7 @@ func (e *Engine) SCard(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return s.Cardinality(), nil
+	return s.Len(), nil
 }
 
 // SUnion
@@ -743,7 +763,7 @@ func (e *Engine) load() error {
 		return err
 	}
 
-	e.logInfo(fmt.Sprintf("start to load e size %s", formatSize(len(line))))
+	e.logInfo("start to load e size %s", formatSize(len(line)))
 
 	var args [][]byte
 
@@ -751,7 +771,7 @@ func (e *Engine) load() error {
 	// <OP><argsNum><args...>
 	for len(line) > 2 {
 		op := Operation(line[0])
-		argsNum := cmdTable[op]
+		argsNum := cmdTable[op].ArgsNum
 		line = line[1:]
 
 		// parse args by operation
@@ -1108,14 +1128,45 @@ func (e *Engine) backend(t time.Duration, f func()) {
 	}()
 }
 
-func (e *Engine) logInfo(msg string) {
-	if e.Logger != nil {
+func (e *Engine) printRuntimeStats() {
+	if e.Logger == nil {
+		return
+	}
+
+	var stats debug.GCStats
+	var memStats runtime.MemStats
+
+	debug.ReadGCStats(&stats)
+	runtime.ReadMemStats(&memStats)
+
+	e.Logger.
+		With("alloc", formatSize(memStats.Alloc)).
+		With("sys", formatSize(memStats.Sys)).
+		With("gctime", stats.NumGC).
+		With("gcpause", stats.PauseTotal/time.Duration(stats.NumGC)).
+		Info("[Runtime]")
+}
+
+func (e *Engine) logInfo(msg string, args ...any) {
+	if e.Logger == nil {
+		return
+	}
+
+	if len(args) == 0 {
 		e.Logger.Info(msg)
+	} else {
+		e.Logger.Info(fmt.Sprintf(msg, args...))
 	}
 }
 
-func (e *Engine) logError(msg string) {
-	if e.Logger != nil {
+func (e *Engine) logError(msg string, args ...any) {
+	if e.Logger == nil {
+		return
+	}
+
+	if len(args) == 0 {
 		e.Logger.Error(msg)
+	} else {
+		e.Logger.Error(fmt.Sprintf(msg, args...))
 	}
 }

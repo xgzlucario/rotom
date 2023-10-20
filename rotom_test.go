@@ -17,7 +17,6 @@ type vItem struct {
 
 // Test cache set operation
 func TestCacheSet(t *testing.T) {
-	t.Parallel()
 	assert := assert.New(t)
 
 	cfg := DefaultConfig
@@ -88,7 +87,6 @@ func TestCacheSet(t *testing.T) {
 
 // TestBitmap
 func TestBitmap(t *testing.T) {
-	t.Parallel()
 	assert := assert.New(t)
 
 	cfg := DefaultConfig
@@ -134,11 +132,8 @@ func TestBitmap(t *testing.T) {
 	test()
 }
 
-func FuzzTest(f *testing.F) {
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-
-	db, err := Open(cfg)
+func FuzzSet(f *testing.F) {
+	db, err := Open(NoPersistentConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -168,5 +163,22 @@ func FuzzTest(f *testing.F) {
 			assert.Equal(ttl, ts)
 			assert.Equal(err, nil)
 		}
+	})
+}
+
+func FuzzHMap(f *testing.F) {
+	db, err := Open(NoPersistentConfig)
+	if err != nil {
+		panic(err)
+	}
+
+	f.Fuzz(func(t *testing.T, key, field string, value []byte) {
+		assert := assert.New(t)
+		err := db.HSet(key, field, value)
+		assert.Nil(err)
+
+		res, err := db.HGet(key, field)
+		assert.Equal(res, value)
+		assert.Nil(err)
 	})
 }

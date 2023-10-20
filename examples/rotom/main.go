@@ -1,12 +1,8 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	_ "net/http/pprof"
-	"runtime"
-	"runtime/debug"
-	"time"
 
 	"github.com/xgzlucario/rotom"
 )
@@ -23,32 +19,20 @@ func main() {
 		panic(err)
 	}
 
-	// Monitor
-	go func() {
-		var stats debug.GCStats
-		var memStats runtime.MemStats
-
-		for {
-			time.Sleep(time.Second * 5)
-
-			debug.ReadGCStats(&stats)
-			runtime.ReadMemStats(&memStats)
-
-			// print GC stats
-			fmt.Printf("[GC] times: %d, alloc: %.2f GB, sys: %.2f GB, heapObj: %d k, pause: %v\n",
-				stats.NumGC,
-				float64(memStats.Alloc)/GB,
-				float64(memStats.Sys)/GB,
-				memStats.HeapObjects/1e3,
-				stats.PauseTotal/time.Duration(stats.NumGC),
-			)
-
-			// print db stats
-			fmt.Println("[Stat]", db.Stat())
-		}
-	}()
-
+	// run for web server
 	if err := db.Listen("0.0.0.0:7676"); err != nil {
 		panic(err)
 	}
+
+	// or run for local
+	// db, err := rotom.Open(rotom.DefaultConfig)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer db.Close()
+
+	// for i := 0; ; i++ {
+	// 	k := strconv.Itoa(i)
+	// 	db.SetEx(k, []byte(k), time.Second*10)
+	// }
 }

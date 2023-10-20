@@ -29,16 +29,10 @@ type Gober interface {
 	GobDecode([]byte) error
 }
 
-type GTreeJSON[K, V any] struct {
-	K []K
-	V []V
-}
-
 // SyncPolicy represents how often data is synced to disk.
 type SyncPolicy byte
 
 const (
 	Never SyncPolicy = iota
-	EverySecond
-	Always
+	EveryInterval
 )

@@ -4,17 +4,21 @@ import (
 	"sync"
 
 	"github.com/bytedance/sonic"
-	"github.com/tidwall/hashmap"
+	"github.com/dolthub/swiss"
 )
 
-// ==================== Map ====================
+// Map
 type Map[K comparable, V any] struct {
-	*hashmap.Map[K, V]
+	*swiss.Map[K, V]
 }
 
 // NewMap
-func NewMap[K comparable, V any]() Map[K, V] {
-	return Map[K, V]{&hashmap.Map[K, V]{}}
+func NewMap[K comparable, V any](size ...int) Map[K, V] {
+	defaultCap := 8
+	if len(size) > 0 {
+		defaultCap = size[0]
+	}
+	return Map[K, V]{swiss.NewMap[K, V](uint32(defaultCap))}
 }
 
 type entry[K comparable, V any] struct {
@@ -22,16 +26,26 @@ type entry[K comparable, V any] struct {
 	V []V
 }
 
+// Clone
+func (m *Map[K, V]) Clone() Map[K, V] {
+	m2 := NewMap[K, V](m.Count())
+	m.Iter(func(k K, v V) bool {
+		m2.Put(k, v)
+		return false
+	})
+	return m2
+}
+
 // MarshalJSON
 func (m *Map[K, V]) MarshalJSON() ([]byte, error) {
 	e := entry[K, V]{
-		K: make([]K, 0, m.Len()),
-		V: make([]V, 0, m.Len()),
+		K: make([]K, 0, m.Count()),
+		V: make([]V, 0, m.Count()),
 	}
-	m.Scan(func(key K, value V) bool {
-		e.K = append(e.K, key)
-		e.V = append(e.V, value)
-		return true
+	m.Iter(func(k K, v V) bool {
+		e.K = append(e.K, k)
+		e.V = append(e.V, v)
+		return false
 	})
 
 	return sonic.Marshal(e)
@@ -45,20 +59,20 @@ func (m *Map[K, V]) UnmarshalJSON(src []byte) error {
 	}
 
 	for i, k := range e.K {
-		m.Set(k, e.V[i])
+		m.Put(k, e.V[i])
 	}
 	return nil
 }
 
-// ================== SyncMap ==================
+// SyncMap
 type SyncMap[K comparable, V any] struct {
 	m Map[K, V]
 	sync.RWMutex
 }
 
 // NewSyncMap
-func NewSyncMap[K comparable, V any]() *SyncMap[K, V] {
-	return &SyncMap[K, V]{NewMap[K, V](), sync.RWMutex{}}
+func NewSyncMap[K comparable, V any](size ...int) *SyncMap[K, V] {
+	return &SyncMap[K, V]{m: NewMap[K, V](size...)}
 }
 
 // Get
@@ -72,21 +86,26 @@ func (m *SyncMap[K, V]) Get(key K) (v V, ok bool) {
 // Set
 func (m *SyncMap[K, V]) Set(key K, value V) {
 	m.Lock()
-	m.m.Set(key, value)
+	m.m.Put(key, value)
 	m.Unlock()
 }
 
 // Delete
-func (m *SyncMap[K, V]) Delete(key K) {
+func (m *SyncMap[K, V]) Delete(key K) bool {
 	m.Lock()
-	m.m.Delete(key)
+	ok := m.m.Delete(key)
 	m.Unlock()
+	return ok
 }
 
 // Keys
-func (m *SyncMap[K, V]) Keys() (k []K) {
+func (m *SyncMap[K, V]) Keys() (keys []K) {
 	m.RLock()
-	k = m.m.Keys()
+	keys = make([]K, 0, m.m.Count())
+	m.m.Iter(func(k K, _ V) bool {
+		keys = append(keys, k)
+		return false
+	})
 	m.RUnlock()
 	return
 }
@@ -94,9 +113,17 @@ func (m *SyncMap[K, V]) Keys() (k []K) {
 // Len
 func (m *SyncMap[K, V]) Len() (n int) {
 	m.RLock()
-	n = m.m.Len()
+	n = m.m.Count()
 	m.RUnlock()
 	return
+}
+
+// Clone
+func (m *SyncMap[K, V]) Clone() *SyncMap[K, V] {
+	m.RLock()
+	m2 := &SyncMap[K, V]{m: m.m.Clone()}
+	m.RUnlock()
+	return m2
 }
 
 // MarshalJSON
