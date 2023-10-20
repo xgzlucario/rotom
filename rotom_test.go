@@ -187,61 +187,6 @@ func TestBitmap(t *testing.T) {
 	test()
 }
 
-func TestMap(t *testing.T) {
-	assert := assert.New(t)
-
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-
-	db, err := Open(cfg)
-	if err != nil {
-		panic(err)
-	}
-
-	// valid
-	vmap := make(map[string][]byte, 10000)
-
-	for i := 0; i < 10000; i++ {
-		k := gofakeit.UUID()
-		v := []byte(gofakeit.Username())
-
-		db.HSet("hm", k, v)
-		vmap[k] = v
-	}
-
-	// len
-	c, err := db.HLen("hm")
-	assert.Nil(err)
-	assert.Equal(c, len(vmap))
-
-	// remove
-	for k := range vmap {
-		err := db.HRemove("hm", k)
-		delete(vmap, k)
-		assert.Nil(err)
-		break
-	}
-
-	test := func() {
-		for k, v := range vmap {
-			res, err := db.HGet("hm", k)
-			assert.Equal(res, v)
-			assert.Nil(err)
-		}
-	}
-
-	test()
-
-	err = db.Close()
-	assert.Nil(err)
-
-	// load
-	db, err = Open(cfg)
-	assert.Nil(err)
-
-	test()
-}
-
 func FuzzSet(f *testing.F) {
 	db, err := Open(NoPersistentConfig)
 	if err != nil {
@@ -276,19 +221,78 @@ func FuzzSet(f *testing.F) {
 	})
 }
 
-func FuzzHMap(f *testing.F) {
+func TestHMap(t *testing.T) {
+	assert := assert.New(t)
+
 	db, err := Open(NoPersistentConfig)
 	if err != nil {
 		panic(err)
 	}
 
-	f.Fuzz(func(t *testing.T, key, field string, value []byte) {
-		assert := assert.New(t)
+	for i := 0; i < 10000; i++ {
+		// gen random data
+		key := gofakeit.UUID()
+		field := gofakeit.UUID()
+		value := []byte(gofakeit.Username())
+		op := gofakeit.Number(0, 100)
+
+		// test
 		err := db.HSet(key, field, value)
 		assert.Nil(err)
 
 		res, err := db.HGet(key, field)
 		assert.Equal(res, value)
 		assert.Nil(err)
-	})
+
+		if op%3 == 0 {
+			err = db.HRemove(key, field)
+			assert.Nil(err)
+
+			res, err = db.HGet(key, field)
+			assert.Equal(res, nilBytes)
+			assert.Equal(err, base.ErrFieldNotFound)
+		}
+
+		if op%5 == 0 {
+			keys, err1 := db.HKeys(key)
+			length, err2 := db.HLen(key)
+
+			assert.Equal(err1, nil)
+			assert.Equal(err2, nil)
+
+			assert.Equal(len(keys), int(length))
+		}
+	}
+
+	// err test
+	db.Set("str", []byte(""))
+	{
+		// get
+		res, err := db.HGet("str", "foo")
+		assert.Equal(res, nilBytes)
+		assert.Equal(err, base.ErrWrongType)
+	}
+	{
+		// len
+		res, err := db.HLen("str")
+		assert.Equal(res, 0)
+		assert.Equal(err, base.ErrWrongType)
+	}
+	{
+		// set
+		err := db.HSet("str", "foo", []byte("bar"))
+		assert.Equal(err, base.ErrWrongType)
+	}
+	{
+		// remove
+		err := db.HRemove("str", "foo")
+		assert.Equal(err, base.ErrWrongType)
+	}
+	{
+		// keys
+		res, err := db.HKeys("str")
+		var nilSlice []string
+		assert.Equal(res, nilSlice)
+		assert.Equal(err, base.ErrWrongType)
+	}
 }
