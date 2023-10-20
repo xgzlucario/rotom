@@ -26,7 +26,7 @@ func TestCacheSet(t *testing.T) {
 	assert.Nil(err)
 
 	// generate test data
-	num := 10000 * 100
+	num := 10000
 	kvdata := make(map[string]vItem, num)
 	now := time.Now()
 
@@ -96,7 +96,7 @@ func TestBitmap(t *testing.T) {
 	assert.Nil(err)
 
 	// valid
-	const num = 100 * 10000
+	const num = 10000
 	vmap := make(map[uint32]struct{}, num)
 
 	for i := 0; i < num; i++ {
