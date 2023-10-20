@@ -1,77 +1,35 @@
-name: Run Tests
+name: Test and Coverage
 
-on:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
-
-permissions:
-  contents: read
+on: [push]
 
 jobs:
-  lint:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Setup go
-        uses: actions/setup-go@v4
-        with:
-          go-version: '^1.18'
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Setup golangci-lint
-        uses: golangci/golangci-lint-action@v3.7.0
-        with:
-          version: v1.52.2
-          args: --verbose
-  test:
-    needs: lint
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        go: ['1.18', '1.19', '1.20']
-        test-tags: ['', '-tags nomsgpack', '-tags "sonic avx"', '-tags go_json']
-        include:
-          - os: ubuntu-latest
-            go-build: ~/.cache/go-build
-          - os: macos-latest
-            go-build: ~/Library/Caches/go-build
-    name: ${{ matrix.os }} @ Go ${{ matrix.go }} ${{ matrix.test-tags }}
-    runs-on: ${{ matrix.os }}
-    env:
-      GO111MODULE: on
-      TESTTAGS: ${{ matrix.test-tags }}
-      GOPROXY: https://proxy.golang.org
-    steps:
-      - name: Set up Go ${{ matrix.go }}
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ matrix.go }}
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '^1.20'
 
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ${{ matrix.go-build }}
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+    - name: Setup golangci-lint
+      uses: golangci/golangci-lint-action@v3.7.0
+      with:
+        version: v1.52.2
+        args: --verbose
 
-      - name: Run Tests
-        run: make test
+    - name: Get dependencies
+      run: go mod download
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          flags: ${{ matrix.os }},go-${{ matrix.go }},${{ matrix.test-tags }}
+    - name: Run tests with coverage
+      run: go test ./... -coverprofile=coverage.out
 
-      - name: Format
-        if: matrix.go-version == '1.20.x'
-        run: diff -u <(echo -n) <(gofmt -d .)
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage.out
+        fail_ci_if_error: true
