@@ -36,7 +36,7 @@ func (c *Client) Set(key string, val []byte) ([]byte, error) {
 
 // SetEx
 func (c *Client) SetEx(key string, val []byte, ttl time.Duration) ([]byte, error) {
-	return c.SetTx(key, val, cache.GetUnixNano()+int64(ttl))
+	return c.SetTx(key, val, cache.GetClock()+int64(ttl))
 }
 
 // SetTx

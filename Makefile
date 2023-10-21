@@ -13,7 +13,7 @@ run-gc:
 	GODEBUG=gctrace=1 go run main.go
 
 test-cover:
-	go test -coverprofile=c.out
+	go test -race -coverprofile=c.out -covermode=atomic
 	go tool cover -html=c.out -o coverage.html
 	rm c.out
 	rm *.db
