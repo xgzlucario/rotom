@@ -374,7 +374,7 @@ func (e *Engine) HLen(key string) (int, error) {
 
 // HSet
 func (e *Engine) HSet(key, field string, val []byte) error {
-	m, err := e.fetchMap(key)
+	m, err := e.fetchMap(key, true)
 	if err != nil {
 		return err
 	}
@@ -407,7 +407,7 @@ func (e *Engine) HKeys(key string) ([]string, error) {
 
 // SAdd
 func (e *Engine) SAdd(key string, item string) error {
-	s, err := e.fetchSet(key)
+	s, err := e.fetchSet(key, true)
 	if err != nil {
 		return err
 	}
@@ -418,15 +418,14 @@ func (e *Engine) SAdd(key string, item string) error {
 }
 
 // SRemove
-func (e *Engine) SRemove(key string, item string) error {
+func (e *Engine) SRemove(key string, item string) (bool, error) {
 	s, err := e.fetchSet(key)
 	if err != nil {
-		return err
+		return false, err
 	}
 	e.encode(NewCodec(OpSRemove).Str(key).Str(item))
-	s.Remove(item)
 
-	return nil
+	return s.Remove(item), nil
 }
 
 // SHas
@@ -445,6 +444,15 @@ func (e *Engine) SCard(key string) (int, error) {
 		return 0, err
 	}
 	return s.Len(), nil
+}
+
+// SMembers
+func (e *Engine) SMembers(key string) ([]string, error) {
+	s, err := e.fetchSet(key)
+	if err != nil {
+		return nil, err
+	}
+	return s.ToSlice(), nil
 }
 
 // SUnion
@@ -518,7 +526,7 @@ func (e *Engine) SDiff(key1, key2, dest string) error {
 
 // LPush
 func (e *Engine) LPush(key, item string) error {
-	ls, err := e.fetchList(key)
+	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
 	}
@@ -530,7 +538,7 @@ func (e *Engine) LPush(key, item string) error {
 
 // RPush
 func (e *Engine) RPush(key, item string) error {
-	ls, err := e.fetchList(key)
+	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
 	}
@@ -590,7 +598,7 @@ func (e *Engine) BitTest(key string, offset uint32) (bool, error) {
 
 // BitSet
 func (e *Engine) BitSet(key string, offset uint32, val bool) (bool, error) {
-	bm, err := e.fetchBitMap(key)
+	bm, err := e.fetchBitMap(key, true)
 	if err != nil {
 		return false, err
 	}
@@ -1058,42 +1066,42 @@ func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
 }
 
 // fetchMap
-func (e *Engine) fetchMap(key string) (m Map, err error) {
+func (e *Engine) fetchMap(key string, setWhenNotExist ...bool) (m Map, err error) {
 	return fetch(e, key, func() Map {
 		return structx.NewSyncMap[string, []byte]()
-	})
+	}, setWhenNotExist...)
 }
 
 // fetchSet
-func (e *Engine) fetchSet(key string) (s Set, err error) {
+func (e *Engine) fetchSet(key string, setWhenNotExist ...bool) (s Set, err error) {
 	return fetch(e, key, func() Set {
 		return structx.NewSet[string]()
-	})
+	}, setWhenNotExist...)
 }
 
 // fetchList
-func (e *Engine) fetchList(key string) (m List, err error) {
+func (e *Engine) fetchList(key string, setWhenNotExist ...bool) (m List, err error) {
 	return fetch(e, key, func() List {
 		return structx.NewList[string]()
-	})
+	}, setWhenNotExist...)
 }
 
 // fetchBitMap
-func (e *Engine) fetchBitMap(key string) (bm BitMap, err error) {
+func (e *Engine) fetchBitMap(key string, setWhenNotExist ...bool) (bm BitMap, err error) {
 	return fetch(e, key, func() BitMap {
 		return structx.NewBitmap()
-	})
+	}, setWhenNotExist...)
 }
 
 // fetchZSet
-func (e *Engine) fetchZSet(key string) (z ZSet, err error) {
+func (e *Engine) fetchZSet(key string, setWhenNotExist ...bool) (z ZSet, err error) {
 	return fetch(e, key, func() ZSet {
 		return structx.NewZSet[string, float64, []byte]()
-	})
+	}, setWhenNotExist...)
 }
 
 // fetch
-func fetch[T any](e *Engine, key string, new func() T) (T, error) {
+func fetch[T any](e *Engine, key string, new func() T, setWhenNotExist ...bool) (T, error) {
 	m, _, ok := e.m.Get(key)
 	if ok {
 		m, ok := m.(T)
@@ -1103,9 +1111,10 @@ func fetch[T any](e *Engine, key string, new func() T) (T, error) {
 		var v T
 		return v, base.ErrWrongType
 	}
-
 	vptr := new()
-	e.m.Set(key, vptr)
+	if len(setWhenNotExist) > 0 && setWhenNotExist[0] {
+		e.m.Set(key, vptr)
+	}
 
 	return vptr, nil
 }
