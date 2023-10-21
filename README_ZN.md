@@ -1,12 +1,12 @@
 # Rotom
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/xgzlucario/rotom)](https://goreportcard.com/report/github.com/xgzlucario/rotom) [![Go Reference](https://pkg.go.dev/badge/github.com/xgzlucario/rotom.svg)](https://pkg.go.dev/github.com/xgzlucario/rotom) ![](https://img.shields.io/badge/go-1.21.0-orange.svg) ![](https://img.shields.io/github/languages/code-size/xgzlucario/rotom.svg) 
+[![Go Report Card](https://goreportcard.com/badge/github.com/xgzlucario/rotom)](https://goreportcard.com/report/github.com/xgzlucario/rotom) [![Go Reference](https://pkg.go.dev/badge/github.com/xgzlucario/rotom.svg)](https://pkg.go.dev/github.com/xgzlucario/rotom) ![](https://img.shields.io/badge/go-1.21.0-orange.svg) ![](https://img.shields.io/github/languages/code-size/xgzlucario/rotom.svg) [![codecov](https://codecov.io/gh/xgzlucario/rotom/graph/badge.svg?token=2V0HJ4KO3E)](https://codecov.io/gh/xgzlucario/rotom) [![Test and coverage](https://github.com/xgzlucario/rotom/actions/workflows/rotom.yml/badge.svg)](https://github.com/xgzlucario/rotom/actions/workflows/rotom.yml)
 
 [English](README.md) | 中文 | [在线文档](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc)
 
 ## 📃介绍
 
-​这里是 Rotom，一个 Go 编写高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储，可以在 Golang 中以包引入的方式使用，也可以作为服务器使用（客户端部分正在开发中，暂不支持所有命令）。
+这里是 Rotom，一个 Go 编写高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储，可以在 Golang 中以包引入的方式使用，也可以作为服务器使用（客户端部分正在开发中，暂不支持所有命令）。
 
 目前支持的功能：
 
