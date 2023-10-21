@@ -290,9 +290,9 @@ func TestSetAndBitmap(t *testing.T) {
 	type keyPair struct {
 		skey, bkey string
 	}
-	keyPairMap := make(map[keyPair]struct{}, 20000)
+	keyPairMap := make(map[keyPair]struct{}, 30000)
 
-	for i := 0; i < 20000; i++ {
+	for i := 0; i < 30000; i++ {
 		rand := gofakeit.Username()
 		k1, k2 := "S"+rand, "B"+rand
 		val := randUint16()

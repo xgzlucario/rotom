@@ -89,6 +89,10 @@ func (s *Set[T]) Clone() *Set[T] {
 
 // Union
 func (s *Set[T]) Union(other *Set[T]) *Set[T] {
+	if s == other {
+		return s
+	}
+
 	s.Lock()
 	other.m.Iter(func(k T, _ struct{}) bool {
 		s.m.Put(k, struct{}{})
@@ -101,6 +105,10 @@ func (s *Set[T]) Union(other *Set[T]) *Set[T] {
 
 // Intersect
 func (s *Set[T]) Intersect(other *Set[T]) *Set[T] {
+	if s == other {
+		return s
+	}
+
 	s.Lock()
 	other.RLock()
 
@@ -119,6 +127,11 @@ func (s *Set[T]) Intersect(other *Set[T]) *Set[T] {
 
 // Difference
 func (s *Set[T]) Difference(other *Set[T]) *Set[T] {
+	if s == other {
+		s.m.Clear()
+		return s
+	}
+
 	s.Lock()
 	other.RLock()
 
