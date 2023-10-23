@@ -85,7 +85,6 @@ func TestDB(t *testing.T) {
 	assert.False(db.Remove("num-new"))
 
 	db.printRuntimeStats()
-	go db.Listen("localhost:7676")
 	time.Sleep(time.Second * 5)
 
 	// close
@@ -461,5 +460,31 @@ func TestSetAndBitmap(t *testing.T) {
 		// Union
 		err := db.SUnion("str", "str", "")
 		assert.Equal(err, base.ErrWrongType)
+	}
+}
+
+func TestClient(t *testing.T) {
+	assert := assert.New(t)
+
+	cfg := DefaultConfig
+	cfg.Path = gofakeit.UUID() + ".db"
+	db, err := Open(cfg)
+	assert.Nil(err)
+
+	go db.Listen("localhost:9876")
+	time.Sleep(time.Second)
+
+	cli, err := NewClient("localhost:9876")
+	assert.Nil(err)
+
+	validator := NewCodec(Response).Int(int64(RES_SUCCESS)).Str("ok").B
+
+	for i := 0; i < 10000; i++ {
+		k := gofakeit.Phone()
+		v := gofakeit.UUID()
+
+		res, err := cli.Set(k, []byte(v))
+		assert.Equal(res, validator)
+		assert.Nil(err)
 	}
 }
