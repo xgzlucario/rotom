@@ -1,8 +1,6 @@
 package rotom
 
 import (
-	"io"
-
 	"github.com/panjf2000/gnet/v2"
 	"github.com/xgzlucario/rotom/base"
 )
@@ -14,7 +12,6 @@ const (
 	RES_SUCCESS RespCode = iota + 1
 	RES_ERROR
 	RES_TIMEOUT
-	RES_LIMITED
 )
 
 type RotomEngine struct {
@@ -24,7 +21,7 @@ type RotomEngine struct {
 
 // OnTraffic
 func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
-	buf, err := io.ReadAll(conn)
+	buf, err := conn.Next(-1)
 	if err != nil {
 		return gnet.Close
 	}

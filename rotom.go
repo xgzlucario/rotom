@@ -3,6 +3,7 @@ package rotom
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -180,17 +181,24 @@ type Config struct {
 type Engine struct {
 	sync.Mutex
 	*Config
-	closed bool
-	buf    *bytes.Buffer
-	rwbuf  *bytes.Buffer
-	m      *cache.GigaCache
+
+	// context
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	buf   *bytes.Buffer
+	rwbuf *bytes.Buffer
+	m     *cache.GigaCache
 }
 
 // Open opens a database specified by config.
 // The file will be created automatically if not exist.
 func Open(conf *Config) (*Engine, error) {
+	ctx, cancel := context.WithCancel(context.Background())
 	e := &Engine{
 		Config: conf,
+		ctx:    ctx,
+		cancel: cancel,
 		buf:    bytes.NewBuffer(nil),
 		rwbuf:  bytes.NewBuffer(nil),
 		m:      cache.New(conf.ShardCount),
@@ -204,9 +212,9 @@ func Open(conf *Config) (*Engine, error) {
 	}
 
 	// runtime monitor.
-	e.backend(time.Minute, func() {
-		e.printRuntimeStats()
-	})
+	if e.Logger != nil {
+		e.backend(time.Minute, func() { e.printRuntimeStats() })
+	}
 
 	if e.SyncPolicy == base.EveryInterval {
 		// sync buffer to disk.
@@ -242,15 +250,16 @@ func (e *Engine) Listen(addr string) error {
 
 // Close closes the db engine.
 func (e *Engine) Close() error {
-	e.Lock()
-	defer e.Unlock()
-	if e.closed {
+	select {
+	case <-e.ctx.Done():
 		return base.ErrDatabaseClosed
+	default:
+		e.Lock()
+		_, err := e.writeTo(e.buf, e.Path)
+		e.Unlock()
+		e.cancel()
+		return err
 	}
-	_, err := e.writeTo(e.buf, e.Path)
-	e.closed = true
-
-	return err
 }
 
 // encode
@@ -1140,21 +1149,18 @@ func (e *Engine) backend(t time.Duration, f func()) {
 	}
 	go func() {
 		for {
-			time.Sleep(t)
-			if e.closed {
+			select {
+			case <-time.After(t):
+				f()
+			case <-e.ctx.Done():
 				return
 			}
-			f()
 		}
 	}()
 }
 
 // printRuntimeStats
 func (e *Engine) printRuntimeStats() {
-	if e.Logger == nil {
-		return
-	}
-
 	var stats debug.GCStats
 	var memStats runtime.MemStats
 
@@ -1165,6 +1171,7 @@ func (e *Engine) printRuntimeStats() {
 		With("alloc", formatSize(memStats.Alloc)).
 		With("sys", formatSize(memStats.Sys)).
 		With("gctime", stats.NumGC).
+		With("heapObj", memStats.HeapObjects).
 		With("gcpause", stats.PauseTotal/time.Duration(stats.NumGC)).
 		Info("[Runtime]")
 }

@@ -89,7 +89,7 @@ func TestDB(t *testing.T) {
 
 	// close
 	assert.Nil(db.Close())
-	assert.NotNil(db.Close())
+	assert.Equal(db.Close(), base.ErrDatabaseClosed)
 
 	// load error
 	os.WriteFile(cfg.Path, []byte("fake data"), 0644)
