@@ -183,7 +183,7 @@ type Engine struct {
 	closed bool
 	buf    *bytes.Buffer
 	rwbuf  *bytes.Buffer
-	m      *cache.GigaCache[string]
+	m      *cache.GigaCache
 }
 
 // Open opens a database specified by config.
@@ -193,7 +193,7 @@ func Open(conf *Config) (*Engine, error) {
 		Config: conf,
 		buf:    bytes.NewBuffer(nil),
 		rwbuf:  bytes.NewBuffer(nil),
-		m:      cache.New[string](conf.ShardCount),
+		m:      cache.New(conf.ShardCount),
 	}
 	e.tmpPath = e.Path + ".tmp"
 
@@ -208,7 +208,7 @@ func Open(conf *Config) (*Engine, error) {
 		e.printRuntimeStats()
 	})
 
-	if e.SyncPolicy != base.Never {
+	if e.SyncPolicy == base.EveryInterval {
 		// sync buffer to disk.
 		e.backend(e.SyncInterval, func() {
 			e.Lock()
@@ -1119,6 +1119,7 @@ func fetch[T any](e *Engine, key string, new func() T, setWhenNotExist ...bool) 
 	return vptr, nil
 }
 
+// formatSize
 func formatSize[T base.Integer](size T) string {
 	switch {
 	case size < KB:
@@ -1132,6 +1133,7 @@ func formatSize[T base.Integer](size T) string {
 	}
 }
 
+// backend
 func (e *Engine) backend(t time.Duration, f func()) {
 	if t <= 0 {
 		panic("invalid interval")
@@ -1147,6 +1149,7 @@ func (e *Engine) backend(t time.Duration, f func()) {
 	}()
 }
 
+// printRuntimeStats
 func (e *Engine) printRuntimeStats() {
 	if e.Logger == nil {
 		return
@@ -1166,26 +1169,18 @@ func (e *Engine) printRuntimeStats() {
 		Info("[Runtime]")
 }
 
+// logInfo
 func (e *Engine) logInfo(msg string, args ...any) {
 	if e.Logger == nil {
 		return
 	}
-
-	if len(args) == 0 {
-		e.Logger.Info(msg)
-	} else {
-		e.Logger.Info(fmt.Sprintf(msg, args...))
-	}
+	e.Logger.Info(fmt.Sprintf(msg, args...))
 }
 
+// logError
 func (e *Engine) logError(msg string, args ...any) {
 	if e.Logger == nil {
 		return
 	}
-
-	if len(args) == 0 {
-		e.Logger.Error(msg)
-	} else {
-		e.Logger.Error(fmt.Sprintf(msg, args...))
-	}
+	e.Logger.Error(fmt.Sprintf(msg, args...))
 }

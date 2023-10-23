@@ -1,6 +1,7 @@
 package rotom
 
 import (
+	"log/slog"
 	"os"
 	"strconv"
 	"testing"
@@ -27,9 +28,15 @@ var (
 func TestDB(t *testing.T) {
 	assert := assert.New(t)
 
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-
+	cfg := &Config{
+		Path:             gofakeit.UUID() + ".db",
+		ShardCount:       1024,
+		SyncPolicy:       base.EveryInterval,
+		SyncInterval:     time.Second,
+		ShrinkInterval:   time.Second * 3,
+		RunSkipLoadError: true,
+		Logger:           slog.Default(),
+	}
 	db, err := Open(cfg)
 	assert.Nil(err)
 	assert.NotNil(db)
@@ -62,6 +69,24 @@ func TestDB(t *testing.T) {
 	res, err = db.Incr("num", 3.5)
 	assert.Equal(res, 4.5)
 	assert.Nil(err)
+
+	// Keys
+	assert.ElementsMatch(db.Keys(), []string{"foo", "num", "hm"})
+
+	// Rename
+	ok := db.Rename("num", "num-new")
+	assert.True(ok)
+	res, err = db.Incr("num-new", 0.5)
+	assert.Equal(res, float64(5))
+	assert.Nil(err)
+
+	// Remove
+	assert.True(db.Remove("num-new"))
+	assert.False(db.Remove("num-new"))
+
+	db.printRuntimeStats()
+	go db.Listen("localhost:7676")
+	time.Sleep(time.Second * 5)
 
 	// close
 	assert.Nil(db.Close())
@@ -382,6 +407,17 @@ func TestSetAndBitmap(t *testing.T) {
 			assert.Equal(db.BitAnd(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
 			assert.Equal(db.BitXor(kp1.bkey, kp2.skey, ""), base.ErrWrongType)
 			assert.Equal(db.BitXor(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
+			// Test Bitmap other errors
+			_, err = db.BitTest(kp1.skey, 100)
+			assert.Equal(err, base.ErrWrongType)
+			_, err = db.BitSet(kp1.skey, 100, true)
+			assert.Equal(err, base.ErrWrongType)
+			err = db.BitFlip(kp1.skey, 100)
+			assert.Equal(err, base.ErrWrongType)
+			_, err = db.BitArray(kp1.skey)
+			assert.Equal(err, base.ErrWrongType)
+			_, err = db.BitCount(kp1.skey)
+			assert.Equal(err, base.ErrWrongType)
 
 			setEqualBitmap(assert, db, kp1.skey, kp1.bkey)
 			setEqualBitmap(assert, db, kp2.skey, kp2.bkey)
