@@ -466,9 +466,7 @@ func TestSetAndBitmap(t *testing.T) {
 func TestClient(t *testing.T) {
 	assert := assert.New(t)
 
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-	db, err := Open(cfg)
+	db, err := Open(NoPersistentConfig)
 	assert.Nil(err)
 
 	go db.Listen("localhost:9876")
