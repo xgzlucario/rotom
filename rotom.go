@@ -784,25 +784,11 @@ func (e *Engine) load() error {
 		return err
 	}
 
-	e.logInfo("start to load e size %s", formatSize(len(line)))
+	e.logInfo("loading db file size %s", formatSize(len(line)))
 
-	var args [][]byte
-
-	// record line is like:
-	// <OP><argsNum><args...>
-	for len(line) > 2 {
-		op := Operation(line[0])
-
-		// if operation valid
-		if int(op) >= len(cmdTable) {
-			return base.ErrParseRecordLine
-		}
-
-		argsNum := cmdTable[op].ArgsNum
-		line = line[1:]
-
-		// parse args by operation
-		args, line, err = parseLine(line, argsNum)
+	decoder := NewDecoder(line)
+	for !decoder.Done() {
+		op, args, err := decoder.ParseRecord()
 		if err != nil {
 			return err
 		}
@@ -1045,35 +1031,6 @@ func (e *Engine) shrink() {
 	e.logInfo("rotom rewrite done")
 }
 
-// parseLine parse file content to record lines.
-// exp:
-// input: <key_len>SEP<key_value><somthing...>
-// return: key_value, somthing..., error
-func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
-	res := make([][]byte, 0, argsNum)
-
-	for flag := 0; flag < argsNum; flag++ {
-		i := bytes.IndexByte(line, SepChar)
-		if i <= 0 {
-			return nil, nil, base.ErrParseRecordLine
-		}
-
-		key_len := base.ParseInt[int](line[:i])
-		i++
-
-		// valid
-		if len(line) < i+key_len {
-			return nil, nil, base.ErrParseRecordLine
-		}
-
-		res = append(res, line[i:i+key_len])
-
-		line = line[i+key_len:]
-	}
-
-	return res, line, nil
-}
-
 // fetchMap
 func (e *Engine) fetchMap(key string, setWhenNotExist ...bool) (m Map, err error) {
 	return fetch(e, key, func() Map {
@@ -1171,7 +1128,7 @@ func (e *Engine) printRuntimeStats() {
 		With("alloc", formatSize(memStats.Alloc)).
 		With("sys", formatSize(memStats.Sys)).
 		With("gctime", stats.NumGC).
-		With("heapObj", memStats.HeapObjects).
+		With("heapObjects", memStats.HeapObjects).
 		With("gcpause", stats.PauseTotal/time.Duration(stats.NumGC)).
 		Info("[Runtime]")
 }
