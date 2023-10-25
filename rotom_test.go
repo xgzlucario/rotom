@@ -470,38 +470,63 @@ func TestClient(t *testing.T) {
 	db, err := Open(NoPersistentConfig)
 	assert.Nil(err)
 
+	port := gofakeit.Number(10000, 20000)
+	addr := "localhost:" + strconv.Itoa(port)
+
 	// listen
-	go db.Listen("localhost:7777")
-	time.Sleep(time.Second)
+	go db.Listen(addr)
+	time.Sleep(time.Second / 10)
 
-	cli, err := NewClient("localhost:7777")
+	cli, err := NewClient(addr)
 	assert.Nil(err)
+	defer cli.Close()
 
-	// Set
-	for i := 0; i < 10000; i++ {
-		k := fmt.Sprintf("key-%d", i)
-		res, err := cli.Set(k, []byte(k))
+	testOk := func(res []byte) {
+		op, args, err := NewDecoder(res).ParseRecord()
 		assert.Nil(err)
-		{
-			op, args, err := NewDecoder(res).ParseRecord()
-			assert.Nil(err)
-			assert.Equal(op, Response)
-			assert.Equal(base.ParseInt[int64](args[0]), RES_SUCCESS)
-			assert.Equal(args[1], []byte("ok"))
-		}
+		assert.Equal(op, Response)
+		assert.Equal(base.ParseInt[int64](args[0]), RES_SUCCESS)
+		assert.Equal(args[1], []byte("ok"))
 	}
 
-	// Get
 	for i := 0; i < 10000; i++ {
-		k := fmt.Sprintf("key-%d", i)
-		res, err := cli.Get(k)
+		// Set
+		key := fmt.Sprintf("key-%d", i)
+		res, err := cli.Set(key, []byte(key))
+		assert.Nil(err)
+		testOk(res)
+
+		// Get
+		res, err = cli.Get(key)
 		assert.Nil(err)
 		{
 			op, args, err := NewDecoder(res).ParseRecord()
 			assert.Nil(err)
 			assert.Equal(op, Response)
 			assert.Equal(base.ParseInt[int64](args[0]), RES_SUCCESS)
-			assert.Equal(args[1], []byte(k))
+			assert.Equal(args[1], []byte(key))
 		}
+
+		// SetEx
+		key = fmt.Sprintf("key-ex-%d", i)
+		res, err = cli.SetEx(key, []byte(key), time.Minute)
+		assert.Nil(err)
+		testOk(res)
+
+		// Rename
+		newKey := fmt.Sprintf("key-new-%d", i)
+		res, err = cli.Rename(key, newKey)
+		assert.Nil(err)
+		testOk(res)
+
+		// Remove
+		res, err = cli.Remove(newKey)
+		assert.Nil(err)
+		testOk(res)
+
+		// Len
+		num, err := cli.Len()
+		assert.Nil(err)
+		assert.Equal(num, uint64(i+1), fmt.Sprintf("num=%d, i=%d", num, i))
 	}
 }

@@ -60,12 +60,16 @@ func (c *Client) Get(key string) ([]byte, error) {
 }
 
 // Len
-func (c *Client) Len() (int, error) {
-	bytes, err := c.do(NewCodec(ReqLen))
+func (c *Client) Len() (uint64, error) {
+	res, err := c.do(NewCodec(ReqLen))
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](bytes), nil
+	_, args, err := NewDecoder(res).ParseRecord()
+	if err != nil {
+		return 0, err
+	}
+	return base.ParseInt[uint64](args[1]), nil
 }
 
 // HSet

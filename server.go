@@ -69,9 +69,14 @@ func (e *Engine) handleEvent(line []byte) (msg []byte, err error) {
 		return nil, base.ErrKeyNotFound
 
 	case OpSetTx: // type, key, ts, val
-		// type is String
 		ts := base.ParseInt[int64](args[2])
 		e.SetTx(*b2s(args[1]), args[3], ts)
+
+	case OpRename: // new, old
+		e.Rename(*b2s(args[0]), *b2s(args[1]))
+
+	case OpRemove: // key
+		e.Remove(*b2s(args[0]))
 
 	case OpLPush: // key, item
 		e.LPush(*b2s(args[0]), *b2s(args[1]))
