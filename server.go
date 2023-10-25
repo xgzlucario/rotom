@@ -6,7 +6,7 @@ import (
 )
 
 // Response code inplements.
-type RespCode byte
+type RespCode = int64
 
 const (
 	RES_SUCCESS RespCode = iota + 1
@@ -30,10 +30,10 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 	msg, err := e.db.handleEvent(buf)
 	var cd *Codec
 	if err != nil {
-		cd = NewCodec(Response).Int(int64(RES_ERROR)).Str(err.Error())
+		cd = NewCodec(Response).Int(RES_ERROR).Str(err.Error())
 
 	} else {
-		cd = NewCodec(Response).Int(int64(RES_SUCCESS)).Bytes(msg)
+		cd = NewCodec(Response).Int(RES_SUCCESS).Bytes(msg)
 	}
 
 	// send resp
@@ -69,13 +69,9 @@ func (e *Engine) handleEvent(line []byte) (msg []byte, err error) {
 		return nil, base.ErrKeyNotFound
 
 	case OpSetTx: // type, key, ts, val
-		recType := VType(args[0][0])
-
-		switch recType {
-		case TypeString:
-			ts := base.ParseInt[int64](args[2])
-			e.SetTx(*b2s(args[1]), args[3], ts)
-		}
+		// type is String
+		ts := base.ParseInt[int64](args[2])
+		e.SetTx(*b2s(args[1]), args[3], ts)
 
 	case OpLPush: // key, item
 		e.LPush(*b2s(args[0]), *b2s(args[1]))

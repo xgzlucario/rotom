@@ -1,6 +1,7 @@
 package rotom
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
@@ -469,20 +470,38 @@ func TestClient(t *testing.T) {
 	db, err := Open(NoPersistentConfig)
 	assert.Nil(err)
 
-	go db.Listen("localhost:9876")
+	// listen
+	go db.Listen("localhost:7777")
 	time.Sleep(time.Second)
 
-	cli, err := NewClient("localhost:9876")
+	cli, err := NewClient("localhost:7777")
 	assert.Nil(err)
 
-	validator := NewCodec(Response).Int(int64(RES_SUCCESS)).Str("ok").B
-
+	// Set
 	for i := 0; i < 10000; i++ {
-		k := gofakeit.Phone()
-		v := gofakeit.UUID()
-
-		res, err := cli.Set(k, []byte(v))
-		assert.Equal(res, validator)
+		k := fmt.Sprintf("key-%d", i)
+		res, err := cli.Set(k, []byte(k))
 		assert.Nil(err)
+		{
+			op, args, err := NewDecoder(res).ParseRecord()
+			assert.Nil(err)
+			assert.Equal(op, Response)
+			assert.Equal(base.ParseInt[int64](args[0]), RES_SUCCESS)
+			assert.Equal(args[1], []byte("ok"))
+		}
+	}
+
+	// Get
+	for i := 0; i < 10000; i++ {
+		k := fmt.Sprintf("key-%d", i)
+		res, err := cli.Get(k)
+		assert.Nil(err)
+		{
+			op, args, err := NewDecoder(res).ParseRecord()
+			assert.Nil(err)
+			assert.Equal(op, Response)
+			assert.Equal(base.ParseInt[int64](args[0]), RES_SUCCESS)
+			assert.Equal(args[1], []byte(k))
+		}
 	}
 }

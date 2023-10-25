@@ -27,7 +27,6 @@ func cmd() {
 	start := time.Now()
 	p := pool.New()
 
-	validator := rotom.NewCodec(rotom.Response).Int(int64(rotom.RES_SUCCESS)).Str("ok").B
 	delays := cache.NewPercentile()
 
 	for i := 0; i < CLIENT_NUM; i++ {
@@ -48,8 +47,17 @@ func cmd() {
 				if err != nil {
 					panic(err)
 				}
-				if !bytes.Equal(res, validator) {
-					panic(base.ErrInvalidResponse)
+				{
+					op, args, err := rotom.NewDecoder(res).ParseRecord()
+					if err != nil || op != rotom.Response {
+						panic("error")
+					}
+					if base.ParseInt[int64](args[0]) != rotom.RES_SUCCESS {
+						panic("error")
+					}
+					if !bytes.Equal(args[1], []byte("ok")) {
+						panic("error")
+					}
 				}
 
 				// stat
