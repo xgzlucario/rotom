@@ -720,7 +720,7 @@ func (e *Engine) BitCount(key string) (uint64, error) {
 
 // ZAdd
 func (e *Engine) ZAdd(zset, key string, score float64, val []byte) error {
-	zs, err := e.fetchZSet(zset)
+	zs, err := e.fetchZSet(zset, true)
 	if err != nil {
 		return err
 	}
@@ -732,7 +732,7 @@ func (e *Engine) ZAdd(zset, key string, score float64, val []byte) error {
 
 // ZIncr
 func (e *Engine) ZIncr(zset, key string, incr float64) (float64, error) {
-	zs, err := e.fetchZSet(zset)
+	zs, err := e.fetchZSet(zset, true)
 	if err != nil {
 		return 0, err
 	}

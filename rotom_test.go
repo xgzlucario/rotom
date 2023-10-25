@@ -464,6 +464,32 @@ func TestSetAndBitmap(t *testing.T) {
 	}
 }
 
+func TestZSet(t *testing.T) {
+	assert := assert.New(t)
+
+	db, err := Open(NoPersistentConfig)
+	assert.Nil(err)
+
+	// ZAdd
+	for i := 0; i < 10000; i++ {
+		err := db.ZAdd("zset", fmt.Sprintf("key-%d", i), float64(i), nil)
+		assert.Nil(err)
+	}
+
+	// ZIncr
+	for i := 0; i < 10000; i++ {
+		num, err := db.ZIncr("zset", fmt.Sprintf("key-%d", i), 3)
+		assert.Nil(err)
+		assert.Equal(num, float64(i+3))
+	}
+
+	// ZRemove
+	for i := 0; i < 10000; i++ {
+		err := db.ZRemove("zset", fmt.Sprintf("key-%d", i))
+		assert.Nil(err)
+	}
+}
+
 func TestClient(t *testing.T) {
 	assert := assert.New(t)
 
