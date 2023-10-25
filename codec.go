@@ -2,7 +2,6 @@ package rotom
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -10,7 +9,6 @@ import (
 	"unsafe"
 
 	"github.com/xgzlucario/rotom/base"
-	"github.com/zeebo/xxh3"
 )
 
 const (
@@ -76,11 +74,6 @@ func (s *Codec) format(v []byte) *Codec {
 	s.B = append(s.B, SepChar)
 	s.B = append(s.B, v...)
 	return s
-}
-
-// crc
-func (s *Codec) crc() {
-	s.B = binary.LittleEndian.AppendUint32(s.B, uint32(xxh3.Hash(s.B)))
 }
 
 func (s *Codec) Any(v any) (*Codec, error) {
