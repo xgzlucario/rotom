@@ -135,11 +135,11 @@ func (s *Decoder) ParseRecord() (op Operation, res [][]byte, err error) {
 		return 0, nil, base.ErrParseRecordLine
 	}
 
-	argsNum := cmdTable[op].ArgsNum
+	argsNum := cmdTable[op].argsNum
 	res = make([][]byte, 0, argsNum)
 
 	// parses args.
-	for j := 0; j < argsNum; j++ {
+	for j := 0; j < int(argsNum); j++ {
 		i := bytes.IndexByte(line, SepChar)
 		if i <= 0 {
 			return 0, nil, base.ErrParseRecordLine
