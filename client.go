@@ -31,7 +31,7 @@ func NewClient(addr string) (c *Client, err error) {
 
 // Set
 func (c *Client) Set(key string, val []byte) ([]byte, error) {
-	return c.SetTx(key, val, NoTTL)
+	return c.SetTx(key, val, noTTL)
 }
 
 // SetEx
@@ -69,7 +69,7 @@ func (c *Client) Len() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[uint64](args[1]), nil
+	return base.ParseInt[uint64](args[0]), nil
 }
 
 // HSet

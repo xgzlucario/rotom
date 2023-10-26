@@ -71,7 +71,7 @@ func (s *Codec) Float(f float64) *Codec {
 // format encodes a byte slice into the Coder's buffer as a record.
 func (s *Codec) format(v []byte) *Codec {
 	s.B = append(s.B, base.FormatInt(len(v))...)
-	s.B = append(s.B, SepChar)
+	s.B = append(s.B, sepChar)
 	s.B = append(s.B, v...)
 	return s
 }
@@ -140,7 +140,7 @@ func (s *Decoder) ParseRecord() (op Operation, res [][]byte, err error) {
 
 	// parses args.
 	for j := 0; j < int(argsNum); j++ {
-		i := bytes.IndexByte(line, SepChar)
+		i := bytes.IndexByte(line, sepChar)
 		if i <= 0 {
 			return 0, nil, base.ErrParseRecordLine
 		}
