@@ -843,7 +843,7 @@ func (e *Engine) load() error {
 			e.m.Rename(*b2s(args[0]), *b2s(args[1]))
 
 		case OpHSet: // key, field, val
-			m, err := e.fetchMap(*b2s(args[0]))
+			m, err := e.fetchMap(*b2s(args[0]), true)
 			if err != nil {
 				return err
 			}
@@ -856,15 +856,80 @@ func (e *Engine) load() error {
 			}
 			m.Delete(*b2s(args[1]))
 
+		case OpSAdd: // key, item
+			s, err := e.fetchSet(*b2s(args[0]), true)
+			if err != nil {
+				return err
+			}
+			s.Add(*b2s(args[1]))
+
+		case OpSRemove: // key, item
+			s, err := e.fetchSet(*b2s(args[0]))
+			if err != nil {
+				return err
+			}
+			s.Remove(*b2s(args[1]))
+
+		case OpSUnion: // key1, key2, dest
+			s1, err := e.fetchSet(*b2s(args[0]))
+			if err != nil {
+				return err
+			}
+			s2, err := e.fetchSet(*b2s(args[1]))
+			if err != nil {
+				return err
+			}
+			if slices.Equal(args[0], args[2]) {
+				s1.Union(s2)
+			} else if slices.Equal(args[1], args[2]) {
+				s2.Union(s1)
+			} else {
+				e.m.Set(*b2s(args[2]), s1.Clone().Union(s2))
+			}
+
+		case OpSInter: // key1, key2, dest
+			s1, err := e.fetchSet(*b2s(args[0]))
+			if err != nil {
+				return err
+			}
+			s2, err := e.fetchSet(*b2s(args[1]))
+			if err != nil {
+				return err
+			}
+			if slices.Equal(args[0], args[2]) {
+				s1.Intersect(s2)
+			} else if slices.Equal(args[1], args[2]) {
+				s2.Intersect(s1)
+			} else {
+				e.m.Set(*b2s(args[2]), s1.Clone().Intersect(s2))
+			}
+
+		case OpSDiff: // key1, key2, dest
+			s1, err := e.fetchSet(*b2s(args[0]))
+			if err != nil {
+				return err
+			}
+			s2, err := e.fetchSet(*b2s(args[1]))
+			if err != nil {
+				return err
+			}
+			if slices.Equal(args[0], args[2]) {
+				s1.Difference(s2)
+			} else if slices.Equal(args[1], args[2]) {
+				s2.Difference(s1)
+			} else {
+				e.m.Set(*b2s(args[2]), s1.Clone().Difference(s2))
+			}
+
 		case OpLPush: // key, item
-			ls, err := e.fetchList(*b2s(args[0]))
+			ls, err := e.fetchList(*b2s(args[0]), true)
 			if err != nil {
 				return err
 			}
 			ls.LPush(*b2s(args[1]))
 
 		case OpRPush: // key, item
-			ls, err := e.fetchList(*b2s(args[0]))
+			ls, err := e.fetchList(*b2s(args[0]), true)
 			if err != nil {
 				return err
 			}
@@ -885,7 +950,7 @@ func (e *Engine) load() error {
 			ls.RPop()
 
 		case OpBitSet: // key, offset, val
-			bm, err := e.fetchBitMap(*b2s(args[0]))
+			bm, err := e.fetchBitMap(*b2s(args[0]), true)
 			if err != nil {
 				return err
 			}
@@ -947,7 +1012,7 @@ func (e *Engine) load() error {
 			}
 
 		case OpZSet: // key, field, score, val
-			zs, err := e.fetchZSet(*b2s(args[0]))
+			zs, err := e.fetchZSet(*b2s(args[0]), true)
 			if err != nil {
 				return err
 			}
@@ -958,7 +1023,7 @@ func (e *Engine) load() error {
 			zs.SetWithScore(*b2s(args[1]), s, args[3])
 
 		case OpZIncr: // key, field, incr
-			zs, err := e.fetchZSet(*b2s(args[0]))
+			zs, err := e.fetchZSet(*b2s(args[0]), true)
 			if err != nil {
 				return err
 			}
@@ -976,7 +1041,7 @@ func (e *Engine) load() error {
 			zs.Delete(*b2s(args[1]))
 
 		default:
-			return fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op)
+			return fmt.Errorf("%v: %d", base.ErrUnknownOperationType, op)
 		}
 	}
 

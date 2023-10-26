@@ -315,9 +315,9 @@ func TestSetAndBitmap(t *testing.T) {
 	type keyPair struct {
 		skey, bkey string
 	}
-	keyPairMap := make(map[keyPair]struct{}, 30000)
+	keyPairMap := make(map[keyPair]struct{}, 10000)
 
-	for i := 0; i < 30000; i++ {
+	test := func() {
 		rand := gofakeit.Username()
 		k1, k2 := "S"+rand, "B"+rand
 		val := randUint16()
@@ -425,6 +425,20 @@ func TestSetAndBitmap(t *testing.T) {
 		}
 	}
 
+	for i := 0; i < 10000; i++ {
+		test()
+	}
+
+	// load
+	db.Close()
+
+	db, err = Open(cfg)
+	assert.Nil(err)
+
+	for i := 0; i < 10000; i++ {
+		test()
+	}
+
 	// err test
 	db.Set("str", []byte(""))
 	{
@@ -488,6 +502,22 @@ func TestZSet(t *testing.T) {
 		err := db.ZRemove("zset", fmt.Sprintf("key-%d", i))
 		assert.Nil(err)
 	}
+
+	// Test error
+	db.SAdd("set", "1")
+
+	err = db.ZAdd("set", "key", 1, nil)
+	assert.Equal(err, base.ErrWrongType)
+
+	_, err = db.ZIncr("set", "key", 1)
+	assert.Equal(err, base.ErrWrongType)
+
+	err = db.ZRemove("set", "key")
+	assert.Equal(err, base.ErrWrongType)
+
+	// load
+	db.Close()
+
 }
 
 func TestClient(t *testing.T) {
