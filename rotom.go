@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"runtime"
@@ -66,12 +65,12 @@ const (
 type Cmd struct {
 	op      Operation
 	argsNum byte
-	hook    func(*Engine, [][]byte, io.Writer) error
+	hook    func(*Engine, [][]byte, base.Writer) error
 }
 
 // cmdTable defines the number of parameters required for the operation.
 var cmdTable = []Cmd{
-	{OpSetTx, 4, func(e *Engine, args [][]byte, _ io.Writer) error {
+	{OpSetTx, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// type, key, ts, val
 		ts := base.ParseInt[int64](args[2]) * timeCarry
 		if ts < cache.GetClock() && ts != noTTL {
@@ -118,90 +117,98 @@ var cmdTable = []Cmd{
 
 		return nil
 	}},
-	{OpRemove, 1, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpRemove, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		e.Remove(*b2s(args[0]))
+		if e.Remove(*b2s(args[0])) {
+			w.WriteByte(_true)
+		} else {
+			w.WriteByte(_false)
+		}
 		return nil
 	}},
-	{OpRename, 2, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpRename, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// old, new
-		e.Rename(*b2s(args[0]), *b2s(args[1]))
+		if e.Rename(*b2s(args[0]), *b2s(args[1])) {
+			w.WriteByte(_true)
+		} else {
+			w.WriteByte(_false)
+		}
 		return nil
 	}},
 	// map
-	{OpHSet, 3, func(e *Engine, args [][]byte, _ io.Writer) error {
+	{OpHSet, 3, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, field, val
 		return e.HSet(*b2s(args[0]), *b2s(args[1]), args[2])
 	}},
-	{OpHRemove, 2, func(e *Engine, args [][]byte, _ io.Writer) error {
+	{OpHRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, field
 		return e.HRemove(*b2s(args[0]), *b2s(args[1]))
 	}},
 	// set
-	{OpSAdd, 2, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpSAdd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
 		return e.SAdd(*b2s(args[0]), *b2s(args[1]))
 	}},
-	{OpSRemove, 2, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpSRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
 		_, err := e.SRemove(*b2s(args[0]), *b2s(args[1]))
 		return err
 	}},
-	{OpSUnion, 3, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpSUnion, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key1, key2, dest
 		return e.SUnion(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
 	}},
-	{OpSInter, 3, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpSInter, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key1, key2, dest
 		return e.SInter(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
 	}},
-	{OpSDiff, 3, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpSDiff, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key1, key2, dest
 		return e.SDiff(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
 	}},
 	// list
-	{OpLPush, 2, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpLPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
 		return e.LPush(*b2s(args[0]), *b2s(args[1]))
 	}},
-	{OpLPop, 1, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpLPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
 		_, err := e.LPop(*b2s(args[0]))
 		return err
 	}},
-	{OpRPush, 2, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpRPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
 		return e.RPush(*b2s(args[0]), *b2s(args[1]))
 	}},
-	{OpRPop, 1, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpRPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
 		_, err := e.RPop(*b2s(args[0]))
 		return err
 	}},
 	// bitmap
-	{OpBitSet, 3, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpBitSet, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset, val
 		_, err := e.BitSet(*b2s(args[0]), base.ParseInt[uint32](args[1]), args[2][0] == _true)
 		return err
 	}},
-	{OpBitFlip, 2, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpBitFlip, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset
 		return e.BitFlip(*b2s(args[0]), base.ParseInt[uint32](args[1]))
 	}},
-	{OpBitOr, 3, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpBitOr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key1, key2, dest
 		return e.BitOr(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
 	}},
-	{OpBitAnd, 3, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpBitAnd, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key1, key2, dest
 		return e.BitAnd(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
 	}},
-	{OpBitXor, 3, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpBitXor, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key1, key2, dest
 		return e.BitXor(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
 	}},
 	// zset
-	{OpZAdd, 4, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpZAdd, 4, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, score, val
 		s, err := strconv.ParseFloat(*b2s(args[2]), 64)
 		if err != nil {
@@ -209,7 +216,7 @@ var cmdTable = []Cmd{
 		}
 		return e.ZAdd(*b2s(args[0]), *b2s(args[1]), s, args[3])
 	}},
-	{OpZIncr, 3, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpZIncr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, score, val
 		s, err := strconv.ParseFloat(*b2s(args[2]), 64)
 		if err != nil {
@@ -218,24 +225,24 @@ var cmdTable = []Cmd{
 		_, err = e.ZIncr(*b2s(args[0]), *b2s(args[1]), s)
 		return err
 	}},
-	{OpZRemove, 2, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpZRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, val
 		return e.ZRemove(*b2s(args[0]), *b2s(args[1]))
 	}},
 	// marshal
-	{OpMarshalBytes, 1, func(e *Engine, args [][]byte, w io.Writer) error {
+	{OpMarshalBytes, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// val
 		return e.m.UnmarshalBytes(args[0])
 	}},
 	// request
-	{Response, 2, func(e *Engine, args [][]byte, w io.Writer) error {
+	{Response, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		return nil
 	}},
-	{ReqPing, 0, func(e *Engine, args [][]byte, w io.Writer) error {
+	{ReqPing, 0, func(e *Engine, args [][]byte, w base.Writer) error {
 		_, err := w.Write([]byte("pong"))
 		return err
 	}},
-	{ReqGet, 1, func(e *Engine, args [][]byte, w io.Writer) error {
+	{ReqGet, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
 		val, _, err := e.GetBytes(*b2s(args[0]))
 		if err != nil {
@@ -244,12 +251,12 @@ var cmdTable = []Cmd{
 		_, err = w.Write(val)
 		return err
 	}},
-	{ReqLen, 0, func(e *Engine, args [][]byte, w io.Writer) error {
-		str := strconv.Itoa(int(e.Stat().Len))
-		_, err := w.Write(s2b(&str))
+	{ReqLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
+		res := base.FormatInt[uint64](e.Stat().Len)
+		_, err := w.Write(res)
 		return err
 	}},
-	{ReqHLen, 1, func(e *Engine, args [][]byte, w io.Writer) error {
+	{ReqHLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
 		m, err := e.fetchMap(*b2s(args[0]))
 		if err != nil {
@@ -259,7 +266,7 @@ var cmdTable = []Cmd{
 		_, err = w.Write(s2b(&str))
 		return err
 	}},
-	{ReqLLen, 1, func(e *Engine, args [][]byte, w io.Writer) error {
+	{ReqLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
 		l, err := e.fetchList(*b2s(args[0]))
 		if err != nil {

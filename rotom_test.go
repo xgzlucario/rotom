@@ -537,52 +537,38 @@ func TestClient(t *testing.T) {
 	assert.Nil(err)
 	defer cli.Close()
 
-	testOk := func(res []byte) {
-		op, args, err := NewDecoder(res).ParseRecord()
-		assert.Nil(err)
-		assert.Equal(op, Response)
-		assert.Equal(base.ParseInt[int64](args[0]), RES_SUCCESS)
-		assert.Equal(args[1], []byte{})
-	}
-
 	for i := 0; i < 10000; i++ {
 		// Set
 		key := fmt.Sprintf("key-%d", i)
 		res, err := cli.Set(key, []byte(key))
 		assert.Nil(err)
-		testOk(res)
+		assert.Equal(res, []byte{})
 
 		// Get
 		res, err = cli.Get(key)
 		assert.Nil(err)
-		{
-			op, args, err := NewDecoder(res).ParseRecord()
-			assert.Nil(err)
-			assert.Equal(op, Response)
-			assert.Equal(base.ParseInt[int64](args[0]), RES_SUCCESS)
-			assert.Equal(args[1], []byte(key))
-		}
+		assert.Equal(res, []byte(key))
 
 		// SetEx
 		key = fmt.Sprintf("key-ex-%d", i)
 		res, err = cli.SetEx(key, []byte(key), time.Minute)
 		assert.Nil(err)
-		testOk(res)
+		assert.Equal(res, []byte{})
 
 		// Rename
 		newKey := fmt.Sprintf("key-new-%d", i)
-		res, err = cli.Rename(key, newKey)
+		ok, err := cli.Rename(key, newKey)
 		assert.Nil(err)
-		testOk(res)
+		assert.True(ok, ok)
 
 		// Remove
-		res, err = cli.Remove(newKey)
+		ok, err = cli.Remove(newKey)
 		assert.Nil(err)
-		testOk(res)
+		assert.True(ok, ok)
 
 		// Len
-		// num, err := cli.Len()
-		// assert.Nil(err)
-		// assert.Equal(num, uint64(i+1), fmt.Sprintf("num=%d, i=%d", num, i))
+		num, err := cli.Len()
+		assert.Nil(err)
+		assert.Equal(num, uint64(i+1))
 	}
 }

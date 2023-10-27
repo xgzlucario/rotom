@@ -29,6 +29,12 @@ type Gober interface {
 	GobDecode([]byte) error
 }
 
+// Writer
+type Writer interface {
+	Write([]byte) (int, error)
+	WriteByte(byte) error
+}
+
 // SyncPolicy represents how often data is synced to disk.
 type SyncPolicy byte
 
