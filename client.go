@@ -62,7 +62,7 @@ func (c *Client) Rename(key, newKey string) (bool, error) {
 
 // Get
 func (c *Client) Get(key string) ([]byte, error) {
-	args, err := c.do(NewCodec(ReqGet).Str(key))
+	args, err := c.do(NewCodec(OpGet).Str(key))
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (c *Client) Get(key string) ([]byte, error) {
 
 // Len
 func (c *Client) Len() (uint64, error) {
-	args, err := c.do(NewCodec(ReqLen))
+	args, err := c.do(NewCodec(OpLen))
 	if err != nil {
 		return 0, err
 	}
@@ -79,8 +79,14 @@ func (c *Client) Len() (uint64, error) {
 }
 
 // HSet
-func (c *Client) HSet(key, field string, val []byte) ([]byte, error) {
-	args, err := c.do(NewCodec(OpHSet).Str(key).Str(field).Bytes(val))
+func (c *Client) HSet(key, field string, val []byte) error {
+	_, err := c.do(NewCodec(OpHSet).Str(key).Str(field).Bytes(val))
+	return err
+}
+
+// HGet
+func (c *Client) HGet(key, field string) ([]byte, error) {
+	args, err := c.do(NewCodec(OpHGet).Str(key).Str(field))
 	if err != nil {
 		return nil, err
 	}
@@ -88,12 +94,21 @@ func (c *Client) HSet(key, field string, val []byte) ([]byte, error) {
 }
 
 // HRemove
-func (c *Client) HRemove(key, field string) ([]byte, error) {
+func (c *Client) HRemove(key, field string) (bool, error) {
 	args, err := c.do(NewCodec(OpHRemove).Str(key).Str(field))
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	return args, nil
+	return args[0] == _true, nil
+}
+
+// Len
+func (c *Client) HLen(key string) (int, error) {
+	args, err := c.do(NewCodec(OpHLen).Str(key))
+	if err != nil {
+		return 0, err
+	}
+	return base.ParseInt[int](args), nil
 }
 
 // Close

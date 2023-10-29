@@ -23,11 +23,16 @@ import (
 type Operation byte
 
 const (
-	OpSetTx Operation = iota
+	Response Operation = iota
+	OpSetTx
+	OpGet
 	OpRemove
 	OpRename
+	OpLen
 	// map
 	OpHSet
+	OpHGet
+	OpHLen
 	OpHRemove
 	// set
 	OpSAdd
@@ -40,6 +45,7 @@ const (
 	OpLPop
 	OpRPush
 	OpRPop
+	OpLLen
 	// bitmap
 	OpBitSet
 	OpBitFlip
@@ -50,15 +56,9 @@ const (
 	OpZAdd
 	OpZIncr
 	OpZRemove
-	// marshal
+	// others
 	OpMarshalBytes
-	// request
-	Response
-	ReqPing
-	ReqGet
-	ReqLen
-	ReqHLen
-	ReqLLen
+	OpPing
 )
 
 // Cmd
@@ -70,6 +70,9 @@ type Cmd struct {
 
 // cmdTable defines the argsNum and callback function required for the operation.
 var cmdTable = []Cmd{
+	{Response, 2, func(_ *Engine, _ [][]byte, _ base.Writer) error {
+		return nil
+	}},
 	{OpSetTx, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// type, key, ts, val
 		ts := base.ParseInt[int64](args[2]) * timeCarry
@@ -117,6 +120,15 @@ var cmdTable = []Cmd{
 
 		return nil
 	}},
+	{OpGet, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		val, _, err := e.GetBytes(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(val)
+		return err
+	}},
 	{OpRemove, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
 		ok := e.Remove(*b2s(args[0]))
@@ -127,14 +139,46 @@ var cmdTable = []Cmd{
 		ok := e.Rename(*b2s(args[0]), *b2s(args[1]))
 		return w.WriteByte(bool2byte(ok))
 	}},
+	{OpLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
+		res := base.FormatInt[uint64](e.Stat().Len)
+		_, err := w.Write(res)
+		return err
+	}},
 	// map
 	{OpHSet, 3, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, field, val
 		return e.HSet(*b2s(args[0]), *b2s(args[1]), args[2])
 	}},
-	{OpHRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+	{OpHGet, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, field
-		return e.HRemove(*b2s(args[0]), *b2s(args[1]))
+		m, err := e.fetchMap(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		val, ok := m.Get(*b2s(args[1]))
+		if !ok {
+			return base.ErrFieldNotFound
+		}
+		_, err = w.Write(val)
+		return err
+	}},
+	{OpHLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		m, err := e.fetchMap(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		res := base.FormatInt[int](m.Len())
+		_, err = w.Write(res)
+		return err
+	}},
+	{OpHRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, field
+		ok, err := e.HRemove(*b2s(args[0]), *b2s(args[1]))
+		if err != nil {
+			return err
+		}
+		return w.WriteByte(bool2byte(ok))
 	}},
 	// set
 	{OpSAdd, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
@@ -175,6 +219,16 @@ var cmdTable = []Cmd{
 	{OpRPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
 		_, err := e.RPop(*b2s(args[0]))
+		return err
+	}},
+	{OpLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		l, err := e.fetchList(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		str := strconv.Itoa(l.Len())
+		_, err = w.Write(s2b(&str))
 		return err
 	}},
 	// bitmap
@@ -221,51 +275,13 @@ var cmdTable = []Cmd{
 		// key, val
 		return e.ZRemove(*b2s(args[0]), *b2s(args[1]))
 	}},
-	// marshal
+	// others
 	{OpMarshalBytes, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// val
 		return e.m.UnmarshalBytes(args[0])
 	}},
-	// request
-	{Response, 2, func(e *Engine, args [][]byte, w base.Writer) error {
-		return nil
-	}},
-	{ReqPing, 0, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpPing, 0, func(_ *Engine, _ [][]byte, w base.Writer) error {
 		_, err := w.Write([]byte("pong"))
-		return err
-	}},
-	{ReqGet, 1, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key
-		val, _, err := e.GetBytes(*b2s(args[0]))
-		if err != nil {
-			return err
-		}
-		_, err = w.Write(val)
-		return err
-	}},
-	{ReqLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
-		res := base.FormatInt[uint64](e.Stat().Len)
-		_, err := w.Write(res)
-		return err
-	}},
-	{ReqHLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key
-		m, err := e.fetchMap(*b2s(args[0]))
-		if err != nil {
-			return err
-		}
-		str := strconv.Itoa(m.Len())
-		_, err = w.Write(s2b(&str))
-		return err
-	}},
-	{ReqLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key
-		l, err := e.fetchList(*b2s(args[0]))
-		if err != nil {
-			return err
-		}
-		str := strconv.Itoa(l.Len())
-		_, err = w.Write(s2b(&str))
 		return err
 	}},
 }
@@ -556,15 +572,14 @@ func (e *Engine) HSet(key, field string, val []byte) error {
 }
 
 // HRemove
-func (e *Engine) HRemove(key, field string) error {
+func (e *Engine) HRemove(key, field string) (bool, error) {
 	m, err := e.fetchMap(key)
 	if err != nil {
-		return err
+		return false, err
 	}
 	e.encode(NewCodec(OpHRemove).Str(key).Str(field))
-	m.Delete(field)
 
-	return nil
+	return m.Delete(field), nil
 }
 
 // HKeys

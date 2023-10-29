@@ -227,8 +227,9 @@ func TestHMap(t *testing.T) {
 		assert.Nil(err)
 
 		if op%3 == 0 {
-			err = db.HRemove(key, field)
+			ok, err := db.HRemove(key, field)
 			assert.Nil(err)
+			assert.True(ok)
 
 			res, err = db.HGet(key, field)
 			assert.Equal(res, nilBytes)
@@ -267,8 +268,9 @@ func TestHMap(t *testing.T) {
 	}
 	{
 		// remove
-		err := db.HRemove("str", "foo")
+		ok, err := db.HRemove("str", "foo")
 		assert.Equal(err, base.ErrWrongType)
+		assert.False(ok)
 	}
 	{
 		// keys
@@ -570,5 +572,32 @@ func TestClient(t *testing.T) {
 		num, err := cli.Len()
 		assert.Nil(err)
 		assert.Equal(num, uint64(i+1))
+	}
+
+	for i := 0; i < 10000; i++ {
+		// HSet
+		key := fmt.Sprintf("key-%d", i)
+		err := cli.HSet("exmap", key, []byte(key))
+		assert.Nil(err)
+
+		// HGet
+		res, err := cli.HGet("exmap", key)
+		assert.Nil(err)
+		assert.Equal(res, []byte(key))
+
+		// HLen
+		num, err := cli.HLen("exmap")
+		assert.Nil(err)
+		assert.Equal(num, 1)
+
+		// HRemove
+		ok, err := cli.HRemove("exmap", key)
+		assert.Nil(err)
+		assert.True(ok)
+
+		// HLen
+		num, err = cli.HLen("exmap")
+		assert.Nil(err)
+		assert.Equal(num, 0)
 	}
 }
