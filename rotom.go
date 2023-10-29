@@ -300,7 +300,7 @@ const (
 
 const (
 	sepChar   = byte(255)
-	timeCarry = 1e6 // millsecs
+	timeCarry = 1e6 // millisecs
 	noTTL     = 0
 
 	KB = 1024
