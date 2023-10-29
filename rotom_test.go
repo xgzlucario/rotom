@@ -152,8 +152,8 @@ func TestCacheSet(t *testing.T) {
 	// get again
 	for k, v := range kvdata {
 		// timeCarry convert
-		v.Ts /= (1000 * 1000 * 1000)
-		v.Ts *= (1000 * 1000 * 1000)
+		v.Ts /= (1000 * 1000)
+		v.Ts *= (1000 * 1000)
 
 		// expired
 		if v.Ts < cache.GetClock() {
@@ -559,12 +559,12 @@ func TestClient(t *testing.T) {
 		newKey := fmt.Sprintf("key-new-%d", i)
 		ok, err := cli.Rename(key, newKey)
 		assert.Nil(err)
-		assert.True(ok, ok)
+		assert.True(ok)
 
 		// Remove
 		ok, err = cli.Remove(newKey)
 		assert.Nil(err)
-		assert.True(ok, ok)
+		assert.True(ok)
 
 		// Len
 		num, err := cli.Len()

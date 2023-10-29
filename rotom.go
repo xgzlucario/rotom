@@ -68,7 +68,7 @@ type Cmd struct {
 	hook    func(*Engine, [][]byte, base.Writer) error
 }
 
-// cmdTable defines the number of parameters required for the operation.
+// cmdTable defines the argsNum and callback function required for the operation.
 var cmdTable = []Cmd{
 	{OpSetTx, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// type, key, ts, val
@@ -119,21 +119,13 @@ var cmdTable = []Cmd{
 	}},
 	{OpRemove, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		if e.Remove(*b2s(args[0])) {
-			w.WriteByte(_true)
-		} else {
-			w.WriteByte(_false)
-		}
-		return nil
+		ok := e.Remove(*b2s(args[0]))
+		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpRename, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// old, new
-		if e.Rename(*b2s(args[0]), *b2s(args[1])) {
-			w.WriteByte(_true)
-		} else {
-			w.WriteByte(_false)
-		}
-		return nil
+		ok := e.Rename(*b2s(args[0]), *b2s(args[1]))
+		return w.WriteByte(bool2byte(ok))
 	}},
 	// map
 	{OpHSet, 3, func(e *Engine, args [][]byte, _ base.Writer) error {
@@ -145,11 +137,11 @@ var cmdTable = []Cmd{
 		return e.HRemove(*b2s(args[0]), *b2s(args[1]))
 	}},
 	// set
-	{OpSAdd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSAdd, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, item
 		return e.SAdd(*b2s(args[0]), *b2s(args[1]))
 	}},
-	{OpSRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, item
 		_, err := e.SRemove(*b2s(args[0]), *b2s(args[1]))
 		return err
@@ -292,7 +284,7 @@ const (
 
 const (
 	sepChar   = byte(255)
-	timeCarry = 1e9
+	timeCarry = 1e6 // millsecs
 	noTTL     = 0
 
 	KB = 1024

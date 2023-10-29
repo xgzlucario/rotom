@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 	"time"
@@ -9,7 +8,6 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom"
-	"github.com/xgzlucario/rotom/base"
 )
 
 const (
@@ -47,17 +45,8 @@ func cmd() {
 				if err != nil {
 					panic(err)
 				}
-				{
-					op, args, err := rotom.NewDecoder(res).ParseRecord()
-					if err != nil || op != rotom.Response {
-						panic("error")
-					}
-					if base.ParseInt[int64](args[0]) != rotom.RES_SUCCESS {
-						panic("error")
-					}
-					if !bytes.Equal(args[1], []byte("ok")) {
-						panic("error")
-					}
+				if len(res) > 0 {
+					panic("error res")
 				}
 
 				// stat

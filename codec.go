@@ -114,6 +114,14 @@ func b2s(buf []byte) *string {
 	return (*string)(unsafe.Pointer(&buf))
 }
 
+// bool2byte
+func bool2byte(b bool) byte {
+	if b {
+		return _true
+	}
+	return _false
+}
+
 type Decoder struct {
 	b []byte
 }

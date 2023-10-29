@@ -19,7 +19,7 @@ type Client struct {
 func NewClient(addr string) (c *Client, err error) {
 	c = &Client{}
 	c.c, err = net.Dial("tcp", addr)
-	c.b = make([]byte, 64)
+	c.b = make([]byte, 512)
 	return
 }
 
@@ -35,7 +35,7 @@ func (c *Client) SetEx(key string, val []byte, ttl time.Duration) ([]byte, error
 
 // SetTx
 func (c *Client) SetTx(key string, val []byte, ts int64) ([]byte, error) {
-	args, err := c.do(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts).Bytes(val))
+	args, err := c.do(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 	if err != nil {
 		return nil, err
 	}
