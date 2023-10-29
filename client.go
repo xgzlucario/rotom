@@ -35,11 +35,7 @@ func (c *Client) SetEx(key string, val []byte, ttl time.Duration) ([]byte, error
 
 // SetTx
 func (c *Client) SetTx(key string, val []byte, ts int64) ([]byte, error) {
-	args, err := c.do(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
-	if err != nil {
-		return nil, err
-	}
-	return args, nil
+	return c.do(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 }
 
 // Remove
@@ -62,11 +58,7 @@ func (c *Client) Rename(key, newKey string) (bool, error) {
 
 // Get
 func (c *Client) Get(key string) ([]byte, error) {
-	args, err := c.do(NewCodec(OpGet).Str(key))
-	if err != nil {
-		return nil, err
-	}
-	return args, nil
+	return c.do(NewCodec(OpGet).Str(key))
 }
 
 // Len
@@ -86,11 +78,16 @@ func (c *Client) HSet(key, field string, val []byte) error {
 
 // HGet
 func (c *Client) HGet(key, field string) ([]byte, error) {
-	args, err := c.do(NewCodec(OpHGet).Str(key).Str(field))
+	return c.do(NewCodec(OpHGet).Str(key).Str(field))
+}
+
+// HLen
+func (c *Client) HLen(key string) (int, error) {
+	args, err := c.do(NewCodec(OpHLen).Str(key))
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	return args, nil
+	return base.ParseInt[int](args), nil
 }
 
 // HRemove
@@ -100,15 +97,6 @@ func (c *Client) HRemove(key, field string) (bool, error) {
 		return false, err
 	}
 	return args[0] == _true, nil
-}
-
-// Len
-func (c *Client) HLen(key string) (int, error) {
-	args, err := c.do(NewCodec(OpHLen).Str(key))
-	if err != nil {
-		return 0, err
-	}
-	return base.ParseInt[int](args), nil
 }
 
 // Close
