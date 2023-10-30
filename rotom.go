@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/panjf2000/gnet/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
@@ -33,6 +34,7 @@ const (
 	OpHSet
 	OpHGet
 	OpHLen
+	OpHKeys
 	OpHRemove
 	// set
 	OpSAdd
@@ -170,6 +172,19 @@ var cmdTable = []Cmd{
 		}
 		res := base.FormatInt[int](m.Len())
 		_, err = w.Write(res)
+		return err
+	}},
+	{OpHKeys, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		m, err := e.fetchMap(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		src, err := sonic.Marshal(m.Keys())
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(src)
 		return err
 	}},
 	{OpHRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {

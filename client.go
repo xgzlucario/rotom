@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/bytedance/sonic"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 )
@@ -88,6 +89,17 @@ func (c *Client) HLen(key string) (int, error) {
 		return 0, err
 	}
 	return base.ParseInt[int](args), nil
+}
+
+// HKeys
+func (c *Client) HKeys(key string) ([]string, error) {
+	args, err := c.do(NewCodec(OpHKeys).Str(key))
+	if err != nil {
+		return nil, err
+	}
+	var keys []string
+	err = sonic.Unmarshal(args, &keys)
+	return keys, err
 }
 
 // HRemove

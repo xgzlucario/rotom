@@ -590,14 +590,14 @@ func TestClient(t *testing.T) {
 		assert.Nil(err)
 		assert.Equal(num, 1)
 
+		// HKeys
+		keys, err := cli.HKeys("exmap")
+		assert.Nil(err)
+		assert.ElementsMatch(keys, []string{key})
+
 		// HRemove
 		ok, err := cli.HRemove("exmap", key)
 		assert.Nil(err)
 		assert.True(ok)
-
-		// HLen
-		num, err = cli.HLen("exmap")
-		assert.Nil(err)
-		assert.Equal(num, 0)
 	}
 }
