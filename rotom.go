@@ -3,16 +3,17 @@ package rotom
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"runtime"
 	"runtime/debug"
-	"slices"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/panjf2000/gnet/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
@@ -23,12 +24,17 @@ import (
 type Operation byte
 
 const (
-	OpSetTx Operation = iota
+	Response Operation = iota
+	OpSetTx
+	OpGet
 	OpRemove
 	OpRename
-	OpMarshalBytes
+	OpLen
 	// map
 	OpHSet
+	OpHGet
+	OpHLen
+	OpHKeys
 	OpHRemove
 	// set
 	OpSAdd
@@ -41,6 +47,7 @@ const (
 	OpLPop
 	OpRPush
 	OpRPop
+	OpLLen
 	// bitmap
 	OpBitSet
 	OpBitFlip
@@ -48,66 +55,253 @@ const (
 	OpBitAnd
 	OpBitXor
 	// zset
-	OpZSet
+	OpZAdd
 	OpZIncr
 	OpZRemove
-	// request
-	Response
-	ReqPing
-	ReqGet
-	ReqRanGet
-	ReqLen
-	ReqHLen
-	ReqLLen
+	// others
+	OpMarshalBytes
+	OpPing
 )
 
 // Cmd
 type Cmd struct {
-	Op      Operation
-	ArgsNum int
+	op      Operation
+	argsNum byte
+	hook    func(*Engine, [][]byte, base.Writer) error
 }
 
-// cmdTable defines the number of parameters required for the operation.
+// cmdTable defines the argsNum and callback function required for the operation.
 var cmdTable = []Cmd{
-	{OpSetTx, 4},
-	{OpRemove, 1},
-	{OpRename, 2},
-	{OpMarshalBytes, 1},
+	{Response, 2, func(_ *Engine, _ [][]byte, _ base.Writer) error {
+		return nil
+	}},
+	{OpSetTx, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
+		// type, key, ts, val
+		ts := base.ParseInt[int64](args[2]) * timeCarry
+		if ts < cache.GetClock() && ts != noTTL {
+			return nil
+		}
+
+		vType := VType(args[0][0])
+
+		switch vType {
+		case TypeString:
+			e.m.SetTx(*b2s(args[1]), args[3], ts)
+
+		case TypeList:
+			var ls List
+			if err := ls.UnmarshalJSON(args[3]); err != nil {
+				return err
+			}
+			e.m.Set(*b2s(args[1]), ls)
+
+		case TypeSet:
+			var s Set
+			if err := s.UnmarshalJSON(args[3]); err != nil {
+				return err
+			}
+			e.m.Set(*b2s(args[1]), s)
+
+		case TypeMap:
+			var m Map
+			if err := m.UnmarshalJSON(args[3]); err != nil {
+				return err
+			}
+			e.m.Set(*b2s(args[1]), m)
+
+		case TypeBitmap:
+			var m BitMap
+			if err := m.UnmarshalBinary(args[3]); err != nil {
+				return err
+			}
+			e.m.Set(*b2s(args[1]), m)
+
+		default:
+			return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, vType)
+		}
+
+		return nil
+	}},
+	{OpGet, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		val, _, err := e.GetBytes(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(val)
+		return err
+	}},
+	{OpRemove, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		ok := e.Remove(*b2s(args[0]))
+		return w.WriteByte(bool2byte(ok))
+	}},
+	{OpRename, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// old, new
+		ok := e.Rename(*b2s(args[0]), *b2s(args[1]))
+		return w.WriteByte(bool2byte(ok))
+	}},
+	{OpLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
+		res := base.FormatInt[uint64](e.Stat().Len)
+		_, err := w.Write(res)
+		return err
+	}},
 	// map
-	{OpHSet, 3},
-	{OpHRemove, 2},
+	{OpHSet, 3, func(e *Engine, args [][]byte, _ base.Writer) error {
+		// key, field, val
+		return e.HSet(*b2s(args[0]), *b2s(args[1]), args[2])
+	}},
+	{OpHGet, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, field
+		m, err := e.fetchMap(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		val, ok := m.Get(*b2s(args[1]))
+		if !ok {
+			return base.ErrFieldNotFound
+		}
+		_, err = w.Write(val)
+		return err
+	}},
+	{OpHLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		m, err := e.fetchMap(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		res := base.FormatInt[int](m.Len())
+		_, err = w.Write(res)
+		return err
+	}},
+	{OpHKeys, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		m, err := e.fetchMap(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		src, err := sonic.Marshal(m.Keys())
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(src)
+		return err
+	}},
+	{OpHRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, field
+		ok, err := e.HRemove(*b2s(args[0]), *b2s(args[1]))
+		if err != nil {
+			return err
+		}
+		return w.WriteByte(bool2byte(ok))
+	}},
 	// set
-	{OpSAdd, 2},
-	{OpSRemove, 2},
-	{OpSUnion, 3},
-	{OpSInter, 3},
-	{OpSDiff, 3},
+	{OpSAdd, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+		// key, item
+		return e.SAdd(*b2s(args[0]), *b2s(args[1]))
+	}},
+	{OpSRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+		// key, item
+		_, err := e.SRemove(*b2s(args[0]), *b2s(args[1]))
+		return err
+	}},
+	{OpSUnion, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key1, key2, dest
+		return e.SUnion(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	}},
+	{OpSInter, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key1, key2, dest
+		return e.SInter(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	}},
+	{OpSDiff, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key1, key2, dest
+		return e.SDiff(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	}},
 	// list
-	{OpLPush, 2},
-	{OpLPop, 1},
-	{OpRPush, 2},
-	{OpRPop, 1},
+	{OpLPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, item
+		return e.LPush(*b2s(args[0]), *b2s(args[1]))
+	}},
+	{OpLPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		_, err := e.LPop(*b2s(args[0]))
+		return err
+	}},
+	{OpRPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, item
+		return e.RPush(*b2s(args[0]), *b2s(args[1]))
+	}},
+	{OpRPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		_, err := e.RPop(*b2s(args[0]))
+		return err
+	}},
+	{OpLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		l, err := e.fetchList(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		str := strconv.Itoa(l.Len())
+		_, err = w.Write(s2b(&str))
+		return err
+	}},
 	// bitmap
-	{OpBitSet, 3},
-	{OpBitFlip, 2},
-	{OpBitOr, 3},
-	{OpBitAnd, 3},
-	{OpBitXor, 3},
+	{OpBitSet, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, offset, val
+		_, err := e.BitSet(*b2s(args[0]), base.ParseInt[uint32](args[1]), args[2][0] == _true)
+		return err
+	}},
+	{OpBitFlip, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, offset
+		return e.BitFlip(*b2s(args[0]), base.ParseInt[uint32](args[1]))
+	}},
+	{OpBitOr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key1, key2, dest
+		return e.BitOr(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	}},
+	{OpBitAnd, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key1, key2, dest
+		return e.BitAnd(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	}},
+	{OpBitXor, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key1, key2, dest
+		return e.BitXor(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	}},
 	// zset
-	{OpZSet, 4},
-	{OpZIncr, 3},
-	{OpZRemove, 2},
-	// request
-	{Response, 2},
-	{ReqPing, 0},
-	{ReqGet, 1},
-	{ReqRanGet, 0},
-	{ReqLen, 0},
-	{ReqHLen, 1},
-	{ReqLLen, 1},
+	{OpZAdd, 4, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, score, val
+		s, err := strconv.ParseFloat(*b2s(args[2]), 64)
+		if err != nil {
+			return err
+		}
+		return e.ZAdd(*b2s(args[0]), *b2s(args[1]), s, args[3])
+	}},
+	{OpZIncr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, score, val
+		s, err := strconv.ParseFloat(*b2s(args[2]), 64)
+		if err != nil {
+			return err
+		}
+		_, err = e.ZIncr(*b2s(args[0]), *b2s(args[1]), s)
+		return err
+	}},
+	{OpZRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, val
+		return e.ZRemove(*b2s(args[0]), *b2s(args[1]))
+	}},
+	// others
+	{OpMarshalBytes, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// val
+		return e.m.UnmarshalBytes(args[0])
+	}},
+	{OpPing, 0, func(_ *Engine, _ [][]byte, w base.Writer) error {
+		_, err := w.Write([]byte("pong"))
+		return err
+	}},
 }
 
-// VType is value type for OpSet.
+// VType is value type for Set Operation.
 type VType byte
 
 const (
@@ -120,9 +314,9 @@ const (
 )
 
 const (
-	SepChar   = byte(255)
-	timeCarry = 1e9
-	NoTTL     = 0
+	sepChar   = byte(255)
+	timeCarry = 1e6 // millisecs
+	noTTL     = 0
 
 	KB = 1024
 	MB = 1024 * KB
@@ -163,8 +357,7 @@ var (
 type Config struct {
 	ShardCount int
 
-	Path    string // Path of db file.
-	tmpPath string
+	Path string // Path of db file.
 
 	SyncPolicy base.SyncPolicy // Data sync policy.
 
@@ -180,35 +373,45 @@ type Config struct {
 type Engine struct {
 	sync.Mutex
 	*Config
-	closed bool
-	buf    *bytes.Buffer
-	rwbuf  *bytes.Buffer
-	m      *cache.GigaCache[string]
+
+	// context
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	loading bool //if db loading encode() not allowed.
+
+	buf   *bytes.Buffer
+	rwbuf *bytes.Buffer
+	m     *cache.GigaCache
 }
 
 // Open opens a database specified by config.
 // The file will be created automatically if not exist.
 func Open(conf *Config) (*Engine, error) {
+	ctx, cancel := context.WithCancel(context.Background())
 	e := &Engine{
-		Config: conf,
-		buf:    bytes.NewBuffer(nil),
-		rwbuf:  bytes.NewBuffer(nil),
-		m:      cache.New[string](conf.ShardCount),
+		Config:  conf,
+		ctx:     ctx,
+		cancel:  cancel,
+		loading: true,
+		buf:     bytes.NewBuffer(nil),
+		rwbuf:   bytes.NewBuffer(nil),
+		m:       cache.New(conf.ShardCount),
 	}
-	e.tmpPath = e.Path + ".tmp"
 
 	// load db from disk.
 	if err := e.load(); err != nil {
 		e.logError("db load error: %v", err)
 		return nil, err
 	}
+	e.loading = false
 
 	// runtime monitor.
-	e.backend(time.Minute, func() {
-		e.printRuntimeStats()
-	})
+	if e.Logger != nil {
+		e.backend(time.Minute, func() { e.printRuntimeStats() })
+	}
 
-	if e.SyncPolicy != base.Never {
+	if e.SyncPolicy == base.EveryInterval {
 		// sync buffer to disk.
 		e.backend(e.SyncInterval, func() {
 			e.Lock()
@@ -242,20 +445,24 @@ func (e *Engine) Listen(addr string) error {
 
 // Close closes the db engine.
 func (e *Engine) Close() error {
-	e.Lock()
-	defer e.Unlock()
-	if e.closed {
+	select {
+	case <-e.ctx.Done():
 		return base.ErrDatabaseClosed
+	default:
+		e.Lock()
+		_, err := e.writeTo(e.buf, e.Path)
+		e.Unlock()
+		e.cancel()
+		return err
 	}
-	_, err := e.writeTo(e.buf, e.Path)
-	e.closed = true
-
-	return err
 }
 
 // encode
 func (e *Engine) encode(cd *Codec) {
 	if e.SyncPolicy == base.Never {
+		return
+	}
+	if e.loading {
 		return
 	}
 	e.Lock()
@@ -281,14 +488,9 @@ func (e *Engine) GetBytes(key string) ([]byte, int64, error) {
 	return nil, 0, base.ErrKeyNotFound
 }
 
-// RandomGet
-func (e *Engine) RandomGet() (string, any, int64, bool) {
-	return e.m.RandomGet()
-}
-
 // Set store key-value pair.
 func (e *Engine) Set(key string, val []byte) {
-	e.SetTx(key, val, NoTTL)
+	e.SetTx(key, val, noTTL)
 }
 
 // SetEx store key-value pair with ttl.
@@ -385,15 +587,14 @@ func (e *Engine) HSet(key, field string, val []byte) error {
 }
 
 // HRemove
-func (e *Engine) HRemove(key, field string) error {
+func (e *Engine) HRemove(key, field string) (bool, error) {
 	m, err := e.fetchMap(key)
 	if err != nil {
-		return err
+		return false, err
 	}
 	e.encode(NewCodec(OpHRemove).Str(key).Str(field))
-	m.Delete(field)
 
-	return nil
+	return m.Delete(field), nil
 }
 
 // HKeys
@@ -711,11 +912,11 @@ func (e *Engine) BitCount(key string) (uint64, error) {
 
 // ZAdd
 func (e *Engine) ZAdd(zset, key string, score float64, val []byte) error {
-	zs, err := e.fetchZSet(zset)
+	zs, err := e.fetchZSet(zset, true)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpZSet).Str(zset).Str(key).Float(score).Bytes(val))
+	e.encode(NewCodec(OpZAdd).Str(zset).Str(key).Float(score).Bytes(val))
 	zs.SetWithScore(key, score, val)
 
 	return nil
@@ -723,7 +924,7 @@ func (e *Engine) ZAdd(zset, key string, score float64, val []byte) error {
 
 // ZIncr
 func (e *Engine) ZIncr(zset, key string, incr float64) (float64, error) {
-	zs, err := e.fetchZSet(zset)
+	zs, err := e.fetchZSet(zset, true)
 	if err != nil {
 		return 0, err
 	}
@@ -775,216 +976,18 @@ func (e *Engine) load() error {
 		return err
 	}
 
-	e.logInfo("start to load e size %s", formatSize(len(line)))
+	e.logInfo("loading db file size %s", formatSize(len(line)))
 
-	var args [][]byte
-
-	// record line is like:
-	// <OP><argsNum><args...>
-	for len(line) > 2 {
-		op := Operation(line[0])
-
-		// if operation valid
-		if int(op) >= len(cmdTable) {
-			return base.ErrParseRecordLine
-		}
-
-		argsNum := cmdTable[op].ArgsNum
-		line = line[1:]
-
-		// parse args by operation
-		args, line, err = parseLine(line, argsNum)
+	decoder := NewDecoder(line)
+	for !decoder.Done() {
+		op, args, err := decoder.ParseRecord()
 		if err != nil {
 			return err
 		}
-
-		switch op {
-		case OpMarshalBytes: // val
-			if err := e.m.UnmarshalBytes(args[0]); err != nil {
-				return err
-			}
-
-		case OpSetTx: // type, key, ts, val
-			ts := base.ParseInt[int64](args[2]) * timeCarry
-			if ts < cache.GetClock() && ts != NoTTL {
-				continue
-			}
-
-			vType := VType(args[0][0])
-
-			switch vType {
-			case TypeString:
-				e.m.SetTx(*b2s(args[1]), args[3], ts)
-
-			case TypeList:
-				var ls List
-				if err := ls.UnmarshalJSON(args[3]); err != nil {
-					return err
-				}
-				e.m.Set(*b2s(args[1]), ls)
-
-			case TypeMap:
-				var m Map
-				if err := m.UnmarshalJSON(args[3]); err != nil {
-					return err
-				}
-				e.m.Set(*b2s(args[1]), m)
-
-			case TypeBitmap:
-				var m BitMap
-				if err := m.UnmarshalBinary(args[3]); err != nil {
-					return err
-				}
-				e.m.Set(*b2s(args[1]), m)
-
-			default:
-				return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, vType)
-			}
-
-		case OpRemove: // key
-			e.m.Delete(*b2s(args[0]))
-
-		case OpRename: // old, new
-			e.m.Rename(*b2s(args[0]), *b2s(args[1]))
-
-		case OpHSet: // key, field, val
-			m, err := e.fetchMap(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			m.Set(*b2s(args[1]), args[2])
-
-		case OpHRemove: // key, field
-			m, err := e.fetchMap(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			m.Delete(*b2s(args[1]))
-
-		case OpLPush: // key, item
-			ls, err := e.fetchList(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			ls.LPush(*b2s(args[1]))
-
-		case OpRPush: // key, item
-			ls, err := e.fetchList(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			ls.RPush(*b2s(args[1]))
-
-		case OpLPop: // key
-			ls, err := e.fetchList(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			ls.LPop()
-
-		case OpRPop: // key
-			ls, err := e.fetchList(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			ls.RPop()
-
-		case OpBitSet: // key, offset, val
-			bm, err := e.fetchBitMap(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-
-			offset := base.ParseInt[uint32](args[1])
-			if args[2][0] == _true {
-				bm.Add(offset)
-			} else {
-				bm.Remove(offset)
-			}
-
-		case OpBitFlip: // key, offset
-			bm, err := e.fetchBitMap(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			bm.Flip(base.ParseInt[uint64](args[1]))
-
-		case OpBitAnd, OpBitOr, OpBitXor: // key, src, dst
-			bm1, err := e.fetchBitMap(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-
-			bm2, err := e.fetchBitMap(*b2s(args[1]))
-			if err != nil {
-				return err
-			}
-
-			if slices.Equal(args[0], args[2]) {
-				switch op {
-				case OpBitAnd:
-					bm1.And(bm2)
-				case OpBitOr:
-					bm1.Or(bm2)
-				case OpBitXor:
-					bm1.Xor(bm2)
-				}
-
-			} else if slices.Equal(args[1], args[2]) {
-				switch op {
-				case OpBitAnd:
-					bm2.And(bm1)
-				case OpBitOr:
-					bm2.Or(bm1)
-				case OpBitXor:
-					bm2.Xor(bm1)
-				}
-
-			} else {
-				switch op {
-				case OpBitAnd:
-					e.m.Set(*b2s(args[2]), bm1.Clone().And(bm2))
-				case OpBitOr:
-					e.m.Set(*b2s(args[2]), bm1.Clone().Or(bm2))
-				case OpBitXor:
-					e.m.Set(*b2s(args[2]), bm1.Clone().Xor(bm2))
-				}
-			}
-
-		case OpZSet: // key, field, score, val
-			zs, err := e.fetchZSet(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			s, err := strconv.ParseFloat(*b2s(args[2]), 64)
-			if err != nil {
-				return err
-			}
-			zs.SetWithScore(*b2s(args[1]), s, args[3])
-
-		case OpZIncr: // key, field, incr
-			zs, err := e.fetchZSet(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			s, err := strconv.ParseFloat(*b2s(args[2]), 64)
-			if err != nil {
-				return err
-			}
-			zs.Incr(*b2s(args[1]), s)
-
-		case OpZRemove: // key, field
-			zs, err := e.fetchZSet(*b2s(args[0]))
-			if err != nil {
-				return err
-			}
-			zs.Delete(*b2s(args[1]))
-
-		default:
-			return fmt.Errorf("%v: %c", base.ErrUnknownOperationType, op)
+		if err := cmdTable[op].hook(e, args, nil); err != nil {
+			return err
 		}
 	}
-
 	e.logInfo("db load complete")
 
 	return nil
@@ -1028,41 +1031,13 @@ func (e *Engine) shrink() {
 	cd.Recycle()
 
 	// Flush buffer to file
-	e.writeTo(e.rwbuf, e.tmpPath)
-	e.writeTo(e.buf, e.tmpPath)
+	tmpPath := fmt.Sprintf("%v.tmp", time.Now())
+	e.writeTo(e.rwbuf, tmpPath)
+	e.writeTo(e.buf, tmpPath)
 
-	os.Rename(e.tmpPath, e.Path)
+	os.Rename(tmpPath, e.Path)
 
 	e.logInfo("rotom rewrite done")
-}
-
-// parseLine parse file content to record lines.
-// exp:
-// input: <key_len>SEP<key_value><somthing...>
-// return: key_value, somthing..., error
-func parseLine(line []byte, argsNum int) ([][]byte, []byte, error) {
-	res := make([][]byte, 0, argsNum)
-
-	for flag := 0; flag < argsNum; flag++ {
-		i := bytes.IndexByte(line, SepChar)
-		if i <= 0 {
-			return nil, nil, base.ErrParseRecordLine
-		}
-
-		key_len := base.ParseInt[int](line[:i])
-		i++
-
-		// valid
-		if len(line) < i+key_len {
-			return nil, nil, base.ErrParseRecordLine
-		}
-
-		res = append(res, line[i:i+key_len])
-
-		line = line[i+key_len:]
-	}
-
-	return res, line, nil
 }
 
 // fetchMap
@@ -1119,6 +1094,7 @@ func fetch[T any](e *Engine, key string, new func() T, setWhenNotExist ...bool) 
 	return vptr, nil
 }
 
+// formatSize
 func formatSize[T base.Integer](size T) string {
 	switch {
 	case size < KB:
@@ -1132,26 +1108,25 @@ func formatSize[T base.Integer](size T) string {
 	}
 }
 
+// backend
 func (e *Engine) backend(t time.Duration, f func()) {
 	if t <= 0 {
 		panic("invalid interval")
 	}
 	go func() {
 		for {
-			time.Sleep(t)
-			if e.closed {
+			select {
+			case <-time.After(t):
+				f()
+			case <-e.ctx.Done():
 				return
 			}
-			f()
 		}
 	}()
 }
 
+// printRuntimeStats
 func (e *Engine) printRuntimeStats() {
-	if e.Logger == nil {
-		return
-	}
-
 	var stats debug.GCStats
 	var memStats runtime.MemStats
 
@@ -1162,30 +1137,21 @@ func (e *Engine) printRuntimeStats() {
 		With("alloc", formatSize(memStats.Alloc)).
 		With("sys", formatSize(memStats.Sys)).
 		With("gctime", stats.NumGC).
+		With("heapObjects", memStats.HeapObjects).
 		With("gcpause", stats.PauseTotal/time.Duration(stats.NumGC)).
 		Info("[Runtime]")
 }
 
+// logInfo
 func (e *Engine) logInfo(msg string, args ...any) {
-	if e.Logger == nil {
-		return
-	}
-
-	if len(args) == 0 {
-		e.Logger.Info(msg)
-	} else {
+	if e.Logger != nil {
 		e.Logger.Info(fmt.Sprintf(msg, args...))
 	}
 }
 
+// logError
 func (e *Engine) logError(msg string, args ...any) {
-	if e.Logger == nil {
-		return
-	}
-
-	if len(args) == 0 {
-		e.Logger.Error(msg)
-	} else {
+	if e.Logger != nil {
 		e.Logger.Error(fmt.Sprintf(msg, args...))
 	}
 }

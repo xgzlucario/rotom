@@ -1,6 +1,8 @@
 package rotom
 
 import (
+	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"testing"
@@ -27,9 +29,15 @@ var (
 func TestDB(t *testing.T) {
 	assert := assert.New(t)
 
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-
+	cfg := &Config{
+		Path:             gofakeit.UUID() + ".db",
+		ShardCount:       1024,
+		SyncPolicy:       base.EveryInterval,
+		SyncInterval:     time.Second,
+		ShrinkInterval:   time.Second * 3,
+		RunSkipLoadError: true,
+		Logger:           slog.Default(),
+	}
 	db, err := Open(cfg)
 	assert.Nil(err)
 	assert.NotNil(db)
@@ -63,9 +71,26 @@ func TestDB(t *testing.T) {
 	assert.Equal(res, 4.5)
 	assert.Nil(err)
 
+	// Keys
+	assert.ElementsMatch(db.Keys(), []string{"foo", "num", "hm"})
+
+	// Rename
+	ok := db.Rename("num", "num-new")
+	assert.True(ok)
+	res, err = db.Incr("num-new", 0.5)
+	assert.Equal(res, float64(5))
+	assert.Nil(err)
+
+	// Remove
+	assert.True(db.Remove("num-new"))
+	assert.False(db.Remove("num-new"))
+
+	db.printRuntimeStats()
+	time.Sleep(time.Second * 5)
+
 	// close
 	assert.Nil(db.Close())
-	assert.NotNil(db.Close())
+	assert.Equal(db.Close(), base.ErrDatabaseClosed)
 
 	// load error
 	os.WriteFile(cfg.Path, []byte("fake data"), 0644)
@@ -127,8 +152,8 @@ func TestCacheSet(t *testing.T) {
 	// get again
 	for k, v := range kvdata {
 		// timeCarry convert
-		v.Ts /= (1000 * 1000 * 1000)
-		v.Ts *= (1000 * 1000 * 1000)
+		v.Ts /= (1000 * 1000)
+		v.Ts *= (1000 * 1000)
 
 		// expired
 		if v.Ts < cache.GetClock() {
@@ -202,8 +227,9 @@ func TestHMap(t *testing.T) {
 		assert.Nil(err)
 
 		if op%3 == 0 {
-			err = db.HRemove(key, field)
+			ok, err := db.HRemove(key, field)
 			assert.Nil(err)
+			assert.True(ok)
 
 			res, err = db.HGet(key, field)
 			assert.Equal(res, nilBytes)
@@ -242,8 +268,9 @@ func TestHMap(t *testing.T) {
 	}
 	{
 		// remove
-		err := db.HRemove("str", "foo")
+		ok, err := db.HRemove("str", "foo")
 		assert.Equal(err, base.ErrWrongType)
+		assert.False(ok)
 	}
 	{
 		// keys
@@ -290,9 +317,9 @@ func TestSetAndBitmap(t *testing.T) {
 	type keyPair struct {
 		skey, bkey string
 	}
-	keyPairMap := make(map[keyPair]struct{}, 30000)
+	keyPairMap := make(map[keyPair]struct{}, 10000)
 
-	for i := 0; i < 30000; i++ {
+	test := func() {
 		rand := gofakeit.Username()
 		k1, k2 := "S"+rand, "B"+rand
 		val := randUint16()
@@ -382,11 +409,36 @@ func TestSetAndBitmap(t *testing.T) {
 			assert.Equal(db.BitAnd(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
 			assert.Equal(db.BitXor(kp1.bkey, kp2.skey, ""), base.ErrWrongType)
 			assert.Equal(db.BitXor(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
+			// Test Bitmap other errors
+			_, err = db.BitTest(kp1.skey, 100)
+			assert.Equal(err, base.ErrWrongType)
+			_, err = db.BitSet(kp1.skey, 100, true)
+			assert.Equal(err, base.ErrWrongType)
+			err = db.BitFlip(kp1.skey, 100)
+			assert.Equal(err, base.ErrWrongType)
+			_, err = db.BitArray(kp1.skey)
+			assert.Equal(err, base.ErrWrongType)
+			_, err = db.BitCount(kp1.skey)
+			assert.Equal(err, base.ErrWrongType)
 
 			setEqualBitmap(assert, db, kp1.skey, kp1.bkey)
 			setEqualBitmap(assert, db, kp2.skey, kp2.bkey)
 			setEqualBitmap(assert, db, dstp.skey, dstp.bkey)
 		}
+	}
+
+	for i := 0; i < 10000; i++ {
+		test()
+	}
+
+	// load
+	db.Close()
+
+	db, err = Open(cfg)
+	assert.Nil(err)
+
+	for i := 0; i < 10000; i++ {
+		test()
 	}
 
 	// err test
@@ -425,5 +477,127 @@ func TestSetAndBitmap(t *testing.T) {
 		// Union
 		err := db.SUnion("str", "str", "")
 		assert.Equal(err, base.ErrWrongType)
+	}
+}
+
+func TestZSet(t *testing.T) {
+	assert := assert.New(t)
+
+	db, err := Open(NoPersistentConfig)
+	assert.Nil(err)
+
+	// ZAdd
+	for i := 0; i < 10000; i++ {
+		err := db.ZAdd("zset", fmt.Sprintf("key-%d", i), float64(i), nil)
+		assert.Nil(err)
+	}
+
+	// ZIncr
+	for i := 0; i < 10000; i++ {
+		num, err := db.ZIncr("zset", fmt.Sprintf("key-%d", i), 3)
+		assert.Nil(err)
+		assert.Equal(num, float64(i+3))
+	}
+
+	// ZRemove
+	for i := 0; i < 10000; i++ {
+		err := db.ZRemove("zset", fmt.Sprintf("key-%d", i))
+		assert.Nil(err)
+	}
+
+	// Test error
+	db.SAdd("set", "1")
+
+	err = db.ZAdd("set", "key", 1, nil)
+	assert.Equal(err, base.ErrWrongType)
+
+	_, err = db.ZIncr("set", "key", 1)
+	assert.Equal(err, base.ErrWrongType)
+
+	err = db.ZRemove("set", "key")
+	assert.Equal(err, base.ErrWrongType)
+
+	// load
+	db.Close()
+
+}
+
+func TestClient(t *testing.T) {
+	assert := assert.New(t)
+
+	db, err := Open(NoPersistentConfig)
+	assert.Nil(err)
+
+	port := gofakeit.Number(10000, 20000)
+	addr := "localhost:" + strconv.Itoa(port)
+
+	// listen
+	go db.Listen(addr)
+	time.Sleep(time.Second / 10)
+
+	cli, err := NewClient(addr)
+	assert.Nil(err)
+	defer cli.Close()
+
+	for i := 0; i < 10000; i++ {
+		// Set
+		key := fmt.Sprintf("key-%d", i)
+		res, err := cli.Set(key, []byte(key))
+		assert.Nil(err)
+		assert.Equal(res, []byte{})
+
+		// Get
+		res, err = cli.Get(key)
+		assert.Nil(err)
+		assert.Equal(res, []byte(key))
+
+		// SetEx
+		key = fmt.Sprintf("key-ex-%d", i)
+		res, err = cli.SetEx(key, []byte(key), time.Minute)
+		assert.Nil(err)
+		assert.Equal(res, []byte{})
+
+		// Rename
+		newKey := fmt.Sprintf("key-new-%d", i)
+		ok, err := cli.Rename(key, newKey)
+		assert.Nil(err)
+		assert.True(ok)
+
+		// Remove
+		ok, err = cli.Remove(newKey)
+		assert.Nil(err)
+		assert.True(ok)
+
+		// Len
+		num, err := cli.Len()
+		assert.Nil(err)
+		assert.Equal(num, uint64(i+1))
+	}
+
+	for i := 0; i < 10000; i++ {
+		// HSet
+		key := fmt.Sprintf("key-%d", i)
+		err := cli.HSet("exmap", key, []byte(key))
+		assert.Nil(err)
+
+		// HGet
+		res, err := cli.HGet("exmap", key)
+		assert.Nil(err)
+		assert.Equal(res, []byte(key))
+
+		// HLen
+		num, err := cli.HLen("exmap")
+		assert.Nil(err)
+		assert.Equal(num, 1)
+
+		// HKeys
+		keys, err := cli.HKeys("exmap")
+		assert.Nil(err)
+		assert.ElementsMatch(keys, []string{key})
+
+		// HRemove
+		ok, err := cli.HRemove("exmap", key)
+		assert.Nil(err)
+		assert.True(ok)
 	}
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 	"time"
@@ -9,7 +8,6 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom"
-	"github.com/xgzlucario/rotom/base"
 )
 
 const (
@@ -27,7 +25,6 @@ func cmd() {
 	start := time.Now()
 	p := pool.New()
 
-	validator := rotom.NewCodec(rotom.Response).Int(int64(rotom.RES_SUCCESS)).Str("ok").B
 	delays := cache.NewPercentile()
 
 	for i := 0; i < CLIENT_NUM; i++ {
@@ -48,8 +45,8 @@ func cmd() {
 				if err != nil {
 					panic(err)
 				}
-				if !bytes.Equal(res, validator) {
-					panic(base.ErrInvalidResponse)
+				if len(res) > 0 {
+					panic("error res")
 				}
 
 				// stat

@@ -11,7 +11,7 @@ require (
 	github.com/sakeven/RbTree v0.0.0-20220710124251-94e35f9fed6c
 	github.com/sourcegraph/conc v0.3.0
 	github.com/stretchr/testify v1.8.4
-	github.com/xgzlucario/GigaCache v0.0.0-20231020075600-61001d347387
+	github.com/xgzlucario/GigaCache v0.0.0-20231022133204-b0a967d404cb
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 )
 

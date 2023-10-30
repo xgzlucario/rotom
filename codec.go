@@ -1,6 +1,7 @@
 package rotom
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -16,9 +17,7 @@ const (
 )
 
 var codecPool = sync.Pool{
-	New: func() any {
-		return &Codec{B: make([]byte, 0, 16)}
-	},
+	New: func() any { return &Codec{B: make([]byte, 0, 16)} },
 }
 
 // Codec is the primary type for encoding data into a specific format.
@@ -72,7 +71,7 @@ func (s *Codec) Float(f float64) *Codec {
 // format encodes a byte slice into the Coder's buffer as a record.
 func (s *Codec) format(v []byte) *Codec {
 	s.B = append(s.B, base.FormatInt(len(v))...)
-	s.B = append(s.B, SepChar)
+	s.B = append(s.B, sepChar)
 	s.B = append(s.B, v...)
 	return s
 }
@@ -113,4 +112,63 @@ func s2b(str *string) []byte {
 // Bytes convert to string unsafe
 func b2s(buf []byte) *string {
 	return (*string)(unsafe.Pointer(&buf))
+}
+
+// bool2byte
+func bool2byte(b bool) byte {
+	if b {
+		return _true
+	}
+	return _false
+}
+
+type Decoder struct {
+	b []byte
+}
+
+func NewDecoder(buf []byte) *Decoder {
+	return &Decoder{b: buf}
+}
+
+// ParseRecord parse one operation record line.
+func (s *Decoder) ParseRecord() (op Operation, res [][]byte, err error) {
+	if s.Done() {
+		return 0, nil, base.ErrParseRecordLine
+	}
+	op = Operation(s.b[0])
+	line := s.b[1:]
+
+	// bound check.
+	if int(op) >= len(cmdTable) {
+		return 0, nil, base.ErrParseRecordLine
+	}
+
+	argsNum := cmdTable[op].argsNum
+	res = make([][]byte, 0, argsNum)
+
+	// parses args.
+	for j := 0; j < int(argsNum); j++ {
+		i := bytes.IndexByte(line, sepChar)
+		if i <= 0 {
+			return 0, nil, base.ErrParseRecordLine
+		}
+
+		klen := base.ParseInt[int](line[:i])
+		i++
+
+		// bound check.
+		if i+klen > len(line) {
+			return 0, nil, base.ErrParseRecordLine
+		}
+		res = append(res, line[i:i+klen])
+
+		line = line[i+klen:]
+	}
+	s.b = line
+
+	return
+}
+
+func (s *Decoder) Done() bool {
+	return len(s.b) == 0
 }

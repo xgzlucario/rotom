@@ -1,20 +1,18 @@
 package rotom
 
 import (
-	"io"
+	"bytes"
 
 	"github.com/panjf2000/gnet/v2"
-	"github.com/xgzlucario/rotom/base"
 )
 
 // Response code inplements.
-type RespCode byte
+type RespCode = int64
 
 const (
 	RES_SUCCESS RespCode = iota + 1
 	RES_ERROR
 	RES_TIMEOUT
-	RES_LIMITED
 )
 
 type RotomEngine struct {
@@ -24,7 +22,7 @@ type RotomEngine struct {
 
 // OnTraffic
 func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
-	buf, err := io.ReadAll(conn)
+	buf, err := conn.Next(-1)
 	if err != nil {
 		return gnet.Close
 	}
@@ -33,10 +31,10 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 	msg, err := e.db.handleEvent(buf)
 	var cd *Codec
 	if err != nil {
-		cd = NewCodec(Response).Int(int64(RES_ERROR)).Str(err.Error())
+		cd = NewCodec(Response).Int(RES_ERROR).Str(err.Error())
 
 	} else {
-		cd = NewCodec(Response).Int(int64(RES_SUCCESS)).Bytes(msg)
+		cd = NewCodec(Response).Int(RES_SUCCESS).Bytes(msg)
 	}
 
 	// send resp
@@ -50,60 +48,16 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 }
 
 // handleEvent
-func (e *Engine) handleEvent(line []byte) (msg []byte, err error) {
-	op := Operation(line[0])
-
-	// parse args by operation
-	args, _, err := parseLine(line[1:], cmdTable[op].ArgsNum)
+func (e *Engine) handleEvent(line []byte) ([]byte, error) {
+	op, args, err := NewDecoder(line).ParseRecord()
 	if err != nil {
 		return nil, err
 	}
 
-	switch op {
-	case ReqPing:
-		return []byte("pong"), nil
-
-	case ReqLen:
-		stat := e.Stat()
-		return base.FormatInt(stat.Len), nil
-
-	case ReqGet:
-		v, _, ok := e.Get(*b2s(args[0]))
-		if ok {
-			return v.([]byte), nil
-		}
-		return nil, base.ErrKeyNotFound
-
-	case OpSetTx: // type, key, ts, val
-		recType := VType(args[0][0])
-
-		switch recType {
-		case TypeString:
-			ts := base.ParseInt[int64](args[2])
-			e.SetTx(*b2s(args[1]), args[3], ts)
-		}
-
-	case OpLPush: // key, item
-		e.LPush(*b2s(args[0]), *b2s(args[1]))
-
-	case OpRPush: // key, item
-		e.RPush(*b2s(args[0]), *b2s(args[1]))
-
-	case OpLPop: // key
-		r, err := e.LPop(*b2s(args[0]))
-		return s2b(&r), err
-
-	case OpRPop: // key
-		r, err := e.RPop(*b2s(args[0]))
-		return s2b(&r), err
-
-	case ReqLLen: // key
-		num, err := e.LLen(*b2s(args[0]))
-		return base.FormatInt(num), err
-
-	default:
-		return nil, base.ErrUnknownOperationType
+	res := bytes.NewBuffer(nil)
+	if err := cmdTable[op].hook(e, args, res); err != nil {
+		return nil, err
 	}
 
-	return []byte("ok"), nil
+	return res.Bytes(), nil
 }
