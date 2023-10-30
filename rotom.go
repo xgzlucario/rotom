@@ -72,9 +72,7 @@ type Cmd struct {
 
 // cmdTable defines the argsNum and callback function required for the operation.
 var cmdTable = []Cmd{
-	{Response, 2, func(_ *Engine, _ [][]byte, _ base.Writer) error {
-		return nil
-	}},
+	{Response, 2, nil},
 	{OpSetTx, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// type, key, ts, val
 		ts := base.ParseInt[int64](args[2]) * timeCarry
@@ -269,7 +267,7 @@ var cmdTable = []Cmd{
 		return e.BitXor(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
 	}},
 	// zset
-	{OpZAdd, 4, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpZAdd, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, score, val
 		s, err := strconv.ParseFloat(*b2s(args[2]), 64)
 		if err != nil {
@@ -378,7 +376,7 @@ type Engine struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	loading bool //if db loading encode() not allowed.
+	loading bool // if db loading encode() not allowed.
 
 	buf   *bytes.Buffer
 	rwbuf *bytes.Buffer
@@ -1041,42 +1039,42 @@ func (e *Engine) shrink() {
 }
 
 // fetchMap
-func (e *Engine) fetchMap(key string, setWhenNotExist ...bool) (m Map, err error) {
+func (e *Engine) fetchMap(key string, setnx ...bool) (m Map, err error) {
 	return fetch(e, key, func() Map {
 		return structx.NewSyncMap[string, []byte]()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetchSet
-func (e *Engine) fetchSet(key string, setWhenNotExist ...bool) (s Set, err error) {
+func (e *Engine) fetchSet(key string, setnx ...bool) (s Set, err error) {
 	return fetch(e, key, func() Set {
 		return structx.NewSet[string]()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetchList
-func (e *Engine) fetchList(key string, setWhenNotExist ...bool) (m List, err error) {
+func (e *Engine) fetchList(key string, setnx ...bool) (m List, err error) {
 	return fetch(e, key, func() List {
 		return structx.NewList[string]()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetchBitMap
-func (e *Engine) fetchBitMap(key string, setWhenNotExist ...bool) (bm BitMap, err error) {
+func (e *Engine) fetchBitMap(key string, setnx ...bool) (bm BitMap, err error) {
 	return fetch(e, key, func() BitMap {
 		return structx.NewBitmap()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetchZSet
-func (e *Engine) fetchZSet(key string, setWhenNotExist ...bool) (z ZSet, err error) {
+func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 	return fetch(e, key, func() ZSet {
 		return structx.NewZSet[string, float64, []byte]()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetch
-func fetch[T any](e *Engine, key string, new func() T, setWhenNotExist ...bool) (T, error) {
+func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (T, error) {
 	m, _, ok := e.m.Get(key)
 	if ok {
 		m, ok := m.(T)
@@ -1087,7 +1085,7 @@ func fetch[T any](e *Engine, key string, new func() T, setWhenNotExist ...bool) 
 		return v, base.ErrWrongType
 	}
 	vptr := new()
-	if len(setWhenNotExist) > 0 && setWhenNotExist[0] {
+	if len(setnx) > 0 && setnx[0] {
 		e.m.Set(key, vptr)
 	}
 

@@ -600,4 +600,22 @@ func TestClient(t *testing.T) {
 		assert.Nil(err)
 		assert.True(ok)
 	}
+
+	// Error
+	cli.Set("fakemap", []byte("123"))
+
+	res, err := cli.HLen("fakemap")
+	assert.Equal(res, 0)
+	assert.Equal(err, base.ErrWrongType)
+	{
+		res, err := cli.HKeys("fakemap")
+		var nilSlice []string
+		assert.Equal(res, nilSlice)
+		assert.Equal(err, base.ErrWrongType)
+	}
+	{
+		res, err := cli.HRemove("fakemap", "foo")
+		assert.False(res)
+		assert.Equal(err, base.ErrWrongType)
+	}
 }
