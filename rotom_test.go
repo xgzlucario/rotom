@@ -45,7 +45,15 @@ func TestDB(t *testing.T) {
 	// Set
 	db.Set("foo", []byte("bar"))
 	db.Set("num", []byte("1"))
+	db.SetEx("foo1", []byte("bar"), time.Second)
 	db.HSet("hm", "foo", []byte("bar"))
+
+	db.Scan(func(s string, a any, i int64) bool {
+		if s == "foo" || s == "num" || s == "hm" || s == "foo1" {
+			return true
+		}
+		return false
+	})
 
 	// Get
 	val, ts, err := db.GetBytes("hm")
@@ -72,7 +80,7 @@ func TestDB(t *testing.T) {
 	assert.Nil(err)
 
 	// Keys
-	assert.ElementsMatch(db.Keys(), []string{"foo", "num", "hm"})
+	assert.ElementsMatch(db.Keys(), []string{"foo", "num", "hm", "foo1"})
 
 	// Rename
 	ok := db.Rename("num", "num-new")
@@ -604,20 +612,37 @@ func TestClient(t *testing.T) {
 	}
 
 	// Error
-	cli.Set("fakemap", []byte("123"))
+	cli.Set("fake", []byte("123"))
 
-	res, err := cli.HLen("fakemap")
+	res, err := cli.HLen("fake")
 	assert.Equal(res, 0)
 	assert.Equal(err, base.ErrWrongType)
 	{
-		res, err := cli.HKeys("fakemap")
+		res, err := cli.HKeys("fake")
 		var nilSlice []string
 		assert.Equal(res, nilSlice)
 		assert.Equal(err, base.ErrWrongType)
 	}
 	{
-		res, err := cli.HRemove("fakemap", "foo")
+		res, err := cli.HRemove("fake", "foo")
 		assert.False(res)
 		assert.Equal(err, base.ErrWrongType)
+	}
+
+	cli.HSet("fakemap", "m1", []byte("m2"))
+	{
+		res, err := cli.Get("fakemap")
+		assert.Nil(res)
+		assert.Equal(err, base.ErrTypeAssert)
+	}
+	{
+		res, err := cli.HGet("fake", "none")
+		assert.Nil(res)
+		assert.Equal(err, base.ErrWrongType)
+	}
+	{
+		res, err := cli.HGet("fakemap", "none")
+		assert.Nil(res)
+		assert.Equal(err, base.ErrFieldNotFound)
 	}
 }

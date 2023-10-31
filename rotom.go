@@ -240,8 +240,8 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		str := strconv.Itoa(l.Len())
-		_, err = w.Write(s2b(&str))
+		str := base.FormatInt(l.Len())
+		_, err = w.Write(str)
 		return err
 	}},
 	// bitmap
@@ -318,7 +318,6 @@ const (
 
 	KB = 1024
 	MB = 1024 * KB
-	GB = 1024 * MB
 )
 
 // Type aliases for structx types.
@@ -1112,10 +1111,8 @@ func formatSize[T base.Integer](size T) string {
 		return fmt.Sprintf("%dB", size)
 	case size < MB:
 		return fmt.Sprintf("%.1fKB", float64(size)/KB)
-	case size < GB:
-		return fmt.Sprintf("%.1fMB", float64(size)/MB)
 	default:
-		return fmt.Sprintf("%.1fGB", float64(size)/GB)
+		return fmt.Sprintf("%.1fMB", float64(size)/MB)
 	}
 }
 
