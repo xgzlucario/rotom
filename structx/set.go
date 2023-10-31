@@ -24,21 +24,11 @@ func NewSet[T comparable](args ...T) *Set[T] {
 	return s
 }
 
-func (s *Set[T]) add(v T) bool {
-	if s.m.Has(v) {
-		return false
-	}
-	s.m.Put(v, struct{}{})
-
-	return true
-}
-
 // Add
-func (s *Set[T]) Add(v T) bool {
+func (s *Set[T]) Add(v T) {
 	s.Lock()
-	ok := s.add(v)
+	s.m.Put(v, struct{}{})
 	s.Unlock()
-	return ok
 }
 
 // Remove
@@ -157,18 +147,11 @@ func (s *Set[T]) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON
 func (s *Set[T]) UnmarshalJSON(src []byte) error {
-	s.Lock()
-	defer s.Unlock()
-
 	var tmp []T
 	if err := json.Unmarshal(src, &tmp); err != nil {
 		return err
 	}
-
-	s.m = NewMap[T, struct{}](len(tmp))
-	for _, v := range tmp {
-		s.m.Put(v, struct{}{})
-	}
+	*s = *NewSet(tmp...)
 
 	return nil
 }

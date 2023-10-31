@@ -87,28 +87,28 @@ var cmdTable = []Cmd{
 			e.m.SetTx(*b2s(args[1]), args[3], ts)
 
 		case TypeList:
-			var ls List
+			ls := structx.NewList[string]()
 			if err := ls.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
 			e.m.Set(*b2s(args[1]), ls)
 
 		case TypeSet:
-			var s Set
+			s := structx.NewSet[string]()
 			if err := s.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
 			e.m.Set(*b2s(args[1]), s)
 
 		case TypeMap:
-			var m Map
+			m := structx.NewSyncMap[string, []byte]()
 			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
 			e.m.Set(*b2s(args[1]), m)
 
 		case TypeBitmap:
-			var m BitMap
+			m := structx.NewBitmap()
 			if err := m.UnmarshalBinary(args[3]); err != nil {
 				return err
 			}
@@ -359,10 +359,10 @@ type Config struct {
 
 	SyncPolicy base.SyncPolicy // Data sync policy.
 
-	SyncInterval   time.Duration // Job for db sync to disk.
-	ShrinkInterval time.Duration // Job for shrink db file size.
+	SyncInterval   time.Duration // Sync to disk interval.
+	ShrinkInterval time.Duration // Shrink db file interval.
 
-	RunSkipLoadError bool // Starts when loading database file error.
+	RunSkipLoadError bool // Starts when loading db file error.
 
 	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
 }
@@ -372,11 +372,13 @@ type Engine struct {
 	sync.Mutex
 	*Config
 
-	// context
-	ctx    context.Context
-	cancel context.CancelFunc
+	// context.
+	ctx     context.Context
+	cancel  context.CancelFunc
+	tickers [3]*base.Ticker
 
-	loading bool // if db loading encode() not allowed.
+	// if db loading encode() not allowed.
+	loading bool
 
 	buf   *bytes.Buffer
 	rwbuf *bytes.Buffer
@@ -395,6 +397,7 @@ func Open(conf *Config) (*Engine, error) {
 		buf:     bytes.NewBuffer(nil),
 		rwbuf:   bytes.NewBuffer(nil),
 		m:       cache.New(conf.ShardCount),
+		tickers: [3]*base.Ticker{},
 	}
 
 	// load db from disk.
@@ -406,12 +409,14 @@ func Open(conf *Config) (*Engine, error) {
 
 	// runtime monitor.
 	if e.Logger != nil {
-		e.backend(time.Minute, func() { e.printRuntimeStats() })
+		e.tickers[0] = base.NewTicker(ctx, time.Minute, func() {
+			e.printRuntimeStats()
+		})
 	}
 
 	if e.SyncPolicy == base.EveryInterval {
 		// sync buffer to disk.
-		e.backend(e.SyncInterval, func() {
+		e.tickers[1] = base.NewTicker(ctx, e.SyncInterval, func() {
 			e.Lock()
 			n, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()
@@ -423,7 +428,7 @@ func Open(conf *Config) (*Engine, error) {
 		})
 
 		// shrink db.
-		e.backend(e.ShrinkInterval, func() {
+		e.tickers[2] = base.NewTicker(ctx, e.ShrinkInterval, func() {
 			e.Lock()
 			e.shrink()
 			e.Unlock()
@@ -1038,6 +1043,14 @@ func (e *Engine) shrink() {
 	e.logInfo("rotom rewrite done")
 }
 
+// ForceShrink force to shrink db file.
+func (e *Engine) ForceShrink() error {
+	if e.tickers[2] == nil {
+		return base.ErrUnSupportOperation
+	}
+	return e.tickers[2].ForceFunc()
+}
+
 // fetchMap
 func (e *Engine) fetchMap(key string, setnx ...bool) (m Map, err error) {
 	return fetch(e, key, func() Map {
@@ -1104,23 +1117,6 @@ func formatSize[T base.Integer](size T) string {
 	default:
 		return fmt.Sprintf("%.1fGB", float64(size)/GB)
 	}
-}
-
-// backend
-func (e *Engine) backend(t time.Duration, f func()) {
-	if t <= 0 {
-		panic("invalid interval")
-	}
-	go func() {
-		for {
-			select {
-			case <-time.After(t):
-				f()
-			case <-e.ctx.Done():
-				return
-			}
-		}
-	}()
 }
 
 // printRuntimeStats

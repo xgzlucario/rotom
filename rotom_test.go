@@ -432,7 +432,9 @@ func TestSetAndBitmap(t *testing.T) {
 	}
 
 	// load
+	assert.Nil(db.ForceShrink())
 	db.Close()
+	assert.Equal(db.ForceShrink(), base.ErrDatabaseClosed)
 
 	db, err = Open(cfg)
 	assert.Nil(err)

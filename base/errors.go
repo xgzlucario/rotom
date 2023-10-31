@@ -28,7 +28,8 @@ var (
 	ErrInvalidArgs     = errors.New("invalid args")
 	ErrInvalidResponse = errors.New("invalid response")
 
-	ErrDatabaseClosed = errors.New("database closed")
+	ErrDatabaseClosed     = errors.New("database closed")
+	ErrUnSupportOperation = errors.New("unsupport operation")
 
 	ErrEmptyList = errors.New("list is empty")
 )

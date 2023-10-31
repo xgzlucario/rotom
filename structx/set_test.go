@@ -11,8 +11,7 @@ func TestSet(t *testing.T) {
 	s := NewSet[int]()
 
 	for i := 0; i < 10; i++ {
-		assert.True(s.Add(i))
-		assert.False(s.Add(i))
+		s.Add(i)
 	}
 	assert.Equal(s.Len(), 10)
 
