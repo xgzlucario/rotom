@@ -198,6 +198,7 @@ var cmdTable = []Cmd{
 	}},
 	// set
 	{OpSAdd, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+		fmt.Println("hook SAdd", string(args[0]), string(args[1]))
 		// key, item
 		return e.SAdd(*b2s(args[0]), *b2s(args[1]))
 	}},
@@ -211,6 +212,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
+		fmt.Println("hook SHas", string(args[0]), string(args[1]), ok)
 		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpSCard, 1, func(e *Engine, args [][]byte, w base.Writer) error {
