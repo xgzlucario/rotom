@@ -306,12 +306,14 @@ func TestSet(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		assert.Nil(cli.SAdd("set", strconv.Itoa(i)))
-	}
 
-	for i := 200; i < 1200; i++ {
 		ok, err := cli.SHas("set", strconv.Itoa(i))
 		assert.Nil(err)
-		assert.Equal(ok, i < 1000, i)
+		assert.True(ok)
+
+		ok, err = cli.SHas("set", "none")
+		assert.Nil(err)
+		assert.False(ok)
 	}
 }
 
