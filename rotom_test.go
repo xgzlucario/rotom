@@ -104,7 +104,7 @@ func TestDB(t *testing.T) {
 	assert.Nil(db)
 }
 
-func TestSet(t *testing.T) {
+func TestCSet(t *testing.T) {
 	assert := assert.New(t)
 
 	cfg := DefaultConfig
@@ -282,6 +282,36 @@ func TestHMap(t *testing.T) {
 		var nilSlice []string
 		assert.Equal(res, nilSlice)
 		assert.Equal(err, base.ErrWrongType)
+	}
+}
+
+func TestSet(t *testing.T) {
+	assert := assert.New(t)
+
+	cfg := DefaultConfig
+	cfg.Path = gofakeit.UUID() + ".db"
+
+	db, err := Open(cfg)
+	assert.Nil(err)
+
+	port := gofakeit.Number(10000, 20000)
+	addr := "localhost:" + strconv.Itoa(port)
+
+	// listen
+	go db.Listen(addr)
+	time.Sleep(time.Second / 10)
+
+	cli, err := NewClient(addr)
+	assert.Nil(err)
+
+	for i := 0; i < 1000; i++ {
+		assert.Nil(cli.SAdd("set", strconv.Itoa(i)))
+	}
+
+	for i := 200; i < 1200; i++ {
+		ok, err := cli.SHas("set", strconv.Itoa(i))
+		assert.Nil(err)
+		assert.Equal(ok, i < 1000, i)
 	}
 }
 

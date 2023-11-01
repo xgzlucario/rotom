@@ -111,6 +111,63 @@ func (c *Client) HRemove(key, field string) (bool, error) {
 	return args[0] == _true, nil
 }
 
+// SAdd
+func (c *Client) SAdd(key, item string) error {
+	_, err := c.do(NewCodec(OpSAdd).Str(key).Str(item))
+	return err
+}
+
+// SRemove
+func (c *Client) SRemove(key, item string) error {
+	_, err := c.do(NewCodec(OpSRemove).Str(key).Str(item))
+	return err
+}
+
+// SHas
+func (c *Client) SHas(key, item string) (bool, error) {
+	args, err := c.do(NewCodec(OpSHas).Str(key).Str(item))
+	if err != nil {
+		return false, err
+	}
+	return args[0] == _true, nil
+}
+
+// SCard
+func (c *Client) SCard(key string) (int, error) {
+	args, err := c.do(NewCodec(OpSCard).Str(key))
+	if err != nil {
+		return 0, err
+	}
+	return base.ParseInt[int](args), nil
+}
+
+// SMembers
+func (c *Client) SMembers(key string) ([]string, error) {
+	args, err := c.do(NewCodec(OpSMembers).Str(key))
+	if err != nil {
+		return nil, err
+	}
+	return base.ParseStrSlice(args), nil
+}
+
+// SUnion
+func (c *Client) SUnion(dstKey string, srcKeys ...string) error {
+	_, err := c.do(NewCodec(OpSUnion).Str(dstKey).StrSlice(srcKeys))
+	return err
+}
+
+// SInter
+func (c *Client) SInter(dstKey string, srcKeys ...string) error {
+	_, err := c.do(NewCodec(OpSInter).Str(dstKey).StrSlice(srcKeys))
+	return err
+}
+
+// SDiff
+func (c *Client) SDiff(dstKey string, srcKeys ...string) error {
+	_, err := c.do(NewCodec(OpSDiff).Str(dstKey).StrSlice(srcKeys))
+	return err
+}
+
 // Close
 func (c *Client) Close() error {
 	return c.c.Close()

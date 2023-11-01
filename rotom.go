@@ -39,6 +39,9 @@ const (
 	// set
 	OpSAdd
 	OpSRemove
+	OpSHas
+	OpSCard
+	OpSMembers
 	OpSUnion
 	OpSInter
 	OpSDiff
@@ -202,17 +205,43 @@ var cmdTable = []Cmd{
 		// key, item
 		return e.SRemove(*b2s(args[0]), *b2s(args[1]))
 	}},
-	{OpSUnion, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSHas, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, item
+		ok, err := e.SHas(*b2s(args[0]), *b2s(args[1]))
+		if err != nil {
+			return err
+		}
+		return w.WriteByte(bool2byte(ok))
+	}},
+	{OpSCard, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		n, err := e.SCard(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(base.FormatInt(n))
+		return err
+	}},
+	{OpSMembers, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		s, err := e.fetchSet(*b2s(args[0]))
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(base.FormatStrSlice(s.ToSlice()))
+		return err
+	}},
+	{OpSUnion, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
 		srcKeys := base.ParseStrSlice(args[1])
 		return e.SUnion(*b2s(args[0]), srcKeys...)
 	}},
-	{OpSInter, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSInter, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
 		srcKeys := base.ParseStrSlice(args[1])
 		return e.SInter(*b2s(args[0]), srcKeys...)
 	}},
-	{OpSDiff, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSDiff, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
 		srcKeys := base.ParseStrSlice(args[1])
 		return e.SDiff(*b2s(args[0]), srcKeys...)
