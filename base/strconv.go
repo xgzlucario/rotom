@@ -1,5 +1,9 @@
 package base
 
+import (
+	"github.com/bytedance/sonic"
+)
+
 const (
 	VALID = 255
 	RADIX = VALID - 1
@@ -28,4 +32,15 @@ func ParseInt[T Integer](b []byte) T {
 		n = n*RADIX + T(b[i])
 	}
 	return n
+}
+
+func FormatStrSlice(ss []string) []byte {
+	src, _ := sonic.Marshal(ss)
+	return src
+}
+
+func ParseStrSlice(b []byte) []string {
+	var ss []string
+	sonic.Unmarshal(b, &ss)
+	return ss
 }

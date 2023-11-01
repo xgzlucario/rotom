@@ -200,20 +200,22 @@ var cmdTable = []Cmd{
 	}},
 	{OpSRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, item
-		_, err := e.SRemove(*b2s(args[0]), *b2s(args[1]))
-		return err
+		return e.SRemove(*b2s(args[0]), *b2s(args[1]))
 	}},
-	{OpSUnion, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.SUnion(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpSUnion, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.SUnion(*b2s(args[0]), srcKeys...)
 	}},
-	{OpSInter, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.SInter(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpSInter, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.SInter(*b2s(args[0]), srcKeys...)
 	}},
-	{OpSDiff, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.SDiff(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpSDiff, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.SDiff(*b2s(args[0]), srcKeys...)
 	}},
 	// list
 	{OpLPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
@@ -254,17 +256,20 @@ var cmdTable = []Cmd{
 		// key, offset
 		return e.BitFlip(*b2s(args[0]), base.ParseInt[uint32](args[1]))
 	}},
-	{OpBitOr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.BitOr(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpBitOr, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.BitOr(*b2s(args[0]), srcKeys...)
 	}},
-	{OpBitAnd, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.BitAnd(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpBitAnd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.BitAnd(*b2s(args[0]), srcKeys...)
 	}},
-	{OpBitXor, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.BitXor(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpBitXor, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.BitXor(*b2s(args[0]), srcKeys...)
 	}},
 	// zset
 	{OpZAdd, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
@@ -621,14 +626,15 @@ func (e *Engine) SAdd(key string, item string) error {
 }
 
 // SRemove
-func (e *Engine) SRemove(key string, item string) (bool, error) {
+func (e *Engine) SRemove(key string, item string) error {
 	s, err := e.fetchSet(key)
 	if err != nil {
-		return false, err
+		return err
 	}
 	e.encode(NewCodec(OpSRemove).Str(key).Str(item))
+	s.Remove(item)
 
-	return s.Remove(item), nil
+	return nil
 }
 
 // SHas
@@ -637,7 +643,7 @@ func (e *Engine) SHas(key string, item string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return s.Has(item), nil
+	return s.Contains(item), nil
 }
 
 // SCard
@@ -646,7 +652,7 @@ func (e *Engine) SCard(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return s.Len(), nil
+	return s.Cardinality(), nil
 }
 
 // SMembers
@@ -659,70 +665,49 @@ func (e *Engine) SMembers(key string) ([]string, error) {
 }
 
 // SUnion
-func (e *Engine) SUnion(key1, key2, dest string) error {
-	s1, err := e.fetchSet(key1)
-	if err != nil {
-		return err
+func (e *Engine) SUnion(dstKey string, srcKeys ...string) error {
+	s := structx.NewSet[string]()
+	for _, key := range srcKeys {
+		ts, err := e.fetchSet(key)
+		if err != nil {
+			return err
+		}
+		s.Union(ts)
 	}
-	s2, err := e.fetchSet(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpSUnion).Str(key1).Str(key2).Str(dest))
-
-	if key1 == dest {
-		s1.Union(s2)
-	} else if key2 == dest {
-		s2.Union(s1)
-	} else {
-		e.m.Set(dest, s1.Clone().Union(s2))
-	}
+	e.encode(NewCodec(OpSUnion).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, s)
 
 	return nil
 }
 
 // SInter
-func (e *Engine) SInter(key1, key2, dest string) error {
-	s1, err := e.fetchSet(key1)
-	if err != nil {
-		return err
+func (e *Engine) SInter(dstKey string, srcKeys ...string) error {
+	s := structx.NewSet[string]()
+	for _, key := range srcKeys {
+		ts, err := e.fetchSet(key)
+		if err != nil {
+			return err
+		}
+		s.Intersect(ts)
 	}
-	s2, err := e.fetchSet(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpSInter).Str(key1).Str(key2).Str(dest))
-
-	if key1 == dest {
-		s1.Intersect(s2)
-	} else if key2 == dest {
-		s2.Intersect(s1)
-	} else {
-		e.m.Set(dest, s1.Clone().Intersect(s2))
-	}
+	e.encode(NewCodec(OpSInter).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, s)
 
 	return nil
 }
 
 // SDiff
-func (e *Engine) SDiff(key1, key2, dest string) error {
-	s1, err := e.fetchSet(key1)
-	if err != nil {
-		return err
+func (e *Engine) SDiff(dstKey string, srcKeys ...string) error {
+	s := structx.NewSet[string]()
+	for _, key := range srcKeys {
+		ts, err := e.fetchSet(key)
+		if err != nil {
+			return err
+		}
+		s.Difference(ts)
 	}
-	s2, err := e.fetchSet(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpSDiff).Str(key1).Str(key2).Str(dest))
-
-	if key1 == dest {
-		s1.Difference(s2)
-	} else if key2 == dest {
-		s2.Difference(s1)
-	} else {
-		e.m.Set(dest, s1.Clone().Difference(s2))
-	}
+	e.encode(NewCodec(OpSDiff).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, s)
 
 	return nil
 }
@@ -826,70 +811,49 @@ func (e *Engine) BitFlip(key string, offset uint32) error {
 }
 
 // BitOr
-func (e *Engine) BitOr(key1, key2, dest string) error {
-	bm1, err := e.fetchBitMap(key1)
-	if err != nil {
-		return err
+func (e *Engine) BitOr(dstKey string, srcKeys ...string) error {
+	bm := structx.NewBitmap()
+	for _, key := range srcKeys {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.Or(tbm)
 	}
-	bm2, err := e.fetchBitMap(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpBitOr).Str(key1).Str(key2).Str(dest))
-
-	if key1 == dest {
-		bm1.Or(bm2)
-	} else if key2 == dest {
-		bm2.Or(bm1)
-	} else {
-		e.m.Set(dest, bm1.Clone().Or(bm2))
-	}
+	e.encode(NewCodec(OpBitOr).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, bm)
 
 	return nil
 }
 
 // BitXor
-func (e *Engine) BitXor(key1, key2, dest string) error {
-	bm1, err := e.fetchBitMap(key1)
-	if err != nil {
-		return err
+func (e *Engine) BitXor(dstKey string, srcKeys ...string) error {
+	bm := structx.NewBitmap()
+	for _, key := range srcKeys {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.Xor(tbm)
 	}
-	bm2, err := e.fetchBitMap(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpBitXor).Str(key1).Str(key2).Str(dest))
-
-	if key1 == dest {
-		bm1.Xor(bm2)
-	} else if key2 == dest {
-		bm2.Xor(bm1)
-	} else {
-		e.m.Set(dest, bm1.Clone().Xor(bm2))
-	}
+	e.encode(NewCodec(OpBitXor).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, bm)
 
 	return nil
 }
 
 // BitAnd
-func (e *Engine) BitAnd(key1, key2, dest string) error {
-	bm1, err := e.fetchBitMap(key1)
-	if err != nil {
-		return err
+func (e *Engine) BitAnd(dstKey string, srcKeys ...string) error {
+	bm := structx.NewBitmap()
+	for _, key := range srcKeys {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.And(tbm)
 	}
-	bm2, err := e.fetchBitMap(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpBitAnd).Str(key1).Str(key2).Str(dest))
-
-	if key1 == dest {
-		bm1.And(bm2)
-	} else if key2 == dest {
-		bm2.And(bm1)
-	} else {
-		e.m.Set(dest, bm1.Clone().And(bm2))
-	}
+	e.encode(NewCodec(OpBitAnd).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, bm)
 
 	return nil
 }
@@ -1042,8 +1006,8 @@ func (e *Engine) shrink() {
 	e.logInfo("rotom rewrite done")
 }
 
-// ForceShrink force to shrink db file.
-func (e *Engine) ForceShrink() error {
+// Shrink forced to shrink db file.
+func (e *Engine) Shrink() error {
 	if e.tickers[2] == nil {
 		return base.ErrUnSupportOperation
 	}

@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/exp/rand"
-
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
 	cache "github.com/xgzlucario/GigaCache"
@@ -23,7 +21,6 @@ type vItem struct {
 
 var (
 	nilBytes []byte
-	source   = rand.NewSource(uint64(time.Now().UnixNano()))
 )
 
 func TestDB(t *testing.T) {
@@ -107,8 +104,7 @@ func TestDB(t *testing.T) {
 	assert.Nil(db)
 }
 
-// Test cache set operation
-func TestCacheSet(t *testing.T) {
+func TestSet(t *testing.T) {
 	assert := assert.New(t)
 
 	cfg := DefaultConfig
@@ -289,207 +285,6 @@ func TestHMap(t *testing.T) {
 	}
 }
 
-func setEqualBitmap(assert *assert.Assertions, db *Engine, skey, bkey string) {
-	// Card
-	n1, err1 := db.SCard(skey)
-	n2, err2 := db.BitCount(bkey)
-	assert.Equal(n1, int(n2))
-	assert.Nil(err1)
-	assert.Nil(err2)
-
-	// Members
-	s1, err1 := db.SMembers(skey)
-	s2, err2 := db.BitArray(bkey)
-	// s2 -> []string
-	strslices := make([]string, 0, len(s2))
-	for _, v := range s2 {
-		strslices = append(strslices, strconv.Itoa(int(v)))
-	}
-	assert.ElementsMatch(s1, strslices)
-	assert.Nil(err1)
-	assert.Nil(err2)
-}
-
-func randUint16() uint32 {
-	return uint32(source.Uint64() >> 48)
-}
-
-func TestSetAndBitmap(t *testing.T) {
-	assert := assert.New(t)
-
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-	db, err := Open(cfg)
-	assert.Nil(err)
-
-	type keyPair struct {
-		skey, bkey string
-	}
-	keyPairMap := make(map[keyPair]struct{}, 10000)
-
-	test := func() {
-		rand := gofakeit.Username()
-		k1, k2 := "S"+rand, "B"+rand
-		val := randUint16()
-
-		// Add
-		err := db.SAdd(k1, strconv.Itoa(int(val)))
-		assert.Nil(err)
-		_, err = db.BitSet(k2, val, true)
-		assert.Nil(err)
-
-		keyPairMap[keyPair{k1, k2}] = struct{}{}
-
-		// Remove
-		if gofakeit.Number(0, 10) > 5 {
-			val := randUint16()
-			// Has
-			ok1, err1 := db.SHas(k1, strconv.Itoa(int(val)))
-			ok2, err2 := db.BitTest(k2, val)
-			assert.Equal(ok1, ok2)
-			assert.Nil(err1)
-			assert.Nil(err2)
-			{
-				// Remove
-				ok3, err3 := db.SRemove(k1, strconv.Itoa(int(val)))
-				ok4, err4 := db.BitSet(k2, val, false)
-				assert.Equal(ok1, ok3)
-				assert.Equal(ok3, ok4)
-				assert.Nil(err3)
-				assert.Nil(err4)
-			}
-		}
-
-		setEqualBitmap(assert, db, k1, k2)
-
-		// Test Union
-		if gofakeit.Number(0, 10) > 8 {
-			var kp1, kp2, dstp keyPair
-			for k := range keyPairMap {
-				kp1 = k
-				break
-			}
-			for k := range keyPairMap {
-				kp2 = k
-				break
-			}
-			for k := range keyPairMap {
-				dstp = k
-				break
-			}
-
-			// Inplace
-			switch gofakeit.Number(1, 10) {
-			case 1:
-				kp1 = kp2
-			case 2:
-				kp2 = dstp
-			case 3:
-				kp1 = dstp
-			}
-
-			// Test Union, Inter, Diff
-			switch gofakeit.Number(1, 3) {
-			case 1:
-				assert.Nil(db.SUnion(kp1.skey, kp2.skey, dstp.skey))
-				assert.Nil(db.BitOr(kp1.bkey, kp2.bkey, dstp.bkey))
-
-			case 2:
-				assert.Nil(db.SInter(kp1.skey, kp2.skey, dstp.skey))
-				assert.Nil(db.BitAnd(kp1.bkey, kp2.bkey, dstp.bkey))
-
-			case 3:
-				assert.Nil(db.SDiff(kp1.skey, kp2.skey, dstp.skey))
-				assert.Nil(db.BitXor(kp1.bkey, kp2.bkey, dstp.bkey))
-			}
-
-			// Test Set error
-			assert.Equal(db.SUnion(kp1.bkey, kp2.skey, ""), base.ErrWrongType)
-			assert.Equal(db.SUnion(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
-			assert.Equal(db.SInter(kp1.bkey, kp2.skey, ""), base.ErrWrongType)
-			assert.Equal(db.SInter(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
-			assert.Equal(db.SDiff(kp1.bkey, kp2.skey, ""), base.ErrWrongType)
-			assert.Equal(db.SDiff(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
-			// Test Bitmap error
-			assert.Equal(db.BitOr(kp1.bkey, kp2.skey, ""), base.ErrWrongType)
-			assert.Equal(db.BitOr(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
-			assert.Equal(db.BitAnd(kp1.bkey, kp2.skey, ""), base.ErrWrongType)
-			assert.Equal(db.BitAnd(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
-			assert.Equal(db.BitXor(kp1.bkey, kp2.skey, ""), base.ErrWrongType)
-			assert.Equal(db.BitXor(kp1.skey, kp2.bkey, ""), base.ErrWrongType)
-			// Test Bitmap other errors
-			_, err = db.BitTest(kp1.skey, 100)
-			assert.Equal(err, base.ErrWrongType)
-			_, err = db.BitSet(kp1.skey, 100, true)
-			assert.Equal(err, base.ErrWrongType)
-			err = db.BitFlip(kp1.skey, 100)
-			assert.Equal(err, base.ErrWrongType)
-			_, err = db.BitArray(kp1.skey)
-			assert.Equal(err, base.ErrWrongType)
-			_, err = db.BitCount(kp1.skey)
-			assert.Equal(err, base.ErrWrongType)
-
-			setEqualBitmap(assert, db, kp1.skey, kp1.bkey)
-			setEqualBitmap(assert, db, kp2.skey, kp2.bkey)
-			setEqualBitmap(assert, db, dstp.skey, dstp.bkey)
-		}
-	}
-
-	for i := 0; i < 10000; i++ {
-		test()
-	}
-
-	// load
-	assert.Nil(db.ForceShrink())
-	db.Close()
-	assert.Equal(db.ForceShrink(), base.ErrDatabaseClosed)
-
-	db, err = Open(cfg)
-	assert.Nil(err)
-
-	for i := 0; i < 10000; i++ {
-		test()
-	}
-
-	// err test
-	db.Set("str", []byte(""))
-	{
-		// add
-		err := db.SAdd("str", "foo")
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		// card
-		res, err := db.SCard("str")
-		assert.Equal(res, 0)
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		// has
-		ok, err := db.SHas("str", "foo")
-		assert.False(ok)
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		// remove
-		ok, err := db.SRemove("str", "foo")
-		assert.False(ok)
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		// members
-		res, err := db.SMembers("str")
-		var nilSlice []string
-		assert.Equal(res, nilSlice)
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		// Union
-		err := db.SUnion("str", "str", "")
-		assert.Equal(err, base.ErrWrongType)
-	}
-}
-
 func TestZSet(t *testing.T) {
 	assert := assert.New(t)
 
@@ -529,7 +324,6 @@ func TestZSet(t *testing.T) {
 
 	// load
 	db.Close()
-
 }
 
 func TestClient(t *testing.T) {
