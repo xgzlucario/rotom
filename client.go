@@ -2,7 +2,6 @@ package rotom
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"time"
 
@@ -130,7 +129,6 @@ func (c *Client) SHas(key, item string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	fmt.Println(args[0])
 	return args[0] == _true, nil
 }
 

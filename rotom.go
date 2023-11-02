@@ -87,35 +87,35 @@ var cmdTable = []Cmd{
 
 		switch vType {
 		case TypeString:
-			e.m.SetTx(*b2s(args[1]), args[3], ts)
+			e.m.SetTx(string(args[1]), args[3], ts)
 
 		case TypeList:
 			ls := structx.NewList[string]()
 			if err := ls.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(*b2s(args[1]), ls)
+			e.m.Set(string(args[1]), ls)
 
 		case TypeSet:
 			s := structx.NewSet[string]()
 			if err := s.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(*b2s(args[1]), s)
+			e.m.Set(string(args[1]), s)
 
 		case TypeMap:
 			m := structx.NewSyncMap[string, []byte]()
 			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(*b2s(args[1]), m)
+			e.m.Set(string(args[1]), m)
 
 		case TypeBitmap:
 			m := structx.NewBitmap()
 			if err := m.UnmarshalBinary(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(*b2s(args[1]), m)
+			e.m.Set(string(args[1]), m)
 
 		default:
 			return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, vType)
@@ -125,7 +125,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpGet, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		val, _, err := e.GetBytes(*b2s(args[0]))
+		val, _, err := e.GetBytes(string(args[0]))
 		if err != nil {
 			return err
 		}
@@ -134,12 +134,12 @@ var cmdTable = []Cmd{
 	}},
 	{OpRemove, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		ok := e.Remove(*b2s(args[0]))
+		ok := e.Remove(string(args[0]))
 		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpRename, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// old, new
-		ok := e.Rename(*b2s(args[0]), *b2s(args[1]))
+		ok := e.Rename(string(args[0]), string(args[1]))
 		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
@@ -150,15 +150,15 @@ var cmdTable = []Cmd{
 	// map
 	{OpHSet, 3, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, field, val
-		return e.HSet(*b2s(args[0]), *b2s(args[1]), args[2])
+		return e.HSet(string(args[0]), string(args[1]), args[2])
 	}},
 	{OpHGet, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, field
-		m, err := e.fetchMap(*b2s(args[0]))
+		m, err := e.fetchMap(string(args[0]))
 		if err != nil {
 			return err
 		}
-		val, ok := m.Get(*b2s(args[1]))
+		val, ok := m.Get(string(args[1]))
 		if !ok {
 			return base.ErrFieldNotFound
 		}
@@ -167,7 +167,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpHLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		m, err := e.fetchMap(*b2s(args[0]))
+		m, err := e.fetchMap(string(args[0]))
 		if err != nil {
 			return err
 		}
@@ -177,7 +177,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpHKeys, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		m, err := e.fetchMap(*b2s(args[0]))
+		m, err := e.fetchMap(string(args[0]))
 		if err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpHRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, field
-		ok, err := e.HRemove(*b2s(args[0]), *b2s(args[1]))
+		ok, err := e.HRemove(string(args[0]), string(args[1]))
 		if err != nil {
 			return err
 		}
@@ -198,26 +198,24 @@ var cmdTable = []Cmd{
 	}},
 	// set
 	{OpSAdd, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
-		fmt.Println("hook SAdd", string(args[0]), string(args[1]))
 		// key, item
-		return e.SAdd(*b2s(args[0]), *b2s(args[1]))
+		return e.SAdd(string(args[0]), string(args[1]))
 	}},
 	{OpSRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, item
-		return e.SRemove(*b2s(args[0]), *b2s(args[1]))
+		return e.SRemove(string(args[0]), string(args[1]))
 	}},
 	{OpSHas, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
-		ok, err := e.SHas(*b2s(args[0]), *b2s(args[1]))
+		ok, err := e.SHas(string(args[0]), string(args[1]))
 		if err != nil {
 			return err
 		}
-		fmt.Println("hook SHas", string(args[0]), string(args[1]), ok)
 		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpSCard, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		n, err := e.SCard(*b2s(args[0]))
+		n, err := e.SCard(string(args[0]))
 		if err != nil {
 			return err
 		}
@@ -226,7 +224,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpSMembers, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		s, err := e.fetchSet(*b2s(args[0]))
+		s, err := e.fetchSet(string(args[0]))
 		if err != nil {
 			return err
 		}
@@ -236,40 +234,40 @@ var cmdTable = []Cmd{
 	{OpSUnion, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
 		srcKeys := base.ParseStrSlice(args[1])
-		return e.SUnion(*b2s(args[0]), srcKeys...)
+		return e.SUnion(string(args[0]), srcKeys...)
 	}},
 	{OpSInter, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
 		srcKeys := base.ParseStrSlice(args[1])
-		return e.SInter(*b2s(args[0]), srcKeys...)
+		return e.SInter(string(args[0]), srcKeys...)
 	}},
 	{OpSDiff, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
 		srcKeys := base.ParseStrSlice(args[1])
-		return e.SDiff(*b2s(args[0]), srcKeys...)
+		return e.SDiff(string(args[0]), srcKeys...)
 	}},
 	// list
 	{OpLPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
-		return e.LPush(*b2s(args[0]), *b2s(args[1]))
+		return e.LPush(string(args[0]), string(args[1]))
 	}},
 	{OpLPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		_, err := e.LPop(*b2s(args[0]))
+		_, err := e.LPop(string(args[0]))
 		return err
 	}},
 	{OpRPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
-		return e.RPush(*b2s(args[0]), *b2s(args[1]))
+		return e.RPush(string(args[0]), string(args[1]))
 	}},
 	{OpRPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		_, err := e.RPop(*b2s(args[0]))
+		_, err := e.RPop(string(args[0]))
 		return err
 	}},
 	{OpLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		l, err := e.fetchList(*b2s(args[0]))
+		l, err := e.fetchList(string(args[0]))
 		if err != nil {
 			return err
 		}
@@ -280,49 +278,49 @@ var cmdTable = []Cmd{
 	// bitmap
 	{OpBitSet, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset, val
-		_, err := e.BitSet(*b2s(args[0]), base.ParseInt[uint32](args[1]), args[2][0] == _true)
+		_, err := e.BitSet(string(args[0]), base.ParseInt[uint32](args[1]), args[2][0] == _true)
 		return err
 	}},
 	{OpBitFlip, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset
-		return e.BitFlip(*b2s(args[0]), base.ParseInt[uint32](args[1]))
+		return e.BitFlip(string(args[0]), base.ParseInt[uint32](args[1]))
 	}},
 	{OpBitOr, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// dstKey, srcKeys...
 		srcKeys := base.ParseStrSlice(args[1])
-		return e.BitOr(*b2s(args[0]), srcKeys...)
+		return e.BitOr(string(args[0]), srcKeys...)
 	}},
 	{OpBitAnd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// dstKey, srcKeys...
 		srcKeys := base.ParseStrSlice(args[1])
-		return e.BitAnd(*b2s(args[0]), srcKeys...)
+		return e.BitAnd(string(args[0]), srcKeys...)
 	}},
 	{OpBitXor, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// dstKey, srcKeys...
 		srcKeys := base.ParseStrSlice(args[1])
-		return e.BitXor(*b2s(args[0]), srcKeys...)
+		return e.BitXor(string(args[0]), srcKeys...)
 	}},
 	// zset
 	{OpZAdd, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, score, val
-		s, err := strconv.ParseFloat(*b2s(args[2]), 64)
+		s, err := strconv.ParseFloat(string(args[2]), 64)
 		if err != nil {
 			return err
 		}
-		return e.ZAdd(*b2s(args[0]), *b2s(args[1]), s, args[3])
+		return e.ZAdd(string(args[0]), string(args[1]), s, args[3])
 	}},
 	{OpZIncr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, score, val
-		s, err := strconv.ParseFloat(*b2s(args[2]), 64)
+		s, err := strconv.ParseFloat(string(args[2]), 64)
 		if err != nil {
 			return err
 		}
-		_, err = e.ZIncr(*b2s(args[0]), *b2s(args[1]), s)
+		_, err = e.ZIncr(string(args[0]), string(args[1]), s)
 		return err
 	}},
 	{OpZRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, val
-		return e.ZRemove(*b2s(args[0]), *b2s(args[1]))
+		return e.ZRemove(string(args[0]), string(args[1]))
 	}},
 	// others
 	{OpMarshalBytes, 1, func(e *Engine, args [][]byte, w base.Writer) error {
