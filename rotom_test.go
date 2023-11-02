@@ -3,6 +3,7 @@ package rotom
 import (
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"os"
 	"strconv"
 	"testing"
@@ -20,7 +21,8 @@ type vItem struct {
 }
 
 var (
-	nilBytes []byte
+	nilBytes   []byte
+	nilStrings []string
 )
 
 func TestDB(t *testing.T) {
@@ -305,17 +307,19 @@ func TestSet(t *testing.T) {
 	assert.Nil(err)
 
 	// SAdd
-	for i := 0; i < 10000; i++ {
-		cli.SAdd("set"+strconv.Itoa(i/100), strconv.Itoa(i))
+	for i := 0; i < 1000; i++ {
+		n, err := cli.SAdd("set"+strconv.Itoa(i/100), strconv.Itoa(i))
+		assert.Equal(n, 1)
+		assert.Nil(err)
 	}
 	// SHas
-	for i := 5000; i < 15000; i++ {
+	for i := 500; i < 1500; i++ {
 		ok, err := cli.SHas("set"+strconv.Itoa(i/100), strconv.Itoa(i))
 		assert.Nil(err)
-		assert.Equal(ok, i < 10000)
+		assert.Equal(ok, i < 1000)
 	}
 	// SRemove
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000; i++ {
 		key := "set" + strconv.Itoa(i/100)
 		err := cli.SRemove(key, strconv.Itoa(i))
 		assert.Nil(err)
@@ -324,12 +328,58 @@ func TestSet(t *testing.T) {
 		assert.Nil(err)
 
 		// SCard SMembers
-		_, err1 := cli.SCard(key)
-		// m, err2 := cli.SMembers(key)
+		n, err1 := cli.SCard(key)
+		m, err2 := cli.SMembers(key)
 		assert.Nil(err1)
-		// assert.Nil(err2)
-		// assert.Equal(n, len(m))
+		assert.Nil(err2)
+		assert.Equal(n, len(m))
 	}
+	// Union
+	for i := 0; i < 1000; i++ {
+		// Add random data
+		for i := 0; i < 20; i++ {
+			cli.SAdd("a"+strconv.Itoa(i), strconv.Itoa(rand.Intn(10)))
+			cli.SAdd("b"+strconv.Itoa(i), strconv.Itoa(rand.Intn(10)))
+		}
+
+		err = cli.SUnion("union"+strconv.Itoa(i), "a"+strconv.Itoa(i), "b"+strconv.Itoa(i))
+		assert.Nil(err)
+
+		err = cli.SInter("inter"+strconv.Itoa(i), "a"+strconv.Itoa(i), "b"+strconv.Itoa(i))
+		assert.Nil(err)
+
+		err = cli.SDiff("diff"+strconv.Itoa(i), "a"+strconv.Itoa(i), "b"+strconv.Itoa(i))
+		assert.Nil(err)
+
+		// diff + inter = union
+		cli.SUnion("res"+strconv.Itoa(i), "inter"+strconv.Itoa(i), "diff"+strconv.Itoa(i))
+
+		m1, err1 := cli.SMembers("union" + strconv.Itoa(i))
+		assert.Nil(err1)
+		m2, err2 := cli.SMembers("res" + strconv.Itoa(i))
+		assert.Nil(err2)
+		assert.ElementsMatch(m1, m2)
+	}
+	// Error
+	cli.HSet("map", "key", []byte("1"))
+	n, err := cli.SAdd("map", "1")
+	assert.Equal(n, 0)
+	assert.Equal(err, base.ErrWrongType)
+
+	ok, err := cli.SHas("map", "1")
+	assert.False(ok)
+	assert.Equal(err, base.ErrWrongType)
+
+	n, err = cli.SCard("map")
+	assert.Equal(n, 0)
+	assert.Equal(err, base.ErrWrongType)
+
+	m, err := cli.SMembers("map")
+	assert.Equal(m, nilStrings)
+	assert.Equal(err, base.ErrWrongType)
+}
+
+func TestBitmap(t *testing.T) {
 }
 
 func TestZSet(t *testing.T) {

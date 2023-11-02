@@ -197,9 +197,14 @@ var cmdTable = []Cmd{
 		return w.WriteByte(bool2byte(ok))
 	}},
 	// set
-	{OpSAdd, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
-		// key, item
-		return e.SAdd(string(args[0]), string(args[1]))
+	{OpSAdd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, items
+		n, err := e.SAdd(string(args[0]), base.ParseStrSlice(args[1])...)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(base.FormatInt(n))
+		return err
 	}},
 	{OpSRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, item
@@ -643,15 +648,13 @@ func (e *Engine) HKeys(key string) ([]string, error) {
 }
 
 // SAdd
-func (e *Engine) SAdd(key string, item string) error {
+func (e *Engine) SAdd(key string, items ...string) (int, error) {
 	s, err := e.fetchSet(key, true)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	e.encode(NewCodec(OpSAdd).Str(key).Str(item))
-	s.Add(item)
-
-	return nil
+	e.encode(NewCodec(OpSAdd).Str(key).StrSlice(items))
+	return s.Append(items...), nil
 }
 
 // SRemove
@@ -662,17 +665,29 @@ func (e *Engine) SRemove(key string, item string) error {
 	}
 	e.encode(NewCodec(OpSRemove).Str(key).Str(item))
 	s.Remove(item)
-
 	return nil
 }
 
-// SHas
+// SHas returns whether the given items are all in the set.
 func (e *Engine) SHas(key string, item string) (bool, error) {
 	s, err := e.fetchSet(key)
 	if err != nil {
 		return false, err
 	}
 	return s.Contains(item), nil
+}
+
+// SPop
+func (e *Engine) SPop(key string) (string, error) {
+	s, err := e.fetchSet(key)
+	if err != nil {
+		return "", err
+	}
+	res, ok := s.Pop()
+	if !ok {
+		return "", base.ErrEmptySet
+	}
+	return res, nil
 }
 
 // SCard
@@ -695,8 +710,13 @@ func (e *Engine) SMembers(key string) ([]string, error) {
 
 // SUnion
 func (e *Engine) SUnion(dstKey string, srcKeys ...string) error {
-	s := structx.NewSet[string]()
-	for _, key := range srcKeys {
+	srcSet, err := e.fetchSet(srcKeys[0])
+	if err != nil {
+		return err
+	}
+	s := srcSet.Clone()
+
+	for _, key := range srcKeys[1:] {
 		ts, err := e.fetchSet(key)
 		if err != nil {
 			return err
@@ -711,8 +731,13 @@ func (e *Engine) SUnion(dstKey string, srcKeys ...string) error {
 
 // SInter
 func (e *Engine) SInter(dstKey string, srcKeys ...string) error {
-	s := structx.NewSet[string]()
-	for _, key := range srcKeys {
+	srcSet, err := e.fetchSet(srcKeys[0])
+	if err != nil {
+		return err
+	}
+	s := srcSet.Clone()
+
+	for _, key := range srcKeys[1:] {
 		ts, err := e.fetchSet(key)
 		if err != nil {
 			return err
@@ -727,8 +752,13 @@ func (e *Engine) SInter(dstKey string, srcKeys ...string) error {
 
 // SDiff
 func (e *Engine) SDiff(dstKey string, srcKeys ...string) error {
-	s := structx.NewSet[string]()
-	for _, key := range srcKeys {
+	srcSet, err := e.fetchSet(srcKeys[0])
+	if err != nil {
+		return err
+	}
+	s := srcSet.Clone()
+
+	for _, key := range srcKeys[1:] {
 		ts, err := e.fetchSet(key)
 		if err != nil {
 			return err

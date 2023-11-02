@@ -20,7 +20,7 @@ type Client struct {
 func NewClient(addr string) (c *Client, err error) {
 	c = &Client{}
 	c.c, err = net.Dial("tcp", addr)
-	c.b = make([]byte, 512)
+	c.b = make([]byte, 4096)
 	return
 }
 
@@ -111,10 +111,13 @@ func (c *Client) HRemove(key, field string) (bool, error) {
 	return args[0] == _true, nil
 }
 
-// SAdd
-func (c *Client) SAdd(key, item string) error {
-	_, err := c.do(NewCodec(OpSAdd).Str(key).Str(item))
-	return err
+// SAdd Append items into set, and returns the number of new items added.
+func (c *Client) SAdd(key string, items ...string) (int, error) {
+	args, err := c.do(NewCodec(OpSAdd).Str(key).StrSlice(items))
+	if err != nil {
+		return 0, err
+	}
+	return base.ParseInt[int](args), nil
 }
 
 // SRemove

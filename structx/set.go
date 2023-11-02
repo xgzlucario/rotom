@@ -31,7 +31,7 @@ func (s *Set[T]) Intersect(other *Set[T]) {
 
 // Difference
 func (s *Set[T]) Difference(other *Set[T]) {
-	s.Set = s.Set.Difference(other.Set)
+	s.Set = s.Set.SymmetricDifference(other.Set)
 }
 
 // MarshalJSON
