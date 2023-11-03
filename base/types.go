@@ -35,6 +35,17 @@ type Writer interface {
 	WriteByte(byte) error
 }
 
+// NullWriter
+type NullWriter struct{}
+
+func (NullWriter) Write([]byte) (int, error) {
+	return 0, nil
+}
+
+func (NullWriter) WriteByte(byte) error {
+	return nil
+}
+
 // SyncPolicy represents how often data is synced to disk.
 type SyncPolicy byte
 

@@ -209,81 +209,119 @@ func FuzzSet(f *testing.F) {
 	})
 }
 
-func TestHMap(t *testing.T) {
+func TestHmap(t *testing.T) {
 	assert := assert.New(t)
 
-	db, err := Open(NoPersistentConfig)
-	if err != nil {
-		panic(err)
+	cfg := DefaultConfig
+	cfg.Path = gofakeit.UUID() + ".db"
+
+	db, err := Open(cfg)
+	assert.Nil(err)
+
+	port := gofakeit.Number(10000, 20000)
+	addr := "localhost:" + strconv.Itoa(port)
+
+	// listen
+	go db.Listen(addr)
+	time.Sleep(time.Second / 20)
+
+	cli, err := NewClient(addr)
+	assert.Nil(err)
+	defer cli.Close()
+
+	for i := 0; i < 10000; i++ {
+		// Set
+		key := fmt.Sprintf("key-%d", i)
+		err := cli.Set(key, []byte(key))
+		assert.Nil(err)
+
+		// Get
+		res, err := cli.Get(key)
+		assert.Nil(err)
+		assert.Equal(res, []byte(key))
+
+		// SetEx
+		key = fmt.Sprintf("key-ex-%d", i)
+		err = cli.SetEx(key, []byte(key), time.Minute)
+		assert.Nil(err)
+
+		// Rename
+		newKey := fmt.Sprintf("key-new-%d", i)
+		ok, err := cli.Rename(key, newKey)
+		assert.Nil(err)
+		assert.True(ok)
+
+		// Remove
+		ok, err = cli.Remove(newKey)
+		assert.Nil(err)
+		assert.True(ok)
+
+		// Len
+		num, err := cli.Len()
+		assert.Nil(err)
+		assert.Equal(num, uint64(i+1))
 	}
 
 	for i := 0; i < 10000; i++ {
-		// gen random data
-		key := gofakeit.UUID()
-		field := gofakeit.UUID()
-		value := []byte(gofakeit.Username())
-		op := gofakeit.Number(0, 100)
-
-		// test
-		err := db.HSet(key, field, value)
+		// HSet
+		key := fmt.Sprintf("key-%d", i)
+		err := cli.HSet("exmap", key, []byte(key))
 		assert.Nil(err)
 
-		res, err := db.HGet(key, field)
-		assert.Equal(res, value)
+		// HGet
+		res, err := cli.HGet("exmap", key)
 		assert.Nil(err)
+		assert.Equal(res, []byte(key))
 
-		if op%3 == 0 {
-			ok, err := db.HRemove(key, field)
-			assert.Nil(err)
-			assert.True(ok)
+		// HLen
+		num, err := cli.HLen("exmap")
+		assert.Nil(err)
+		assert.Equal(num, 1)
 
-			res, err = db.HGet(key, field)
-			assert.Equal(res, nilBytes)
-			assert.Equal(err, base.ErrFieldNotFound)
-		}
+		// HKeys
+		keys, err := cli.HKeys("exmap")
+		assert.Nil(err)
+		assert.ElementsMatch(keys, []string{key})
 
-		if op%5 == 0 {
-			keys, err1 := db.HKeys(key)
-			length, err2 := db.HLen(key)
-
-			assert.Equal(err1, nil)
-			assert.Equal(err2, nil)
-
-			assert.Equal(len(keys), int(length))
-		}
+		// HRemove
+		ok, err := cli.HRemove("exmap", key)
+		assert.Nil(err)
+		assert.True(ok)
 	}
 
-	// err test
-	db.Set("str", []byte(""))
+	// Error
+	cli.Set("fake", []byte("123"))
+
+	res, err := cli.HLen("fake")
+	assert.Equal(res, 0)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
 	{
-		// get
-		res, err := db.HGet("str", "foo")
-		assert.Equal(res, nilBytes)
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		// len
-		res, err := db.HLen("str")
-		assert.Equal(res, 0)
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		// set
-		err := db.HSet("str", "foo", []byte("bar"))
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		// remove
-		ok, err := db.HRemove("str", "foo")
-		assert.Equal(err, base.ErrWrongType)
-		assert.False(ok)
-	}
-	{
-		// keys
-		res, err := db.HKeys("str")
+		res, err := cli.HKeys("fake")
 		var nilSlice []string
 		assert.Equal(res, nilSlice)
-		assert.Equal(err, base.ErrWrongType)
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+	}
+	{
+		res, err := cli.HRemove("fake", "foo")
+		assert.False(res)
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+	}
+
+	cli.HSet("fakemap", "m1", []byte("m2"))
+	{
+		res, err := cli.Get("fakemap")
+		assert.Nil(res)
+		assert.Equal(err, base.ErrTypeAssert)
+	}
+	{
+		res, err := cli.HGet("fake", "none")
+		assert.Nil(res)
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+	}
+	{
+		res, err := cli.HGet("fakemap", "none")
+		assert.Nil(res)
+		assert.Equal(err, base.ErrFieldNotFound)
 	}
 }
 
@@ -301,7 +339,7 @@ func TestSet(t *testing.T) {
 
 	// listen
 	go db.Listen(addr)
-	time.Sleep(time.Second / 10)
+	time.Sleep(time.Second / 20)
 
 	cli, err := NewClient(addr)
 	assert.Nil(err)
@@ -364,22 +402,63 @@ func TestSet(t *testing.T) {
 	cli.HSet("map", "key", []byte("1"))
 	n, err := cli.SAdd("map", "1")
 	assert.Equal(n, 0)
-	assert.Equal(err, base.ErrWrongType)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	ok, err := cli.SHas("map", "1")
 	assert.False(ok)
-	assert.Equal(err, base.ErrWrongType)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	n, err = cli.SCard("map")
 	assert.Equal(n, 0)
-	assert.Equal(err, base.ErrWrongType)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	m, err := cli.SMembers("map")
 	assert.Equal(m, nilStrings)
-	assert.Equal(err, base.ErrWrongType)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	db.Shrink()
+	db.Close()
+
+	// Load
+	// _, err = Open(cfg)
+	// assert.Nil(err)
 }
 
 func TestBitmap(t *testing.T) {
+	assert := assert.New(t)
+
+	cfg := DefaultConfig
+	cfg.Path = gofakeit.UUID() + ".db"
+
+	db, err := Open(cfg)
+	assert.Nil(err)
+
+	port := gofakeit.Number(10000, 20000)
+	addr := "localhost:" + strconv.Itoa(port)
+
+	// listen
+	go db.Listen(addr)
+	time.Sleep(time.Second / 20)
+
+	cli, err := NewClient(addr)
+	assert.Nil(err)
+
+	for i := 0; i < 1000; i++ {
+		key := strconv.Itoa(i / 100)
+
+		assert.Nil(cli.BitSet(key, uint32(i), true))
+
+		ok, err := cli.BitTest(key, uint32(i))
+		assert.True(ok)
+		assert.Nil(err)
+	}
+
+	db.Shrink()
+	db.Close()
+
+	// Load
+	_, err = Open(cfg)
+	assert.Nil(err)
 }
 
 func TestZSet(t *testing.T) {
@@ -411,129 +490,14 @@ func TestZSet(t *testing.T) {
 	db.SAdd("set", "1")
 
 	err = db.ZAdd("set", "key", 1, nil)
-	assert.Equal(err, base.ErrWrongType)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	_, err = db.ZIncr("set", "key", 1)
-	assert.Equal(err, base.ErrWrongType)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	err = db.ZRemove("set", "key")
-	assert.Equal(err, base.ErrWrongType)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	// load
 	db.Close()
-}
-
-func TestClient(t *testing.T) {
-	assert := assert.New(t)
-
-	db, err := Open(NoPersistentConfig)
-	assert.Nil(err)
-
-	port := gofakeit.Number(10000, 20000)
-	addr := "localhost:" + strconv.Itoa(port)
-
-	// listen
-	go db.Listen(addr)
-	time.Sleep(time.Second / 10)
-
-	cli, err := NewClient(addr)
-	assert.Nil(err)
-	defer cli.Close()
-
-	for i := 0; i < 10000; i++ {
-		// Set
-		key := fmt.Sprintf("key-%d", i)
-		res, err := cli.Set(key, []byte(key))
-		assert.Nil(err)
-		assert.Equal(res, []byte{})
-
-		// Get
-		res, err = cli.Get(key)
-		assert.Nil(err)
-		assert.Equal(res, []byte(key))
-
-		// SetEx
-		key = fmt.Sprintf("key-ex-%d", i)
-		res, err = cli.SetEx(key, []byte(key), time.Minute)
-		assert.Nil(err)
-		assert.Equal(res, []byte{})
-
-		// Rename
-		newKey := fmt.Sprintf("key-new-%d", i)
-		ok, err := cli.Rename(key, newKey)
-		assert.Nil(err)
-		assert.True(ok)
-
-		// Remove
-		ok, err = cli.Remove(newKey)
-		assert.Nil(err)
-		assert.True(ok)
-
-		// Len
-		num, err := cli.Len()
-		assert.Nil(err)
-		assert.Equal(num, uint64(i+1))
-	}
-
-	for i := 0; i < 10000; i++ {
-		// HSet
-		key := fmt.Sprintf("key-%d", i)
-		err := cli.HSet("exmap", key, []byte(key))
-		assert.Nil(err)
-
-		// HGet
-		res, err := cli.HGet("exmap", key)
-		assert.Nil(err)
-		assert.Equal(res, []byte(key))
-
-		// HLen
-		num, err := cli.HLen("exmap")
-		assert.Nil(err)
-		assert.Equal(num, 1)
-
-		// HKeys
-		keys, err := cli.HKeys("exmap")
-		assert.Nil(err)
-		assert.ElementsMatch(keys, []string{key})
-
-		// HRemove
-		ok, err := cli.HRemove("exmap", key)
-		assert.Nil(err)
-		assert.True(ok)
-	}
-
-	// Error
-	cli.Set("fake", []byte("123"))
-
-	res, err := cli.HLen("fake")
-	assert.Equal(res, 0)
-	assert.Equal(err, base.ErrWrongType)
-	{
-		res, err := cli.HKeys("fake")
-		var nilSlice []string
-		assert.Equal(res, nilSlice)
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		res, err := cli.HRemove("fake", "foo")
-		assert.False(res)
-		assert.Equal(err, base.ErrWrongType)
-	}
-
-	cli.HSet("fakemap", "m1", []byte("m2"))
-	{
-		res, err := cli.Get("fakemap")
-		assert.Nil(res)
-		assert.Equal(err, base.ErrTypeAssert)
-	}
-	{
-		res, err := cli.HGet("fake", "none")
-		assert.Nil(res)
-		assert.Equal(err, base.ErrWrongType)
-	}
-	{
-		res, err := cli.HGet("fakemap", "none")
-		assert.Nil(res)
-		assert.Equal(err, base.ErrFieldNotFound)
-	}
 }

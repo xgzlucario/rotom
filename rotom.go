@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/panjf2000/gnet/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
@@ -53,6 +53,7 @@ const (
 	OpLLen
 	// bitmap
 	OpBitSet
+	OpBitTest
 	OpBitFlip
 	OpBitOr
 	OpBitAnd
@@ -154,38 +155,29 @@ var cmdTable = []Cmd{
 	}},
 	{OpHGet, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, field
-		m, err := e.fetchMap(string(args[0]))
+		res, err := e.HGet(string(args[0]), string(args[1]))
 		if err != nil {
 			return err
 		}
-		val, ok := m.Get(string(args[1]))
-		if !ok {
-			return base.ErrFieldNotFound
-		}
-		_, err = w.Write(val)
+		_, err = w.Write(res)
 		return err
 	}},
 	{OpHLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		m, err := e.fetchMap(string(args[0]))
+		n, err := e.HLen(string(args[0]))
 		if err != nil {
 			return err
 		}
-		res := base.FormatInt[int](m.Len())
-		_, err = w.Write(res)
+		_, err = w.Write(base.FormatInt(n))
 		return err
 	}},
 	{OpHKeys, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		m, err := e.fetchMap(string(args[0]))
+		res, err := e.HKeys(string(args[0]))
 		if err != nil {
 			return err
 		}
-		src, err := sonic.Marshal(m.Keys())
-		if err != nil {
-			return err
-		}
-		_, err = w.Write(src)
+		_, err = w.Write(base.FormatStrSlice(res))
 		return err
 	}},
 	{OpHRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
@@ -285,6 +277,14 @@ var cmdTable = []Cmd{
 		// key, offset, val
 		_, err := e.BitSet(string(args[0]), base.ParseInt[uint32](args[1]), args[2][0] == _true)
 		return err
+	}},
+	{OpBitTest, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, offset
+		ok, err := e.BitTest(string(args[0]), base.ParseInt[uint32](args[1]))
+		if err != nil {
+			return err
+		}
+		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpBitFlip, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset
@@ -598,7 +598,6 @@ func (e *Engine) HGet(key, field string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	res, ok := m.Get(field)
 	if !ok {
 		return nil, base.ErrFieldNotFound
@@ -1009,7 +1008,7 @@ func (e *Engine) load() error {
 		if err != nil {
 			return err
 		}
-		if err := cmdTable[op].hook(e, args, nil); err != nil {
+		if err := cmdTable[op].hook(e, args, base.NullWriter{}); err != nil {
 			return err
 		}
 	}
@@ -1024,24 +1023,24 @@ func (e *Engine) shrink() {
 		return
 	}
 
-	var rec VType
+	var _type VType
 	// Marshal any
 	data, err := e.m.MarshalBytesFunc(func(key string, v any, i int64) {
 		switch v.(type) {
 		case Map:
-			rec = TypeString
+			_type = TypeString
 		case BitMap:
-			rec = TypeBitmap
+			_type = TypeBitmap
 		case List:
-			rec = TypeList
+			_type = TypeList
 		case Set:
-			rec = TypeSet
+			_type = TypeSet
 		default:
 			panic(base.ErrUnSupportDataType)
 		}
 
 		// SetTx
-		if cd, err := NewCodec(OpSetTx).Type(rec).Str(key).Int(i / timeCarry).Any(v); err == nil {
+		if cd, err := NewCodec(OpSetTx).Type(_type).Str(key).Int(i / timeCarry).Any(v); err == nil {
 			e.rwbuf.Write(cd.B)
 			cd.Recycle()
 		}
@@ -1109,22 +1108,22 @@ func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 }
 
 // fetch
-func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (T, error) {
+func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err error) {
 	m, _, ok := e.m.Get(key)
 	if ok {
 		m, ok := m.(T)
 		if ok {
 			return m, nil
 		}
-		var v T
-		return v, base.ErrWrongType
-	}
-	vptr := new()
-	if len(setnx) > 0 && setnx[0] {
-		e.m.Set(key, vptr)
+		return v, fmt.Errorf("%w: %v->%v", base.ErrWrongType, reflect.TypeOf(m), reflect.TypeOf(v))
 	}
 
-	return vptr, nil
+	v = new()
+	if len(setnx) > 0 && setnx[0] {
+		e.m.Set(key, v)
+	}
+
+	return v, nil
 }
 
 // formatSize

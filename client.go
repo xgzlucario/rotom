@@ -25,18 +25,18 @@ func NewClient(addr string) (c *Client, err error) {
 }
 
 // Set
-func (c *Client) Set(key string, val []byte) ([]byte, error) {
+func (c *Client) Set(key string, val []byte) error {
 	return c.SetTx(key, val, noTTL)
 }
 
 // SetEx
-func (c *Client) SetEx(key string, val []byte, ttl time.Duration) ([]byte, error) {
+func (c *Client) SetEx(key string, val []byte, ttl time.Duration) error {
 	return c.SetTx(key, val, cache.GetClock()+int64(ttl))
 }
 
 // SetTx
-func (c *Client) SetTx(key string, val []byte, ts int64) ([]byte, error) {
-	return c.do(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
+func (c *Client) SetTx(key string, val []byte, ts int64) error {
+	return c.doNoRes(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 }
 
 // Remove
@@ -73,8 +73,7 @@ func (c *Client) Len() (uint64, error) {
 
 // HSet
 func (c *Client) HSet(key, field string, val []byte) error {
-	_, err := c.do(NewCodec(OpHSet).Str(key).Str(field).Bytes(val))
-	return err
+	return c.doNoRes(NewCodec(OpHSet).Str(key).Str(field).Bytes(val))
 }
 
 // HGet
@@ -122,8 +121,7 @@ func (c *Client) SAdd(key string, items ...string) (int, error) {
 
 // SRemove
 func (c *Client) SRemove(key, item string) error {
-	_, err := c.do(NewCodec(OpSRemove).Str(key).Str(item))
-	return err
+	return c.doNoRes(NewCodec(OpSRemove).Str(key).Str(item))
 }
 
 // SHas
@@ -155,25 +153,47 @@ func (c *Client) SMembers(key string) ([]string, error) {
 
 // SUnion
 func (c *Client) SUnion(dstKey string, srcKeys ...string) error {
-	_, err := c.do(NewCodec(OpSUnion).Str(dstKey).StrSlice(srcKeys))
-	return err
+	return c.doNoRes(NewCodec(OpSUnion).Str(dstKey).StrSlice(srcKeys))
 }
 
 // SInter
 func (c *Client) SInter(dstKey string, srcKeys ...string) error {
-	_, err := c.do(NewCodec(OpSInter).Str(dstKey).StrSlice(srcKeys))
-	return err
+	return c.doNoRes(NewCodec(OpSInter).Str(dstKey).StrSlice(srcKeys))
 }
 
 // SDiff
 func (c *Client) SDiff(dstKey string, srcKeys ...string) error {
-	_, err := c.do(NewCodec(OpSDiff).Str(dstKey).StrSlice(srcKeys))
-	return err
+	return c.doNoRes(NewCodec(OpSDiff).Str(dstKey).StrSlice(srcKeys))
+}
+
+// BitSet
+func (c *Client) BitSet(key string, offset uint32, val bool) error {
+	return c.doNoRes(NewCodec(OpBitSet).Str(key).Uint(offset).Bool(val))
+}
+
+// BitTest
+func (c *Client) BitTest(key string, offset uint32) (bool, error) {
+	args, err := c.do(NewCodec(OpBitTest).Str(key).Uint(offset))
+	if err != nil {
+		return false, err
+	}
+	return args[0] == _true, nil
+}
+
+// BitFlip
+func (c *Client) BitFlip(key string, offset uint32) error {
+	return c.doNoRes(NewCodec(OpBitFlip).Str(key).Uint(offset))
 }
 
 // Close
 func (c *Client) Close() error {
 	return c.c.Close()
+}
+
+// doNoRes do without res.
+func (c *Client) doNoRes(cd *Codec) error {
+	_, err := c.do(cd)
+	return err
 }
 
 // do send request and return response.
