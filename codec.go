@@ -91,16 +91,12 @@ func (s *Codec) Any(v any) (*Codec, error) {
 
 func (s *Codec) encode(v any) ([]byte, error) {
 	switch v := v.(type) {
-	case String:
-		return v, nil
 	case base.Binarier:
 		return v.MarshalBinary()
-	case base.Gober:
-		return v.GobEncode()
 	case base.Jsoner:
 		return v.MarshalJSON()
 	default:
-		return nil, fmt.Errorf("%v: %v", base.ErrUnSupportDataType, reflect.TypeOf(v))
+		return nil, fmt.Errorf("%w: %v", base.ErrUnSupportDataType, reflect.TypeOf(v))
 	}
 }
 

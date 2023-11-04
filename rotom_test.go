@@ -277,13 +277,6 @@ func TestHmap(t *testing.T) {
 		assert.True(ok)
 	}
 
-	db.Shrink()
-	db.Close()
-
-	// Load
-	// _, err = Open(cfg)
-	// assert.Nil(err)
-
 	// Error
 	cli.Set("fake", []byte("123"))
 
@@ -318,6 +311,13 @@ func TestHmap(t *testing.T) {
 		assert.Nil(res)
 		assert.Equal(err, base.ErrFieldNotFound)
 	}
+
+	db.Shrink()
+	db.Close()
+
+	// Load
+	// _, err = Open(cfg)
+	// assert.Nil(err)
 }
 
 func TestSet(t *testing.T) {
@@ -548,4 +548,23 @@ func TestZSet(t *testing.T) {
 	db.Close()
 	_, err = Open(db.Config)
 	assert.Nil(err)
+}
+
+func TestUtils(t *testing.T) {
+	assert := assert.New(t)
+	cd, err := NewCodec(OpSetTx).Any("string")
+	assert.Nil(cd)
+	assert.NotNil(err)
+
+	decoder := NewDecoder(nil)
+	_, _, err = decoder.ParseRecord()
+	assert.Equal(err, base.ErrParseRecordLine)
+
+	decoder = NewDecoder([]byte{byte(OpSetTx)})
+	_, _, err = decoder.ParseRecord()
+	assert.Equal(err, base.ErrParseRecordLine)
+
+	decoder = NewDecoder([]byte{byte(OpSetTx), 10, 255})
+	_, _, err = decoder.ParseRecord()
+	assert.Equal(err, base.ErrParseRecordLine)
 }

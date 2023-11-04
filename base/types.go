@@ -22,11 +22,6 @@ type Binarier interface {
 	UnmarshalBinary([]byte) error
 }
 
-type Gober interface {
-	GobEncode() ([]byte, error)
-	GobDecode([]byte) error
-}
-
 // Writer
 type Writer interface {
 	WriteByte(byte) error
