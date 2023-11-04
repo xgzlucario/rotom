@@ -1,14 +1,12 @@
 package base
 
 import (
+	"bytes"
+
 	"golang.org/x/exp/constraints"
 )
 
 type Ordered constraints.Ordered
-
-type Number interface {
-	Integer | float64 | float32
-}
 
 type Integer interface {
 	~int | ~int32 | ~int64 | ~uint | ~uint32 | ~uint64
@@ -31,15 +29,29 @@ type Gober interface {
 
 // Writer
 type Writer interface {
-	Write([]byte) (int, error)
 	WriteByte(byte) error
+	Write([]byte) error
+}
+
+// CWriter
+type CWriter struct {
+	*bytes.Buffer
+}
+
+func (w *CWriter) Write(b []byte) error {
+	_, err := w.Buffer.Write(b)
+	return err
+}
+
+func (w *CWriter) WriteByte(b byte) error {
+	return w.Buffer.WriteByte(b)
 }
 
 // NullWriter
 type NullWriter struct{}
 
-func (NullWriter) Write([]byte) (int, error) {
-	return 0, nil
+func (NullWriter) Write([]byte) error {
+	return nil
 }
 
 func (NullWriter) WriteByte(byte) error {

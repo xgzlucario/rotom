@@ -4,6 +4,7 @@ import (
 	"bytes"
 
 	"github.com/panjf2000/gnet/v2"
+	"github.com/xgzlucario/rotom/base"
 )
 
 // Response code inplements.
@@ -54,7 +55,7 @@ func (e *Engine) handleEvent(line []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	res := bytes.NewBuffer(nil)
+	res := &base.CWriter{Buffer: bytes.NewBuffer(nil)}
 	if err := cmdTable[op].hook(e, args, res); err != nil {
 		return nil, err
 	}

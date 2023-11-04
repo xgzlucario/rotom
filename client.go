@@ -3,6 +3,7 @@ package rotom
 import (
 	"errors"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -24,6 +25,11 @@ func NewClient(addr string) (c *Client, err error) {
 	return
 }
 
+// Ping
+func (c *Client) Ping() ([]byte, error) {
+	return c.do(NewCodec(OpPing))
+}
+
 // Set
 func (c *Client) Set(key string, val []byte) error {
 	return c.SetTx(key, val, noTTL)
@@ -39,13 +45,22 @@ func (c *Client) SetTx(key string, val []byte, ts int64) error {
 	return c.doNoRes(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 }
 
-// Remove
-func (c *Client) Remove(key string) (bool, error) {
-	args, err := c.do(NewCodec(OpRemove).Str(key))
+// Incr
+func (c *Client) Incr(key string, val float64) (float64, error) {
+	args, err := c.do(NewCodec(OpIncr).Str(key).Float(val))
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	return args[0] == _true, nil
+	return strconv.ParseFloat(*b2s(args), 64)
+}
+
+// Remove
+func (c *Client) Remove(keys ...string) (int, error) {
+	args, err := c.do(NewCodec(OpRemove).StrSlice(keys))
+	if err != nil {
+		return 0, err
+	}
+	return base.ParseInt[int](args), nil
 }
 
 // Rename
@@ -124,6 +139,15 @@ func (c *Client) SRemove(key, item string) error {
 	return c.doNoRes(NewCodec(OpSRemove).Str(key).Str(item))
 }
 
+// SPop
+func (c *Client) SPop(key string) (string, error) {
+	args, err := c.do(NewCodec(OpSPop).Str(key))
+	if err != nil {
+		return "", err
+	}
+	return string(args), nil
+}
+
 // SHas
 func (c *Client) SHas(key, item string) (bool, error) {
 	args, err := c.do(NewCodec(OpSHas).Str(key).Str(item))
@@ -183,6 +207,39 @@ func (c *Client) BitTest(key string, offset uint32) (bool, error) {
 // BitFlip
 func (c *Client) BitFlip(key string, offset uint32) error {
 	return c.doNoRes(NewCodec(OpBitFlip).Str(key).Uint(offset))
+}
+
+// BitOr
+func (c *Client) BitOr(dstKey string, srcKeys ...string) error {
+	return c.doNoRes(NewCodec(OpBitOr).Str(dstKey).StrSlice(srcKeys))
+}
+
+// BitAnd
+func (c *Client) BitAnd(dstKey string, srcKeys ...string) error {
+	return c.doNoRes(NewCodec(OpBitAnd).Str(dstKey).StrSlice(srcKeys))
+}
+
+// BitXor
+func (c *Client) BitXor(dstKey string, srcKeys ...string) error {
+	return c.doNoRes(NewCodec(OpBitXor).Str(dstKey).StrSlice(srcKeys))
+}
+
+// BitCount
+func (c *Client) BitCount(key string) (uint64, error) {
+	args, err := c.do(NewCodec(OpBitCount).Str(key))
+	if err != nil {
+		return 0, err
+	}
+	return base.ParseInt[uint64](args), nil
+}
+
+// BitArray
+func (c *Client) BitArray(key string) ([]uint32, error) {
+	res, err := c.do(NewCodec(OpBitArray).Str(key))
+	if err != nil {
+		return nil, err
+	}
+	return base.ParseU32Slice(res), nil
 }
 
 // Close

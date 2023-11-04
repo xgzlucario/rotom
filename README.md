@@ -6,11 +6,11 @@ English | [中文](README_ZN.md) | [doc](https://www.yuque.com/1ucario/devdoc/nt
 
 ## 📃Introduction
 
-This is Rotom, a high-performance Key-Value memory database written in Go. It has built-in multiple commonly used data types, supports persistent storage, and can be used in Golang as an imported package or as a server (the client part is under development and does not support all commands yet).
+This is Rotom, a high-performance Key-Value memory database written in Go. It has built-in multiple commonly used data types, supports persistent storage, and can be used in Golang as an imported package or as a server.
 
 Features:
 
-1. Built-in data types like String, Map, Set, List, ZSet, BitMap, etc., supporting more than 20 commands.
+1. Built-in data types like String, Map, Set, List, ZSet, BitMap, etc., supporting more than 30 commands.
 2. Microsecond-level expiration time (ttl).
 3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), it can avoid GC overhead and have stronger multithreaded performance.
 4. RDB + AOF hybrid persistence strategy.

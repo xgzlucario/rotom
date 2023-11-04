@@ -33,13 +33,3 @@ func (s *Set[T]) Intersect(other *Set[T]) {
 func (s *Set[T]) Difference(other *Set[T]) {
 	s.Set = s.Set.SymmetricDifference(other.Set)
 }
-
-// MarshalJSON
-func (s *Set[T]) MarshalJSON() ([]byte, error) {
-	return s.Set.MarshalJSON()
-}
-
-// MarshalJSON
-func (s *Set[T]) UnmarshalJSON(b []byte) error {
-	return s.Set.UnmarshalJSON(b)
-}

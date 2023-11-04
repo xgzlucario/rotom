@@ -28,6 +28,7 @@ const (
 	OpSetTx
 	OpGet
 	OpRemove
+	OpIncr
 	OpRename
 	OpLen
 	// map
@@ -39,6 +40,7 @@ const (
 	// set
 	OpSAdd
 	OpSRemove
+	OpSPop
 	OpSHas
 	OpSCard
 	OpSMembers
@@ -58,6 +60,8 @@ const (
 	OpBitOr
 	OpBitAnd
 	OpBitXor
+	OpBitCount
+	OpBitArray
 	// zset
 	OpZAdd
 	OpZIncr
@@ -130,13 +134,25 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(val)
-		return err
+		return w.Write(val)
 	}},
 	{OpRemove, 1, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key
-		ok := e.Remove(string(args[0]))
-		return w.WriteByte(bool2byte(ok))
+		// keys
+		keys := base.ParseStrSlice(args[0])
+		sum := e.Remove(keys...)
+		return w.Write(base.FormatInt(sum))
+	}},
+	{OpIncr, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key val
+		incr, err := strconv.ParseFloat(string(args[1]), 64)
+		if err != nil {
+			return err
+		}
+		res, _, err := e.incr(string(args[0]), incr)
+		if err != nil {
+			return err
+		}
+		return w.Write(res)
 	}},
 	{OpRename, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// old, new
@@ -144,9 +160,7 @@ var cmdTable = []Cmd{
 		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
-		res := base.FormatInt[uint64](e.Stat().Len)
-		_, err := w.Write(res)
-		return err
+		return w.Write(base.FormatInt(e.Stat().Len))
 	}},
 	// map
 	{OpHSet, 3, func(e *Engine, args [][]byte, _ base.Writer) error {
@@ -159,8 +173,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(res)
-		return err
+		return w.Write(res)
 	}},
 	{OpHLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
@@ -168,8 +181,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(base.FormatInt(n))
-		return err
+		return w.Write(base.FormatInt(n))
 	}},
 	{OpHKeys, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
@@ -177,8 +189,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(base.FormatStrSlice(res))
-		return err
+		return w.Write(base.FormatStrSlice(res))
 	}},
 	{OpHRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, field
@@ -195,12 +206,19 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(base.FormatInt(n))
-		return err
+		return w.Write(base.FormatInt(n))
 	}},
 	{OpSRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, item
 		return e.SRemove(string(args[0]), string(args[1]))
+	}},
+	{OpSPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		item, _, err := e.SPop(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write([]byte(item))
 	}},
 	{OpSHas, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
@@ -216,17 +234,15 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(base.FormatInt(n))
-		return err
+		return w.Write(base.FormatInt(n))
 	}},
 	{OpSMembers, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		s, err := e.fetchSet(string(args[0]))
+		m, err := e.SMembers(string(args[0]))
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(base.FormatStrSlice(s.ToSlice()))
-		return err
+		return w.Write(base.FormatStrSlice(m))
 	}},
 	{OpSUnion, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
@@ -268,9 +284,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		str := base.FormatInt(l.Len())
-		_, err = w.Write(str)
-		return err
+		return w.Write(base.FormatInt(l.Len()))
 	}},
 	// bitmap
 	{OpBitSet, 3, func(e *Engine, args [][]byte, w base.Writer) error {
@@ -305,6 +319,22 @@ var cmdTable = []Cmd{
 		srcKeys := base.ParseStrSlice(args[1])
 		return e.BitXor(string(args[0]), srcKeys...)
 	}},
+	{OpBitCount, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		n, err := e.BitCount(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(base.FormatInt(n))
+	}},
+	{OpBitArray, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		res, err := e.BitArray(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(base.FormatU32Slice(res))
+	}},
 	// zset
 	{OpZAdd, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, score, val
@@ -333,8 +363,7 @@ var cmdTable = []Cmd{
 		return e.m.UnmarshalBytes(args[0])
 	}},
 	{OpPing, 0, func(_ *Engine, _ [][]byte, w base.Writer) error {
-		_, err := w.Write([]byte("pong"))
-		return err
+		return w.Write([]byte("pong"))
 	}},
 }
 
@@ -545,30 +574,42 @@ func (e *Engine) SetTx(key string, val []byte, ts int64) {
 	e.m.SetTx(key, val, ts)
 }
 
-// Incr
-func (e *Engine) Incr(key string, incr float64) (res float64, err error) {
-	bytes, ts, err := e.GetBytes(key)
+// incr
+func (e *Engine) incr(key string, incr float64) (resb []byte, res float64, err error) {
+	b, ts, err := e.GetBytes(key)
 	if err != nil {
-		return 0, err
+		return nil, 0, err
 	}
 
-	f, err := strconv.ParseFloat(*b2s(bytes), 64)
+	f, err := strconv.ParseFloat(*b2s(b), 64)
 	if err != nil {
-		return 0, err
+		return nil, 0, err
 	}
 	res = f + incr
 	fstr := strconv.FormatFloat(res, 'f', -1, 64)
 
-	e.encode(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Str(fstr))
+	e.encode(NewCodec(OpIncr).Str(key).Float(incr))
 	e.m.SetTx(key, s2b(&fstr), ts)
 
-	return res, nil
+	return []byte(fstr), res, nil
+}
+
+// Incr
+func (e *Engine) Incr(key string, incr float64) (float64, error) {
+	_, res, err := e.incr(key, incr)
+	return res, err
 }
 
 // Remove
-func (e *Engine) Remove(key string) bool {
-	e.encode(NewCodec(OpRemove).Str(key))
-	return e.m.Delete(key)
+func (e *Engine) Remove(keys ...string) int {
+	e.encode(NewCodec(OpRemove).StrSlice(keys))
+	var sum int
+	for _, key := range keys {
+		if e.m.Delete(key) {
+			sum++
+		}
+	}
+	return sum
 }
 
 // Rename
@@ -677,16 +718,13 @@ func (e *Engine) SHas(key string, item string) (bool, error) {
 }
 
 // SPop
-func (e *Engine) SPop(key string) (string, error) {
+func (e *Engine) SPop(key string) (string, bool, error) {
 	s, err := e.fetchSet(key)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	res, ok := s.Pop()
-	if !ok {
-		return "", base.ErrEmptySet
-	}
-	return res, nil
+	return res, ok, nil
 }
 
 // SCard

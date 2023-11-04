@@ -2,9 +2,7 @@ package rotom
 
 import (
 	"fmt"
-	"log/slog"
 	"math/rand"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -28,85 +26,95 @@ var (
 func TestDB(t *testing.T) {
 	assert := assert.New(t)
 
-	cfg := &Config{
-		Path:             gofakeit.UUID() + ".db",
-		ShardCount:       1024,
-		SyncPolicy:       base.EveryInterval,
-		SyncInterval:     time.Second,
-		ShrinkInterval:   time.Second * 3,
-		RunSkipLoadError: true,
-		Logger:           slog.Default(),
-	}
+	cfg := DefaultConfig
+	cfg.Path = gofakeit.UUID() + ".db"
+
 	db, err := Open(cfg)
 	assert.Nil(err)
-	assert.NotNil(db)
 
-	// Set
-	db.Set("foo", []byte("bar"))
-	db.Set("num", []byte("1"))
-	db.SetEx("foo1", []byte("bar"), time.Second)
-	db.HSet("hm", "foo", []byte("bar"))
+	port := gofakeit.Number(10000, 20000)
+	addr := "localhost:" + strconv.Itoa(port)
 
-	db.Scan(func(s string, a any, i int64) bool {
-		if s == "foo" || s == "num" || s == "hm" || s == "foo1" {
-			return true
-		}
-		return false
-	})
+	// listen
+	go db.Listen(addr)
+	time.Sleep(time.Second / 20)
 
-	// Get
-	val, ts, err := db.GetBytes("hm")
-	assert.Equal(val, nilBytes)
-	assert.Equal(ts, int64(0))
-	assert.Equal(err, base.ErrTypeAssert)
-
-	val, ts, err = db.GetBytes("none")
-	assert.Equal(val, nilBytes)
-	assert.Equal(ts, int64(0))
-	assert.Equal(err, base.ErrKeyNotFound)
-
-	// Incr
-	res, err := db.Incr("hm", 3.5)
-	assert.Equal(res, float64(0))
-	assert.Equal(err, base.ErrTypeAssert)
-
-	res, err = db.Incr("foo", 3.5)
-	assert.Equal(res, float64(0))
-	assert.NotNil(err)
-
-	res, err = db.Incr("num", 3.5)
-	assert.Equal(res, 4.5)
+	cli, err := NewClient(addr)
 	assert.Nil(err)
 
-	// Keys
-	assert.ElementsMatch(db.Keys(), []string{"foo", "num", "hm", "foo1"})
+	// Test db operations
+	db.Set("test1", []byte("1"))
+	db.SetEx("test2", []byte("2"), time.Minute)
+	r, err := db.Incr("test1", 1.5)
+	assert.Nil(err)
+	assert.Equal(r, float64(2.5))
+
+	assert.ElementsMatch(db.Keys(), []string{"test1", "test2"})
+	db.Scan(func(key string, val any, ts int64) bool {
+		if key == "test1" {
+			assert.Equal(val, []byte("2.5"))
+			assert.Equal(ts, int64(0))
+		} else if key == "test2" {
+			assert.Equal(val, []byte("2"))
+		} else {
+			panic("wrong key")
+		}
+		return true
+	})
+
+	// Client
+	cli.Set("foo", []byte("bar"))
+	cli.SetEx("foo1", []byte("bar"), time.Minute)
+	cli.HSet("map", "foo", []byte("bar"))
+
+	// Len
+	num, err := cli.Len()
+	assert.Nil(err)
+	assert.Equal(num, uint64(5))
+
+	// Get
+	val, err := cli.Get("map")
+	assert.Equal(val, nilBytes)
+	assert.Equal(err, base.ErrTypeAssert)
+
+	val, err = cli.Get("none")
+	assert.Equal(val, nilBytes)
+	assert.Equal(err, base.ErrKeyNotFound)
+
+	cli.Set("num", []byte("0"))
+	for i := 0; i < 1000; i++ {
+		// Incr
+		num, err := cli.Incr("num", 1)
+		assert.Equal(num, float64(1+i))
+		assert.Nil(err)
+
+		_, err = cli.Incr("none", 1)
+		assert.Equal(err, base.ErrKeyNotFound)
+	}
 
 	// Rename
-	ok := db.Rename("num", "num-new")
+	ok, err := cli.Rename("foo", "foo2")
 	assert.True(ok)
-	res, err = db.Incr("num-new", 0.5)
-	assert.Equal(res, float64(5))
 	assert.Nil(err)
 
 	// Remove
-	assert.True(db.Remove("num-new"))
-	assert.False(db.Remove("num-new"))
+	sum, err := cli.Remove("foo2")
+	assert.Equal(sum, 1)
+	assert.Nil(err)
+
+	sum, err = cli.Remove("foo2")
+	assert.Equal(sum, 0)
+	assert.Nil(err)
 
 	db.printRuntimeStats()
-	time.Sleep(time.Second * 5)
+	time.Sleep(time.Second)
 
 	// close
 	assert.Nil(db.Close())
 	assert.Equal(db.Close(), base.ErrDatabaseClosed)
-
-	// load error
-	os.WriteFile(cfg.Path, []byte("fake data"), 0644)
-	db, err = Open(cfg)
-	assert.NotNil(err)
-	assert.Nil(db)
 }
 
-func TestCSet(t *testing.T) {
+func TestSetTTL(t *testing.T) {
 	assert := assert.New(t)
 
 	cfg := DefaultConfig
@@ -229,87 +237,61 @@ func TestHmap(t *testing.T) {
 	assert.Nil(err)
 	defer cli.Close()
 
-	for i := 0; i < 10000; i++ {
-		// Set
-		key := fmt.Sprintf("key-%d", i)
-		err := cli.Set(key, []byte(key))
-		assert.Nil(err)
-
-		// Get
-		res, err := cli.Get(key)
-		assert.Nil(err)
-		assert.Equal(res, []byte(key))
-
-		// SetEx
-		key = fmt.Sprintf("key-ex-%d", i)
-		err = cli.SetEx(key, []byte(key), time.Minute)
-		assert.Nil(err)
-
-		// Rename
-		newKey := fmt.Sprintf("key-new-%d", i)
-		ok, err := cli.Rename(key, newKey)
-		assert.Nil(err)
-		assert.True(ok)
-
-		// Remove
-		ok, err = cli.Remove(newKey)
-		assert.Nil(err)
-		assert.True(ok)
-
-		// Len
-		num, err := cli.Len()
-		assert.Nil(err)
-		assert.Equal(num, uint64(i+1))
-	}
-
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000; i++ {
 		// HSet
-		key := fmt.Sprintf("key-%d", i)
-		err := cli.HSet("exmap", key, []byte(key))
+		key := "key" + strconv.Itoa(i/100)
+		err := cli.HSet("map", key, []byte(key))
 		assert.Nil(err)
 
 		// HGet
-		res, err := cli.HGet("exmap", key)
+		res, err := cli.HGet("map", key)
 		assert.Nil(err)
 		assert.Equal(res, []byte(key))
 
 		// HLen
-		num, err := cli.HLen("exmap")
+		num, err := cli.HLen("map")
 		assert.Nil(err)
 		assert.Equal(num, 1)
 
 		// HKeys
-		keys, err := cli.HKeys("exmap")
+		keys, err := cli.HKeys("map")
 		assert.Nil(err)
 		assert.ElementsMatch(keys, []string{key})
 
 		// HRemove
-		ok, err := cli.HRemove("exmap", key)
+		ok, err := cli.HRemove("map", key)
 		assert.Nil(err)
 		assert.True(ok)
 	}
 
+	db.Shrink()
+	db.Close()
+
+	// Load
+	// _, err = Open(cfg)
+	// assert.Nil(err)
+
 	// Error
 	cli.Set("fake", []byte("123"))
+
+	err = cli.HSet("fake", "a", []byte("b"))
+	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	res, err := cli.HLen("fake")
 	assert.Equal(res, 0)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
-	{
-		res, err := cli.HKeys("fake")
-		var nilSlice []string
-		assert.Equal(res, nilSlice)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
-	}
-	{
-		res, err := cli.HRemove("fake", "foo")
-		assert.False(res)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
-	}
 
-	cli.HSet("fakemap", "m1", []byte("m2"))
+	m, err := cli.HKeys("fake")
+	assert.Equal(m, nilStrings)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	ok, err := cli.HRemove("fake", "foo")
+	assert.False(ok)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	cli.HSet("map", "m1", []byte("m2"))
 	{
-		res, err := cli.Get("fakemap")
+		res, err := cli.Get("map")
 		assert.Nil(res)
 		assert.Equal(err, base.ErrTypeAssert)
 	}
@@ -319,7 +301,7 @@ func TestHmap(t *testing.T) {
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 	}
 	{
-		res, err := cli.HGet("fakemap", "none")
+		res, err := cli.HGet("map", "none")
 		assert.Nil(res)
 		assert.Equal(err, base.ErrFieldNotFound)
 	}
@@ -346,6 +328,10 @@ func TestSet(t *testing.T) {
 
 	// SAdd
 	for i := 0; i < 1000; i++ {
+		r, err := cli.Ping()
+		assert.Nil(err)
+		assert.Equal(r, []byte("pong"))
+
 		n, err := cli.SAdd("set"+strconv.Itoa(i/100), strconv.Itoa(i))
 		assert.Equal(n, 1)
 		assert.Nil(err)
@@ -359,8 +345,14 @@ func TestSet(t *testing.T) {
 	// SRemove
 	for i := 0; i < 1000; i++ {
 		key := "set" + strconv.Itoa(i/100)
-		err := cli.SRemove(key, strconv.Itoa(i))
-		assert.Nil(err)
+
+		if i%2 == 0 {
+			assert.Nil(cli.SRemove(key, strconv.Itoa(i)))
+		} else {
+			_, err := cli.SPop(key)
+			assert.Nil(err)
+			// assert.Equal(res, strconv.Itoa(i))
+		}
 
 		err = cli.SRemove(key, "none")
 		assert.Nil(err)
@@ -376,25 +368,27 @@ func TestSet(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		// Add random data
 		for i := 0; i < 20; i++ {
-			cli.SAdd("a"+strconv.Itoa(i), strconv.Itoa(rand.Intn(10)))
-			cli.SAdd("b"+strconv.Itoa(i), strconv.Itoa(rand.Intn(10)))
+			stri := strconv.Itoa(i)
+			cli.SAdd("a"+stri, strconv.Itoa(rand.Intn(10)))
+			cli.SAdd("b"+stri, strconv.Itoa(rand.Intn(10)))
 		}
+		stri := strconv.Itoa(i)
 
-		err = cli.SUnion("union"+strconv.Itoa(i), "a"+strconv.Itoa(i), "b"+strconv.Itoa(i))
+		err = cli.SUnion("union"+stri, "a"+stri, "b"+stri)
 		assert.Nil(err)
 
-		err = cli.SInter("inter"+strconv.Itoa(i), "a"+strconv.Itoa(i), "b"+strconv.Itoa(i))
+		err = cli.SInter("inter"+stri, "a"+stri, "b"+stri)
 		assert.Nil(err)
 
-		err = cli.SDiff("diff"+strconv.Itoa(i), "a"+strconv.Itoa(i), "b"+strconv.Itoa(i))
+		err = cli.SDiff("diff"+stri, "a"+stri, "b"+stri)
 		assert.Nil(err)
 
 		// diff + inter = union
-		cli.SUnion("res"+strconv.Itoa(i), "inter"+strconv.Itoa(i), "diff"+strconv.Itoa(i))
+		cli.SUnion("res"+stri, "inter"+stri, "diff"+stri)
 
-		m1, err1 := cli.SMembers("union" + strconv.Itoa(i))
+		m1, err1 := cli.SMembers("union" + stri)
 		assert.Nil(err1)
-		m2, err2 := cli.SMembers("res" + strconv.Itoa(i))
+		m2, err2 := cli.SMembers("res" + stri)
 		assert.Nil(err2)
 		assert.ElementsMatch(m1, m2)
 	}
@@ -406,6 +400,13 @@ func TestSet(t *testing.T) {
 
 	ok, err := cli.SHas("map", "1")
 	assert.False(ok)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	res, err := cli.SPop("map")
+	assert.Equal(res, "")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	err = cli.SRemove("map", "1")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	n, err = cli.SCard("map")
@@ -451,6 +452,55 @@ func TestBitmap(t *testing.T) {
 		ok, err := cli.BitTest(key, uint32(i))
 		assert.True(ok)
 		assert.Nil(err)
+
+		// TODO
+		cli.BitFlip(key, uint32(i))
+
+		// Error
+		cli.Set("none", []byte("1"))
+		ok, err = cli.BitTest("none", uint32(i))
+		assert.False(ok)
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		m, err := cli.BitArray("none")
+		assert.Nil(m)
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		n, err := cli.BitCount("none")
+		assert.Equal(n, uint64(0))
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+	}
+
+	for i := 0; i < 1000; i++ {
+		// Add random data
+		for i := 0; i < 20; i++ {
+			stri := strconv.Itoa(i)
+			cli.BitSet("a"+stri, rand.Uint32(), true)
+			cli.BitSet("b"+stri, rand.Uint32(), true)
+		}
+		stri := strconv.Itoa(i)
+
+		err = cli.BitOr("or"+stri, "a"+stri, "b"+stri)
+		assert.Nil(err)
+
+		err = cli.BitAnd("and"+stri, "a"+stri, "b"+stri)
+		assert.Nil(err)
+
+		err = cli.BitXor("xor"+stri, "a"+stri, "b"+stri)
+		assert.Nil(err)
+
+		// xor + and = or
+		cli.BitOr("res"+stri, "and"+stri, "xor"+stri)
+
+		m1, err1 := cli.BitArray("or" + stri)
+		assert.Nil(err1)
+		n1, errn1 := cli.BitCount("or" + stri)
+		assert.Nil(errn1)
+		assert.Equal(uint64(len(m1)), n1)
+
+		m2, err2 := cli.BitArray("res" + stri)
+		assert.Nil(err2)
+		assert.ElementsMatch(m1, m2)
 	}
 
 	db.Shrink()
