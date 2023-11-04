@@ -41,12 +41,9 @@ func cmd() {
 				k := strconv.FormatInt(addnow, 36)
 
 				// send
-				res, err := cli.SetTx(k, []byte(k), addnow)
+				err := cli.SetTx(k, []byte(k), addnow)
 				if err != nil {
 					panic(err)
-				}
-				if len(res) > 0 {
-					panic("error res")
 				}
 
 				// stat

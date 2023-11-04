@@ -6,11 +6,11 @@
 
 ## 📃介绍
 
-这里是 Rotom，一个 Go 编写高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储，可以在 Golang 中以包引入的方式使用，也可以作为服务器使用（客户端部分正在开发中，暂不支持所有命令）。
+这里是 Rotom，一个 Go 编写高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储，可以在 Golang 中以包引入的方式使用，也可以作为网络服务器使用。
 
 目前支持的功能：
 
-1. 内置数据类型 String，Map，Set，List，ZSet，BitMap 等，支持 20 多种命令
+1. 内置数据类型 String，Map，Set，List，ZSet，BitMap 等，支持 30 多种命令
 2. 微秒级别的过期时间（ttl）
 3. 底层基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，能规避GC开销，多线程性能更强
 4. 基于 RDB + AOF 混合的持久化策略

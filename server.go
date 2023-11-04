@@ -2,8 +2,20 @@ package rotom
 
 import (
 	"bytes"
+	"sync"
 
 	"github.com/panjf2000/gnet/v2"
+	"github.com/xgzlucario/rotom/base"
+)
+
+var (
+	bufferpool = sync.Pool{
+		New: func() any {
+			return &base.CWriter{
+				Buffer: bytes.NewBuffer(make([]byte, 0, 16)),
+			}
+		},
+	}
 )
 
 // Response code inplements.
@@ -28,18 +40,22 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 	}
 
 	// handle event
-	msg, err := e.db.handleEvent(buf)
+	res, err := e.db.handleEvent(buf)
 	var cd *Codec
 	if err != nil {
 		cd = NewCodec(Response).Int(RES_ERROR).Str(err.Error())
 
 	} else {
-		cd = NewCodec(Response).Int(RES_SUCCESS).Bytes(msg)
+		cd = NewCodec(Response).Int(RES_SUCCESS).Bytes(res.Bytes())
 	}
 
 	// send resp
 	_, err = conn.Write(cd.B)
 	cd.Recycle()
+	if res != nil {
+		res.Reset()
+		bufferpool.Put(res)
+	}
 	if err != nil {
 		return gnet.Close
 	}
@@ -48,16 +64,16 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 }
 
 // handleEvent
-func (e *Engine) handleEvent(line []byte) ([]byte, error) {
+func (e *Engine) handleEvent(line []byte) (*base.CWriter, error) {
 	op, args, err := NewDecoder(line).ParseRecord()
 	if err != nil {
 		return nil, err
 	}
 
-	res := bytes.NewBuffer(nil)
-	if err := cmdTable[op].hook(e, args, res); err != nil {
+	buf := bufferpool.Get().(*base.CWriter)
+	if err := cmdTable[op].hook(e, args, buf); err != nil {
 		return nil, err
 	}
 
-	return res.Bytes(), nil
+	return buf, nil
 }

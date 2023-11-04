@@ -41,7 +41,11 @@ func (s *Codec) Str(v string) *Codec {
 	return s.format(s2b(&v))
 }
 
-func (s *Codec) Type(v VType) *Codec {
+func (s *Codec) StrSlice(v []string) *Codec {
+	return s.format(base.FormatStrSlice(v))
+}
+
+func (s *Codec) Type(v Type) *Codec {
 	return s.format([]byte{byte(v)})
 }
 
@@ -87,16 +91,12 @@ func (s *Codec) Any(v any) (*Codec, error) {
 
 func (s *Codec) encode(v any) ([]byte, error) {
 	switch v := v.(type) {
-	case String:
-		return v, nil
 	case base.Binarier:
 		return v.MarshalBinary()
-	case base.Gober:
-		return v.GobEncode()
 	case base.Jsoner:
 		return v.MarshalJSON()
 	default:
-		return nil, fmt.Errorf("%v: %v", base.ErrUnSupportDataType, reflect.TypeOf(v))
+		return nil, fmt.Errorf("%w: %v", base.ErrUnSupportDataType, reflect.TypeOf(v))
 	}
 }
 

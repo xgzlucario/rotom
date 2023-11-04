@@ -6,6 +6,7 @@ require (
 	github.com/RoaringBitmap/roaring v1.6.0
 	github.com/brianvoe/gofakeit/v6 v6.23.2
 	github.com/bytedance/sonic v1.10.2
+	github.com/deckarep/golang-set/v2 v2.3.1
 	github.com/dolthub/swiss v0.2.1
 	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/sakeven/RbTree v0.0.0-20220710124251-94e35f9fed6c
@@ -16,9 +17,9 @@ require (
 )
 
 require (
-	github.com/bits-and-blooms/bitset v1.10.0 // indirect
+	github.com/bits-and-blooms/bitset v1.11.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
-	github.com/chenzhuoyu/iasm v0.9.0 // indirect
+	github.com/chenzhuoyu/iasm v0.9.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect

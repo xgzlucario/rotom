@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
 	"runtime"
 	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/panjf2000/gnet/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
@@ -28,6 +28,7 @@ const (
 	OpSetTx
 	OpGet
 	OpRemove
+	OpIncr
 	OpRename
 	OpLen
 	// map
@@ -39,6 +40,10 @@ const (
 	// set
 	OpSAdd
 	OpSRemove
+	OpSPop
+	OpSHas
+	OpSCard
+	OpSMembers
 	OpSUnion
 	OpSInter
 	OpSDiff
@@ -50,10 +55,13 @@ const (
 	OpLLen
 	// bitmap
 	OpBitSet
+	OpBitTest
 	OpBitFlip
 	OpBitOr
 	OpBitAnd
 	OpBitXor
+	OpBitCount
+	OpBitArray
 	// zset
 	OpZAdd
 	OpZIncr
@@ -72,9 +80,7 @@ type Cmd struct {
 
 // cmdTable defines the argsNum and callback function required for the operation.
 var cmdTable = []Cmd{
-	{Response, 2, func(_ *Engine, _ [][]byte, _ base.Writer) error {
-		return nil
-	}},
+	{Response, 2, nil},
 	{OpSetTx, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// type, key, ts, val
 		ts := base.ParseInt[int64](args[2]) * timeCarry
@@ -82,213 +88,290 @@ var cmdTable = []Cmd{
 			return nil
 		}
 
-		vType := VType(args[0][0])
+		Type := Type(args[0][0])
 
-		switch vType {
+		switch Type {
 		case TypeString:
-			e.m.SetTx(*b2s(args[1]), args[3], ts)
+			e.m.SetTx(string(args[1]), args[3], ts)
 
 		case TypeList:
-			var ls List
+			ls := structx.NewList[string]()
 			if err := ls.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(*b2s(args[1]), ls)
+			e.m.Set(string(args[1]), ls)
 
 		case TypeSet:
-			var s Set
+			s := structx.NewSet[string]()
 			if err := s.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(*b2s(args[1]), s)
+			e.m.Set(string(args[1]), s)
 
 		case TypeMap:
-			var m Map
+			m := structx.NewSyncMap[string, []byte]()
 			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(*b2s(args[1]), m)
+			e.m.Set(string(args[1]), m)
 
 		case TypeBitmap:
-			var m BitMap
+			m := structx.NewBitmap()
 			if err := m.UnmarshalBinary(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(*b2s(args[1]), m)
+			e.m.Set(string(args[1]), m)
+
+		case TypeZSet:
+			m := structx.NewZSet[string, float64, []byte]()
+			if err := m.UnmarshalJSON(args[3]); err != nil {
+				return err
+			}
+			e.m.Set(string(args[1]), m)
 
 		default:
-			return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, vType)
+			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, Type)
 		}
 
 		return nil
 	}},
 	{OpGet, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		val, _, err := e.GetBytes(*b2s(args[0]))
+		val, _, err := e.GetBytes(string(args[0]))
 		if err != nil {
 			return err
 		}
-		_, err = w.Write(val)
-		return err
+		return w.Write(val)
 	}},
 	{OpRemove, 1, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key
-		ok := e.Remove(*b2s(args[0]))
-		return w.WriteByte(bool2byte(ok))
+		// keys
+		keys := base.ParseStrSlice(args[0])
+		sum := e.Remove(keys...)
+		return w.Write(base.FormatInt(sum))
+	}},
+	{OpIncr, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key val
+		incr, err := strconv.ParseFloat(string(args[1]), 64)
+		if err != nil {
+			return err
+		}
+		res, _, err := e.incr(string(args[0]), incr)
+		if err != nil {
+			return err
+		}
+		return w.Write(res)
 	}},
 	{OpRename, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// old, new
-		ok := e.Rename(*b2s(args[0]), *b2s(args[1]))
+		ok := e.Rename(string(args[0]), string(args[1]))
 		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
-		res := base.FormatInt[uint64](e.Stat().Len)
-		_, err := w.Write(res)
-		return err
+		return w.Write(base.FormatInt(e.Stat().Len))
 	}},
 	// map
 	{OpHSet, 3, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, field, val
-		return e.HSet(*b2s(args[0]), *b2s(args[1]), args[2])
+		return e.HSet(string(args[0]), string(args[1]), args[2])
 	}},
 	{OpHGet, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, field
-		m, err := e.fetchMap(*b2s(args[0]))
+		res, err := e.HGet(string(args[0]), string(args[1]))
 		if err != nil {
 			return err
 		}
-		val, ok := m.Get(*b2s(args[1]))
-		if !ok {
-			return base.ErrFieldNotFound
-		}
-		_, err = w.Write(val)
-		return err
+		return w.Write(res)
 	}},
 	{OpHLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		m, err := e.fetchMap(*b2s(args[0]))
+		n, err := e.HLen(string(args[0]))
 		if err != nil {
 			return err
 		}
-		res := base.FormatInt[int](m.Len())
-		_, err = w.Write(res)
-		return err
+		return w.Write(base.FormatInt(n))
 	}},
 	{OpHKeys, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		m, err := e.fetchMap(*b2s(args[0]))
+		res, err := e.HKeys(string(args[0]))
 		if err != nil {
 			return err
 		}
-		src, err := sonic.Marshal(m.Keys())
-		if err != nil {
-			return err
-		}
-		_, err = w.Write(src)
-		return err
+		return w.Write(base.FormatStrSlice(res))
 	}},
 	{OpHRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, field
-		ok, err := e.HRemove(*b2s(args[0]), *b2s(args[1]))
+		ok, err := e.HRemove(string(args[0]), string(args[1]))
 		if err != nil {
 			return err
 		}
 		return w.WriteByte(bool2byte(ok))
 	}},
 	// set
-	{OpSAdd, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
-		// key, item
-		return e.SAdd(*b2s(args[0]), *b2s(args[1]))
+	{OpSAdd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, items
+		n, err := e.SAdd(string(args[0]), base.ParseStrSlice(args[1])...)
+		if err != nil {
+			return err
+		}
+		return w.Write(base.FormatInt(n))
 	}},
 	{OpSRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, item
-		_, err := e.SRemove(*b2s(args[0]), *b2s(args[1]))
-		return err
+		return e.SRemove(string(args[0]), string(args[1]))
 	}},
-	{OpSUnion, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.SUnion(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpSPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		item, _, err := e.SPop(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write([]byte(item))
 	}},
-	{OpSInter, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.SInter(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpSHas, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, item
+		ok, err := e.SHas(string(args[0]), string(args[1]))
+		if err != nil {
+			return err
+		}
+		return w.WriteByte(bool2byte(ok))
 	}},
-	{OpSDiff, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.SDiff(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpSCard, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		n, err := e.SCard(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(base.FormatInt(n))
+	}},
+	{OpSMembers, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		m, err := e.SMembers(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(base.FormatStrSlice(m))
+	}},
+	{OpSUnion, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.SUnion(string(args[0]), srcKeys...)
+	}},
+	{OpSInter, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.SInter(string(args[0]), srcKeys...)
+	}},
+	{OpSDiff, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.SDiff(string(args[0]), srcKeys...)
 	}},
 	// list
 	{OpLPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
-		return e.LPush(*b2s(args[0]), *b2s(args[1]))
+		return e.LPush(string(args[0]), string(args[1]))
 	}},
 	{OpLPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		_, err := e.LPop(*b2s(args[0]))
-		return err
-	}},
-	{OpRPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key, item
-		return e.RPush(*b2s(args[0]), *b2s(args[1]))
-	}},
-	{OpRPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key
-		_, err := e.RPop(*b2s(args[0]))
-		return err
-	}},
-	{OpLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key
-		l, err := e.fetchList(*b2s(args[0]))
+		res, err := e.LPop(string(args[0]))
 		if err != nil {
 			return err
 		}
-		str := strconv.Itoa(l.Len())
-		_, err = w.Write(s2b(&str))
-		return err
+		return w.Write(s2b(&res))
+	}},
+	{OpRPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, item
+		return e.RPush(string(args[0]), string(args[1]))
+	}},
+	{OpRPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		res, err := e.RPop(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(s2b(&res))
+	}},
+	{OpLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		num, err := e.LLen(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(base.FormatInt(num))
 	}},
 	// bitmap
 	{OpBitSet, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset, val
-		_, err := e.BitSet(*b2s(args[0]), base.ParseInt[uint32](args[1]), args[2][0] == _true)
+		_, err := e.BitSet(string(args[0]), base.ParseInt[uint32](args[1]), args[2][0] == _true)
 		return err
+	}},
+	{OpBitTest, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key, offset
+		ok, err := e.BitTest(string(args[0]), base.ParseInt[uint32](args[1]))
+		if err != nil {
+			return err
+		}
+		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpBitFlip, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset
-		return e.BitFlip(*b2s(args[0]), base.ParseInt[uint32](args[1]))
+		return e.BitFlip(string(args[0]), base.ParseInt[uint32](args[1]))
 	}},
-	{OpBitOr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.BitOr(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpBitOr, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.BitOr(string(args[0]), srcKeys...)
 	}},
-	{OpBitAnd, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.BitAnd(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpBitAnd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.BitAnd(string(args[0]), srcKeys...)
 	}},
-	{OpBitXor, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key1, key2, dest
-		return e.BitXor(*b2s(args[0]), *b2s(args[1]), *b2s(args[2]))
+	{OpBitXor, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+		// dstKey, srcKeys...
+		srcKeys := base.ParseStrSlice(args[1])
+		return e.BitXor(string(args[0]), srcKeys...)
+	}},
+	{OpBitCount, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		n, err := e.BitCount(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(base.FormatInt(n))
+	}},
+	{OpBitArray, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		res, err := e.BitArray(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(base.FormatU32Slice(res))
 	}},
 	// zset
-	{OpZAdd, 4, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key, score, val
-		s, err := strconv.ParseFloat(*b2s(args[2]), 64)
+	{OpZAdd, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
+		// key, field, score, val
+		s, err := strconv.ParseFloat(string(args[2]), 64)
 		if err != nil {
 			return err
 		}
-		return e.ZAdd(*b2s(args[0]), *b2s(args[1]), s, args[3])
+		return e.ZAdd(string(args[0]), string(args[1]), s, args[3])
 	}},
 	{OpZIncr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key, score, val
-		s, err := strconv.ParseFloat(*b2s(args[2]), 64)
+		// key, field, score
+		s, err := strconv.ParseFloat(string(args[2]), 64)
 		if err != nil {
 			return err
 		}
-		_, err = e.ZIncr(*b2s(args[0]), *b2s(args[1]), s)
-		return err
+		res, err := e.ZIncr(string(args[0]), string(args[1]), s)
+		if err != nil {
+			return err
+		}
+		return w.Write([]byte(strconv.FormatFloat(res, 'f', -1, 64)))
 	}},
 	{OpZRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, val
-		return e.ZRemove(*b2s(args[0]), *b2s(args[1]))
+		return e.ZRemove(string(args[0]), string(args[1]))
 	}},
 	// others
 	{OpMarshalBytes, 1, func(e *Engine, args [][]byte, w base.Writer) error {
@@ -296,16 +379,15 @@ var cmdTable = []Cmd{
 		return e.m.UnmarshalBytes(args[0])
 	}},
 	{OpPing, 0, func(_ *Engine, _ [][]byte, w base.Writer) error {
-		_, err := w.Write([]byte("pong"))
-		return err
+		return w.Write([]byte("pong"))
 	}},
 }
 
-// VType is value type for Set Operation.
-type VType byte
+// Type is the data type for Rotom.
+type Type byte
 
 const (
-	TypeString VType = iota + 1
+	TypeString Type = iota + 1
 	TypeMap
 	TypeSet
 	TypeList
@@ -320,7 +402,6 @@ const (
 
 	KB = 1024
 	MB = 1024 * KB
-	GB = 1024 * MB
 )
 
 // Type aliases for structx types.
@@ -341,15 +422,17 @@ var (
 		SyncPolicy:       base.EveryInterval,
 		SyncInterval:     time.Second,
 		ShrinkInterval:   time.Minute,
+		MonitorIerval:    time.Minute,
 		RunSkipLoadError: true,
 		Logger:           slog.Default(),
 	}
 
 	// No persistent config
 	NoPersistentConfig = &Config{
-		ShardCount: 1024,
-		SyncPolicy: base.Never,
-		Logger:     slog.Default(),
+		ShardCount:    1024,
+		SyncPolicy:    base.Never,
+		MonitorIerval: time.Minute,
+		Logger:        slog.Default(),
 	}
 )
 
@@ -361,10 +444,11 @@ type Config struct {
 
 	SyncPolicy base.SyncPolicy // Data sync policy.
 
-	SyncInterval   time.Duration // Job for db sync to disk.
-	ShrinkInterval time.Duration // Job for shrink db file size.
+	SyncInterval   time.Duration // Sync to disk interval.
+	ShrinkInterval time.Duration // Shrink db file interval.
+	MonitorIerval  time.Duration // Monitor interval.
 
-	RunSkipLoadError bool // Starts when loading database file error.
+	RunSkipLoadError bool // Starts when loading db file error.
 
 	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
 }
@@ -374,11 +458,13 @@ type Engine struct {
 	sync.Mutex
 	*Config
 
-	// context
-	ctx    context.Context
-	cancel context.CancelFunc
+	// context.
+	ctx     context.Context
+	cancel  context.CancelFunc
+	tickers [3]*base.Ticker
 
-	loading bool //if db loading encode() not allowed.
+	// if db loading encode() not allowed.
+	loading bool
 
 	buf   *bytes.Buffer
 	rwbuf *bytes.Buffer
@@ -397,6 +483,7 @@ func Open(conf *Config) (*Engine, error) {
 		buf:     bytes.NewBuffer(nil),
 		rwbuf:   bytes.NewBuffer(nil),
 		m:       cache.New(conf.ShardCount),
+		tickers: [3]*base.Ticker{},
 	}
 
 	// load db from disk.
@@ -408,12 +495,14 @@ func Open(conf *Config) (*Engine, error) {
 
 	// runtime monitor.
 	if e.Logger != nil {
-		e.backend(time.Minute, func() { e.printRuntimeStats() })
+		e.tickers[0] = base.NewTicker(ctx, e.MonitorIerval, func() {
+			e.printRuntimeStats()
+		})
 	}
 
 	if e.SyncPolicy == base.EveryInterval {
 		// sync buffer to disk.
-		e.backend(e.SyncInterval, func() {
+		e.tickers[1] = base.NewTicker(ctx, e.SyncInterval, func() {
 			e.Lock()
 			n, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()
@@ -425,7 +514,7 @@ func Open(conf *Config) (*Engine, error) {
 		})
 
 		// shrink db.
-		e.backend(e.ShrinkInterval, func() {
+		e.tickers[2] = base.NewTicker(ctx, e.ShrinkInterval, func() {
 			e.Lock()
 			e.shrink()
 			e.Unlock()
@@ -504,30 +593,42 @@ func (e *Engine) SetTx(key string, val []byte, ts int64) {
 	e.m.SetTx(key, val, ts)
 }
 
-// Incr
-func (e *Engine) Incr(key string, incr float64) (res float64, err error) {
-	bytes, ts, err := e.GetBytes(key)
+// incr
+func (e *Engine) incr(key string, incr float64) (resb []byte, res float64, err error) {
+	b, ts, err := e.GetBytes(key)
 	if err != nil {
-		return 0, err
+		return nil, 0, err
 	}
 
-	f, err := strconv.ParseFloat(*b2s(bytes), 64)
+	f, err := strconv.ParseFloat(*b2s(b), 64)
 	if err != nil {
-		return 0, err
+		return nil, 0, err
 	}
 	res = f + incr
 	fstr := strconv.FormatFloat(res, 'f', -1, 64)
 
-	e.encode(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Str(fstr))
+	e.encode(NewCodec(OpIncr).Str(key).Float(incr))
 	e.m.SetTx(key, s2b(&fstr), ts)
 
-	return res, nil
+	return []byte(fstr), res, nil
+}
+
+// Incr
+func (e *Engine) Incr(key string, incr float64) (float64, error) {
+	_, res, err := e.incr(key, incr)
+	return res, err
 }
 
 // Remove
-func (e *Engine) Remove(key string) bool {
-	e.encode(NewCodec(OpRemove).Str(key))
-	return e.m.Delete(key)
+func (e *Engine) Remove(keys ...string) int {
+	e.encode(NewCodec(OpRemove).StrSlice(keys))
+	var sum int
+	for _, key := range keys {
+		if e.m.Delete(key) {
+			sum++
+		}
+	}
+	return sum
 }
 
 // Rename
@@ -557,7 +658,6 @@ func (e *Engine) HGet(key, field string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	res, ok := m.Get(field)
 	if !ok {
 		return nil, base.ErrFieldNotFound
@@ -607,35 +707,43 @@ func (e *Engine) HKeys(key string) ([]string, error) {
 }
 
 // SAdd
-func (e *Engine) SAdd(key string, item string) error {
+func (e *Engine) SAdd(key string, items ...string) (int, error) {
 	s, err := e.fetchSet(key, true)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	e.encode(NewCodec(OpSAdd).Str(key).Str(item))
-	s.Add(item)
-
-	return nil
+	e.encode(NewCodec(OpSAdd).Str(key).StrSlice(items))
+	return s.Append(items...), nil
 }
 
 // SRemove
-func (e *Engine) SRemove(key string, item string) (bool, error) {
+func (e *Engine) SRemove(key string, item string) error {
 	s, err := e.fetchSet(key)
 	if err != nil {
-		return false, err
+		return err
 	}
 	e.encode(NewCodec(OpSRemove).Str(key).Str(item))
-
-	return s.Remove(item), nil
+	s.Remove(item)
+	return nil
 }
 
-// SHas
+// SHas returns whether the given items are all in the set.
 func (e *Engine) SHas(key string, item string) (bool, error) {
 	s, err := e.fetchSet(key)
 	if err != nil {
 		return false, err
 	}
-	return s.Has(item), nil
+	return s.Contains(item), nil
+}
+
+// SPop
+func (e *Engine) SPop(key string) (string, bool, error) {
+	s, err := e.fetchSet(key)
+	if err != nil {
+		return "", false, err
+	}
+	res, ok := s.Pop()
+	return res, ok, nil
 }
 
 // SCard
@@ -644,7 +752,7 @@ func (e *Engine) SCard(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return s.Len(), nil
+	return s.Cardinality(), nil
 }
 
 // SMembers
@@ -657,70 +765,64 @@ func (e *Engine) SMembers(key string) ([]string, error) {
 }
 
 // SUnion
-func (e *Engine) SUnion(key1, key2, dest string) error {
-	s1, err := e.fetchSet(key1)
+func (e *Engine) SUnion(dstKey string, srcKeys ...string) error {
+	srcSet, err := e.fetchSet(srcKeys[0])
 	if err != nil {
 		return err
 	}
-	s2, err := e.fetchSet(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpSUnion).Str(key1).Str(key2).Str(dest))
+	s := srcSet.Clone()
 
-	if key1 == dest {
-		s1.Union(s2)
-	} else if key2 == dest {
-		s2.Union(s1)
-	} else {
-		e.m.Set(dest, s1.Clone().Union(s2))
+	for _, key := range srcKeys[1:] {
+		ts, err := e.fetchSet(key)
+		if err != nil {
+			return err
+		}
+		s.Union(ts)
 	}
+	e.encode(NewCodec(OpSUnion).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, s)
 
 	return nil
 }
 
 // SInter
-func (e *Engine) SInter(key1, key2, dest string) error {
-	s1, err := e.fetchSet(key1)
+func (e *Engine) SInter(dstKey string, srcKeys ...string) error {
+	srcSet, err := e.fetchSet(srcKeys[0])
 	if err != nil {
 		return err
 	}
-	s2, err := e.fetchSet(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpSInter).Str(key1).Str(key2).Str(dest))
+	s := srcSet.Clone()
 
-	if key1 == dest {
-		s1.Intersect(s2)
-	} else if key2 == dest {
-		s2.Intersect(s1)
-	} else {
-		e.m.Set(dest, s1.Clone().Intersect(s2))
+	for _, key := range srcKeys[1:] {
+		ts, err := e.fetchSet(key)
+		if err != nil {
+			return err
+		}
+		s.Intersect(ts)
 	}
+	e.encode(NewCodec(OpSInter).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, s)
 
 	return nil
 }
 
 // SDiff
-func (e *Engine) SDiff(key1, key2, dest string) error {
-	s1, err := e.fetchSet(key1)
+func (e *Engine) SDiff(dstKey string, srcKeys ...string) error {
+	srcSet, err := e.fetchSet(srcKeys[0])
 	if err != nil {
 		return err
 	}
-	s2, err := e.fetchSet(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpSDiff).Str(key1).Str(key2).Str(dest))
+	s := srcSet.Clone()
 
-	if key1 == dest {
-		s1.Difference(s2)
-	} else if key2 == dest {
-		s2.Difference(s1)
-	} else {
-		e.m.Set(dest, s1.Clone().Difference(s2))
+	for _, key := range srcKeys[1:] {
+		ts, err := e.fetchSet(key)
+		if err != nil {
+			return err
+		}
+		s.Difference(ts)
 	}
+	e.encode(NewCodec(OpSDiff).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, s)
 
 	return nil
 }
@@ -824,70 +926,49 @@ func (e *Engine) BitFlip(key string, offset uint32) error {
 }
 
 // BitOr
-func (e *Engine) BitOr(key1, key2, dest string) error {
-	bm1, err := e.fetchBitMap(key1)
-	if err != nil {
-		return err
+func (e *Engine) BitOr(dstKey string, srcKeys ...string) error {
+	bm := structx.NewBitmap()
+	for _, key := range srcKeys {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.Or(tbm)
 	}
-	bm2, err := e.fetchBitMap(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpBitOr).Str(key1).Str(key2).Str(dest))
-
-	if key1 == dest {
-		bm1.Or(bm2)
-	} else if key2 == dest {
-		bm2.Or(bm1)
-	} else {
-		e.m.Set(dest, bm1.Clone().Or(bm2))
-	}
+	e.encode(NewCodec(OpBitOr).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, bm)
 
 	return nil
 }
 
 // BitXor
-func (e *Engine) BitXor(key1, key2, dest string) error {
-	bm1, err := e.fetchBitMap(key1)
-	if err != nil {
-		return err
+func (e *Engine) BitXor(dstKey string, srcKeys ...string) error {
+	bm := structx.NewBitmap()
+	for _, key := range srcKeys {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.Xor(tbm)
 	}
-	bm2, err := e.fetchBitMap(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpBitXor).Str(key1).Str(key2).Str(dest))
-
-	if key1 == dest {
-		bm1.Xor(bm2)
-	} else if key2 == dest {
-		bm2.Xor(bm1)
-	} else {
-		e.m.Set(dest, bm1.Clone().Xor(bm2))
-	}
+	e.encode(NewCodec(OpBitXor).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, bm)
 
 	return nil
 }
 
 // BitAnd
-func (e *Engine) BitAnd(key1, key2, dest string) error {
-	bm1, err := e.fetchBitMap(key1)
-	if err != nil {
-		return err
+func (e *Engine) BitAnd(dstKey string, srcKeys ...string) error {
+	bm := structx.NewBitmap()
+	for _, key := range srcKeys {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.And(tbm)
 	}
-	bm2, err := e.fetchBitMap(key2)
-	if err != nil {
-		return err
-	}
-	e.encode(NewCodec(OpBitAnd).Str(key1).Str(key2).Str(dest))
-
-	if key1 == dest {
-		bm1.And(bm2)
-	} else if key2 == dest {
-		bm2.And(bm1)
-	} else {
-		e.m.Set(dest, bm1.Clone().And(bm2))
-	}
+	e.encode(NewCodec(OpBitAnd).Str(dstKey).StrSlice(srcKeys))
+	e.m.Set(dstKey, bm)
 
 	return nil
 }
@@ -984,7 +1065,7 @@ func (e *Engine) load() error {
 		if err != nil {
 			return err
 		}
-		if err := cmdTable[op].hook(e, args, nil); err != nil {
+		if err := cmdTable[op].hook(e, args, base.NullWriter{}); err != nil {
 			return err
 		}
 	}
@@ -995,28 +1076,24 @@ func (e *Engine) load() error {
 
 // rewrite write data to the file.
 func (e *Engine) shrink() {
-	if e.SyncPolicy == base.Never {
-		return
-	}
-
-	var rec VType
-	// Marshal any
+	var _type Type
 	data, err := e.m.MarshalBytesFunc(func(key string, v any, i int64) {
-		switch v.(type) {
+		switch v := v.(type) {
 		case Map:
-			rec = TypeString
+			_type = TypeString
 		case BitMap:
-			rec = TypeBitmap
+			_type = TypeBitmap
 		case List:
-			rec = TypeList
+			_type = TypeList
 		case Set:
-			rec = TypeSet
+			_type = TypeSet
+		case ZSet:
+			_type = TypeZSet
 		default:
-			panic(base.ErrUnSupportDataType)
+			panic(fmt.Errorf("%w: %d", base.ErrUnSupportDataType, v))
 		}
-
 		// SetTx
-		if cd, err := NewCodec(OpSetTx).Type(rec).Str(key).Int(i / timeCarry).Any(v); err == nil {
+		if cd, err := NewCodec(OpSetTx).Type(_type).Str(key).Int(i / timeCarry).Any(v); err == nil {
 			e.rwbuf.Write(cd.B)
 			cd.Recycle()
 		}
@@ -1040,58 +1117,64 @@ func (e *Engine) shrink() {
 	e.logInfo("rotom rewrite done")
 }
 
+// Shrink forced to shrink db file.
+// Warning: will panic if SyncPolicy is never.
+func (e *Engine) Shrink() error {
+	return e.tickers[2].ForceFunc()
+}
+
 // fetchMap
-func (e *Engine) fetchMap(key string, setWhenNotExist ...bool) (m Map, err error) {
+func (e *Engine) fetchMap(key string, setnx ...bool) (m Map, err error) {
 	return fetch(e, key, func() Map {
 		return structx.NewSyncMap[string, []byte]()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetchSet
-func (e *Engine) fetchSet(key string, setWhenNotExist ...bool) (s Set, err error) {
+func (e *Engine) fetchSet(key string, setnx ...bool) (s Set, err error) {
 	return fetch(e, key, func() Set {
 		return structx.NewSet[string]()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetchList
-func (e *Engine) fetchList(key string, setWhenNotExist ...bool) (m List, err error) {
+func (e *Engine) fetchList(key string, setnx ...bool) (m List, err error) {
 	return fetch(e, key, func() List {
 		return structx.NewList[string]()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetchBitMap
-func (e *Engine) fetchBitMap(key string, setWhenNotExist ...bool) (bm BitMap, err error) {
+func (e *Engine) fetchBitMap(key string, setnx ...bool) (bm BitMap, err error) {
 	return fetch(e, key, func() BitMap {
 		return structx.NewBitmap()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetchZSet
-func (e *Engine) fetchZSet(key string, setWhenNotExist ...bool) (z ZSet, err error) {
+func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 	return fetch(e, key, func() ZSet {
 		return structx.NewZSet[string, float64, []byte]()
-	}, setWhenNotExist...)
+	}, setnx...)
 }
 
 // fetch
-func fetch[T any](e *Engine, key string, new func() T, setWhenNotExist ...bool) (T, error) {
+func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err error) {
 	m, _, ok := e.m.Get(key)
 	if ok {
 		m, ok := m.(T)
 		if ok {
 			return m, nil
 		}
-		var v T
-		return v, base.ErrWrongType
-	}
-	vptr := new()
-	if len(setWhenNotExist) > 0 && setWhenNotExist[0] {
-		e.m.Set(key, vptr)
+		return v, fmt.Errorf("%w: %v->%v", base.ErrWrongType, reflect.TypeOf(m), reflect.TypeOf(v))
 	}
 
-	return vptr, nil
+	v = new()
+	if len(setnx) > 0 && setnx[0] {
+		e.m.Set(key, v)
+	}
+
+	return v, nil
 }
 
 // formatSize
@@ -1101,28 +1184,9 @@ func formatSize[T base.Integer](size T) string {
 		return fmt.Sprintf("%dB", size)
 	case size < MB:
 		return fmt.Sprintf("%.1fKB", float64(size)/KB)
-	case size < GB:
-		return fmt.Sprintf("%.1fMB", float64(size)/MB)
 	default:
-		return fmt.Sprintf("%.1fGB", float64(size)/GB)
+		return fmt.Sprintf("%.1fMB", float64(size)/MB)
 	}
-}
-
-// backend
-func (e *Engine) backend(t time.Duration, f func()) {
-	if t <= 0 {
-		panic("invalid interval")
-	}
-	go func() {
-		for {
-			select {
-			case <-time.After(t):
-				f()
-			case <-e.ctx.Done():
-				return
-			}
-		}
-	}()
 }
 
 // printRuntimeStats
