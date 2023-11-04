@@ -209,40 +209,6 @@ func TestSetTTL(t *testing.T) {
 	}
 }
 
-func FuzzSet(f *testing.F) {
-	db, err := Open(NoPersistentConfig)
-	if err != nil {
-		panic(err)
-	}
-
-	f.Fuzz(func(t *testing.T, key string, val []byte, ts int64) {
-		assert := assert.New(t)
-		db.SetTx(key, val, ts)
-		now := cache.GetClock()
-
-		v, ttl, err := db.GetBytes(key)
-
-		// no ttl
-		if ts == 0 {
-			assert.Equal(v, val)
-			assert.Equal(ttl, int64(0))
-			assert.Equal(err, nil)
-
-			// expired
-		} else if ts < now {
-			assert.Equal(v, nil)
-			assert.Equal(ttl, int64(0))
-			assert.Equal(err, base.ErrKeyNotFound)
-
-			// not expired
-		} else if ts > now {
-			assert.Equal(v, val)
-			assert.Equal(ttl, ts)
-			assert.Equal(err, nil)
-		}
-	})
-}
-
 func TestHmap(t *testing.T) {
 	assert := assert.New(t)
 

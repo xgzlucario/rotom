@@ -416,7 +416,7 @@ type (
 
 var (
 	// Default config for db
-	DefaultConfig = &Config{
+	DefaultConfig = Config{
 		Path:             "rotom.db",
 		ShardCount:       1024,
 		SyncPolicy:       base.EveryInterval,
@@ -428,7 +428,7 @@ var (
 	}
 
 	// No persistent config
-	NoPersistentConfig = &Config{
+	NoPersistentConfig = Config{
 		ShardCount:    1024,
 		SyncPolicy:    base.Never,
 		MonitorIerval: time.Minute,
@@ -456,7 +456,7 @@ type Config struct {
 // Engine represents a rotom engine for storage.
 type Engine struct {
 	sync.Mutex
-	*Config
+	Config
 
 	// context.
 	ctx     context.Context
@@ -473,7 +473,7 @@ type Engine struct {
 
 // Open opens a database specified by config.
 // The file will be created automatically if not exist.
-func Open(conf *Config) (*Engine, error) {
+func Open(conf Config) (*Engine, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	e := &Engine{
 		Config:  conf,
