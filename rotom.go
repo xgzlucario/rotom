@@ -273,8 +273,11 @@ var cmdTable = []Cmd{
 	}},
 	{OpLPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		_, err := e.LPop(string(args[0]))
-		return err
+		res, err := e.LPop(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(s2b(&res))
 	}},
 	{OpRPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, item
@@ -282,16 +285,19 @@ var cmdTable = []Cmd{
 	}},
 	{OpRPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
-		_, err := e.RPop(string(args[0]))
-		return err
-	}},
-	{OpLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key
-		l, err := e.fetchList(string(args[0]))
+		res, err := e.RPop(string(args[0]))
 		if err != nil {
 			return err
 		}
-		return w.Write(base.FormatInt(l.Len()))
+		return w.Write(s2b(&res))
+	}},
+	{OpLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+		// key
+		num, err := e.LLen(string(args[0]))
+		if err != nil {
+			return err
+		}
+		return w.Write(base.FormatInt(num))
 	}},
 	// bitmap
 	{OpBitSet, 3, func(e *Engine, args [][]byte, w base.Writer) error {

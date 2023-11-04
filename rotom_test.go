@@ -323,27 +323,24 @@ func TestHmap(t *testing.T) {
 func TestList(t *testing.T) {
 	assert := assert.New(t)
 
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-
-	db, err := Open(cfg)
+	db, cli, err := newDBInstance()
 	assert.Nil(err)
 
 	for i := 0; i < 1000; i++ {
 		key := gofakeit.UUID()
 
 		for j := 0; j < 100; j++ {
-			err := db.RPush(key, strconv.Itoa(j))
+			err := cli.RPush(key, strconv.Itoa(j))
 			assert.Nil(err)
 		}
 		for j := 0; j < 100; j++ {
-			res, err := db.LPop(key)
+			res, err := cli.LPop(key)
 			assert.Nil(err)
 			assert.Equal(res, strconv.Itoa(j))
 		}
 
 		// LLen
-		num, err := db.LLen(key)
+		num, err := cli.LLen(key)
 		assert.Nil(err)
 		assert.Equal(num, 0)
 	}
@@ -352,41 +349,43 @@ func TestList(t *testing.T) {
 		key := gofakeit.UUID()
 
 		for j := 0; j < 100; j++ {
-			err := db.LPush(key, strconv.Itoa(j))
+			err := cli.LPush(key, strconv.Itoa(j))
 			assert.Nil(err)
 		}
 		for j := 0; j < 100; j++ {
-			res, err := db.RPop(key)
+			res, err := cli.RPop(key)
 			assert.Nil(err)
 			assert.Equal(res, strconv.Itoa(j))
 		}
 
 		// LLen
-		num, err := db.LLen(key)
+		num, err := cli.LLen(key)
 		assert.Nil(err)
 		assert.Equal(num, 0)
 	}
 
 	// Error
-	db.HSet("map", "key", []byte("value"))
+	cli.HSet("map", "key", []byte("value"))
 
-	err = db.LPush("map", "1")
+	err = cli.LPush("map", "1")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	err = db.RPush("map", "1")
+	err = cli.RPush("map", "1")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	res, err := db.LPop("map")
+	res, err := cli.LPop("map")
 	assert.Equal(res, "")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	res, err = db.RPop("map")
+	res, err = cli.RPop("map")
 	assert.Equal(res, "")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	n, err := db.LLen("map")
+	n, err := cli.LLen("map")
 	assert.Equal(n, 0)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	db.Close()
 }
 
 func TestSet(t *testing.T) {
@@ -484,6 +483,15 @@ func TestSet(t *testing.T) {
 
 	m, err := cli.SMembers("map")
 	assert.Equal(m, nilStrings)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	err = cli.SUnion("map", "map")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	err = cli.SDiff("map", "map")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	err = cli.SInter("map", "map")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	db.Shrink()

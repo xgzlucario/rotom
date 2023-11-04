@@ -187,6 +187,43 @@ func (c *Client) SDiff(dstKey string, srcKeys ...string) error {
 	return c.doNoRes(NewCodec(OpSDiff).Str(dstKey).StrSlice(srcKeys))
 }
 
+// LPush
+func (c *Client) LPush(key, item string) error {
+	return c.doNoRes(NewCodec(OpLPush).Str(key).Str(item))
+}
+
+// LPop
+func (c *Client) LPop(key string) (string, error) {
+	res, err := c.do(NewCodec(OpLPop).Str(key))
+	if err != nil {
+		return "", err
+	}
+	return string(res), nil
+}
+
+// RPush
+func (c *Client) RPush(key, item string) error {
+	return c.doNoRes(NewCodec(OpRPush).Str(key).Str(item))
+}
+
+// RPop
+func (c *Client) RPop(key string) (string, error) {
+	res, err := c.do(NewCodec(OpRPop).Str(key))
+	if err != nil {
+		return "", err
+	}
+	return string(res), nil
+}
+
+// LLen
+func (c *Client) LLen(key string) (int, error) {
+	args, err := c.do(NewCodec(OpLLen).Str(key))
+	if err != nil {
+		return 0, err
+	}
+	return base.ParseInt[int](args), nil
+}
+
 // BitSet
 func (c *Client) BitSet(key string, offset uint32, val bool) error {
 	return c.doNoRes(NewCodec(OpBitSet).Str(key).Uint(offset).Bool(val))
