@@ -1076,12 +1076,7 @@ func (e *Engine) load() error {
 
 // rewrite write data to the file.
 func (e *Engine) shrink() {
-	if e.SyncPolicy == base.Never {
-		return
-	}
-
 	var _type Type
-	// Marshal any
 	data, err := e.m.MarshalBytesFunc(func(key string, v any, i int64) {
 		switch v := v.(type) {
 		case Map:
@@ -1097,7 +1092,6 @@ func (e *Engine) shrink() {
 		default:
 			panic(fmt.Errorf("%w: %d", base.ErrUnSupportDataType, v))
 		}
-
 		// SetTx
 		if cd, err := NewCodec(OpSetTx).Type(_type).Str(key).Int(i / timeCarry).Any(v); err == nil {
 			e.rwbuf.Write(cd.B)
@@ -1124,10 +1118,8 @@ func (e *Engine) shrink() {
 }
 
 // Shrink forced to shrink db file.
+// Warning: will panic if SyncPolicy is never.
 func (e *Engine) Shrink() error {
-	if e.tickers[2] == nil {
-		return base.ErrUnSupportOperation
-	}
 	return e.tickers[2].ForceFunc()
 }
 

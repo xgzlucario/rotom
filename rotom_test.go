@@ -39,7 +39,7 @@ func newDBInstance() (*Engine, *Client, error) {
 
 	// listen
 	go db.Listen(addr)
-	time.Sleep(time.Second / 20)
+	time.Sleep(time.Millisecond)
 
 	cli, err := NewClient(addr)
 	if err != nil {
@@ -384,6 +384,17 @@ func TestList(t *testing.T) {
 	n, err := cli.LLen("map")
 	assert.Equal(n, 0)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	cli.RPush("list", "1")
+	cli.RPop("list")
+	// empty list
+	res, err = cli.LPop("list")
+	assert.Equal(res, "")
+	assert.Equal(err, base.ErrEmptyList)
+
+	res, err = cli.RPop("list")
+	assert.Equal(res, "")
+	assert.Equal(err, base.ErrEmptyList)
 
 	db.Close()
 }
