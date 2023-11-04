@@ -88,9 +88,9 @@ var cmdTable = []Cmd{
 			return nil
 		}
 
-		vType := VType(args[0][0])
+		Type := Type(args[0][0])
 
-		switch vType {
+		switch Type {
 		case TypeString:
 			e.m.SetTx(string(args[1]), args[3], ts)
 
@@ -122,8 +122,15 @@ var cmdTable = []Cmd{
 			}
 			e.m.Set(string(args[1]), m)
 
+		case TypeZSet:
+			m := structx.NewZSet[string, float64, []byte]()
+			if err := m.UnmarshalJSON(args[3]); err != nil {
+				return err
+			}
+			e.m.Set(string(args[1]), m)
+
 		default:
-			return fmt.Errorf("%v: %d", base.ErrUnSupportDataType, vType)
+			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, Type)
 		}
 
 		return nil
@@ -337,7 +344,7 @@ var cmdTable = []Cmd{
 	}},
 	// zset
 	{OpZAdd, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
-		// key, score, val
+		// key, field, score, val
 		s, err := strconv.ParseFloat(string(args[2]), 64)
 		if err != nil {
 			return err
@@ -345,13 +352,16 @@ var cmdTable = []Cmd{
 		return e.ZAdd(string(args[0]), string(args[1]), s, args[3])
 	}},
 	{OpZIncr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
-		// key, score, val
+		// key, field, score
 		s, err := strconv.ParseFloat(string(args[2]), 64)
 		if err != nil {
 			return err
 		}
-		_, err = e.ZIncr(string(args[0]), string(args[1]), s)
-		return err
+		res, err := e.ZIncr(string(args[0]), string(args[1]), s)
+		if err != nil {
+			return err
+		}
+		return w.Write([]byte(strconv.FormatFloat(res, 'f', -1, 64)))
 	}},
 	{OpZRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, val
@@ -367,11 +377,11 @@ var cmdTable = []Cmd{
 	}},
 }
 
-// VType is value type for Set Operation.
-type VType byte
+// Type is the data type for Rotom.
+type Type byte
 
 const (
-	TypeString VType = iota + 1
+	TypeString Type = iota + 1
 	TypeMap
 	TypeSet
 	TypeList
@@ -406,15 +416,17 @@ var (
 		SyncPolicy:       base.EveryInterval,
 		SyncInterval:     time.Second,
 		ShrinkInterval:   time.Minute,
+		MonitorIerval:    time.Minute,
 		RunSkipLoadError: true,
 		Logger:           slog.Default(),
 	}
 
 	// No persistent config
 	NoPersistentConfig = &Config{
-		ShardCount: 1024,
-		SyncPolicy: base.Never,
-		Logger:     slog.Default(),
+		ShardCount:    1024,
+		SyncPolicy:    base.Never,
+		MonitorIerval: time.Minute,
+		Logger:        slog.Default(),
 	}
 )
 
@@ -428,6 +440,7 @@ type Config struct {
 
 	SyncInterval   time.Duration // Sync to disk interval.
 	ShrinkInterval time.Duration // Shrink db file interval.
+	MonitorIerval  time.Duration // Monitor interval.
 
 	RunSkipLoadError bool // Starts when loading db file error.
 
@@ -476,7 +489,7 @@ func Open(conf *Config) (*Engine, error) {
 
 	// runtime monitor.
 	if e.Logger != nil {
-		e.tickers[0] = base.NewTicker(ctx, time.Minute, func() {
+		e.tickers[0] = base.NewTicker(ctx, e.MonitorIerval, func() {
 			e.printRuntimeStats()
 		})
 	}
@@ -1061,10 +1074,10 @@ func (e *Engine) shrink() {
 		return
 	}
 
-	var _type VType
+	var _type Type
 	// Marshal any
 	data, err := e.m.MarshalBytesFunc(func(key string, v any, i int64) {
-		switch v.(type) {
+		switch v := v.(type) {
 		case Map:
 			_type = TypeString
 		case BitMap:
@@ -1073,8 +1086,10 @@ func (e *Engine) shrink() {
 			_type = TypeList
 		case Set:
 			_type = TypeSet
+		case ZSet:
+			_type = TypeZSet
 		default:
-			panic(base.ErrUnSupportDataType)
+			panic(fmt.Errorf("%w: %d", base.ErrUnSupportDataType, v))
 		}
 
 		// SetTx

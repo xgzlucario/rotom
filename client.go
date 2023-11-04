@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bytedance/sonic"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 )
@@ -111,9 +110,7 @@ func (c *Client) HKeys(key string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var keys []string
-	err = sonic.Unmarshal(args, &keys)
-	return keys, err
+	return base.ParseStrSlice(args), err
 }
 
 // HRemove
@@ -240,6 +237,25 @@ func (c *Client) BitArray(key string) ([]uint32, error) {
 		return nil, err
 	}
 	return base.ParseU32Slice(res), nil
+}
+
+// ZAdd
+func (c *Client) ZAdd(key, field string, score float64, val []byte) error {
+	return c.doNoRes(NewCodec(OpZAdd).Str(key).Str(field).Float(score).Bytes(val))
+}
+
+// ZIncr
+func (c *Client) ZIncr(key, field string, score float64) (float64, error) {
+	args, err := c.do(NewCodec(OpZIncr).Str(key).Str(field).Float(score))
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseFloat(*b2s(args), 64)
+}
+
+// ZRemove
+func (c *Client) ZRemove(key, field string) error {
+	return c.doNoRes(NewCodec(OpZRemove).Str(key).Str(field))
 }
 
 // Close

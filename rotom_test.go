@@ -3,6 +3,7 @@ package rotom
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -23,14 +24,15 @@ var (
 	nilStrings []string
 )
 
-func TestDB(t *testing.T) {
-	assert := assert.New(t)
-
+func newDBInstance() (*Engine, *Client, error) {
 	cfg := DefaultConfig
+	cfg.MonitorIerval = time.Second
 	cfg.Path = gofakeit.UUID() + ".db"
 
 	db, err := Open(cfg)
-	assert.Nil(err)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	port := gofakeit.Number(10000, 20000)
 	addr := "localhost:" + strconv.Itoa(port)
@@ -40,6 +42,17 @@ func TestDB(t *testing.T) {
 	time.Sleep(time.Second / 20)
 
 	cli, err := NewClient(addr)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return db, cli, nil
+}
+
+func TestDB(t *testing.T) {
+	assert := assert.New(t)
+
+	db, cli, err := newDBInstance()
 	assert.Nil(err)
 
 	// Test db operations
@@ -67,13 +80,22 @@ func TestDB(t *testing.T) {
 	cli.SetEx("foo1", []byte("bar"), time.Minute)
 	cli.HSet("map", "foo", []byte("bar"))
 
+	// Error
+	r, err = db.Incr("foo", 1)
+	assert.Equal(r, float64(0))
+	assert.NotNil(err)
+
 	// Len
 	num, err := cli.Len()
 	assert.Nil(err)
 	assert.Equal(num, uint64(5))
 
 	// Get
-	val, err := cli.Get("map")
+	val, err := cli.Get("foo")
+	assert.Equal(val, []byte("bar"))
+	assert.Nil(err)
+
+	val, err = cli.Get("map")
 	assert.Equal(val, nilBytes)
 	assert.Equal(err, base.ErrTypeAssert)
 
@@ -106,12 +128,16 @@ func TestDB(t *testing.T) {
 	assert.Equal(sum, 0)
 	assert.Nil(err)
 
-	db.printRuntimeStats()
 	time.Sleep(time.Second)
 
 	// close
 	assert.Nil(db.Close())
 	assert.Equal(db.Close(), base.ErrDatabaseClosed)
+
+	// Load Error
+	os.WriteFile(db.Config.Path, []byte("fake"), 0644)
+	_, err = Open(db.Config)
+	assert.Equal(err, base.ErrParseRecordLine)
 }
 
 func TestSetTTL(t *testing.T) {
@@ -220,20 +246,7 @@ func FuzzSet(f *testing.F) {
 func TestHmap(t *testing.T) {
 	assert := assert.New(t)
 
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-
-	db, err := Open(cfg)
-	assert.Nil(err)
-
-	port := gofakeit.Number(10000, 20000)
-	addr := "localhost:" + strconv.Itoa(port)
-
-	// listen
-	go db.Listen(addr)
-	time.Sleep(time.Second / 20)
-
-	cli, err := NewClient(addr)
+	db, cli, err := newDBInstance()
 	assert.Nil(err)
 	defer cli.Close()
 
@@ -310,20 +323,7 @@ func TestHmap(t *testing.T) {
 func TestSet(t *testing.T) {
 	assert := assert.New(t)
 
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-
-	db, err := Open(cfg)
-	assert.Nil(err)
-
-	port := gofakeit.Number(10000, 20000)
-	addr := "localhost:" + strconv.Itoa(port)
-
-	// listen
-	go db.Listen(addr)
-	time.Sleep(time.Second / 20)
-
-	cli, err := NewClient(addr)
+	db, cli, err := newDBInstance()
 	assert.Nil(err)
 
 	// SAdd
@@ -428,25 +428,14 @@ func TestSet(t *testing.T) {
 func TestBitmap(t *testing.T) {
 	assert := assert.New(t)
 
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-
-	db, err := Open(cfg)
-	assert.Nil(err)
-
-	port := gofakeit.Number(10000, 20000)
-	addr := "localhost:" + strconv.Itoa(port)
-
-	// listen
-	go db.Listen(addr)
-	time.Sleep(time.Second / 20)
-
-	cli, err := NewClient(addr)
+	db, cli, err := newDBInstance()
 	assert.Nil(err)
 
 	for i := 0; i < 1000; i++ {
 		key := strconv.Itoa(i / 100)
 
+		assert.Nil(cli.BitSet(key, uint32(i), true))
+		assert.Nil(cli.BitSet(key, uint32(i), false))
 		assert.Nil(cli.BitSet(key, uint32(i), true))
 
 		ok, err := cli.BitTest(key, uint32(i))
@@ -458,8 +447,14 @@ func TestBitmap(t *testing.T) {
 
 		// Error
 		cli.Set("none", []byte("1"))
+		err = cli.BitSet("none", uint32(i), true)
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+
 		ok, err = cli.BitTest("none", uint32(i))
 		assert.False(ok)
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		err = cli.BitFlip("none", uint32(i))
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 
 		m, err := cli.BitArray("none")
@@ -507,47 +502,50 @@ func TestBitmap(t *testing.T) {
 	db.Close()
 
 	// Load
-	_, err = Open(cfg)
+	_, err = Open(db.Config)
 	assert.Nil(err)
 }
 
 func TestZSet(t *testing.T) {
 	assert := assert.New(t)
 
-	db, err := Open(NoPersistentConfig)
+	db, cli, err := newDBInstance()
 	assert.Nil(err)
 
 	// ZAdd
-	for i := 0; i < 10000; i++ {
-		err := db.ZAdd("zset", fmt.Sprintf("key-%d", i), float64(i), nil)
+	for i := 0; i < 1000; i++ {
+		err := cli.ZAdd("zset", fmt.Sprintf("key-%d", i), float64(i), nil)
 		assert.Nil(err)
 	}
 
 	// ZIncr
-	for i := 0; i < 10000; i++ {
-		num, err := db.ZIncr("zset", fmt.Sprintf("key-%d", i), 3)
+	for i := 0; i < 1000; i++ {
+		num, err := cli.ZIncr("zset", fmt.Sprintf("key-%d", i), 3)
 		assert.Nil(err)
 		assert.Equal(num, float64(i+3))
 	}
 
 	// ZRemove
-	for i := 0; i < 10000; i++ {
-		err := db.ZRemove("zset", fmt.Sprintf("key-%d", i))
+	for i := 0; i < 1000; i++ {
+		err := cli.ZRemove("zset", fmt.Sprintf("key-%d", i))
 		assert.Nil(err)
 	}
 
 	// Test error
-	db.SAdd("set", "1")
+	cli.SAdd("set", "1")
 
-	err = db.ZAdd("set", "key", 1, nil)
+	err = cli.ZAdd("set", "key", 1, nil)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	_, err = db.ZIncr("set", "key", 1)
+	_, err = cli.ZIncr("set", "key", 1)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	err = db.ZRemove("set", "key")
+	err = cli.ZRemove("set", "key")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	// load
+	db.Shrink()
 	db.Close()
+	_, err = Open(db.Config)
+	assert.Nil(err)
 }

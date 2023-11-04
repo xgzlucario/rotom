@@ -45,7 +45,7 @@ func (s *Codec) StrSlice(v []string) *Codec {
 	return s.format(base.FormatStrSlice(v))
 }
 
-func (s *Codec) Type(v VType) *Codec {
+func (s *Codec) Type(v Type) *Codec {
 	return s.format([]byte{byte(v)})
 }
 
