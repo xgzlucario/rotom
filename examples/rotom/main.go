@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	_ "net/http/pprof"
+	"strconv"
 
 	"github.com/xgzlucario/rotom"
 )
@@ -18,6 +20,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	key := "key"
+
+	for j := 0; j < 20; j++ {
+		db.RPush(key, strconv.Itoa(j))
+	}
+	for j := 0; j < 20; j++ {
+		res, err := db.LPop(key)
+		fmt.Println(res, err)
+	}
+
+	// LLen
+	num, err := db.LLen(key)
+	fmt.Println(num, err)
 
 	// run for web server
 	if err := db.Listen("0.0.0.0:7676"); err != nil {

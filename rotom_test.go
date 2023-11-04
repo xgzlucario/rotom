@@ -320,6 +320,75 @@ func TestHmap(t *testing.T) {
 	// assert.Nil(err)
 }
 
+func TestList(t *testing.T) {
+	assert := assert.New(t)
+
+	cfg := DefaultConfig
+	cfg.Path = gofakeit.UUID() + ".db"
+
+	db, err := Open(cfg)
+	assert.Nil(err)
+
+	for i := 0; i < 1000; i++ {
+		key := gofakeit.UUID()
+
+		for j := 0; j < 100; j++ {
+			err := db.RPush(key, strconv.Itoa(j))
+			assert.Nil(err)
+		}
+		for j := 0; j < 100; j++ {
+			res, err := db.LPop(key)
+			assert.Nil(err)
+			assert.Equal(res, strconv.Itoa(j))
+		}
+
+		// LLen
+		num, err := db.LLen(key)
+		assert.Nil(err)
+		assert.Equal(num, 0)
+	}
+
+	for i := 0; i < 1000; i++ {
+		key := gofakeit.UUID()
+
+		for j := 0; j < 100; j++ {
+			err := db.LPush(key, strconv.Itoa(j))
+			assert.Nil(err)
+		}
+		for j := 0; j < 100; j++ {
+			res, err := db.RPop(key)
+			assert.Nil(err)
+			assert.Equal(res, strconv.Itoa(j))
+		}
+
+		// LLen
+		num, err := db.LLen(key)
+		assert.Nil(err)
+		assert.Equal(num, 0)
+	}
+
+	// Error
+	db.HSet("map", "key", []byte("value"))
+
+	err = db.LPush("map", "1")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	err = db.RPush("map", "1")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	res, err := db.LPop("map")
+	assert.Equal(res, "")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	res, err = db.RPop("map")
+	assert.Equal(res, "")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	n, err := db.LLen("map")
+	assert.Equal(n, 0)
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+}
+
 func TestSet(t *testing.T) {
 	assert := assert.New(t)
 
