@@ -114,11 +114,6 @@ func TestDB(t *testing.T) {
 		assert.Equal(err, base.ErrKeyNotFound)
 	}
 
-	// Rename
-	ok, err := cli.Rename("foo", "foo2")
-	assert.True(ok)
-	assert.Nil(err)
-
 	// Remove
 	sum, err := cli.Remove("foo2")
 	assert.Equal(sum, 1)

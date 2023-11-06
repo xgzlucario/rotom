@@ -29,7 +29,6 @@ const (
 	OpGet
 	OpRemove
 	OpIncr
-	OpRename
 	OpLen
 	// map
 	OpHSet
@@ -160,11 +159,6 @@ var cmdTable = []Cmd{
 			return err
 		}
 		return w.Write(res)
-	}},
-	{OpRename, 2, func(e *Engine, args [][]byte, w base.Writer) error {
-		// old, new
-		ok := e.Rename(string(args[0]), string(args[1]))
-		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
 		return w.Write(base.FormatInt(e.Stat().Len))
@@ -629,12 +623,6 @@ func (e *Engine) Remove(keys ...string) int {
 		}
 	}
 	return sum
-}
-
-// Rename
-func (e *Engine) Rename(old, new string) bool {
-	e.encode(NewCodec(OpRename).Str(old).Str(new))
-	return e.m.Rename(old, new)
 }
 
 // Keys
