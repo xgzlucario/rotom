@@ -1,6 +1,10 @@
 package structx
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/bytedance/sonic"
+)
 
 // List
 type List[T any] struct {
@@ -28,10 +32,8 @@ func NewList[T any]() *List[T] {
 	}
 }
 
-// RPush
-func (l *List[T]) RPush(elem T) {
-	l.Lock()
-	defer l.Unlock()
+// rpush
+func (l *List[T]) rpush(elem T) {
 	b := l.buckets[l.tail]
 
 	if b.isFull() {
@@ -44,6 +46,13 @@ func (l *List[T]) RPush(elem T) {
 
 	b.data = append(b.data, elem)
 	l.len++
+}
+
+// RPush
+func (l *List[T]) RPush(elem T) {
+	l.Lock()
+	l.rpush(elem)
+	l.Unlock()
 }
 
 // LPush
@@ -169,13 +178,26 @@ func (l *List[T]) MarshalJSON() ([]byte, error) {
 	l.RLock()
 	defer l.RUnlock()
 
-	return nil, nil
+	arr := make([]T, 0, l.len)
+	for _, b := range l.buckets {
+		arr = append(arr, b.data...)
+	}
+
+	return sonic.Marshal(arr)
 }
 
 // UnmarshalJSON
 func (l *List[T]) UnmarshalJSON(b []byte) error {
 	l.Lock()
 	defer l.Unlock()
+
+	var arr []T
+	if err := sonic.Unmarshal(b, &arr); err != nil {
+		return err
+	}
+	for _, v := range arr {
+		l.rpush(v)
+	}
 
 	return nil
 }

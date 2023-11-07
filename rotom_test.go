@@ -26,7 +26,7 @@ var (
 
 func newDBInstance() (*Engine, *Client, error) {
 	cfg := DefaultConfig
-	cfg.MonitorIerval = time.Second
+	cfg.MonitorIerval = time.Second * 3
 	cfg.Path = gofakeit.UUID() + ".db"
 
 	db, err := Open(cfg)
@@ -50,6 +50,7 @@ func newDBInstance() (*Engine, *Client, error) {
 }
 
 func TestDB(t *testing.T) {
+	println("===== TestDB =====")
 	assert := assert.New(t)
 
 	db, cli, err := newDBInstance()
@@ -135,9 +136,16 @@ func TestDB(t *testing.T) {
 	os.WriteFile(db.Config.Path, []byte("fake"), 0644)
 	_, err = Open(db.Config)
 	assert.Equal(err, base.ErrParseRecordLine)
+
+	// error data type
+	db.encode(NewCodec(OpSetTx).Type(100).Str("key").Str("val"))
+	db.Close()
+	_, err = Open(db.Config)
+	assert.Equal(err, base.ErrParseRecordLine)
 }
 
 func TestSetTTL(t *testing.T) {
+	println("===== TestSetTTL =====")
 	assert := assert.New(t)
 
 	cfg := DefaultConfig
@@ -207,6 +215,7 @@ func TestSetTTL(t *testing.T) {
 }
 
 func TestHmap(t *testing.T) {
+	println("===== TestHmap =====")
 	assert := assert.New(t)
 
 	db, cli, err := newDBInstance()
@@ -279,11 +288,12 @@ func TestHmap(t *testing.T) {
 	db.Close()
 
 	// Load
-	// _, err = Open(cfg)
-	// assert.Nil(err)
+	_, err = Open(db.Config)
+	assert.Nil(err)
 }
 
 func TestList(t *testing.T) {
+	println("===== TestList =====")
 	assert := assert.New(t)
 
 	db, cli, err := newDBInstance()
@@ -291,18 +301,15 @@ func TestList(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		key := gofakeit.UUID()
+		animal := gofakeit.Animal()
 
-		for j := 0; j < 100; j++ {
-			err := cli.RPush(key, strconv.Itoa(j))
-			assert.Nil(err)
-		}
-		for j := 0; j < 100; j++ {
-			res, err := cli.LPop(key)
-			assert.Nil(err)
-			assert.Equal(res, strconv.Itoa(j))
-		}
+		err = cli.RPush(key, animal)
+		assert.Nil(err)
 
-		// LLen
+		res, err := cli.LPop(key)
+		assert.Nil(err)
+		assert.Equal(res, animal)
+
 		num, err := cli.LLen(key)
 		assert.Nil(err)
 		assert.Equal(num, 0)
@@ -310,18 +317,15 @@ func TestList(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		key := gofakeit.UUID()
+		animal := gofakeit.Animal()
 
-		for j := 0; j < 100; j++ {
-			err := cli.LPush(key, strconv.Itoa(j))
-			assert.Nil(err)
-		}
-		for j := 0; j < 100; j++ {
-			res, err := cli.RPop(key)
-			assert.Nil(err)
-			assert.Equal(res, strconv.Itoa(j))
-		}
+		err = cli.LPush(key, animal)
+		assert.Nil(err)
 
-		// LLen
+		res, err := cli.RPop(key)
+		assert.Nil(err)
+		assert.Equal(res, animal)
+
 		num, err := cli.LLen(key)
 		assert.Nil(err)
 		assert.Equal(num, 0)
@@ -350,6 +354,7 @@ func TestList(t *testing.T) {
 
 	cli.RPush("list", "1")
 	cli.RPop("list")
+
 	// empty list
 	res, err = cli.LPop("list")
 	assert.Equal(res, "")
@@ -359,10 +364,20 @@ func TestList(t *testing.T) {
 	assert.Equal(res, "")
 	assert.Equal(err, base.ErrEmptyList)
 
+	for i := 0; i < 100; i++ {
+		cli.LPush("list", gofakeit.Animal())
+	}
+
+	db.Shrink()
 	db.Close()
+
+	// Load
+	_, err = Open(db.Config)
+	assert.Nil(err)
 }
 
 func TestSet(t *testing.T) {
+	println("===== TestSet =====")
 	assert := assert.New(t)
 
 	db, cli, err := newDBInstance()
@@ -406,13 +421,14 @@ func TestSet(t *testing.T) {
 		assert.Nil(err2)
 		assert.Equal(n, len(m))
 	}
+
 	// Union
 	for i := 0; i < 1000; i++ {
 		// Add random data
 		for i := 0; i < 20; i++ {
 			stri := strconv.Itoa(i)
-			cli.SAdd("a"+stri, strconv.Itoa(rand.Intn(10)))
-			cli.SAdd("b"+stri, strconv.Itoa(rand.Intn(10)))
+			cli.SAdd("a"+stri, gofakeit.Animal())
+			cli.SAdd("b"+stri, gofakeit.Animal())
 		}
 		stri := strconv.Itoa(i)
 
@@ -434,6 +450,7 @@ func TestSet(t *testing.T) {
 		assert.Nil(err2)
 		assert.ElementsMatch(m1, m2)
 	}
+
 	// Error
 	cli.HSet("map", "key", []byte("1"))
 	n, err := cli.SAdd("map", "1")
@@ -472,11 +489,12 @@ func TestSet(t *testing.T) {
 	db.Close()
 
 	// Load
-	// _, err = Open(cfg)
-	// assert.Nil(err)
+	_, err = Open(db.Config)
+	assert.Nil(err)
 }
 
 func TestBitmap(t *testing.T) {
+	println("===== TestBitmap =====")
 	assert := assert.New(t)
 
 	db, cli, err := newDBInstance()
@@ -558,6 +576,7 @@ func TestBitmap(t *testing.T) {
 }
 
 func TestZSet(t *testing.T) {
+	println("===== TestZSet =====")
 	assert := assert.New(t)
 
 	db, cli, err := newDBInstance()
@@ -602,6 +621,7 @@ func TestZSet(t *testing.T) {
 }
 
 func TestUtils(t *testing.T) {
+	println("===== TestUtils =====")
 	assert := assert.New(t)
 	cd, err := NewCodec(OpSetTx).Any("string")
 	assert.Nil(cd)
