@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"reflect"
 	"runtime"
 	"runtime/debug"
 	"strconv"
@@ -29,7 +28,6 @@ const (
 	OpGet
 	OpRemove
 	OpIncr
-	OpRename
 	OpLen
 	// map
 	OpHSet
@@ -92,7 +90,7 @@ var cmdTable = []Cmd{
 
 		switch Type {
 		case TypeString:
-			e.m.SetTx(string(args[1]), args[3], ts)
+			e.SetTx(string(args[1]), args[3], ts)
 
 		case TypeList:
 			ls := structx.NewList[string]()
@@ -160,11 +158,6 @@ var cmdTable = []Cmd{
 			return err
 		}
 		return w.Write(res)
-	}},
-	{OpRename, 2, func(e *Engine, args [][]byte, w base.Writer) error {
-		// old, new
-		ok := e.Rename(string(args[0]), string(args[1]))
-		return w.WriteByte(bool2byte(ok))
 	}},
 	{OpLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
 		return w.Write(base.FormatInt(e.Stat().Len))
@@ -631,12 +624,6 @@ func (e *Engine) Remove(keys ...string) int {
 	return sum
 }
 
-// Rename
-func (e *Engine) Rename(old, new string) bool {
-	e.encode(NewCodec(OpRename).Str(old).Str(new))
-	return e.m.Rename(old, new)
-}
-
 // Keys
 func (e *Engine) Keys() []string {
 	return e.m.Keys()
@@ -1078,9 +1065,9 @@ func (e *Engine) load() error {
 func (e *Engine) shrink() {
 	var _type Type
 	data, err := e.m.MarshalBytesFunc(func(key string, v any, i int64) {
-		switch v := v.(type) {
+		switch v.(type) {
 		case Map:
-			_type = TypeString
+			_type = TypeMap
 		case BitMap:
 			_type = TypeBitmap
 		case List:
@@ -1089,8 +1076,6 @@ func (e *Engine) shrink() {
 			_type = TypeSet
 		case ZSet:
 			_type = TypeZSet
-		default:
-			panic(fmt.Errorf("%w: %d", base.ErrUnSupportDataType, v))
 		}
 		// SetTx
 		if cd, err := NewCodec(OpSetTx).Type(_type).Str(key).Int(i / timeCarry).Any(v); err == nil {
@@ -1159,21 +1144,19 @@ func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 }
 
 // fetch
-func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err error) {
-	m, _, ok := e.m.Get(key)
+func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (T, error) {
+	item, _, ok := e.m.Get(key)
 	if ok {
-		m, ok := m.(T)
+		v, ok := item.(T)
 		if ok {
-			return m, nil
+			return v, nil
 		}
-		return v, fmt.Errorf("%w: %v->%v", base.ErrWrongType, reflect.TypeOf(m), reflect.TypeOf(v))
+		return v, fmt.Errorf("%w: %T->%T", base.ErrWrongType, item, v)
 	}
-
-	v = new()
+	v := new()
 	if len(setnx) > 0 && setnx[0] {
 		e.m.Set(key, v)
 	}
-
 	return v, nil
 }
 

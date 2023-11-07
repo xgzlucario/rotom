@@ -62,15 +62,6 @@ func (c *Client) Remove(keys ...string) (int, error) {
 	return base.ParseInt[int](args), nil
 }
 
-// Rename
-func (c *Client) Rename(key, newKey string) (bool, error) {
-	args, err := c.do(NewCodec(OpRename).Str(key).Str(newKey))
-	if err != nil {
-		return false, err
-	}
-	return args[0] == _true, nil
-}
-
 // Get
 func (c *Client) Get(key string) ([]byte, error) {
 	return c.do(NewCodec(OpGet).Str(key))
