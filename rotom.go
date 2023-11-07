@@ -90,7 +90,7 @@ var cmdTable = []Cmd{
 
 		switch Type {
 		case TypeString:
-			e.m.SetTx(string(args[1]), args[3], ts)
+			e.SetTx(string(args[1]), args[3], ts)
 
 		case TypeList:
 			ls := structx.NewList[string]()

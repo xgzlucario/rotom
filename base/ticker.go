@@ -7,7 +7,7 @@ import (
 
 // Ticker
 type Ticker struct {
-	ticker *time.Timer
+	ticker *time.Ticker
 	ctx    context.Context
 	f      func()
 	reset  chan struct{}
@@ -20,7 +20,7 @@ func NewTicker(ctx context.Context, interval time.Duration, f func()) *Ticker {
 	}
 
 	t := &Ticker{
-		ticker: time.NewTimer(interval),
+		ticker: time.NewTicker(interval),
 		ctx:    ctx,
 		f:      f,
 		reset:  make(chan struct{}),
