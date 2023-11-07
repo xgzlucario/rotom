@@ -365,7 +365,7 @@ func TestList(t *testing.T) {
 	assert.Equal(err, base.ErrEmptyList)
 
 	for i := 0; i < 100; i++ {
-		cli.LPush("list", gofakeit.Animal())
+		cli.RPush("list", gofakeit.Animal())
 	}
 
 	db.Shrink()
