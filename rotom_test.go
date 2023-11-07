@@ -623,6 +623,11 @@ func TestZSet(t *testing.T) {
 func TestUtils(t *testing.T) {
 	println("===== TestUtils =====")
 	assert := assert.New(t)
+
+	db, cli, err := newDBInstance()
+	assert.Nil(err)
+	assert.NotNil(cli)
+
 	cd, err := NewCodec(OpSetTx).Any("string")
 	assert.Nil(cd)
 	assert.NotNil(err)
@@ -637,5 +642,14 @@ func TestUtils(t *testing.T) {
 
 	decoder = NewDecoder([]byte{byte(OpSetTx), 10, 255})
 	_, _, err = decoder.ParseRecord()
+	assert.Equal(err, base.ErrParseRecordLine)
+
+	// handle
+	w, err := db.handleEvent([]byte{1, 2, 3, 4, 5})
+	assert.Nil(w)
+	assert.Equal(err, base.ErrParseRecordLine)
+
+	cli.b = make([]byte, 1)
+	_, err = cli.do(NewCodec(OpSAdd).Str("test"))
 	assert.Equal(err, base.ErrParseRecordLine)
 }
