@@ -168,6 +168,9 @@ func (s *Decoder) Done() bool {
 
 // formatInt
 func formatVarint[T base.Integer](buf []byte, n T) []byte {
+	if buf == nil {
+		buf = make([]byte, 0, 10)
+	}
 	return binary.AppendUvarint(buf, uint64(n))
 }
 
