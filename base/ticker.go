@@ -44,7 +44,7 @@ func NewTicker(ctx context.Context, interval time.Duration, f func()) *Ticker {
 	return t
 }
 
-func (t *Ticker) ForceFunc() error {
+func (t *Ticker) Do() error {
 	select {
 	case <-t.ctx.Done():
 		return ErrDatabaseClosed

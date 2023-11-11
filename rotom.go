@@ -81,11 +81,10 @@ var cmdTable = []Cmd{
 	{Response, 2, nil},
 	{OpSetTx, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// type, key, ts, val
-		ts := base.ParseInt[int64](args[2]) * timeCarry
+		ts := parseVarint[int64](args[2]) * timeCarry
 		if ts < cache.GetClock() && ts != noTTL {
 			return nil
 		}
-
 		Type := Type(args[0][0])
 
 		switch Type {
@@ -107,7 +106,7 @@ var cmdTable = []Cmd{
 			e.m.Set(string(args[1]), s)
 
 		case TypeMap:
-			m := structx.NewSyncMap[string, []byte]()
+			m := structx.NewSyncMap()
 			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
@@ -143,9 +142,9 @@ var cmdTable = []Cmd{
 	}},
 	{OpRemove, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// keys
-		keys := base.ParseStrSlice(args[0])
+		keys := parseStrSlice(args[0])
 		sum := e.Remove(keys...)
-		return w.Write(base.FormatInt(sum))
+		return w.Write(formatVarint(nil, sum))
 	}},
 	{OpIncr, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key val
@@ -160,7 +159,7 @@ var cmdTable = []Cmd{
 		return w.Write(res)
 	}},
 	{OpLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
-		return w.Write(base.FormatInt(e.Stat().Len))
+		return w.Write(formatVarint(nil, e.Stat().Len))
 	}},
 	// map
 	{OpHSet, 3, func(e *Engine, args [][]byte, _ base.Writer) error {
@@ -181,7 +180,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		return w.Write(base.FormatInt(n))
+		return w.Write(formatVarint(nil, n))
 	}},
 	{OpHKeys, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
@@ -189,7 +188,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		return w.Write(base.FormatStrSlice(res))
+		return w.Write(formatStrSlice(res))
 	}},
 	{OpHRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, field
@@ -197,16 +196,16 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		return w.WriteByte(bool2byte(ok))
+		return w.WriteByte(formatBool(ok))
 	}},
 	// set
 	{OpSAdd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, items
-		n, err := e.SAdd(string(args[0]), base.ParseStrSlice(args[1])...)
+		n, err := e.SAdd(string(args[0]), parseStrSlice(args[1])...)
 		if err != nil {
 			return err
 		}
-		return w.Write(base.FormatInt(n))
+		return w.Write(formatVarint(nil, n))
 	}},
 	{OpSRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// key, item
@@ -226,7 +225,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		return w.WriteByte(bool2byte(ok))
+		return w.WriteByte(formatBool(ok))
 	}},
 	{OpSCard, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
@@ -234,7 +233,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		return w.Write(base.FormatInt(n))
+		return w.Write(formatVarint(nil, n))
 	}},
 	{OpSMembers, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
@@ -242,21 +241,21 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		return w.Write(base.FormatStrSlice(m))
+		return w.Write(formatStrSlice(m))
 	}},
 	{OpSUnion, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := base.ParseStrSlice(args[1])
+		srcKeys := parseStrSlice(args[1])
 		return e.SUnion(string(args[0]), srcKeys...)
 	}},
 	{OpSInter, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := base.ParseStrSlice(args[1])
+		srcKeys := parseStrSlice(args[1])
 		return e.SInter(string(args[0]), srcKeys...)
 	}},
 	{OpSDiff, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := base.ParseStrSlice(args[1])
+		srcKeys := parseStrSlice(args[1])
 		return e.SDiff(string(args[0]), srcKeys...)
 	}},
 	// list
@@ -290,39 +289,39 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		return w.Write(base.FormatInt(num))
+		return w.Write(formatVarint(nil, num))
 	}},
 	// bitmap
 	{OpBitSet, 3, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset, val
-		_, err := e.BitSet(string(args[0]), base.ParseInt[uint32](args[1]), args[2][0] == _true)
+		_, err := e.BitSet(string(args[0]), parseVarint[uint32](args[1]), args[2][0] == _true)
 		return err
 	}},
 	{OpBitTest, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset
-		ok, err := e.BitTest(string(args[0]), base.ParseInt[uint32](args[1]))
+		ok, err := e.BitTest(string(args[0]), parseVarint[uint32](args[1]))
 		if err != nil {
 			return err
 		}
-		return w.WriteByte(bool2byte(ok))
+		return w.WriteByte(formatBool(ok))
 	}},
 	{OpBitFlip, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key, offset
-		return e.BitFlip(string(args[0]), base.ParseInt[uint32](args[1]))
+		return e.BitFlip(string(args[0]), parseVarint[uint32](args[1]))
 	}},
 	{OpBitOr, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := base.ParseStrSlice(args[1])
+		srcKeys := parseStrSlice(args[1])
 		return e.BitOr(string(args[0]), srcKeys...)
 	}},
 	{OpBitAnd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := base.ParseStrSlice(args[1])
+		srcKeys := parseStrSlice(args[1])
 		return e.BitAnd(string(args[0]), srcKeys...)
 	}},
 	{OpBitXor, 2, func(e *Engine, args [][]byte, w base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := base.ParseStrSlice(args[1])
+		srcKeys := parseStrSlice(args[1])
 		return e.BitXor(string(args[0]), srcKeys...)
 	}},
 	{OpBitCount, 1, func(e *Engine, args [][]byte, w base.Writer) error {
@@ -331,7 +330,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		return w.Write(base.FormatInt(n))
+		return w.Write(formatVarint(nil, n))
 	}},
 	{OpBitArray, 1, func(e *Engine, args [][]byte, w base.Writer) error {
 		// key
@@ -339,7 +338,7 @@ var cmdTable = []Cmd{
 		if err != nil {
 			return err
 		}
-		return w.Write(base.FormatU32Slice(res))
+		return w.Write(formatU32Slice(res))
 	}},
 	// zset
 	{OpZAdd, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
@@ -389,7 +388,6 @@ const (
 )
 
 const (
-	sepChar   = byte(255)
 	timeCarry = 1e6 // millisecs
 	noTTL     = 0
 
@@ -400,7 +398,7 @@ const (
 // Type aliases for structx types.
 type (
 	String = []byte
-	Map    = *structx.SyncMap[string, []byte]
+	Map    = *structx.SyncMap
 	Set    = *structx.Set[string]
 	List   = *structx.List[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
@@ -1105,13 +1103,13 @@ func (e *Engine) shrink() {
 // Shrink forced to shrink db file.
 // Warning: will panic if SyncPolicy is never.
 func (e *Engine) Shrink() error {
-	return e.tickers[2].ForceFunc()
+	return e.tickers[2].Do()
 }
 
 // fetchMap
 func (e *Engine) fetchMap(key string, setnx ...bool) (m Map, err error) {
 	return fetch(e, key, func() Map {
-		return structx.NewSyncMap[string, []byte]()
+		return structx.NewSyncMap()
 	}, setnx...)
 }
 

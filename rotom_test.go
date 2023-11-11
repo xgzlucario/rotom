@@ -636,7 +636,8 @@ func TestUtils(t *testing.T) {
 	_, _, err = decoder.ParseRecord()
 	assert.Equal(err, base.ErrParseRecordLine)
 
-	decoder = NewDecoder([]byte{byte(OpSetTx)})
+	// fake
+	decoder = NewDecoder([]byte{1, 2, 3, 4})
 	_, _, err = decoder.ParseRecord()
 	assert.Equal(err, base.ErrParseRecordLine)
 

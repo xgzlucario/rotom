@@ -1,7 +1,7 @@
 package rotom
 
 import (
-	"bytes"
+	"encoding/binary"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -9,6 +9,8 @@ import (
 	"unsafe"
 
 	"github.com/xgzlucario/rotom/base"
+	bproto "github.com/xgzlucario/rotom/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -42,7 +44,7 @@ func (s *Codec) Str(v string) *Codec {
 }
 
 func (s *Codec) StrSlice(v []string) *Codec {
-	return s.format(base.FormatStrSlice(v))
+	return s.format(formatStrSlice(v))
 }
 
 func (s *Codec) Type(v Type) *Codec {
@@ -61,11 +63,11 @@ func (s *Codec) Bool(v bool) *Codec {
 }
 
 func (s *Codec) Uint(v uint32) *Codec {
-	return s.format(base.FormatInt(v))
+	return s.format(formatVarint(nil, v))
 }
 
 func (s *Codec) Int(v int64) *Codec {
-	return s.format(base.FormatInt(v))
+	return s.format(formatVarint(nil, v))
 }
 
 func (s *Codec) Float(f float64) *Codec {
@@ -74,8 +76,9 @@ func (s *Codec) Float(f float64) *Codec {
 
 // format encodes a byte slice into the Coder's buffer as a record.
 func (s *Codec) format(v []byte) *Codec {
-	s.B = append(s.B, base.FormatInt(len(v))...)
-	s.B = append(s.B, sepChar)
+	// encode length.
+	s.B = formatVarint(s.B, len(v))
+	// encode data.
 	s.B = append(s.B, v...)
 	return s
 }
@@ -114,14 +117,6 @@ func b2s(buf []byte) *string {
 	return (*string)(unsafe.Pointer(&buf))
 }
 
-// bool2byte
-func bool2byte(b bool) byte {
-	if b {
-		return _true
-	}
-	return _false
-}
-
 type Decoder struct {
 	b []byte
 }
@@ -148,13 +143,11 @@ func (s *Decoder) ParseRecord() (op Operation, res [][]byte, err error) {
 
 	// parses args.
 	for j := 0; j < int(argsNum); j++ {
-		i := bytes.IndexByte(line, sepChar)
-		if i <= 0 {
+		num, i := binary.Uvarint(line)
+		if i == 0 {
 			return 0, nil, base.ErrParseRecordLine
 		}
-
-		klen := base.ParseInt[int](line[:i])
-		i++
+		klen := int(num)
 
 		// bound check.
 		if i+klen > len(line) {
@@ -171,4 +164,54 @@ func (s *Decoder) ParseRecord() (op Operation, res [][]byte, err error) {
 
 func (s *Decoder) Done() bool {
 	return len(s.b) == 0
+}
+
+// formatInt
+func formatVarint[T base.Integer](buf []byte, n T) []byte {
+	return binary.AppendUvarint(buf, uint64(n))
+}
+
+// parseInt
+func parseVarint[T base.Integer](b []byte) T {
+	n, _ := binary.Uvarint(b)
+	return T(n)
+}
+
+// formatStrSlice
+func formatStrSlice(ss []string) []byte {
+	src, _ := proto.Marshal(&bproto.StrSlice{Data: ss})
+	return src
+}
+
+// parseStrSlice
+func parseStrSlice(b []byte) []string {
+	dst := &bproto.StrSlice{}
+	proto.Unmarshal(b, dst)
+	return dst.Data
+}
+
+// formatU32Slice
+func formatU32Slice(ss []uint32) []byte {
+	src, _ := proto.Marshal(&bproto.UintSlice{Data: ss})
+	return src
+}
+
+// parseU32Slice
+func parseU32Slice(b []byte) []uint32 {
+	dst := &bproto.UintSlice{}
+	proto.Unmarshal(b, dst)
+	return dst.Data
+}
+
+// formatBool
+func formatBool(b bool) byte {
+	if b {
+		return _true
+	}
+	return _false
+}
+
+// parseBool
+func parseBool(b []byte) bool {
+	return b[0] == _true
 }

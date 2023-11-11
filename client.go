@@ -59,7 +59,7 @@ func (c *Client) Remove(keys ...string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return parseVarint[int](args), nil
 }
 
 // Get
@@ -73,7 +73,7 @@ func (c *Client) Len() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[uint64](args), nil
+	return parseVarint[uint64](args), nil
 }
 
 // HSet
@@ -92,7 +92,7 @@ func (c *Client) HLen(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return parseVarint[int](args), nil
 }
 
 // HKeys
@@ -101,7 +101,7 @@ func (c *Client) HKeys(key string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return base.ParseStrSlice(args), err
+	return parseStrSlice(args), err
 }
 
 // HRemove
@@ -110,7 +110,7 @@ func (c *Client) HRemove(key, field string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return args[0] == _true, nil
+	return parseBool(args), nil
 }
 
 // SAdd Append items into set, and returns the number of new items added.
@@ -119,7 +119,7 @@ func (c *Client) SAdd(key string, items ...string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return parseVarint[int](args), nil
 }
 
 // SRemove
@@ -142,7 +142,7 @@ func (c *Client) SHas(key, item string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return args[0] == _true, nil
+	return parseBool(args), nil
 }
 
 // SCard
@@ -151,7 +151,7 @@ func (c *Client) SCard(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return parseVarint[int](args), nil
 }
 
 // SMembers
@@ -160,7 +160,7 @@ func (c *Client) SMembers(key string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return base.ParseStrSlice(args), nil
+	return parseStrSlice(args), nil
 }
 
 // SUnion
@@ -212,7 +212,7 @@ func (c *Client) LLen(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return parseVarint[int](args), nil
 }
 
 // BitSet
@@ -226,7 +226,7 @@ func (c *Client) BitTest(key string, offset uint32) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return args[0] == _true, nil
+	return parseBool(args), nil
 }
 
 // BitFlip
@@ -255,7 +255,7 @@ func (c *Client) BitCount(key string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[uint64](args), nil
+	return parseVarint[uint64](args), nil
 }
 
 // BitArray
@@ -264,7 +264,7 @@ func (c *Client) BitArray(key string) ([]uint32, error) {
 	if err != nil {
 		return nil, err
 	}
-	return base.ParseU32Slice(res), nil
+	return parseU32Slice(res), nil
 }
 
 // ZAdd
