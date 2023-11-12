@@ -50,7 +50,7 @@ func (c *Client) Incr(key string, val float64) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseFloat(*b2s(args), 64)
+	return strconv.ParseFloat(string(args), 64)
 }
 
 // Remove
@@ -59,7 +59,7 @@ func (c *Client) Remove(keys ...string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return parseVarint[int](args), nil
+	return args.ToInt(), nil
 }
 
 // Get
@@ -73,7 +73,7 @@ func (c *Client) Len() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return parseVarint[uint64](args), nil
+	return args.ToUint64(), nil
 }
 
 // HSet
@@ -92,7 +92,7 @@ func (c *Client) HLen(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return parseVarint[int](args), nil
+	return args.ToInt(), nil
 }
 
 // HKeys
@@ -101,7 +101,7 @@ func (c *Client) HKeys(key string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseStrSlice(args), err
+	return args.ToStrSlice(), err
 }
 
 // HRemove
@@ -110,7 +110,7 @@ func (c *Client) HRemove(key, field string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return parseBool(args), nil
+	return args.ToBool(), nil
 }
 
 // SAdd Append items into set, and returns the number of new items added.
@@ -119,7 +119,7 @@ func (c *Client) SAdd(key string, items ...string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return parseVarint[int](args), nil
+	return args.ToInt(), nil
 }
 
 // SRemove
@@ -133,7 +133,7 @@ func (c *Client) SPop(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(args), nil
+	return args.ToStr(), nil
 }
 
 // SHas
@@ -142,7 +142,7 @@ func (c *Client) SHas(key, item string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return parseBool(args), nil
+	return args.ToBool(), nil
 }
 
 // SCard
@@ -151,7 +151,7 @@ func (c *Client) SCard(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return parseVarint[int](args), nil
+	return args.ToInt(), nil
 }
 
 // SMembers
@@ -160,7 +160,7 @@ func (c *Client) SMembers(key string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseStrSlice(args), nil
+	return args.ToStrSlice(), nil
 }
 
 // SUnion
@@ -212,7 +212,7 @@ func (c *Client) LLen(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return parseVarint[int](args), nil
+	return args.ToInt(), nil
 }
 
 // BitSet
@@ -226,7 +226,7 @@ func (c *Client) BitTest(key string, offset uint32) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return parseBool(args), nil
+	return args.ToBool(), nil
 }
 
 // BitFlip
@@ -255,7 +255,7 @@ func (c *Client) BitCount(key string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return parseVarint[uint64](args), nil
+	return args.ToUint64(), nil
 }
 
 // BitArray
@@ -264,7 +264,7 @@ func (c *Client) BitArray(key string) ([]uint32, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseU32Slice(res), nil
+	return res.ToUint32Slice(), nil
 }
 
 // ZAdd
@@ -278,7 +278,7 @@ func (c *Client) ZIncr(key, field string, score float64) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseFloat(*b2s(args), 64)
+	return strconv.ParseFloat(string(args), 64)
 }
 
 // ZRemove
@@ -298,7 +298,7 @@ func (c *Client) doNoRes(cd *Codec) error {
 }
 
 // do send request and return response.
-func (c *Client) do(cd *Codec) ([]byte, error) {
+func (c *Client) do(cd *Codec) (Result, error) {
 	_, err := c.c.Write(cd.B)
 	cd.Recycle()
 	if err != nil {
@@ -321,8 +321,8 @@ func (c *Client) do(cd *Codec) ([]byte, error) {
 	}
 
 	// the first args is response code.
-	if int64(args[0][0]) == RES_ERROR {
-		return nil, errors.New(*b2s(args[1]))
+	if args[0].ToInt64() == RES_ERROR {
+		return nil, errors.New(string(args[1]))
 	}
 
 	return args[1], nil

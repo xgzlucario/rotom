@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
-	"unsafe"
 
 	"github.com/xgzlucario/rotom/base"
 	bproto "github.com/xgzlucario/rotom/proto"
@@ -40,7 +39,7 @@ func (s *Codec) Recycle() {
 }
 
 func (s *Codec) Str(v string) *Codec {
-	return s.format(s2b(&v))
+	return s.format([]byte(v))
 }
 
 func (s *Codec) StrSlice(v []string) *Codec {
@@ -103,22 +102,50 @@ func (s *Codec) encode(v any) ([]byte, error) {
 	}
 }
 
-// String convert to bytes unsafe
-func s2b(str *string) []byte {
-	strHeader := (*[2]uintptr)(unsafe.Pointer(str))
-	byteSliceHeader := [3]uintptr{
-		strHeader[0], strHeader[1], strHeader[1],
-	}
-	return *(*[]byte)(unsafe.Pointer(&byteSliceHeader))
-}
-
-// Bytes convert to string unsafe
-func b2s(buf []byte) *string {
-	return (*string)(unsafe.Pointer(&buf))
-}
-
 type Decoder struct {
 	b []byte
+}
+
+type Result []byte
+
+func (r Result) ToStr() string {
+	return string(r)
+}
+
+func (r Result) ToByte() byte {
+	return r[0]
+}
+
+func (r Result) ToBool() bool {
+	return r[0] == _true
+}
+
+func (r Result) ToInt64() int64 {
+	return int64(parseVarint(r))
+}
+
+func (r Result) ToInt() int {
+	return int(parseVarint(r))
+}
+
+func (r Result) ToUint32() uint32 {
+	return uint32(parseVarint(r))
+}
+
+func (r Result) ToUint64() uint64 {
+	return parseVarint(r)
+}
+
+func (r Result) ToStrSlice() []string {
+	dst := &bproto.StrSlice{}
+	proto.Unmarshal(r, dst)
+	return dst.Data
+}
+
+func (r Result) ToUint32Slice() []uint32 {
+	dst := &bproto.UintSlice{}
+	proto.Unmarshal(r, dst)
+	return dst.Data
 }
 
 func NewDecoder(buf []byte) *Decoder {
@@ -126,7 +153,7 @@ func NewDecoder(buf []byte) *Decoder {
 }
 
 // ParseRecord parse one operation record line.
-func (s *Decoder) ParseRecord() (op Operation, res [][]byte, err error) {
+func (s *Decoder) ParseRecord() (op Operation, res []Result, err error) {
 	if s.Done() {
 		return 0, nil, base.ErrParseRecordLine
 	}
@@ -139,7 +166,7 @@ func (s *Decoder) ParseRecord() (op Operation, res [][]byte, err error) {
 	}
 
 	argsNum := cmdTable[op].argsNum
-	res = make([][]byte, 0, argsNum)
+	res = make([]Result, 0, argsNum)
 
 	// parses args.
 	for j := 0; j < int(argsNum); j++ {
@@ -169,15 +196,15 @@ func (s *Decoder) Done() bool {
 // formatInt
 func formatVarint[T base.Integer](buf []byte, n T) []byte {
 	if buf == nil {
-		buf = make([]byte, 0, 10)
+		buf = make([]byte, 0, binary.MaxVarintLen64)
 	}
 	return binary.AppendUvarint(buf, uint64(n))
 }
 
 // parseInt
-func parseVarint[T base.Integer](b []byte) T {
+func parseVarint(b []byte) uint64 {
 	n, _ := binary.Uvarint(b)
-	return T(n)
+	return n
 }
 
 // formatStrSlice
@@ -186,24 +213,10 @@ func formatStrSlice(ss []string) []byte {
 	return src
 }
 
-// parseStrSlice
-func parseStrSlice(b []byte) []string {
-	dst := &bproto.StrSlice{}
-	proto.Unmarshal(b, dst)
-	return dst.Data
-}
-
 // formatU32Slice
 func formatU32Slice(ss []uint32) []byte {
 	src, _ := proto.Marshal(&bproto.UintSlice{Data: ss})
 	return src
-}
-
-// parseU32Slice
-func parseU32Slice(b []byte) []uint32 {
-	dst := &bproto.UintSlice{}
-	proto.Unmarshal(b, dst)
-	return dst.Data
 }
 
 // formatBool
@@ -212,9 +225,4 @@ func formatBool(b bool) byte {
 		return _true
 	}
 	return _false
-}
-
-// parseBool
-func parseBool(b []byte) bool {
-	return b[0] == _true
 }

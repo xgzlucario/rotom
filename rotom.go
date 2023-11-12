@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"runtime"
-	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -73,305 +71,298 @@ const (
 type Cmd struct {
 	op      Operation
 	argsNum byte
-	hook    func(*Engine, [][]byte, base.Writer) error
+	hook    func(*Engine, []Result, base.Writer) error
 }
 
 // cmdTable defines the argsNum and callback function required for the operation.
 var cmdTable = []Cmd{
 	{Response, 2, nil},
-	{OpSetTx, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
+	{OpSetTx, 4, func(e *Engine, args []Result, _ base.Writer) error {
 		// type, key, ts, val
-		ts := parseVarint[int64](args[2]) * timeCarry
+		ts := args[2].ToInt64() * timeCarry
 		if ts < cache.GetClock() && ts != noTTL {
 			return nil
 		}
-		Type := Type(args[0][0])
 
-		switch Type {
+		tp := Type(args[0].ToByte())
+		switch tp {
 		case TypeString:
-			e.SetTx(string(args[1]), args[3], ts)
+			e.SetTx(args[1].ToStr(), args[3], ts)
 
 		case TypeList:
 			ls := structx.NewList[string]()
 			if err := ls.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(string(args[1]), ls)
+			e.m.Set(args[1].ToStr(), ls)
 
 		case TypeSet:
 			s := structx.NewSet[string]()
 			if err := s.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(string(args[1]), s)
+			e.m.Set(args[1].ToStr(), s)
 
 		case TypeMap:
 			m := structx.NewSyncMap()
 			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(string(args[1]), m)
+			e.m.Set(args[1].ToStr(), m)
 
 		case TypeBitmap:
 			m := structx.NewBitmap()
 			if err := m.UnmarshalBinary(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(string(args[1]), m)
+			e.m.Set(args[1].ToStr(), m)
 
 		case TypeZSet:
 			m := structx.NewZSet[string, float64, []byte]()
 			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(string(args[1]), m)
+			e.m.Set(args[1].ToStr(), m)
 
 		default:
-			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, Type)
+			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, tp)
 		}
 
 		return nil
 	}},
-	{OpGet, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpGet, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		val, _, err := e.GetBytes(string(args[0]))
+		val, _, err := e.GetBytes(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(val)
 	}},
-	{OpRemove, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpRemove, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// keys
-		keys := parseStrSlice(args[0])
-		sum := e.Remove(keys...)
+		sum := e.Remove(args[0].ToStrSlice()...)
 		return w.Write(formatVarint(nil, sum))
 	}},
-	{OpIncr, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpIncr, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key val
-		incr, err := strconv.ParseFloat(string(args[1]), 64)
+		incr, err := strconv.ParseFloat(args[1].ToStr(), 64)
 		if err != nil {
 			return err
 		}
-		res, _, err := e.incr(string(args[0]), incr)
+		res, _, err := e.incr(args[0].ToStr(), incr)
 		if err != nil {
 			return err
 		}
 		return w.Write(res)
 	}},
-	{OpLen, 0, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpLen, 0, func(e *Engine, args []Result, w base.Writer) error {
 		return w.Write(formatVarint(nil, e.Stat().Len))
 	}},
 	// map
-	{OpHSet, 3, func(e *Engine, args [][]byte, _ base.Writer) error {
+	{OpHSet, 3, func(e *Engine, args []Result, _ base.Writer) error {
 		// key, field, val
-		return e.HSet(string(args[0]), string(args[1]), args[2])
+		return e.HSet(args[0].ToStr(), args[1].ToStr(), args[2])
 	}},
-	{OpHGet, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpHGet, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, field
-		res, err := e.HGet(string(args[0]), string(args[1]))
+		res, err := e.HGet(args[0].ToStr(), args[1].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(res)
 	}},
-	{OpHLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpHLen, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		n, err := e.HLen(string(args[0]))
+		n, err := e.HLen(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(formatVarint(nil, n))
 	}},
-	{OpHKeys, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpHKeys, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		res, err := e.HKeys(string(args[0]))
+		res, err := e.HKeys(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(formatStrSlice(res))
 	}},
-	{OpHRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpHRemove, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, field
-		ok, err := e.HRemove(string(args[0]), string(args[1]))
+		ok, err := e.HRemove(args[0].ToStr(), args[1].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.WriteByte(formatBool(ok))
 	}},
 	// set
-	{OpSAdd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSAdd, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, items
-		n, err := e.SAdd(string(args[0]), parseStrSlice(args[1])...)
+		n, err := e.SAdd(args[0].ToStr(), args[1].ToStrSlice()...)
 		if err != nil {
 			return err
 		}
 		return w.Write(formatVarint(nil, n))
 	}},
-	{OpSRemove, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+	{OpSRemove, 2, func(e *Engine, args []Result, _ base.Writer) error {
 		// key, item
-		return e.SRemove(string(args[0]), string(args[1]))
+		return e.SRemove(args[0].ToStr(), args[1].ToStr())
 	}},
-	{OpSPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSPop, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		item, _, err := e.SPop(string(args[0]))
+		item, _, err := e.SPop(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write([]byte(item))
 	}},
-	{OpSHas, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSHas, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, item
-		ok, err := e.SHas(string(args[0]), string(args[1]))
+		ok, err := e.SHas(args[0].ToStr(), args[1].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.WriteByte(formatBool(ok))
 	}},
-	{OpSCard, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSCard, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		n, err := e.SCard(string(args[0]))
+		n, err := e.SCard(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(formatVarint(nil, n))
 	}},
-	{OpSMembers, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpSMembers, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		m, err := e.SMembers(string(args[0]))
+		m, err := e.SMembers(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(formatStrSlice(m))
 	}},
-	{OpSUnion, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+	{OpSUnion, 2, func(e *Engine, args []Result, _ base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := parseStrSlice(args[1])
-		return e.SUnion(string(args[0]), srcKeys...)
+		return e.SUnion(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpSInter, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+	{OpSInter, 2, func(e *Engine, args []Result, _ base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := parseStrSlice(args[1])
-		return e.SInter(string(args[0]), srcKeys...)
+		return e.SInter(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpSDiff, 2, func(e *Engine, args [][]byte, _ base.Writer) error {
+	{OpSDiff, 2, func(e *Engine, args []Result, _ base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := parseStrSlice(args[1])
-		return e.SDiff(string(args[0]), srcKeys...)
+		return e.SDiff(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
 	// list
-	{OpLPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpLPush, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, item
-		return e.LPush(string(args[0]), string(args[1]))
+		return e.LPush(args[0].ToStr(), args[1].ToStr())
 	}},
-	{OpLPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpLPop, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		res, err := e.LPop(string(args[0]))
+		res, err := e.LPop(args[0].ToStr())
 		if err != nil {
 			return err
 		}
-		return w.Write(s2b(&res))
+		return w.WriteString(res)
 	}},
-	{OpRPush, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpRPush, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, item
-		return e.RPush(string(args[0]), string(args[1]))
+		return e.RPush(args[0].ToStr(), args[1].ToStr())
 	}},
-	{OpRPop, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpRPop, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		res, err := e.RPop(string(args[0]))
+		res, err := e.RPop(args[0].ToStr())
 		if err != nil {
 			return err
 		}
-		return w.Write(s2b(&res))
+		return w.WriteString(res)
 	}},
-	{OpLLen, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpLLen, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		num, err := e.LLen(string(args[0]))
+		num, err := e.LLen(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(formatVarint(nil, num))
 	}},
 	// bitmap
-	{OpBitSet, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpBitSet, 3, func(e *Engine, args []Result, w base.Writer) error {
 		// key, offset, val
-		_, err := e.BitSet(string(args[0]), parseVarint[uint32](args[1]), args[2][0] == _true)
+		_, err := e.BitSet(args[0].ToStr(), args[1].ToUint32(), args[2].ToBool())
 		return err
 	}},
-	{OpBitTest, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpBitTest, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, offset
-		ok, err := e.BitTest(string(args[0]), parseVarint[uint32](args[1]))
+		ok, err := e.BitTest(args[0].ToStr(), args[1].ToUint32())
 		if err != nil {
 			return err
 		}
 		return w.WriteByte(formatBool(ok))
 	}},
-	{OpBitFlip, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpBitFlip, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, offset
-		return e.BitFlip(string(args[0]), parseVarint[uint32](args[1]))
+		return e.BitFlip(args[0].ToStr(), args[1].ToUint32())
 	}},
-	{OpBitOr, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpBitOr, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := parseStrSlice(args[1])
-		return e.BitOr(string(args[0]), srcKeys...)
+		return e.BitOr(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpBitAnd, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpBitAnd, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := parseStrSlice(args[1])
-		return e.BitAnd(string(args[0]), srcKeys...)
+		return e.BitAnd(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpBitXor, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpBitXor, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// dstKey, srcKeys...
-		srcKeys := parseStrSlice(args[1])
-		return e.BitXor(string(args[0]), srcKeys...)
+		return e.BitXor(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpBitCount, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpBitCount, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		n, err := e.BitCount(string(args[0]))
+		n, err := e.BitCount(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(formatVarint(nil, n))
 	}},
-	{OpBitArray, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpBitArray, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
-		res, err := e.BitArray(string(args[0]))
+		res, err := e.BitArray(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(formatU32Slice(res))
 	}},
 	// zset
-	{OpZAdd, 4, func(e *Engine, args [][]byte, _ base.Writer) error {
+	{OpZAdd, 4, func(e *Engine, args []Result, _ base.Writer) error {
 		// key, field, score, val
 		s, err := strconv.ParseFloat(string(args[2]), 64)
 		if err != nil {
 			return err
 		}
-		return e.ZAdd(string(args[0]), string(args[1]), s, args[3])
+		return e.ZAdd(args[0].ToStr(), args[1].ToStr(), s, args[3])
 	}},
-	{OpZIncr, 3, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpZIncr, 3, func(e *Engine, args []Result, w base.Writer) error {
 		// key, field, score
 		s, err := strconv.ParseFloat(string(args[2]), 64)
 		if err != nil {
 			return err
 		}
-		res, err := e.ZIncr(string(args[0]), string(args[1]), s)
+		res, err := e.ZIncr(args[0].ToStr(), args[1].ToStr(), s)
 		if err != nil {
 			return err
 		}
-		return w.Write([]byte(strconv.FormatFloat(res, 'f', -1, 64)))
+		return w.WriteString(strconv.FormatFloat(res, 'f', -1, 64))
 	}},
-	{OpZRemove, 2, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpZRemove, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, val
-		return e.ZRemove(string(args[0]), string(args[1]))
+		return e.ZRemove(args[0].ToStr(), args[1].ToStr())
 	}},
 	// others
-	{OpMarshalBytes, 1, func(e *Engine, args [][]byte, w base.Writer) error {
+	{OpMarshalBytes, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// val
 		return e.m.UnmarshalBytes(args[0])
 	}},
-	{OpPing, 0, func(_ *Engine, _ [][]byte, w base.Writer) error {
-		return w.Write([]byte("pong"))
+	{OpPing, 0, func(_ *Engine, _ []Result, w base.Writer) error {
+		return w.WriteString("pong")
 	}},
 }
 
@@ -452,7 +443,7 @@ type Engine struct {
 	// context.
 	ctx     context.Context
 	cancel  context.CancelFunc
-	tickers [3]*base.Ticker
+	tickers [2]*base.Ticker
 
 	// if db loading encode() not allowed.
 	loading bool
@@ -474,7 +465,7 @@ func Open(conf Config) (*Engine, error) {
 		buf:     bytes.NewBuffer(nil),
 		rwbuf:   bytes.NewBuffer(nil),
 		m:       cache.New(conf.ShardCount),
-		tickers: [3]*base.Ticker{},
+		tickers: [2]*base.Ticker{},
 	}
 
 	// load db from disk.
@@ -484,16 +475,9 @@ func Open(conf Config) (*Engine, error) {
 	}
 	e.loading = false
 
-	// runtime monitor.
-	if e.Logger != nil {
-		e.tickers[0] = base.NewTicker(ctx, e.MonitorIerval, func() {
-			e.printRuntimeStats()
-		})
-	}
-
 	if e.SyncPolicy == base.EveryInterval {
 		// sync buffer to disk.
-		e.tickers[1] = base.NewTicker(ctx, e.SyncInterval, func() {
+		e.tickers[0] = base.NewTicker(ctx, e.SyncInterval, func() {
 			e.Lock()
 			n, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()
@@ -505,7 +489,7 @@ func Open(conf Config) (*Engine, error) {
 		})
 
 		// shrink db.
-		e.tickers[2] = base.NewTicker(ctx, e.ShrinkInterval, func() {
+		e.tickers[1] = base.NewTicker(ctx, e.ShrinkInterval, func() {
 			e.Lock()
 			e.shrink()
 			e.Unlock()
@@ -591,7 +575,7 @@ func (e *Engine) incr(key string, incr float64) (resb []byte, res float64, err e
 		return nil, 0, err
 	}
 
-	f, err := strconv.ParseFloat(*b2s(b), 64)
+	f, err := strconv.ParseFloat(string(b), 64)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -599,7 +583,7 @@ func (e *Engine) incr(key string, incr float64) (resb []byte, res float64, err e
 	fstr := strconv.FormatFloat(res, 'f', -1, 64)
 
 	e.encode(NewCodec(OpIncr).Str(key).Float(incr))
-	e.m.SetTx(key, s2b(&fstr), ts)
+	e.m.SetTx(key, []byte(fstr), ts)
 
 	return []byte(fstr), res, nil
 }
@@ -1103,7 +1087,7 @@ func (e *Engine) shrink() {
 // Shrink forced to shrink db file.
 // Warning: will panic if SyncPolicy is never.
 func (e *Engine) Shrink() error {
-	return e.tickers[2].Do()
+	return e.tickers[1].Do()
 }
 
 // fetchMap
@@ -1168,23 +1152,6 @@ func formatSize[T base.Integer](size T) string {
 	default:
 		return fmt.Sprintf("%.1fMB", float64(size)/MB)
 	}
-}
-
-// printRuntimeStats
-func (e *Engine) printRuntimeStats() {
-	var stats debug.GCStats
-	var memStats runtime.MemStats
-
-	debug.ReadGCStats(&stats)
-	runtime.ReadMemStats(&memStats)
-
-	e.Logger.
-		With("alloc", formatSize(memStats.Alloc)).
-		With("sys", formatSize(memStats.Sys)).
-		With("gctime", stats.NumGC).
-		With("heapObjects", memStats.HeapObjects).
-		With("gcpause", stats.PauseTotal/time.Duration(stats.NumGC)).
-		Info("[Runtime]")
 }
 
 // logInfo
