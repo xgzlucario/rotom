@@ -8,8 +8,6 @@ import (
 	"sync"
 
 	"github.com/xgzlucario/rotom/base"
-	bproto "github.com/xgzlucario/rotom/proto"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -137,15 +135,28 @@ func (r Result) ToUint64() uint64 {
 }
 
 func (r Result) ToStrSlice() []string {
-	dst := &bproto.StrSlice{}
-	proto.Unmarshal(r, dst)
-	return dst.Data
+	length, n := binary.Uvarint(r)
+	r = r[n:]
+	data := make([]string, 0, length)
+	for i := uint64(0); i < length; i++ {
+		klen, n := binary.Uvarint(r)
+		r = r[n:]
+		data = append(data, string(r[:klen]))
+		r = r[klen:]
+	}
+	return data
 }
 
 func (r Result) ToUint32Slice() []uint32 {
-	dst := &bproto.UintSlice{}
-	proto.Unmarshal(r, dst)
-	return dst.Data
+	length, n := binary.Uvarint(r)
+	r = r[n:]
+	data := make([]uint32, 0, length)
+	for i := uint64(0); i < length; i++ {
+		k, n := binary.Uvarint(r)
+		r = r[n:]
+		data = append(data, uint32(k))
+	}
+	return data
 }
 
 func NewDecoder(buf []byte) *Decoder {
@@ -208,15 +219,24 @@ func parseVarint(b []byte) uint64 {
 }
 
 // formatStrSlice
-func formatStrSlice(ss []string) []byte {
-	src, _ := proto.Marshal(&bproto.StrSlice{Data: ss})
-	return src
+func formatStrSlice(s []string) []byte {
+	data := make([]byte, 0, len(s)*2)
+	data = binary.AppendUvarint(data, uint64(len(s)))
+	for _, v := range s {
+		data = binary.AppendUvarint(data, uint64(len(v)))
+		data = append(data, v...)
+	}
+	return data
 }
 
 // formatU32Slice
-func formatU32Slice(ss []uint32) []byte {
-	src, _ := proto.Marshal(&bproto.UintSlice{Data: ss})
-	return src
+func formatU32Slice(s []uint32) []byte {
+	data := make([]byte, 0, len(s)+1)
+	data = binary.AppendUvarint(data, uint64(len(s)))
+	for _, v := range s {
+		data = binary.AppendUvarint(data, uint64(v))
+	}
+	return data
 }
 
 // formatBool

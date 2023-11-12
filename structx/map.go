@@ -5,8 +5,6 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/dolthub/swiss"
-	bproto "github.com/xgzlucario/rotom/proto"
-	"google.golang.org/protobuf/proto"
 )
 
 // Map
@@ -132,33 +130,12 @@ func (m *SyncMap) Clone() *SyncMap {
 func (m *SyncMap) MarshalJSON() ([]byte, error) {
 	m.RLock()
 	defer m.RUnlock()
-
-	e := &bproto.SyncMapEntries{
-		K: make([]string, 0, m.m.Count()),
-		V: make([][]byte, 0, m.m.Count()),
-	}
-	m.m.Iter(func(k string, v []byte) bool {
-		e.K = append(e.K, k)
-		e.V = append(e.V, v)
-		return false
-	})
-
-	return proto.Marshal(e)
+	return m.m.MarshalJSON()
 }
 
 // UnmarshalJSON
 func (m *SyncMap) UnmarshalJSON(src []byte) error {
 	m.Lock()
 	defer m.Unlock()
-
-	var entries bproto.SyncMapEntries
-	if err := proto.Unmarshal(src, &entries); err != nil {
-		return err
-	}
-
-	for i, k := range entries.K {
-		m.m.Put(k, entries.V[i])
-	}
-
-	return nil
+	return m.m.UnmarshalJSON(src)
 }
