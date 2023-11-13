@@ -45,15 +45,6 @@ func (c *Client) SetTx(key string, val []byte, ts int64) error {
 	return c.doNoRes(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 }
 
-// Incr
-func (c *Client) Incr(key string, val float64) (float64, error) {
-	args, err := c.do(NewCodec(OpIncr).Str(key).Float(val))
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseFloat(string(args), 64)
-}
-
 // Remove
 func (c *Client) Remove(keys ...string) (int, error) {
 	args, err := c.do(NewCodec(OpRemove).StrSlice(keys))

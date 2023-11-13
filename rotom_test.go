@@ -27,7 +27,6 @@ var (
 
 func newDBInstance() (*Engine, *Client, error) {
 	cfg := DefaultConfig
-	cfg.MonitorIerval = time.Second * 3
 	cfg.Path = gofakeit.UUID() + ".db"
 
 	db, err := Open(cfg)
@@ -58,12 +57,9 @@ func TestDB(t *testing.T) {
 	assert.Nil(err)
 
 	// Test db operations
-	db.Set("test1", []byte("1"))
+	db.Set("test1", []byte("2.5"))
 	db.SetEx("test2", []byte("2"), time.Minute)
 	db.SetTx("test3", []byte("2"), -1)
-	r, err := db.Incr("test1", 1.5)
-	assert.Nil(err)
-	assert.Equal(r, float64(2.5))
 
 	assert.ElementsMatch(db.Keys(), []string{"test1", "test2"})
 	db.Scan(func(key string, val any, ts int64) bool {
@@ -84,11 +80,6 @@ func TestDB(t *testing.T) {
 	cli.HSet("map", "foo", []byte("bar"))
 
 	// Error
-	r, err = db.Incr("foo", 1)
-	assert.Equal(r, float64(0))
-	assert.NotNil(err)
-
-	// Len
 	num, err := cli.Len()
 	assert.Nil(err)
 	assert.Equal(num, uint64(5))
@@ -107,16 +98,6 @@ func TestDB(t *testing.T) {
 	assert.Equal(err, base.ErrKeyNotFound)
 
 	cli.Set("num", []byte("0"))
-	for i := 0; i < 1000; i++ {
-		// Incr
-		num, err := cli.Incr("num", 1)
-		assert.Equal(num, float64(1+i))
-		assert.Nil(err)
-
-		_, err = cli.Incr("none", 1)
-		assert.Equal(err, base.ErrKeyNotFound)
-	}
-
 	cli.Set("foo2", []byte("abc"))
 
 	// Remove

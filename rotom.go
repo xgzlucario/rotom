@@ -26,7 +26,6 @@ const (
 	OpSetTx
 	OpGet
 	OpRemove
-	OpIncr
 	OpLen
 	// map
 	OpHSet
@@ -143,18 +142,6 @@ var cmdTable = []Cmd{
 		// keys
 		sum := e.Remove(r[0].ToStrSlice()...)
 		return w.Write(codeman.FormatVarint(nil, sum))
-	}},
-	{OpIncr, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
-		// key val
-		incr, err := strconv.ParseFloat(r[1].ToStr(), 64)
-		if err != nil {
-			return err
-		}
-		res, _, err := e.incr(r[0].ToStr(), incr)
-		if err != nil {
-			return err
-		}
-		return w.Write(res)
 	}},
 	{OpLen, 0, func(e *Engine, r []codeman.Result, w base.Writer) error {
 		return w.Write(codeman.FormatVarint(nil, e.Stat().Len))
@@ -404,17 +391,15 @@ var (
 		ShardCount:       1024,
 		SyncPolicy:       base.EverySecond,
 		ShrinkInterval:   time.Minute,
-		MonitorIerval:    time.Minute,
 		RunSkipLoadError: true,
 		Logger:           slog.Default(),
 	}
 
 	// No persistent config
 	NoPersistentConfig = Config{
-		ShardCount:    1024,
-		SyncPolicy:    base.Never,
-		MonitorIerval: time.Minute,
-		Logger:        slog.Default(),
+		ShardCount: 1024,
+		SyncPolicy: base.Never,
+		Logger:     slog.Default(),
 	}
 )
 
@@ -426,7 +411,6 @@ type Config struct {
 
 	SyncPolicy     base.SyncPolicy // Data sync policy.
 	ShrinkInterval time.Duration   // Shrink db file interval.
-	MonitorIerval  time.Duration   // Monitor interval.
 
 	RunSkipLoadError bool // Starts when loading db file error.
 
@@ -443,7 +427,7 @@ type Engine struct {
 	cancel  context.CancelFunc
 	tickers [2]*base.Ticker
 
-	// if db loading encode() not allowed.
+	// if db loading encode not allowed.
 	loading bool
 
 	buf   *bytes.Buffer
@@ -567,32 +551,6 @@ func (e *Engine) SetTx(key string, val []byte, ts int64) {
 	}
 	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 	e.m.SetTx(key, val, ts)
-}
-
-// incr
-func (e *Engine) incr(key string, incr float64) (resb []byte, res float64, err error) {
-	b, ts, err := e.GetBytes(key)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	f, err := strconv.ParseFloat(string(b), 64)
-	if err != nil {
-		return nil, 0, err
-	}
-	res = f + incr
-	fstr := strconv.FormatFloat(res, 'f', -1, 64)
-
-	e.encode(NewCodec(OpIncr).Str(key).Float(incr))
-	e.m.SetTx(key, []byte(fstr), ts)
-
-	return []byte(fstr), res, nil
-}
-
-// Incr
-func (e *Engine) Incr(key string, incr float64) (float64, error) {
-	_, res, err := e.incr(key, incr)
-	return res, err
 }
 
 // Remove
