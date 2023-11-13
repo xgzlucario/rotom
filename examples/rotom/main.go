@@ -1,40 +1,53 @@
 package main
 
 import (
-	"net/http"
-	_ "net/http/pprof"
-	"strconv"
-	"time"
-
-	"github.com/xgzlucario/rotom"
-)
-
-const (
-	GB = 1024 * 1024 * 1024
+	"bytes"
+	"compress/gzip"
+	"fmt"
+	"hash/crc32"
+	"io/ioutil"
 )
 
 func main() {
-	go http.ListenAndServe("localhost:6060", nil)
+	// 原始数据
+	data := []byte("这是一些需要进行CRC校验和压缩的数据")
 
-	// db, err := rotom.Open(rotom.DefaultConfig)
-	// if err != nil {
-	// 	panic(err)
-	// }
+	// CRC 校验
+	checksum := crc32.ChecksumIEEE(data)
+	fmt.Printf("CRC Checksum: %d\n", checksum)
 
-	// // run for web server
-	// if err := db.Listen("0.0.0.0:7676"); err != nil {
-	// 	panic(err)
-	// }
+	// 压缩数据
+	var buffer bytes.Buffer
+	gz := gzip.NewWriter(&buffer)
 
-	// or run for local
-	db, err := rotom.Open(rotom.DefaultConfig)
+	if _, err := gz.Write(data); err != nil {
+		fmt.Println("压缩数据时出错: ", err)
+		return
+	}
+
+	if err := gz.Close(); err != nil {
+		fmt.Println("关闭gzip writer时出错: ", err)
+		return
+	}
+
+	fmt.Println("Data after compression: ", buffer.Bytes())
+}
+
+// 对压缩后的数据进行解压缩
+func Decompress(data []byte) ([]byte, error) {
+	b := bytes.NewBuffer(data)
+	var r *gzip.Reader
+	var err error
+	r, err = gzip.NewReader(b)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("创建gzip reader时出错: %w", err)
 	}
-	defer db.Close()
+	defer r.Close()
 
-	for i := 0; ; i++ {
-		k := "key" + strconv.Itoa(i)
-		db.SetEx(k, []byte(k), time.Second)
+	out, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("读取解压缩数据时出错: %w", err)
 	}
+
+	return out, nil
 }

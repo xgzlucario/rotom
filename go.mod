@@ -8,6 +8,7 @@ require (
 	github.com/bytedance/sonic v1.10.2
 	github.com/deckarep/golang-set/v2 v2.3.1
 	github.com/dolthub/swiss v0.2.1
+	github.com/klauspost/compress v1.17.2
 	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/sakeven/RbTree v0.0.0-20220710124251-94e35f9fed6c
 	github.com/sourcegraph/conc v0.3.0
