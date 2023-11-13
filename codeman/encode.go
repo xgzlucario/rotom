@@ -34,8 +34,16 @@ func (s *Codec) Recycle() {
 	codecPool.Put(s)
 }
 
+func (s *Codec) Content() []byte {
+	return s.b
+}
+
 func (s *Codec) Str(v string) *Codec {
 	return s.formatString(v)
+}
+
+func (s *Codec) Byte(v byte) *Codec {
+	return s.formatByte(v)
 }
 
 func (s *Codec) Bytes(v []byte) *Codec {
@@ -43,15 +51,15 @@ func (s *Codec) Bytes(v []byte) *Codec {
 }
 
 func (s *Codec) Bool(v bool) *Codec {
-	return s.formatByte(formatBool(v))
+	return s.formatByte(FormatBool(v))
 }
 
 func (s *Codec) Uint(v uint32) *Codec {
-	return s.format(formatVarint(nil, v))
+	return s.format(FormatVarint(nil, v))
 }
 
 func (s *Codec) Int(v int64) *Codec {
-	return s.format(formatVarint(nil, v))
+	return s.format(FormatVarint(nil, v))
 }
 
 func (s *Codec) Float(f float64) *Codec {
@@ -59,30 +67,30 @@ func (s *Codec) Float(f float64) *Codec {
 }
 
 func (s *Codec) StrSlice(v []string) *Codec {
-	return s.format(formatStrSlice(v))
+	return s.format(FormatStrSlice(v))
 }
 
 func (s *Codec) Uint32Slice(v []uint32) *Codec {
-	return s.format(formatU32Slice(v))
+	return s.format(FormatU32Slice(v))
 }
 
 // format uses variable-length encoding of incoming bytes.
 func (s *Codec) format(v []byte) *Codec {
-	s.b = formatVarint(s.b, len(v))
+	s.b = FormatVarint(s.b, len(v))
 	s.b = append(s.b, v...)
 	return s
 }
 
 // formatByte uses variable-length encoding of incoming byte.
 func (s *Codec) formatByte(v byte) *Codec {
-	s.b = formatVarint(s.b, 1)
+	s.b = FormatVarint(s.b, 1)
 	s.b = append(s.b, v)
 	return s
 }
 
 // formatString uses variable-length encoding of incoming string.
 func (s *Codec) formatString(v string) *Codec {
-	s.b = formatVarint(s.b, len(v))
+	s.b = FormatVarint(s.b, len(v))
 	s.b = append(s.b, v...)
 	return s
 }
@@ -107,8 +115,8 @@ func (s *Codec) encode(v any) ([]byte, error) {
 	}
 }
 
-// formatInt
-func formatVarint[T base.Integer](buf []byte, n T) []byte {
+// FormatVarint
+func FormatVarint[T base.Integer](buf []byte, n T) []byte {
 	if buf == nil {
 		buf = make([]byte, 0, binary.MaxVarintLen64)
 	}
@@ -121,8 +129,8 @@ func parseVarint(b []byte) uint64 {
 	return n
 }
 
-// formatStrSlice
-func formatStrSlice(s []string) []byte {
+// FormatStrSlice
+func FormatStrSlice(s []string) []byte {
 	data := make([]byte, 0, len(s)*2+1)
 	data = binary.AppendUvarint(data, uint64(len(s)))
 	for _, v := range s {
@@ -132,8 +140,8 @@ func formatStrSlice(s []string) []byte {
 	return data
 }
 
-// formatU32Slice
-func formatU32Slice(s []uint32) []byte {
+// FormatU32Slice
+func FormatU32Slice(s []uint32) []byte {
 	data := make([]byte, 0, len(s)+1)
 	data = binary.AppendUvarint(data, uint64(len(s)))
 	for _, v := range s {
@@ -142,8 +150,8 @@ func formatU32Slice(s []uint32) []byte {
 	return data
 }
 
-// formatBool
-func formatBool(b bool) byte {
+// FormatBool
+func FormatBool(b bool) byte {
 	if b {
 		return _true
 	}

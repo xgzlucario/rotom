@@ -26,11 +26,11 @@ func NewDecoder(buf []byte) *Decoder {
 }
 
 // Parse parse a specified length of data.
-func (s *Decoder) Parse(length int) (res []Result, err error) {
+func (s *Decoder) Parse(length int) (r []Result, err error) {
 	if s.Done() {
 		return nil, ErrDecoderIsDone
 	}
-	res = make([]Result, 0, length)
+	r = make([]Result, 0, length)
 
 	// parses args.
 	for j := 0; j < int(length); j++ {
@@ -44,11 +44,20 @@ func (s *Decoder) Parse(length int) (res []Result, err error) {
 		if i+klen > len(s.b) {
 			return nil, ErrParseData
 		}
-		res = append(res, s.b[i:i+klen])
+		r = append(r, s.b[i:i+klen])
 		s.b = s.b[i+klen:]
 	}
 
 	return
+}
+
+// Parse parse a specified length of data.
+func (s *Decoder) ParseOne() (Result, error) {
+	r, err := s.Parse(1)
+	if err != nil {
+		return nil, err
+	}
+	return r[0], nil
 }
 
 func (s *Decoder) Done() bool {

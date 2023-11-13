@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
+	"github.com/xgzlucario/rotom/codeman"
 )
 
 type vItem struct {
@@ -136,13 +137,13 @@ func TestDB(t *testing.T) {
 	// Load Error
 	os.WriteFile(db.Config.Path, []byte("fake"), 0644)
 	_, err = Open(db.Config)
-	assert.Equal(err, base.ErrParseRecordLine)
+	assert.Equal(err, codeman.ErrParseData)
 
 	// error data type
 	db.encode(NewCodec(OpSetTx).Int(100).Str("key").Str("val"))
 	db.Close()
 	_, err = Open(db.Config)
-	assert.Equal(err, base.ErrParseRecordLine)
+	assert.Equal(err, codeman.ErrParseData)
 }
 
 func TestSetTTL(t *testing.T) {
@@ -642,25 +643,25 @@ func TestUtils(t *testing.T) {
 	assert.Nil(cd)
 	assert.NotNil(err)
 
-	decoder := NewDecoder(nil)
-	_, _, err = decoder.ParseRecord()
-	assert.Equal(err, base.ErrParseRecordLine)
+	decoder := codeman.NewDecoder(nil)
+	_, err = decoder.Parse(2)
+	assert.Equal(err, codeman.ErrDecoderIsDone)
 
 	// fake
-	decoder = NewDecoder([]byte{1, 2, 3, 4})
-	_, _, err = decoder.ParseRecord()
-	assert.Equal(err, base.ErrParseRecordLine)
+	decoder = codeman.NewDecoder([]byte{1, 2, 3, 4})
+	_, err = decoder.Parse(2)
+	assert.Equal(err, codeman.ErrParseData)
 
-	decoder = NewDecoder([]byte{byte(OpSetTx), 10, 255})
-	_, _, err = decoder.ParseRecord()
-	assert.Equal(err, base.ErrParseRecordLine)
+	decoder = codeman.NewDecoder([]byte{byte(OpSetTx), 10, 255})
+	_, err = decoder.Parse(2)
+	assert.Equal(err, codeman.ErrParseData)
 
 	// handle
 	w, err := db.handleEvent([]byte{1, 2, 3, 4, 5})
 	assert.Nil(w)
-	assert.Equal(err, base.ErrParseRecordLine)
+	assert.Equal(err, codeman.ErrParseData)
 
 	cli.b = make([]byte, 1)
 	_, err = cli.do(NewCodec(OpSAdd).Str("test"))
-	assert.Equal(err, base.ErrParseRecordLine)
+	assert.Equal(err, codeman.ErrParseData)
 }

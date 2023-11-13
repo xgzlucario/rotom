@@ -8,6 +8,7 @@ import (
 
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
+	"github.com/xgzlucario/rotom/codeman"
 )
 
 // Client defines the client that connects to the server.
@@ -292,14 +293,14 @@ func (c *Client) Close() error {
 }
 
 // doNoRes do without res.
-func (c *Client) doNoRes(cd *Codec) error {
+func (c *Client) doNoRes(cd *codeman.Codec) error {
 	_, err := c.do(cd)
 	return err
 }
 
 // do send request and return response.
-func (c *Client) do(cd *Codec) (Result, error) {
-	_, err := c.c.Write(cd.B)
+func (c *Client) do(cd *codeman.Codec) (codeman.Result, error) {
+	_, err := c.c.Write(cd.Content())
 	cd.Recycle()
 	if err != nil {
 		return nil, err
@@ -312,7 +313,8 @@ func (c *Client) do(cd *Codec) (Result, error) {
 	}
 
 	// parse data.
-	op, args, err := NewDecoder(c.b[:n]).ParseRecord()
+	decoder := codeman.NewDecoder(c.b[:n])
+	op, args, err := ParseRecord(decoder)
 	if err != nil {
 		return nil, err
 	}
