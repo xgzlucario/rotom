@@ -138,7 +138,7 @@ func TestDB(t *testing.T) {
 	assert.Equal(err, base.ErrParseRecordLine)
 
 	// error data type
-	db.encode(NewCodec(OpSetTx).Type(100).Str("key").Str("val"))
+	db.encode(NewCodec(OpSetTx).Int(100).Str("key").Str("val"))
 	db.Close()
 	_, err = Open(db.Config)
 	assert.Equal(err, base.ErrParseRecordLine)

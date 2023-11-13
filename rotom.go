@@ -84,7 +84,7 @@ var cmdTable = []Cmd{
 			return nil
 		}
 
-		tp := Type(args[0].ToByte())
+		tp := args[0].ToInt64()
 		switch tp {
 		case TypeString:
 			e.SetTx(args[1].ToStr(), args[3], ts)
@@ -367,7 +367,7 @@ var cmdTable = []Cmd{
 }
 
 // Type is the data type for Rotom.
-type Type byte
+type Type = int64
 
 const (
 	TypeString Type = iota + 1
@@ -561,7 +561,7 @@ func (e *Engine) SetEx(key string, val []byte, ttl time.Duration) {
 
 // SetTx store key-value pair with deadline.
 func (e *Engine) SetTx(key string, val []byte, ts int64) {
-	e.encode(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
+	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 	e.m.SetTx(key, val, ts)
 }
 
@@ -1057,7 +1057,7 @@ func (e *Engine) shrink() {
 			_type = TypeZSet
 		}
 		// SetTx
-		if cd, err := NewCodec(OpSetTx).Type(_type).Str(key).Int(i / timeCarry).Any(v); err == nil {
+		if cd, err := NewCodec(OpSetTx).Int(_type).Str(key).Int(i / timeCarry).Any(v); err == nil {
 			e.rwbuf.Write(cd.B)
 			cd.Recycle()
 		}
