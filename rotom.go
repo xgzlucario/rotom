@@ -189,11 +189,11 @@ var cmdTable = []Cmd{
 	}},
 	{OpHRemove, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, field
-		ok, err := e.HRemove(args[0].ToStr(), args[1].ToStr())
+		n, err := e.HRemove(args[0].ToStr(), args[1].ToStrSlice()...)
 		if err != nil {
 			return err
 		}
-		return w.WriteByte(formatBool(ok))
+		return w.Write(formatVarint(nil, n))
 	}},
 	// set
 	{OpSAdd, 2, func(e *Engine, args []Result, w base.Writer) error {
@@ -206,7 +206,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpSRemove, 2, func(e *Engine, args []Result, _ base.Writer) error {
 		// key, item
-		return e.SRemove(args[0].ToStr(), args[1].ToStr())
+		return e.SRemove(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
 	{OpSPop, 1, func(e *Engine, args []Result, w base.Writer) error {
 		// key
@@ -218,7 +218,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpSHas, 2, func(e *Engine, args []Result, w base.Writer) error {
 		// key, item
-		ok, err := e.SHas(args[0].ToStr(), args[1].ToStr())
+		ok, err := e.SHas(args[0].ToStr(), args[1].ToStrSlice()...)
 		if err != nil {
 			return err
 		}
@@ -334,7 +334,7 @@ var cmdTable = []Cmd{
 	// zset
 	{OpZAdd, 4, func(e *Engine, args []Result, _ base.Writer) error {
 		// key, field, score, val
-		s, err := strconv.ParseFloat(string(args[2]), 64)
+		s, err := strconv.ParseFloat(args[2].ToStr(), 64)
 		if err != nil {
 			return err
 		}
@@ -342,7 +342,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpZIncr, 3, func(e *Engine, args []Result, w base.Writer) error {
 		// key, field, score
-		s, err := strconv.ParseFloat(string(args[2]), 64)
+		s, err := strconv.ParseFloat(args[2].ToStr(), 64)
 		if err != nil {
 			return err
 		}
@@ -561,6 +561,9 @@ func (e *Engine) SetEx(key string, val []byte, ttl time.Duration) {
 
 // SetTx store key-value pair with deadline.
 func (e *Engine) SetTx(key string, val []byte, ts int64) {
+	if ts < 0 {
+		return
+	}
 	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 	e.m.SetTx(key, val, ts)
 }
@@ -653,14 +656,18 @@ func (e *Engine) HSet(key, field string, val []byte) error {
 }
 
 // HRemove
-func (e *Engine) HRemove(key, field string) (bool, error) {
+func (e *Engine) HRemove(key string, fields ...string) (n int, err error) {
 	m, err := e.fetchMap(key)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	e.encode(NewCodec(OpHRemove).Str(key).Str(field))
-
-	return m.Delete(field), nil
+	e.encode(NewCodec(OpHRemove).Str(key).StrSlice(fields))
+	for _, k := range fields {
+		if m.Delete(k) {
+			n++
+		}
+	}
+	return
 }
 
 // HKeys
@@ -683,23 +690,23 @@ func (e *Engine) SAdd(key string, items ...string) (int, error) {
 }
 
 // SRemove
-func (e *Engine) SRemove(key string, item string) error {
+func (e *Engine) SRemove(key string, items ...string) error {
 	s, err := e.fetchSet(key)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpSRemove).Str(key).Str(item))
-	s.Remove(item)
+	e.encode(NewCodec(OpSRemove).Str(key).StrSlice(items))
+	s.RemoveAll(items...)
 	return nil
 }
 
 // SHas returns whether the given items are all in the set.
-func (e *Engine) SHas(key string, item string) (bool, error) {
+func (e *Engine) SHas(key string, items ...string) (bool, error) {
 	s, err := e.fetchSet(key)
 	if err != nil {
 		return false, err
 	}
-	return s.Contains(item), nil
+	return s.Contains(items...), nil
 }
 
 // SPop
@@ -1022,7 +1029,6 @@ func (e *Engine) load() error {
 		}
 		return err
 	}
-
 	e.logInfo("loading db file size %s", formatSize(len(line)))
 
 	decoder := NewDecoder(line)

@@ -105,12 +105,12 @@ func (c *Client) HKeys(key string) ([]string, error) {
 }
 
 // HRemove
-func (c *Client) HRemove(key, field string) (bool, error) {
-	args, err := c.do(NewCodec(OpHRemove).Str(key).Str(field))
+func (c *Client) HRemove(key string, fields ...string) (int, error) {
+	args, err := c.do(NewCodec(OpHRemove).Str(key).StrSlice(fields))
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	return args.ToBool(), nil
+	return args.ToInt(), nil
 }
 
 // SAdd Append items into set, and returns the number of new items added.
@@ -123,8 +123,8 @@ func (c *Client) SAdd(key string, items ...string) (int, error) {
 }
 
 // SRemove
-func (c *Client) SRemove(key, item string) error {
-	return c.doNoRes(NewCodec(OpSRemove).Str(key).Str(item))
+func (c *Client) SRemove(key string, items ...string) error {
+	return c.doNoRes(NewCodec(OpSRemove).Str(key).StrSlice(items))
 }
 
 // SPop
@@ -137,8 +137,8 @@ func (c *Client) SPop(key string) (string, error) {
 }
 
 // SHas
-func (c *Client) SHas(key, item string) (bool, error) {
-	args, err := c.do(NewCodec(OpSHas).Str(key).Str(item))
+func (c *Client) SHas(key string, items ...string) (bool, error) {
+	args, err := c.do(NewCodec(OpSHas).Str(key).StrSlice(items))
 	if err != nil {
 		return false, err
 	}
@@ -322,7 +322,7 @@ func (c *Client) do(cd *Codec) (Result, error) {
 
 	// the first args is response code.
 	if args[0].ToInt64() == RES_ERROR {
-		return nil, errors.New(string(args[1]))
+		return nil, errors.New(args[1].ToStr())
 	}
 
 	return args[1], nil

@@ -34,7 +34,7 @@ func main() {
 	defer db.Close()
 
 	for i := 0; ; i++ {
-		k := strconv.Itoa(i)
+		k := "key" + strconv.Itoa(i)
 		db.SetEx(k, []byte(k), time.Second)
 	}
 }

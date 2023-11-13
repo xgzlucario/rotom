@@ -244,9 +244,9 @@ func TestHmap(t *testing.T) {
 		assert.ElementsMatch(keys, []string{key})
 
 		// HRemove
-		ok, err := cli.HRemove("map", key)
+		n, err := cli.HRemove("map", key)
 		assert.Nil(err)
-		assert.True(ok)
+		assert.Equal(n, 1)
 	}
 
 	// Error
@@ -263,8 +263,8 @@ func TestHmap(t *testing.T) {
 	assert.Equal(m, nilStrings)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	ok, err := cli.HRemove("fake", "foo")
-	assert.False(ok)
+	n, err := cli.HRemove("fake", "foo")
+	assert.Equal(n, 0)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	cli.HSet("map", "m1", []byte("m2"))
