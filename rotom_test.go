@@ -59,6 +59,7 @@ func TestDB(t *testing.T) {
 	// Test db operations
 	db.Set("test1", []byte("1"))
 	db.SetEx("test2", []byte("2"), time.Minute)
+	db.SetTx("test3", []byte("2"), -1)
 	r, err := db.Incr("test1", 1.5)
 	assert.Nil(err)
 	assert.Equal(r, float64(2.5))
@@ -532,6 +533,15 @@ func TestBitmap(t *testing.T) {
 
 		n, err := cli.BitCount("none")
 		assert.Equal(n, uint64(0))
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		err = cli.BitAnd("none", "none")
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		err = cli.BitOr("none", "none")
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		err = cli.BitXor("none", "none")
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 	}
 

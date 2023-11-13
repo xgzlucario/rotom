@@ -115,10 +115,6 @@ func (r Result) ToStr() string {
 	return string(r)
 }
 
-func (r Result) ToByte() byte {
-	return r[0]
-}
-
 func (r Result) ToBool() bool {
 	return r[0] == _true
 }
