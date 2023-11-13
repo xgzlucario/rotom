@@ -959,7 +959,7 @@ func (e *Engine) ZRemove(zset, key string) error {
 }
 
 // writeTo writes the buffer into the file at the specified path.
-func (s *Engine) writeTo(buf *bytes.Buffer, path string) (int64, error) {
+func (s *Engine) writeTo(buf *bytes.Buffer, path string) (int, error) {
 	if buf.Len() == 0 {
 		return 0, nil
 	}
@@ -970,7 +970,10 @@ func (s *Engine) writeTo(buf *bytes.Buffer, path string) (int64, error) {
 	}
 	defer fs.Close()
 
-	n, err := buf.WriteTo(fs)
+	cbuf := codeman.NewBlock(buf.Bytes()).Compress()
+	coder := codeman.NewCodec().Bytes(cbuf)
+
+	n, err := fs.Write(coder.Content())
 	if err != nil {
 		return 0, err
 	}
