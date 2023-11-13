@@ -401,8 +401,7 @@ var (
 	DefaultConfig = Config{
 		Path:             "rotom.db",
 		ShardCount:       1024,
-		SyncPolicy:       base.EveryInterval,
-		SyncInterval:     time.Second,
+		SyncPolicy:       base.EverySecond,
 		ShrinkInterval:   time.Minute,
 		MonitorIerval:    time.Minute,
 		RunSkipLoadError: true,
@@ -424,11 +423,9 @@ type Config struct {
 
 	Path string // Path of db file.
 
-	SyncPolicy base.SyncPolicy // Data sync policy.
-
-	SyncInterval   time.Duration // Sync to disk interval.
-	ShrinkInterval time.Duration // Shrink db file interval.
-	MonitorIerval  time.Duration // Monitor interval.
+	SyncPolicy     base.SyncPolicy // Data sync policy.
+	ShrinkInterval time.Duration   // Shrink db file interval.
+	MonitorIerval  time.Duration   // Monitor interval.
 
 	RunSkipLoadError bool // Starts when loading db file error.
 
@@ -475,9 +472,9 @@ func Open(conf Config) (*Engine, error) {
 	}
 	e.loading = false
 
-	if e.SyncPolicy == base.EveryInterval {
+	if e.SyncPolicy == base.EverySecond {
 		// sync buffer to disk.
-		e.tickers[0] = base.NewTicker(ctx, e.SyncInterval, func() {
+		e.tickers[0] = base.NewTicker(ctx, time.Second, func() {
 			e.Lock()
 			n, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()

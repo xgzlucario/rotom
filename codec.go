@@ -37,7 +37,7 @@ func (s *Codec) Recycle() {
 }
 
 func (s *Codec) Str(v string) *Codec {
-	return s.format([]byte(v))
+	return s.formatString(v)
 }
 
 func (s *Codec) StrSlice(v []string) *Codec {
@@ -45,7 +45,7 @@ func (s *Codec) StrSlice(v []string) *Codec {
 }
 
 func (s *Codec) Type(v Type) *Codec {
-	return s.format([]byte{byte(v)})
+	return s.formatByte(byte(v))
 }
 
 func (s *Codec) Bytes(v []byte) *Codec {
@@ -53,10 +53,7 @@ func (s *Codec) Bytes(v []byte) *Codec {
 }
 
 func (s *Codec) Bool(v bool) *Codec {
-	if v {
-		return s.format([]byte{_true})
-	}
-	return s.format([]byte{_false})
+	return s.formatByte(formatBool(v))
 }
 
 func (s *Codec) Uint(v uint32) *Codec {
@@ -71,11 +68,23 @@ func (s *Codec) Float(f float64) *Codec {
 	return s.format(strconv.AppendFloat(nil, f, 'f', -1, 64))
 }
 
-// format encodes a byte slice into the Coder's buffer as a record.
+// format uses variable-length encoding of incoming bytes.
 func (s *Codec) format(v []byte) *Codec {
-	// encode length.
 	s.B = formatVarint(s.B, len(v))
-	// encode data.
+	s.B = append(s.B, v...)
+	return s
+}
+
+// formatByte uses variable-length encoding of incoming byte.
+func (s *Codec) formatByte(v byte) *Codec {
+	s.B = formatVarint(s.B, 1)
+	s.B = append(s.B, v)
+	return s
+}
+
+// formatString uses variable-length encoding of incoming string.
+func (s *Codec) formatString(v string) *Codec {
+	s.B = formatVarint(s.B, len(v))
 	s.B = append(s.B, v...)
 	return s
 }
@@ -220,7 +229,7 @@ func parseVarint(b []byte) uint64 {
 
 // formatStrSlice
 func formatStrSlice(s []string) []byte {
-	data := make([]byte, 0, len(s)*2)
+	data := make([]byte, 0, len(s)*2+1)
 	data = binary.AppendUvarint(data, uint64(len(s)))
 	for _, v := range s {
 		data = binary.AppendUvarint(data, uint64(len(v)))

@@ -68,5 +68,6 @@ type SyncPolicy byte
 
 const (
 	Never SyncPolicy = iota
-	EveryInterval
+	EverySecond
+	// TODO: Sync
 )
