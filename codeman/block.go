@@ -5,14 +5,18 @@ import (
 )
 
 var (
-	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedFastest))
+	encoder, _ = zstd.NewWriter(
+		nil,
+		zstd.WithEncoderLevel(zstd.SpeedFastest),
+		zstd.WithEncoderCRC(true),
+	)
 	decoder, _ = zstd.NewReader(nil)
 )
 
 // Block is basic storage union for rotom.
-// +---------------------+-----------------------------+----------+
-// |   blk_len(varint)   |      blk_data(blk_len)      |  crc(4)  |
-// +---------------------+-----------------------------+----------+
+// +---------------------+-------------------------+
+// |   blk_len(varint)   |    blk_data(blk_len)    |
+// +---------------------+-------------------------+
 type Block struct {
 	b []byte
 }

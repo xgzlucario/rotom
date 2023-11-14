@@ -77,52 +77,52 @@ type Cmd struct {
 // cmdTable defines the rNum and callback function required for the operation.
 var cmdTable = []Cmd{
 	{Response, 2, nil},
-	{OpSetTx, 4, func(e *Engine, r []codeman.Result, _ base.Writer) error {
+	{OpSetTx, 4, func(e *Engine, args []codeman.Result, _ base.Writer) error {
 		// type, key, ts, val
-		ts := r[2].ToInt64()
+		ts := args[2].ToInt64()
 		if ts < cache.GetClock() && ts != noTTL {
 			return nil
 		}
 
-		tp := r[0].ToInt64()
+		tp := args[0].ToInt64()
 		switch tp {
 		case TypeString:
-			e.SetTx(r[1].ToStr(), r[3], ts)
+			e.SetTx(args[1].ToStr(), args[3], ts)
 
 		case TypeList:
 			ls := structx.NewList[string]()
-			if err := ls.UnmarshalJSON(r[3]); err != nil {
+			if err := ls.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(r[1].ToStr(), ls)
+			e.m.Set(args[1].ToStr(), ls)
 
 		case TypeSet:
 			s := structx.NewSet[string]()
-			if err := s.UnmarshalJSON(r[3]); err != nil {
+			if err := s.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(r[1].ToStr(), s)
+			e.m.Set(args[1].ToStr(), s)
 
 		case TypeMap:
 			m := structx.NewSyncMap()
-			if err := m.UnmarshalJSON(r[3]); err != nil {
+			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(r[1].ToStr(), m)
+			e.m.Set(args[1].ToStr(), m)
 
 		case TypeBitmap:
 			m := structx.NewBitmap()
-			if err := m.UnmarshalBinary(r[3]); err != nil {
+			if err := m.UnmarshalBinary(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(r[1].ToStr(), m)
+			e.m.Set(args[1].ToStr(), m)
 
 		case TypeZSet:
 			m := structx.NewZSet[string, float64, []byte]()
-			if err := m.UnmarshalJSON(r[3]); err != nil {
+			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(r[1].ToStr(), m)
+			e.m.Set(args[1].ToStr(), m)
 
 		default:
 			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, tp)
@@ -130,224 +130,224 @@ var cmdTable = []Cmd{
 
 		return nil
 	}},
-	{OpGet, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpGet, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		val, _, err := e.GetBytes(r[0].ToStr())
+		val, _, err := e.GetBytes(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(val)
 	}},
-	{OpRemove, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpRemove, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// keys
-		sum := e.Remove(r[0].ToStrSlice()...)
+		sum := e.Remove(args[0].ToStrSlice()...)
 		return w.Write(codeman.FormatVarint(nil, sum))
 	}},
-	{OpLen, 0, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpLen, 0, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		return w.Write(codeman.FormatVarint(nil, e.Stat().Len))
 	}},
 	// map
-	{OpHSet, 3, func(e *Engine, r []codeman.Result, _ base.Writer) error {
+	{OpHSet, 3, func(e *Engine, args []codeman.Result, _ base.Writer) error {
 		// key, field, val
-		return e.HSet(r[0].ToStr(), r[1].ToStr(), r[2])
+		return e.HSet(args[0].ToStr(), args[1].ToStr(), args[2])
 	}},
-	{OpHGet, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpHGet, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, field
-		res, err := e.HGet(r[0].ToStr(), r[1].ToStr())
+		res, err := e.HGet(args[0].ToStr(), args[1].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(res)
 	}},
-	{OpHLen, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpHLen, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		n, err := e.HLen(r[0].ToStr())
+		n, err := e.HLen(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(codeman.FormatVarint(nil, n))
 	}},
-	{OpHKeys, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpHKeys, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		res, err := e.HKeys(r[0].ToStr())
+		res, err := e.HKeys(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(codeman.FormatStrSlice(res))
 	}},
-	{OpHRemove, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpHRemove, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, field
-		n, err := e.HRemove(r[0].ToStr(), r[1].ToStrSlice()...)
+		n, err := e.HRemove(args[0].ToStr(), args[1].ToStrSlice()...)
 		if err != nil {
 			return err
 		}
 		return w.Write(codeman.FormatVarint(nil, n))
 	}},
 	// set
-	{OpSAdd, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpSAdd, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, items
-		n, err := e.SAdd(r[0].ToStr(), r[1].ToStrSlice()...)
+		n, err := e.SAdd(args[0].ToStr(), args[1].ToStrSlice()...)
 		if err != nil {
 			return err
 		}
 		return w.Write(codeman.FormatVarint(nil, n))
 	}},
-	{OpSRemove, 2, func(e *Engine, r []codeman.Result, _ base.Writer) error {
+	{OpSRemove, 2, func(e *Engine, args []codeman.Result, _ base.Writer) error {
 		// key, item
-		return e.SRemove(r[0].ToStr(), r[1].ToStrSlice()...)
+		return e.SRemove(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpSPop, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpSPop, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		item, _, err := e.SPop(r[0].ToStr())
+		item, _, err := e.SPop(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write([]byte(item))
 	}},
-	{OpSHas, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpSHas, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, item
-		ok, err := e.SHas(r[0].ToStr(), r[1].ToStrSlice()...)
+		ok, err := e.SHas(args[0].ToStr(), args[1].ToStrSlice()...)
 		if err != nil {
 			return err
 		}
 		return w.WriteByte(codeman.FormatBool(ok))
 	}},
-	{OpSCard, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpSCard, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		n, err := e.SCard(r[0].ToStr())
+		n, err := e.SCard(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(codeman.FormatVarint(nil, n))
 	}},
-	{OpSMembers, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpSMembers, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		m, err := e.SMembers(r[0].ToStr())
+		m, err := e.SMembers(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(codeman.FormatStrSlice(m))
 	}},
-	{OpSUnion, 2, func(e *Engine, r []codeman.Result, _ base.Writer) error {
+	{OpSUnion, 2, func(e *Engine, args []codeman.Result, _ base.Writer) error {
 		// dstKey, srcKeys...
-		return e.SUnion(r[0].ToStr(), r[1].ToStrSlice()...)
+		return e.SUnion(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpSInter, 2, func(e *Engine, r []codeman.Result, _ base.Writer) error {
+	{OpSInter, 2, func(e *Engine, args []codeman.Result, _ base.Writer) error {
 		// dstKey, srcKeys...
-		return e.SInter(r[0].ToStr(), r[1].ToStrSlice()...)
+		return e.SInter(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpSDiff, 2, func(e *Engine, r []codeman.Result, _ base.Writer) error {
+	{OpSDiff, 2, func(e *Engine, args []codeman.Result, _ base.Writer) error {
 		// dstKey, srcKeys...
-		return e.SDiff(r[0].ToStr(), r[1].ToStrSlice()...)
+		return e.SDiff(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
 	// list
-	{OpLPush, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpLPush, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, item
-		return e.LPush(r[0].ToStr(), r[1].ToStr())
+		return e.LPush(args[0].ToStr(), args[1].ToStr())
 	}},
-	{OpLPop, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpLPop, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		res, err := e.LPop(r[0].ToStr())
+		res, err := e.LPop(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.WriteString(res)
 	}},
-	{OpRPush, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpRPush, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, item
-		return e.RPush(r[0].ToStr(), r[1].ToStr())
+		return e.RPush(args[0].ToStr(), args[1].ToStr())
 	}},
-	{OpRPop, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpRPop, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		res, err := e.RPop(r[0].ToStr())
+		res, err := e.RPop(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.WriteString(res)
 	}},
-	{OpLLen, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpLLen, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		num, err := e.LLen(r[0].ToStr())
+		num, err := e.LLen(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(codeman.FormatVarint(nil, num))
 	}},
 	// bitmap
-	{OpBitSet, 3, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpBitSet, 3, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, offset, val
-		_, err := e.BitSet(r[0].ToStr(), r[1].ToUint32(), r[2].ToBool())
+		_, err := e.BitSet(args[0].ToStr(), args[1].ToUint32(), args[2].ToBool())
 		return err
 	}},
-	{OpBitTest, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpBitTest, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, offset
-		ok, err := e.BitTest(r[0].ToStr(), r[1].ToUint32())
+		ok, err := e.BitTest(args[0].ToStr(), args[1].ToUint32())
 		if err != nil {
 			return err
 		}
 		return w.WriteByte(codeman.FormatBool(ok))
 	}},
-	{OpBitFlip, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpBitFlip, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, offset
-		return e.BitFlip(r[0].ToStr(), r[1].ToUint32())
+		return e.BitFlip(args[0].ToStr(), args[1].ToUint32())
 	}},
-	{OpBitOr, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpBitOr, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// dstKey, srcKeys...
-		return e.BitOr(r[0].ToStr(), r[1].ToStrSlice()...)
+		return e.BitOr(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpBitAnd, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpBitAnd, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// dstKey, srcKeys...
-		return e.BitAnd(r[0].ToStr(), r[1].ToStrSlice()...)
+		return e.BitAnd(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpBitXor, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpBitXor, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// dstKey, srcKeys...
-		return e.BitXor(r[0].ToStr(), r[1].ToStrSlice()...)
+		return e.BitXor(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpBitCount, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpBitCount, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		n, err := e.BitCount(r[0].ToStr())
+		n, err := e.BitCount(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(codeman.FormatVarint(nil, n))
 	}},
-	{OpBitArray, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpBitArray, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		res, err := e.BitArray(r[0].ToStr())
+		res, err := e.BitArray(args[0].ToStr())
 		if err != nil {
 			return err
 		}
 		return w.Write(codeman.FormatU32Slice(res))
 	}},
 	// zset
-	{OpZAdd, 4, func(e *Engine, r []codeman.Result, _ base.Writer) error {
+	{OpZAdd, 4, func(e *Engine, args []codeman.Result, _ base.Writer) error {
 		// key, field, score, val
-		s, err := strconv.ParseFloat(r[2].ToStr(), 64)
+		s, err := strconv.ParseFloat(args[2].ToStr(), 64)
 		if err != nil {
 			return err
 		}
-		return e.ZAdd(r[0].ToStr(), r[1].ToStr(), s, r[3])
+		return e.ZAdd(args[0].ToStr(), args[1].ToStr(), s, args[3])
 	}},
-	{OpZIncr, 3, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpZIncr, 3, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, field, score
-		s, err := strconv.ParseFloat(r[2].ToStr(), 64)
+		s, err := strconv.ParseFloat(args[2].ToStr(), 64)
 		if err != nil {
 			return err
 		}
-		res, err := e.ZIncr(r[0].ToStr(), r[1].ToStr(), s)
+		res, err := e.ZIncr(args[0].ToStr(), args[1].ToStr(), s)
 		if err != nil {
 			return err
 		}
 		return w.WriteString(strconv.FormatFloat(res, 'f', -1, 64))
 	}},
-	{OpZRemove, 2, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpZRemove, 2, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key, val
-		return e.ZRemove(r[0].ToStr(), r[1].ToStr())
+		return e.ZRemove(args[0].ToStr(), args[1].ToStr())
 	}},
 	// others
-	{OpMarshalBytes, 1, func(e *Engine, r []codeman.Result, w base.Writer) error {
+	{OpMarshalBytes, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// val
-		return e.m.UnmarshalBytes(r[0])
+		return e.m.UnmarshalBytes(args[0])
 	}},
 	{OpPing, 0, func(_ *Engine, _ []codeman.Result, w base.Writer) error {
 		return w.WriteString("pong")

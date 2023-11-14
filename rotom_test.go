@@ -179,10 +179,6 @@ func TestSetTTL(t *testing.T) {
 
 	// get again
 	for k, v := range kvdata {
-		// timeCarry convert
-		v.Ts /= (1000 * 1000)
-		v.Ts *= (1000 * 1000)
-
 		// expired
 		if v.Ts < cache.GetClock() {
 			_, _, ok := db.Get(k)

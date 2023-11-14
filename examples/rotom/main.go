@@ -7,10 +7,6 @@ import (
 	"github.com/xgzlucario/rotom"
 )
 
-const (
-	GB = 1024 * 1024 * 1024
-)
-
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
