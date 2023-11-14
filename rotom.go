@@ -79,7 +79,7 @@ var cmdTable = []Cmd{
 	{Response, 2, nil},
 	{OpSetTx, 4, func(e *Engine, r []codeman.Result, _ base.Writer) error {
 		// type, key, ts, val
-		ts := r[2].ToInt64() * timeCarry
+		ts := r[2].ToInt64()
 		if ts < cache.GetClock() && ts != noTTL {
 			return nil
 		}
@@ -367,8 +367,7 @@ const (
 )
 
 const (
-	timeCarry = 1e6 // millisecs
-	noTTL     = 0
+	noTTL = 0
 
 	KB = 1024
 	MB = 1024 * KB
@@ -461,12 +460,10 @@ func Open(conf Config) (*Engine, error) {
 		// sync buffer to disk.
 		e.tickers[0] = base.NewTicker(ctx, time.Second, func() {
 			e.Lock()
-			n, err := e.writeTo(e.buf, e.Path)
+			_, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()
 			if err != nil {
 				e.logError("writeTo buffer error: %v", err)
-			} else if n > 0 {
-				e.logInfo("write %s buffer to db file", formatSize(n))
 			}
 		})
 
@@ -549,7 +546,7 @@ func (e *Engine) SetTx(key string, val []byte, ts int64) {
 	if ts < 0 {
 		return
 	}
-	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
+	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Bytes(val))
 	e.m.SetTx(key, val, ts)
 }
 
@@ -970,7 +967,7 @@ func (s *Engine) writeTo(buf *bytes.Buffer, path string) (int, error) {
 	}
 	defer fs.Close()
 
-	cbuf := codeman.NewBlock(buf.Bytes()).Compress()
+	cbuf := codeman.Compress(buf.Bytes(), nil)
 	coder := codeman.NewCodec().Bytes(cbuf)
 
 	n, err := fs.Write(coder.Content())
@@ -994,14 +991,30 @@ func (e *Engine) load() error {
 
 	e.logInfo("loading db file size %s", formatSize(len(line)))
 
-	decoder := codeman.NewDecoder(line)
-	for !decoder.Done() {
-		op, r, err := ParseRecord(decoder)
+	blkDecoder := codeman.NewDecoder(line)
+	for !blkDecoder.Done() {
+		// parse a block data.
+		blk, err := blkDecoder.Parse()
 		if err != nil {
 			return err
 		}
-		if err := cmdTable[op].hook(e, r, base.NullWriter{}); err != nil {
+
+		// decompress block.
+		data, err := codeman.Decompress(blk, nil)
+		if err != nil {
 			return err
+		}
+
+		dataDecoder := codeman.NewDecoder(data)
+		// parses data.
+		for !dataDecoder.Done() {
+			op, args, err := ParseRecord(dataDecoder)
+			if err != nil {
+				return err
+			}
+			if err := cmdTable[op].hook(e, args, base.NullWriter{}); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -1027,7 +1040,7 @@ func (e *Engine) shrink() {
 			_type = TypeZSet
 		}
 		// SetTx
-		if cd, err := NewCodec(OpSetTx).Int(_type).Str(key).Int(i / timeCarry).Any(v); err == nil {
+		if cd, err := NewCodec(OpSetTx).Int(_type).Str(key).Int(i).Any(v); err == nil {
 			e.rwbuf.Write(cd.Content())
 			cd.Recycle()
 		}

@@ -3,16 +3,11 @@ package codeman
 import (
 	"encoding/binary"
 	"errors"
-	"sync"
 )
 
 var (
 	ErrDecoderIsDone = errors.New("decoder is done")
 	ErrParseData     = errors.New("parse data error")
-
-	decoderPool = sync.Pool{
-		New: func() any { return &Decoder{} },
-	}
 )
 
 type Decoder struct {
@@ -20,13 +15,11 @@ type Decoder struct {
 }
 
 func NewDecoder(buf []byte) *Decoder {
-	decoder := decoderPool.Get().(*Decoder)
-	decoder.b = buf
-	return decoder
+	return &Decoder{b: buf}
 }
 
-// Parse parse a specified length of data.
-func (s *Decoder) Parse(length int) (r []Result, err error) {
+// Parses multiple records of a specified length from a decoder..
+func (s *Decoder) Parses(length int) (r []Result, err error) {
 	if s.Done() {
 		return nil, ErrDecoderIsDone
 	}
@@ -51,20 +44,29 @@ func (s *Decoder) Parse(length int) (r []Result, err error) {
 	return
 }
 
-// Parse parse a specified length of data.
-func (s *Decoder) ParseOne() (Result, error) {
-	r, err := s.Parse(1)
-	if err != nil {
-		return nil, err
+// Parse parses a record from decoder.
+func (s *Decoder) Parse() (Result, error) {
+	if s.Done() {
+		return nil, ErrDecoderIsDone
 	}
-	return r[0], nil
+	// parses one arg.
+	num, i := binary.Uvarint(s.b)
+	if i == 0 {
+		return nil, ErrParseData
+	}
+	klen := int(num)
+
+	// bound check.
+	if i+klen > len(s.b) {
+		return nil, ErrParseData
+	}
+
+	res := s.b[i : i+klen]
+	s.b = s.b[i+klen:]
+
+	return res, nil
 }
 
 func (s *Decoder) Done() bool {
 	return len(s.b) == 0
-}
-
-func (s *Decoder) Recycle(obj *Decoder) {
-	obj.b = nil
-	decoderPool.Put(obj)
 }

@@ -625,16 +625,16 @@ func TestUtils(t *testing.T) {
 	assert.NotNil(err)
 
 	decoder := codeman.NewDecoder(nil)
-	_, err = decoder.Parse(2)
+	_, err = decoder.Parses(2)
 	assert.Equal(err, codeman.ErrDecoderIsDone)
 
 	// fake
 	decoder = codeman.NewDecoder([]byte{1, 2, 3, 4})
-	_, err = decoder.Parse(2)
+	_, err = decoder.Parses(2)
 	assert.Equal(err, codeman.ErrParseData)
 
 	decoder = codeman.NewDecoder([]byte{byte(OpSetTx), 10, 255})
-	_, err = decoder.Parse(2)
+	_, err = decoder.Parses(2)
 	assert.Equal(err, codeman.ErrParseData)
 
 	// handle

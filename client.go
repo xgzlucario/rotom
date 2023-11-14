@@ -42,7 +42,7 @@ func (c *Client) SetEx(key string, val []byte, ttl time.Duration) error {
 
 // SetTx
 func (c *Client) SetTx(key string, val []byte, ts int64) error {
-	return c.doNoRes(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
+	return c.doNoRes(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Bytes(val))
 }
 
 // Remove

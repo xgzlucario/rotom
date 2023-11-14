@@ -5,11 +5,7 @@ import (
 )
 
 var (
-	encoder, _ = zstd.NewWriter(
-		nil,
-		zstd.WithEncoderLevel(zstd.SpeedFastest),
-		zstd.WithEncoderCRC(true),
-	)
+	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedFastest))
 	decoder, _ = zstd.NewReader(nil)
 )
 
@@ -29,10 +25,10 @@ func (s *Block) Len() int {
 	return len(s.b)
 }
 
-func (s *Block) Compress() []byte {
-	return encoder.EncodeAll(s.b, nil)
+func Compress(src, dst []byte) []byte {
+	return encoder.EncodeAll(src, dst)
 }
 
-func (s *Block) Decompress() ([]byte, error) {
-	return decoder.DecodeAll(s.b, nil)
+func Decompress(src, dst []byte) ([]byte, error) {
+	return decoder.DecodeAll(src, dst)
 }

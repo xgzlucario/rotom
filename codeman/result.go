@@ -1,6 +1,8 @@
 package codeman
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+)
 
 type Result []byte
 
