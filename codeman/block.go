@@ -10,6 +10,7 @@ var (
 		zstd.WithEncoderLevel(zstd.SpeedFastest),
 		zstd.WithEncoderCRC(true),
 	)
+
 	decoder, _ = zstd.NewReader(nil)
 )
 

@@ -8,7 +8,7 @@ require (
 	github.com/bytedance/sonic v1.10.2
 	github.com/deckarep/golang-set/v2 v2.3.1
 	github.com/dolthub/swiss v0.2.1
-	github.com/klauspost/compress v1.17.2
+	github.com/klauspost/compress v1.17.3
 	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/sakeven/RbTree v0.0.0-20220710124251-94e35f9fed6c
 	github.com/sourcegraph/conc v0.3.0
@@ -23,6 +23,7 @@ require (
 	github.com/chenzhuoyu/iasm v0.9.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dolthub/maphash v0.1.0 // indirect
+	github.com/influxdata/tdigest v0.0.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.6 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

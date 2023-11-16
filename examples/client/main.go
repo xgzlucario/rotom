@@ -3,16 +3,22 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
+	"github.com/influxdata/tdigest"
 	"github.com/sourcegraph/conc/pool"
-	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom"
 )
 
 const (
 	DATA_NUM   = 100 * 10000
 	CLIENT_NUM = 200
+)
+
+var (
+	tdlock sync.Mutex
+	td     = tdigest.NewWithCompression(1000)
 )
 
 func main() {
@@ -24,8 +30,6 @@ func main() {
 func cmd() {
 	start := time.Now()
 	p := pool.New()
-
-	delays := cache.NewPercentile()
 
 	for i := 0; i < CLIENT_NUM; i++ {
 		p.Go(func() {
@@ -47,7 +51,13 @@ func cmd() {
 				}
 
 				// stat
-				delays.Add(float64(time.Since(now)))
+				if j%100 == 0 {
+					cost := time.Since(now)
+
+					tdlock.Lock()
+					td.Add(float64(cost), 1)
+					tdlock.Unlock()
+				}
 			}
 		})
 	}
@@ -58,13 +68,12 @@ func cmd() {
 	fmt.Printf("[qps] %.2f req/sec\n", DATA_NUM/time.Since(start).Seconds())
 
 	// P99
-	fmt.Printf("[latency] avg: %v | min: %v | p50: %v | p95: %v | p99: %v | max: %v\n",
-		time.Duration(delays.Avg()),
-		time.Duration(delays.Min()),
-		time.Duration(delays.Percentile(50)),
-		time.Duration(delays.Percentile(90)),
-		time.Duration(delays.Percentile(99)),
-		time.Duration(delays.Max()))
-
+	tdlock.Lock()
+	fmt.Printf("[latency] p90: %v | p95: %v | p99: %v | p100: %v\n",
+		time.Duration(td.Quantile(0.9)),
+		time.Duration(td.Quantile(0.95)),
+		time.Duration(td.Quantile(0.99)),
+		time.Duration(td.Quantile(0.9999)))
+	tdlock.Unlock()
 	fmt.Println()
 }
