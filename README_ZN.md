@@ -99,13 +99,13 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 
 ### Rotom
 
-使用 200 个 clients 插入共 100 万数据，556ms 完成，qps 达到 179 万，p99 延迟 1.1ms。
+使用 200 个 clients 插入共 100 万数据，617ms 完成，qps 达到 161 万，p99 延迟 1.7ms, p999 延迟 5.8ms。
 
 ```bash
 $ go run client/*.go
-1000000 requests cost: 556.955696ms
-[qps] 1795418.85 req/sec
-[latency] avg: 98.74µs | min: 3.632µs | p50: 40.903µs | p95: 175.456µs | p99: 1.09595ms | max: 13.305872ms
+1000000 requests cost: 617.811804ms
+[qps] 1618564.04 req/sec
+[latency] p90: 133.015µs | p95: 263.447µs | p99: 1.713789ms | p999: 5.780588ms
 ```
 
 ### Redis

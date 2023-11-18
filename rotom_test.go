@@ -62,7 +62,7 @@ func TestDB(t *testing.T) {
 	db.SetTx("test3", []byte("2"), -1)
 
 	assert.ElementsMatch(db.Keys(), []string{"test1", "test2"})
-	db.Scan(func(key string, val any, ts int64) bool {
+	db.Scan(func(key string, val []byte, ts int64) bool {
 		if key == "test1" {
 			assert.Equal(val, []byte("2.5"))
 			assert.Equal(ts, int64(0))
@@ -157,13 +157,13 @@ func TestSetTTL(t *testing.T) {
 	for k, v := range kvdata {
 		// expired
 		if v.Ts < cache.GetClock() {
-			val, ts, ok := db.Get(k)
-			assert.Equal(val, nil)
+			val, ts, err := db.Get(k)
+			assert.Equal(val, nilBytes)
 			assert.Equal(ts, int64(0))
-			assert.False(ok)
+			assert.NotNil(err)
 
 		} else {
-			val, ts, err := db.GetBytes(k)
+			val, ts, err := db.Get(k)
 			assert.Equal(val, v.Val)
 			assert.Equal(ts, v.Ts)
 			assert.Nil(err)
@@ -181,14 +181,14 @@ func TestSetTTL(t *testing.T) {
 	for k, v := range kvdata {
 		// expired
 		if v.Ts < cache.GetClock() {
-			_, _, ok := db.Get(k)
-			assert.False(ok)
+			_, _, err := db.Get(k)
+			assert.NotNil(err)
 
 		} else {
-			val, ts, err := db.GetBytes(k)
+			val, ts, err := db.Get(k)
 			assert.Equal(val, v.Val)
 			assert.Equal(ts, v.Ts)
-			assert.Equal(err, nil)
+			assert.Nil(err)
 		}
 	}
 }

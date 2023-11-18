@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/panjf2000/gnet/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
@@ -63,7 +64,7 @@ const (
 	OpZIncr
 	OpZRemove
 	// others
-	OpMarshalBytes
+	OpMarshalBinary
 	OpPing
 )
 
@@ -94,35 +95,35 @@ var cmdTable = []Cmd{
 			if err := ls.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(args[1].ToStr(), ls)
+			e.cm.Set(args[1].ToStr(), ls)
 
 		case TypeSet:
 			s := structx.NewSet[string]()
 			if err := s.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(args[1].ToStr(), s)
+			e.cm.Set(args[1].ToStr(), s)
 
 		case TypeMap:
 			m := structx.NewSyncMap()
 			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(args[1].ToStr(), m)
+			e.cm.Set(args[1].ToStr(), m)
 
 		case TypeBitmap:
 			m := structx.NewBitmap()
 			if err := m.UnmarshalBinary(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(args[1].ToStr(), m)
+			e.cm.Set(args[1].ToStr(), m)
 
 		case TypeZSet:
 			m := structx.NewZSet[string, float64, []byte]()
 			if err := m.UnmarshalJSON(args[3]); err != nil {
 				return err
 			}
-			e.m.Set(args[1].ToStr(), m)
+			e.cm.Set(args[1].ToStr(), m)
 
 		default:
 			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, tp)
@@ -132,7 +133,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpGet, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// key
-		val, _, err := e.GetBytes(args[0].ToStr())
+		val, _, err := e.Get(args[0].ToStr())
 		if err != nil {
 			return err
 		}
@@ -144,7 +145,7 @@ var cmdTable = []Cmd{
 		return w.Write(codeman.FormatVarint(nil, sum))
 	}},
 	{OpLen, 0, func(e *Engine, args []codeman.Result, w base.Writer) error {
-		return w.Write(codeman.FormatVarint(nil, e.Stat().Len))
+		return w.Write(codeman.FormatVarint(nil, e.Len()))
 	}},
 	// map
 	{OpHSet, 3, func(e *Engine, args []codeman.Result, _ base.Writer) error {
@@ -345,9 +346,9 @@ var cmdTable = []Cmd{
 		return e.ZRemove(args[0].ToStr(), args[1].ToStr())
 	}},
 	// others
-	{OpMarshalBytes, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
+	{OpMarshalBinary, 1, func(e *Engine, args []codeman.Result, w base.Writer) error {
 		// val
-		return e.m.UnmarshalBytes(args[0])
+		return e.m.UnmarshalBinary(args[0])
 	}},
 	{OpPing, 0, func(_ *Engine, _ []codeman.Result, w base.Writer) error {
 		return w.WriteString("pong")
@@ -431,7 +432,12 @@ type Engine struct {
 
 	buf   *bytes.Buffer
 	rwbuf *bytes.Buffer
-	m     *cache.GigaCache
+
+	// data for bytes.
+	m *cache.GigaCache
+
+	// data for built-in structure.
+	cm cmap.ConcurrentMap[string, any]
 }
 
 // Open opens a database specified by config.
@@ -445,8 +451,9 @@ func Open(conf Config) (*Engine, error) {
 		loading: true,
 		buf:     bytes.NewBuffer(nil),
 		rwbuf:   bytes.NewBuffer(nil),
-		m:       cache.New(conf.ShardCount),
 		tickers: [2]*base.Ticker{},
+		m:       cache.New(conf.ShardCount),
+		cm:      cmap.New[any](),
 	}
 
 	// load db from disk.
@@ -515,20 +522,17 @@ func (e *Engine) encode(cd *codeman.Codec) {
 }
 
 // Get
-func (e *Engine) Get(key string) (any, int64, bool) {
-	return e.m.Get(key)
-}
-
-// GetBytes
-func (e *Engine) GetBytes(key string) ([]byte, int64, error) {
-	r, t, ok := e.m.Get(key)
-	if ok {
-		if r, ok := r.([]byte); ok {
-			return r, t, nil
-		}
+func (e *Engine) Get(key string) ([]byte, int64, error) {
+	// check
+	if e.cm.Has(key) {
 		return nil, 0, base.ErrTypeAssert
 	}
-	return nil, 0, base.ErrKeyNotFound
+	// get
+	val, ts, ok := e.m.Get(key)
+	if !ok {
+		return nil, 0, base.ErrKeyNotFound
+	}
+	return val, ts, nil
 }
 
 // Set store key-value pair.
@@ -564,17 +568,19 @@ func (e *Engine) Remove(keys ...string) int {
 
 // Keys
 func (e *Engine) Keys() []string {
-	return e.m.Keys()
+	return append(e.m.Keys(), e.cm.Keys()...)
+}
+
+// Len
+func (e *Engine) Len() int {
+	return int(e.m.Stat().Len) + e.cm.Count()
 }
 
 // Scan
-func (e *Engine) Scan(f func(string, any, int64) bool) {
-	e.m.Scan(f)
-}
-
-// Stat
-func (e *Engine) Stat() cache.CacheStat {
-	return e.m.Stat()
+func (e *Engine) Scan(f func(string, []byte, int64) bool) {
+	e.m.Scan(func(key, value []byte, ttl int64) bool {
+		return f(string(key), value, ttl)
+	})
 }
 
 // HGet
@@ -709,7 +715,7 @@ func (e *Engine) SUnion(dstKey string, srcKeys ...string) error {
 		s.Union(ts)
 	}
 	e.encode(NewCodec(OpSUnion).Str(dstKey).StrSlice(srcKeys))
-	e.m.Set(dstKey, s)
+	e.cm.Set(dstKey, s)
 
 	return nil
 }
@@ -730,7 +736,7 @@ func (e *Engine) SInter(dstKey string, srcKeys ...string) error {
 		s.Intersect(ts)
 	}
 	e.encode(NewCodec(OpSInter).Str(dstKey).StrSlice(srcKeys))
-	e.m.Set(dstKey, s)
+	e.cm.Set(dstKey, s)
 
 	return nil
 }
@@ -751,7 +757,7 @@ func (e *Engine) SDiff(dstKey string, srcKeys ...string) error {
 		s.Difference(ts)
 	}
 	e.encode(NewCodec(OpSDiff).Str(dstKey).StrSlice(srcKeys))
-	e.m.Set(dstKey, s)
+	e.cm.Set(dstKey, s)
 
 	return nil
 }
@@ -865,7 +871,7 @@ func (e *Engine) BitOr(dstKey string, srcKeys ...string) error {
 		bm.Or(tbm)
 	}
 	e.encode(NewCodec(OpBitOr).Str(dstKey).StrSlice(srcKeys))
-	e.m.Set(dstKey, bm)
+	e.cm.Set(dstKey, bm)
 
 	return nil
 }
@@ -881,7 +887,7 @@ func (e *Engine) BitXor(dstKey string, srcKeys ...string) error {
 		bm.Xor(tbm)
 	}
 	e.encode(NewCodec(OpBitXor).Str(dstKey).StrSlice(srcKeys))
-	e.m.Set(dstKey, bm)
+	e.cm.Set(dstKey, bm)
 
 	return nil
 }
@@ -897,7 +903,7 @@ func (e *Engine) BitAnd(dstKey string, srcKeys ...string) error {
 		bm.And(tbm)
 	}
 	e.encode(NewCodec(OpBitAnd).Str(dstKey).StrSlice(srcKeys))
-	e.m.Set(dstKey, bm)
+	e.cm.Set(dstKey, bm)
 
 	return nil
 }
@@ -1025,9 +1031,20 @@ func (e *Engine) load() error {
 
 // rewrite write data to the file.
 func (e *Engine) shrink() {
+	data, err := e.m.MarshalBinary()
+	if err != nil {
+		panic(err)
+	}
+
+	// Marshal bytes
+	cd := NewCodec(OpMarshalBinary).Bytes(data)
+	e.rwbuf.Write(cd.Content())
+	cd.Recycle()
+
+	// Marshal built-in structure
 	var _type Type
-	data, err := e.m.MarshalBytesFunc(func(key string, v any, i int64) {
-		switch v.(type) {
+	for t := range e.cm.IterBuffered() {
+		switch t.Val.(type) {
 		case Map:
 			_type = TypeMap
 		case BitMap:
@@ -1040,19 +1057,11 @@ func (e *Engine) shrink() {
 			_type = TypeZSet
 		}
 		// SetTx
-		if cd, err := NewCodec(OpSetTx).Int(_type).Str(key).Int(i).Any(v); err == nil {
+		if cd, err := NewCodec(OpSetTx).Int(_type).Str(t.Key).Int(0).Any(t.Val); err == nil {
 			e.rwbuf.Write(cd.Content())
 			cd.Recycle()
 		}
-	})
-	if err != nil {
-		panic(err)
 	}
-
-	// Marshal bytes
-	cd := NewCodec(OpMarshalBytes).Bytes(data)
-	e.rwbuf.Write(cd.Content())
-	cd.Recycle()
 
 	// Flush buffer to file
 	tmpPath := fmt.Sprintf("%v.tmp", time.Now())
@@ -1106,8 +1115,13 @@ func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 }
 
 // fetch
-func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (T, error) {
-	item, _, ok := e.m.Get(key)
+func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err error) {
+	// check from cache.
+	if e.m.Has(key) {
+		return v, base.ErrWrongType
+	}
+
+	item, ok := e.cm.Get(key)
 	if ok {
 		v, ok := item.(T)
 		if ok {
@@ -1115,9 +1129,9 @@ func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (T, error)
 		}
 		return v, fmt.Errorf("%w: %T->%T", base.ErrWrongType, item, v)
 	}
-	v := new()
+	v = new()
 	if len(setnx) > 0 && setnx[0] {
-		e.m.Set(key, v)
+		e.cm.Set(key, v)
 	}
 	return v, nil
 }

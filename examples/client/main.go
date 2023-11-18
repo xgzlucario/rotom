@@ -13,7 +13,7 @@ import (
 
 const (
 	DATA_NUM   = 100 * 10000
-	CLIENT_NUM = 200
+	CLIENT_NUM = 150
 )
 
 var (
@@ -69,11 +69,11 @@ func cmd() {
 
 	// P99
 	tdlock.Lock()
-	fmt.Printf("[latency] p90: %v | p95: %v | p99: %v | p100: %v\n",
+	fmt.Printf("[latency] p90: %v | p95: %v | p99: %v | p999: %v\n",
 		time.Duration(td.Quantile(0.9)),
 		time.Duration(td.Quantile(0.95)),
 		time.Duration(td.Quantile(0.99)),
-		time.Duration(td.Quantile(0.9999)))
+		time.Duration(td.Quantile(0.999)))
 	tdlock.Unlock()
 	fmt.Println()
 }
