@@ -7,10 +7,6 @@ import (
 	"github.com/xgzlucario/rotom"
 )
 
-const (
-	GB = 1024 * 1024 * 1024
-)
-
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
@@ -33,6 +29,6 @@ func main() {
 
 	// for i := 0; ; i++ {
 	// 	k := strconv.Itoa(i)
-	// 	db.SetEx(k, []byte(k), time.Second*10)
+	// 	db.SetEx(k, []byte(k), time.Second)
 	// }
 }

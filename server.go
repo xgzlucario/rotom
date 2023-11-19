@@ -6,6 +6,7 @@ import (
 
 	"github.com/panjf2000/gnet/v2"
 	"github.com/xgzlucario/rotom/base"
+	"github.com/xgzlucario/rotom/codeman"
 )
 
 var (
@@ -41,7 +42,7 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 
 	// handle event
 	res, err := e.db.handleEvent(buf)
-	var cd *Codec
+	var cd *codeman.Codec
 	if err != nil {
 		cd = NewCodec(Response).Int(RES_ERROR).Str(err.Error())
 
@@ -50,7 +51,7 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 	}
 
 	// send resp
-	_, err = conn.Write(cd.B)
+	_, err = conn.Write(cd.Content())
 	cd.Recycle()
 	if res != nil {
 		res.Reset()
@@ -65,7 +66,8 @@ func (e *RotomEngine) OnTraffic(conn gnet.Conn) gnet.Action {
 
 // handleEvent
 func (e *Engine) handleEvent(line []byte) (*base.CWriter, error) {
-	op, args, err := NewDecoder(line).ParseRecord()
+	decoder := codeman.NewDecoder(line)
+	op, args, err := ParseRecord(decoder)
 	if err != nil {
 		return nil, err
 	}

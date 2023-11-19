@@ -24,6 +24,7 @@ type Binarier interface {
 
 // Writer
 type Writer interface {
+	WriteString(string) error
 	WriteByte(byte) error
 	Write([]byte) error
 }
@@ -42,6 +43,11 @@ func (w *CWriter) WriteByte(b byte) error {
 	return w.Buffer.WriteByte(b)
 }
 
+func (w *CWriter) WriteString(s string) error {
+	_, err := w.Buffer.WriteString(s)
+	return err
+}
+
 // NullWriter
 type NullWriter struct{}
 
@@ -53,10 +59,15 @@ func (NullWriter) WriteByte(byte) error {
 	return nil
 }
 
+func (NullWriter) WriteString(string) error {
+	return nil
+}
+
 // SyncPolicy represents how often data is synced to disk.
 type SyncPolicy byte
 
 const (
 	Never SyncPolicy = iota
-	EveryInterval
+	EverySecond
+	// TODO: Sync
 )

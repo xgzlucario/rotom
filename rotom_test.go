@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
+	"github.com/xgzlucario/rotom/codeman"
 )
 
 type vItem struct {
@@ -26,7 +27,6 @@ var (
 
 func newDBInstance() (*Engine, *Client, error) {
 	cfg := DefaultConfig
-	cfg.MonitorIerval = time.Second * 3
 	cfg.Path = gofakeit.UUID() + ".db"
 
 	db, err := Open(cfg)
@@ -57,14 +57,12 @@ func TestDB(t *testing.T) {
 	assert.Nil(err)
 
 	// Test db operations
-	db.Set("test1", []byte("1"))
+	db.Set("test1", []byte("2.5"))
 	db.SetEx("test2", []byte("2"), time.Minute)
-	r, err := db.Incr("test1", 1.5)
-	assert.Nil(err)
-	assert.Equal(r, float64(2.5))
+	db.SetTx("test3", []byte("2"), -1)
 
 	assert.ElementsMatch(db.Keys(), []string{"test1", "test2"})
-	db.Scan(func(key string, val any, ts int64) bool {
+	db.Scan(func(key string, val []byte, ts int64) bool {
 		if key == "test1" {
 			assert.Equal(val, []byte("2.5"))
 			assert.Equal(ts, int64(0))
@@ -82,11 +80,6 @@ func TestDB(t *testing.T) {
 	cli.HSet("map", "foo", []byte("bar"))
 
 	// Error
-	r, err = db.Incr("foo", 1)
-	assert.Equal(r, float64(0))
-	assert.NotNil(err)
-
-	// Len
 	num, err := cli.Len()
 	assert.Nil(err)
 	assert.Equal(num, uint64(5))
@@ -105,16 +98,6 @@ func TestDB(t *testing.T) {
 	assert.Equal(err, base.ErrKeyNotFound)
 
 	cli.Set("num", []byte("0"))
-	for i := 0; i < 1000; i++ {
-		// Incr
-		num, err := cli.Incr("num", 1)
-		assert.Equal(num, float64(1+i))
-		assert.Nil(err)
-
-		_, err = cli.Incr("none", 1)
-		assert.Equal(err, base.ErrKeyNotFound)
-	}
-
 	cli.Set("foo2", []byte("abc"))
 
 	// Remove
@@ -135,13 +118,13 @@ func TestDB(t *testing.T) {
 	// Load Error
 	os.WriteFile(db.Config.Path, []byte("fake"), 0644)
 	_, err = Open(db.Config)
-	assert.Equal(err, base.ErrParseRecordLine)
+	assert.Equal(err, codeman.ErrParseData)
 
 	// error data type
-	db.encode(NewCodec(OpSetTx).Type(100).Str("key").Str("val"))
+	db.encode(NewCodec(OpSetTx).Int(100).Str("key").Str("val"))
 	db.Close()
 	_, err = Open(db.Config)
-	assert.Equal(err, base.ErrParseRecordLine)
+	assert.Equal(err, codeman.ErrParseData)
 }
 
 func TestSetTTL(t *testing.T) {
@@ -174,13 +157,13 @@ func TestSetTTL(t *testing.T) {
 	for k, v := range kvdata {
 		// expired
 		if v.Ts < cache.GetClock() {
-			val, ts, ok := db.Get(k)
-			assert.Equal(val, nil)
+			val, ts, err := db.Get(k)
+			assert.Equal(val, nilBytes)
 			assert.Equal(ts, int64(0))
-			assert.False(ok)
+			assert.NotNil(err)
 
 		} else {
-			val, ts, err := db.GetBytes(k)
+			val, ts, err := db.Get(k)
 			assert.Equal(val, v.Val)
 			assert.Equal(ts, v.Ts)
 			assert.Nil(err)
@@ -196,20 +179,16 @@ func TestSetTTL(t *testing.T) {
 
 	// get again
 	for k, v := range kvdata {
-		// timeCarry convert
-		v.Ts /= (1000 * 1000)
-		v.Ts *= (1000 * 1000)
-
 		// expired
 		if v.Ts < cache.GetClock() {
-			_, _, ok := db.Get(k)
-			assert.False(ok)
+			_, _, err := db.Get(k)
+			assert.NotNil(err)
 
 		} else {
-			val, ts, err := db.GetBytes(k)
+			val, ts, err := db.Get(k)
 			assert.Equal(val, v.Val)
 			assert.Equal(ts, v.Ts)
-			assert.Equal(err, nil)
+			assert.Nil(err)
 		}
 	}
 }
@@ -244,9 +223,9 @@ func TestHmap(t *testing.T) {
 		assert.ElementsMatch(keys, []string{key})
 
 		// HRemove
-		ok, err := cli.HRemove("map", key)
+		n, err := cli.HRemove("map", key)
 		assert.Nil(err)
-		assert.True(ok)
+		assert.Equal(n, 1)
 	}
 
 	// Error
@@ -263,8 +242,8 @@ func TestHmap(t *testing.T) {
 	assert.Equal(m, nilStrings)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	ok, err := cli.HRemove("fake", "foo")
-	assert.False(ok)
+	n, err := cli.HRemove("fake", "foo")
+	assert.Equal(n, 0)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	cli.HSet("map", "m1", []byte("m2"))
@@ -533,6 +512,15 @@ func TestBitmap(t *testing.T) {
 		n, err := cli.BitCount("none")
 		assert.Equal(n, uint64(0))
 		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		err = cli.BitAnd("none", "none")
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		err = cli.BitOr("none", "none")
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		err = cli.BitXor("none", "none")
+		assert.ErrorContains(err, base.ErrWrongType.Error())
 	}
 
 	for i := 0; i < 1000; i++ {
@@ -632,24 +620,25 @@ func TestUtils(t *testing.T) {
 	assert.Nil(cd)
 	assert.NotNil(err)
 
-	decoder := NewDecoder(nil)
-	_, _, err = decoder.ParseRecord()
-	assert.Equal(err, base.ErrParseRecordLine)
+	decoder := codeman.NewDecoder(nil)
+	_, err = decoder.Parses(2)
+	assert.Equal(err, codeman.ErrDecoderIsDone)
 
-	decoder = NewDecoder([]byte{byte(OpSetTx)})
-	_, _, err = decoder.ParseRecord()
-	assert.Equal(err, base.ErrParseRecordLine)
+	// fake
+	decoder = codeman.NewDecoder([]byte{1, 2, 3, 4})
+	_, err = decoder.Parses(2)
+	assert.Equal(err, codeman.ErrParseData)
 
-	decoder = NewDecoder([]byte{byte(OpSetTx), 10, 255})
-	_, _, err = decoder.ParseRecord()
-	assert.Equal(err, base.ErrParseRecordLine)
+	decoder = codeman.NewDecoder([]byte{byte(OpSetTx), 10, 255})
+	_, err = decoder.Parses(2)
+	assert.Equal(err, codeman.ErrParseData)
 
 	// handle
 	w, err := db.handleEvent([]byte{1, 2, 3, 4, 5})
 	assert.Nil(w)
-	assert.Equal(err, base.ErrParseRecordLine)
+	assert.Equal(err, codeman.ErrParseData)
 
 	cli.b = make([]byte, 1)
 	_, err = cli.do(NewCodec(OpSAdd).Str("test"))
-	assert.Equal(err, base.ErrParseRecordLine)
+	assert.Equal(err, codeman.ErrParseData)
 }

@@ -8,6 +8,7 @@ import (
 
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
+	"github.com/xgzlucario/rotom/codeman"
 )
 
 // Client defines the client that connects to the server.
@@ -41,16 +42,7 @@ func (c *Client) SetEx(key string, val []byte, ttl time.Duration) error {
 
 // SetTx
 func (c *Client) SetTx(key string, val []byte, ts int64) error {
-	return c.doNoRes(NewCodec(OpSetTx).Type(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
-}
-
-// Incr
-func (c *Client) Incr(key string, val float64) (float64, error) {
-	args, err := c.do(NewCodec(OpIncr).Str(key).Float(val))
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseFloat(*b2s(args), 64)
+	return c.doNoRes(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Bytes(val))
 }
 
 // Remove
@@ -59,7 +51,7 @@ func (c *Client) Remove(keys ...string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return args.ToInt(), nil
 }
 
 // Get
@@ -73,7 +65,7 @@ func (c *Client) Len() (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[uint64](args), nil
+	return args.ToUint64(), nil
 }
 
 // HSet
@@ -92,7 +84,7 @@ func (c *Client) HLen(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return args.ToInt(), nil
 }
 
 // HKeys
@@ -101,16 +93,16 @@ func (c *Client) HKeys(key string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return base.ParseStrSlice(args), err
+	return args.ToStrSlice(), err
 }
 
 // HRemove
-func (c *Client) HRemove(key, field string) (bool, error) {
-	args, err := c.do(NewCodec(OpHRemove).Str(key).Str(field))
+func (c *Client) HRemove(key string, fields ...string) (int, error) {
+	args, err := c.do(NewCodec(OpHRemove).Str(key).StrSlice(fields))
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	return args[0] == _true, nil
+	return args.ToInt(), nil
 }
 
 // SAdd Append items into set, and returns the number of new items added.
@@ -119,12 +111,12 @@ func (c *Client) SAdd(key string, items ...string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return args.ToInt(), nil
 }
 
 // SRemove
-func (c *Client) SRemove(key, item string) error {
-	return c.doNoRes(NewCodec(OpSRemove).Str(key).Str(item))
+func (c *Client) SRemove(key string, items ...string) error {
+	return c.doNoRes(NewCodec(OpSRemove).Str(key).StrSlice(items))
 }
 
 // SPop
@@ -133,16 +125,16 @@ func (c *Client) SPop(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(args), nil
+	return args.ToStr(), nil
 }
 
 // SHas
-func (c *Client) SHas(key, item string) (bool, error) {
-	args, err := c.do(NewCodec(OpSHas).Str(key).Str(item))
+func (c *Client) SHas(key string, items ...string) (bool, error) {
+	args, err := c.do(NewCodec(OpSHas).Str(key).StrSlice(items))
 	if err != nil {
 		return false, err
 	}
-	return args[0] == _true, nil
+	return args.ToBool(), nil
 }
 
 // SCard
@@ -151,7 +143,7 @@ func (c *Client) SCard(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return args.ToInt(), nil
 }
 
 // SMembers
@@ -160,7 +152,7 @@ func (c *Client) SMembers(key string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return base.ParseStrSlice(args), nil
+	return args.ToStrSlice(), nil
 }
 
 // SUnion
@@ -212,7 +204,7 @@ func (c *Client) LLen(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[int](args), nil
+	return args.ToInt(), nil
 }
 
 // BitSet
@@ -226,7 +218,7 @@ func (c *Client) BitTest(key string, offset uint32) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return args[0] == _true, nil
+	return args.ToBool(), nil
 }
 
 // BitFlip
@@ -255,7 +247,7 @@ func (c *Client) BitCount(key string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return base.ParseInt[uint64](args), nil
+	return args.ToUint64(), nil
 }
 
 // BitArray
@@ -264,7 +256,7 @@ func (c *Client) BitArray(key string) ([]uint32, error) {
 	if err != nil {
 		return nil, err
 	}
-	return base.ParseU32Slice(res), nil
+	return res.ToUint32Slice(), nil
 }
 
 // ZAdd
@@ -278,7 +270,7 @@ func (c *Client) ZIncr(key, field string, score float64) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseFloat(*b2s(args), 64)
+	return strconv.ParseFloat(string(args), 64)
 }
 
 // ZRemove
@@ -292,14 +284,14 @@ func (c *Client) Close() error {
 }
 
 // doNoRes do without res.
-func (c *Client) doNoRes(cd *Codec) error {
+func (c *Client) doNoRes(cd *codeman.Codec) error {
 	_, err := c.do(cd)
 	return err
 }
 
 // do send request and return response.
-func (c *Client) do(cd *Codec) ([]byte, error) {
-	_, err := c.c.Write(cd.B)
+func (c *Client) do(cd *codeman.Codec) (codeman.Result, error) {
+	_, err := c.c.Write(cd.Content())
 	cd.Recycle()
 	if err != nil {
 		return nil, err
@@ -312,7 +304,8 @@ func (c *Client) do(cd *Codec) ([]byte, error) {
 	}
 
 	// parse data.
-	op, args, err := NewDecoder(c.b[:n]).ParseRecord()
+	decoder := codeman.NewDecoder(c.b[:n])
+	op, args, err := ParseRecord(decoder)
 	if err != nil {
 		return nil, err
 	}
@@ -321,8 +314,8 @@ func (c *Client) do(cd *Codec) ([]byte, error) {
 	}
 
 	// the first args is response code.
-	if int64(args[0][0]) == RES_ERROR {
-		return nil, errors.New(*b2s(args[1]))
+	if args[0].ToInt64() == RES_ERROR {
+		return nil, errors.New(args[1].ToStr())
 	}
 
 	return args[1], nil

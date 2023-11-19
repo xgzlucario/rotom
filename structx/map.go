@@ -65,18 +65,18 @@ func (m *Map[K, V]) UnmarshalJSON(src []byte) error {
 }
 
 // SyncMap
-type SyncMap[K comparable, V any] struct {
-	m Map[K, V]
+type SyncMap struct {
+	m Map[string, []byte]
 	sync.RWMutex
 }
 
 // NewSyncMap
-func NewSyncMap[K comparable, V any](size ...int) *SyncMap[K, V] {
-	return &SyncMap[K, V]{m: NewMap[K, V](size...)}
+func NewSyncMap(size ...int) *SyncMap {
+	return &SyncMap{m: NewMap[string, []byte](size...)}
 }
 
 // Get
-func (m *SyncMap[K, V]) Get(key K) (v V, ok bool) {
+func (m *SyncMap) Get(key string) (v []byte, ok bool) {
 	m.RLock()
 	v, ok = m.m.Get(key)
 	m.RUnlock()
@@ -84,14 +84,14 @@ func (m *SyncMap[K, V]) Get(key K) (v V, ok bool) {
 }
 
 // Set
-func (m *SyncMap[K, V]) Set(key K, value V) {
+func (m *SyncMap) Set(key string, value []byte) {
 	m.Lock()
 	m.m.Put(key, value)
 	m.Unlock()
 }
 
 // Delete
-func (m *SyncMap[K, V]) Delete(key K) bool {
+func (m *SyncMap) Delete(key string) bool {
 	m.Lock()
 	ok := m.m.Delete(key)
 	m.Unlock()
@@ -99,10 +99,10 @@ func (m *SyncMap[K, V]) Delete(key K) bool {
 }
 
 // Keys
-func (m *SyncMap[K, V]) Keys() (keys []K) {
+func (m *SyncMap) Keys() (keys []string) {
 	m.RLock()
-	keys = make([]K, 0, m.m.Count())
-	m.m.Iter(func(k K, _ V) bool {
+	keys = make([]string, 0, m.m.Count())
+	m.m.Iter(func(k string, _ []byte) bool {
 		keys = append(keys, k)
 		return false
 	})
@@ -111,7 +111,7 @@ func (m *SyncMap[K, V]) Keys() (keys []K) {
 }
 
 // Len
-func (m *SyncMap[K, V]) Len() (n int) {
+func (m *SyncMap) Len() (n int) {
 	m.RLock()
 	n = m.m.Count()
 	m.RUnlock()
@@ -119,22 +119,22 @@ func (m *SyncMap[K, V]) Len() (n int) {
 }
 
 // Clone
-func (m *SyncMap[K, V]) Clone() *SyncMap[K, V] {
+func (m *SyncMap) Clone() *SyncMap {
 	m.RLock()
-	m2 := &SyncMap[K, V]{m: m.m.Clone()}
+	m2 := &SyncMap{m: m.m.Clone()}
 	m.RUnlock()
 	return m2
 }
 
 // MarshalJSON
-func (m *SyncMap[K, V]) MarshalJSON() ([]byte, error) {
+func (m *SyncMap) MarshalJSON() ([]byte, error) {
 	m.RLock()
 	defer m.RUnlock()
 	return m.m.MarshalJSON()
 }
 
 // UnmarshalJSON
-func (m *SyncMap[K, V]) UnmarshalJSON(src []byte) error {
+func (m *SyncMap) UnmarshalJSON(src []byte) error {
 	m.Lock()
 	defer m.Unlock()
 	return m.m.UnmarshalJSON(src)

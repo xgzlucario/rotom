@@ -27,8 +27,6 @@ var (
 
 	ErrNotNumberic = errors.New("value is not numberic")
 
-	ErrParseRecordLine = errors.New("parse record line error")
-
 	ErrCheckSum = errors.New("crc checksum error, record line is invalid")
 
 	ErrInvalidArgs = errors.New("invalid args")
