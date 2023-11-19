@@ -73,6 +73,8 @@ github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6Kllzaw
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/xgzlucario/GigaCache v0.0.0-20231118161747-4d7a914c62ff h1:sX+f8mJRpZWVJS9xuzTM1NXAT3ok3VpMO2D0CG2l+TU=
 github.com/xgzlucario/GigaCache v0.0.0-20231118161747-4d7a914c62ff/go.mod h1:JWbKR87Ow8luENuiyn+bzoTmtrF6VvLwluELW1s+JBs=
+github.com/xgzlucario/GigaCache v0.0.0-20231119042642-a678357ea5d1 h1:npuxsBtcftvAi4UR9P6anrKw0dFob0RfyWkSM2/zVvU=
+github.com/xgzlucario/GigaCache v0.0.0-20231119042642-a678357ea5d1/go.mod h1:JWbKR87Ow8luENuiyn+bzoTmtrF6VvLwluELW1s+JBs=
 github.com/zeebo/assert v1.3.1 h1:vukIABvugfNMZMQO1ABsyQDJDTVQbn+LWSMy1ol1h6A=
 github.com/zeebo/assert v1.3.1/go.mod h1:Pq9JiuJQpG8JLJdtkwrJESF0Foym2/D9XMU5ciN/wJ0=
 github.com/zeebo/xxh3 v1.0.2 h1:xZmwmqxHZA8AI603jOQ0tMqmBr9lPeFwGg6d+xy9DC0=
