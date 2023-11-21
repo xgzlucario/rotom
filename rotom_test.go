@@ -445,6 +445,7 @@ func TestSet(t *testing.T) {
 	db.Close()
 
 	// Load
+	// TODO: fix
 	// _, err = Open(db.Config)
 	// assert.Nil(err)
 }
@@ -464,8 +465,7 @@ func TestBitmap(t *testing.T) {
 		assert.Nil(db.BitSet(key, uint32(i), true))
 
 		ok, err := db.BitTest(key, uint32(i))
-		// TODO: fix
-		assert.False(ok)
+		assert.True(ok)
 		assert.Nil(err)
 
 		// TODO

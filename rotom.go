@@ -704,8 +704,9 @@ func (e *Engine) BitSet(key string, offset uint32, val bool) error {
 
 	if val {
 		bm.Add(offset)
+	} else {
+		bm.Remove(offset)
 	}
-	bm.Remove(offset)
 
 	return nil
 }
