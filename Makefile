@@ -1,12 +1,9 @@
 run:
 	rm -f rotom.db
-	go run examples/rotom/*.go
+	go run example/*.go
 
 run-db:
-	go run examples/rotom/*.go
-
-run-client:
-	go run examples/client/*.go
+	go run example/*.go
 
 run-gc:
 	rm -f rotom.db
@@ -26,6 +23,3 @@ pprof:
 
 heap:
 	go tool pprof http://localhost:6060/debug/pprof/heap
-
-gen-proto:
-	rm -rf proto && protoc --go_out=. --go_opt=Mrotom.proto=proto/ rotom.proto
