@@ -1,6 +1,8 @@
 package rotom
 
-import "github.com/xgzlucario/rotom/codeman"
+import (
+	"github.com/xgzlucario/rotom/codeman"
+)
 
 // NewCodec
 func NewCodec(op Operation) *codeman.Codec {
@@ -16,11 +18,6 @@ func ParseRecord(decoder *codeman.Decoder) (Operation, []codeman.Result, error) 
 
 	op := sop.ToInt()
 	argsNum := cmdTable[op].argsNum
-
-	// if args is empty.
-	if argsNum == 0 {
-		return Operation(op), nil, nil
-	}
 
 	args, err := decoder.Parses(argsNum)
 	if err != nil {

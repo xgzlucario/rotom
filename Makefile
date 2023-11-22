@@ -1,12 +1,9 @@
 run:
 	rm -f rotom.db
-	go run examples/rotom/*.go
+	go run example/*.go
 
 run-db:
-	go run examples/rotom/*.go
-
-run-client:
-	go run examples/client/*.go
+	go run example/*.go
 
 run-gc:
 	rm -f rotom.db
