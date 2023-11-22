@@ -6,7 +6,7 @@ require (
 	github.com/RoaringBitmap/roaring v1.6.0
 	github.com/brianvoe/gofakeit/v6 v6.23.2
 	github.com/bytedance/sonic v1.10.2
-	github.com/deckarep/golang-set/v2 v2.3.1
+	github.com/deckarep/golang-set/v2 v2.4.0
 	github.com/dolthub/swiss v0.2.1
 	github.com/klauspost/compress v1.17.3
 	github.com/orcaman/concurrent-map/v2 v2.0.1

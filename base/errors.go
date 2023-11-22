@@ -9,8 +9,6 @@ var (
 
 	ErrFieldNotFound = errors.New("field not found")
 
-	ErrEmptySet = errors.New("set is empty")
-
 	ErrTypeAssert = errors.New("type assert error")
 
 	ErrOutOfBounds = errors.New("index out of bounds")

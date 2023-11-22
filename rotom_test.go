@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/codeman"
+	"golang.org/x/exp/maps"
 )
 
 type vItem struct {
@@ -38,61 +40,83 @@ func TestDB(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
-	// Test db operations
-	db.Set("test1", []byte("2.5"))
-	db.SetEx("test2", []byte("2"), time.Minute)
-	db.SetTx("test3", []byte("2"), -1)
+	m := make(map[string][]byte)
 
-	assert.ElementsMatch(db.Keys(), []string{"test1", "test2"})
+	// Test db operations
+	for i := 0; i < 1000; i++ {
+		key := strconv.Itoa(i)
+		db.Set("set-"+key, []byte(strconv.Itoa(i)))
+		db.SetEx("setex-"+key, []byte(strconv.Itoa(i)), time.Minute)
+		db.SetTx("settx-"+key, []byte(strconv.Itoa(i)), -1)
+
+		m["set-"+key] = []byte(strconv.Itoa(i))
+		m["setex-"+key] = []byte(strconv.Itoa(i))
+		// m["settx-"+key] = []byte(strconv.Itoa(i))
+	}
+
+	assert.ElementsMatch(db.Keys(), maps.Keys(m))
 
 	db.Scan(func(key string, val []byte, ts int64) bool {
-		if key == "test1" {
-			assert.Equal(val, []byte("2.5"))
-			assert.Equal(ts, int64(0))
-		} else if key == "test2" {
-			assert.Equal(val, []byte("2"))
-		} else {
+		prefix := strings.Split(key, "-")[0]
+		switch prefix {
+		case "set":
+			assert.Equal(val, m[key])
+		case "setex":
+			assert.Equal(ts > cache.GetClock(), true)
+			assert.Equal(val, m[key])
+		case "settx":
+			assert.Equal(val, m[key])
+		default:
 			panic("wrong key")
 		}
 		return true
 	})
 
-	// Client
-	db.Set("foo", []byte("bar"))
-	db.SetEx("foo1", []byte("bar"), time.Minute)
-	db.HSet("map", "foo", []byte("bar"))
-
-	// Error
+	// Len
 	num := db.Len()
-	assert.Nil(err)
-	assert.Equal(num, uint64(5))
+	assert.Equal(int(num), len(m))
 
 	// Get
-	val, _, err := db.Get("foo")
-	assert.Equal(val, []byte("bar"))
-	assert.Nil(err)
+	for k, v := range m {
+		val, _, err := db.Get(k)
 
-	val, _, err = db.Get("map")
+		prefix := strings.Split(k, "-")[0]
+		switch prefix {
+		case "set":
+			assert.Equal(val, v)
+		case "setex":
+			assert.Equal(val, v)
+		case "settx":
+			assert.Equal(nil, v)
+			assert.Equal(err, base.ErrKeyNotFound)
+		default:
+			panic("wrong key")
+		}
+	}
+
+	// Error
+	val, _, err := db.Get("map")
 	assert.Equal(val, nilBytes)
-	assert.Equal(err, base.ErrTypeAssert)
+	assert.Equal(err, base.ErrKeyNotFound)
 
 	val, _, err = db.Get("none")
 	assert.Equal(val, nilBytes)
 	assert.Equal(err, base.ErrKeyNotFound)
 
-	db.Set("num", []byte("0"))
-	db.Set("foo2", []byte("abc"))
-
 	// Remove
-	sum := db.Remove("foo2")
-	assert.Equal(sum, 1)
+	sum := db.Remove("set-1", "set-2", "set-3")
+	assert.Equal(sum, 3)
 
-	sum = db.Remove("foo2")
+	sum = db.Remove("set-1", "set-2", "set-3")
 	assert.Equal(sum, 0)
 
 	// close
 	assert.Nil(db.Close())
 	assert.Equal(db.Close(), base.ErrDatabaseClosed)
+
+	// Load Success
+	_, err = Open(db.Config)
+	assert.Nil(err)
 
 	// Load Error
 	os.WriteFile(db.Config.Path, []byte("fake"), 0644)
@@ -361,10 +385,6 @@ func TestSet(t *testing.T) {
 
 		if i%2 == 0 {
 			assert.Nil(db.SRemove(key, strconv.Itoa(i)))
-		} else {
-			_, _, err := db.SPop(key)
-			assert.Nil(err)
-			// assert.Equal(res, strconv.Itoa(i))
 		}
 
 		err = db.SRemove(key, "none")
@@ -417,10 +437,6 @@ func TestSet(t *testing.T) {
 	assert.False(ok)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	res, _, err := db.SPop("map")
-	assert.Equal(res, "")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
-
 	err = db.SRemove("map", "1")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
@@ -446,8 +462,8 @@ func TestSet(t *testing.T) {
 
 	// Load
 	// TODO: fix
-	// _, err = Open(db.Config)
-	// assert.Nil(err)
+	_, err = Open(db.Config)
+	assert.Nil(err)
 }
 
 func TestBitmap(t *testing.T) {

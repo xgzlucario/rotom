@@ -530,17 +530,6 @@ func (e *Engine) SHas(key string, items ...string) (bool, error) {
 	return s.Contains(items...), nil
 }
 
-// SPop
-func (e *Engine) SPop(key string) (string, bool, error) {
-	s, err := e.fetchSet(key)
-	if err != nil {
-		return "", false, err
-	}
-	res, ok := s.Pop()
-	e.encode(NewCodec(OpSRemove).Str(key).Str(res))
-	return res, ok, nil
-}
-
 // SCard
 func (e *Engine) SCard(key string) (int, error) {
 	s, err := e.fetchSet(key)

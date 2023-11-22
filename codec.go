@@ -17,11 +17,6 @@ func ParseRecord(decoder *codeman.Decoder) (Operation, []codeman.Result, error) 
 	op := sop.ToInt()
 	argsNum := cmdTable[op].argsNum
 
-	// if args is empty.
-	if argsNum == 0 {
-		return Operation(op), nil, nil
-	}
-
 	args, err := decoder.Parses(argsNum)
 	if err != nil {
 		return 0, nil, err
