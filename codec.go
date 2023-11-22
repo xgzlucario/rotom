@@ -1,6 +1,8 @@
 package rotom
 
-import "github.com/xgzlucario/rotom/codeman"
+import (
+	"github.com/xgzlucario/rotom/codeman"
+)
 
 // NewCodec
 func NewCodec(op Operation) *codeman.Codec {
