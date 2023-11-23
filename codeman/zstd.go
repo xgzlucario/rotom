@@ -10,25 +10,8 @@ var (
 		zstd.WithEncoderLevel(zstd.SpeedFastest),
 		zstd.WithEncoderCRC(true),
 	)
-
 	decoder, _ = zstd.NewReader(nil)
 )
-
-// Block is basic storage union for rotom.
-// +---------------------+-------------------------+
-// |   blk_len(varint)   |    blk_data(blk_len)    |
-// +---------------------+-------------------------+
-type Block struct {
-	b []byte
-}
-
-func NewBlock(buf []byte) *Block {
-	return &Block{b: buf}
-}
-
-func (s *Block) Len() int {
-	return len(s.b)
-}
 
 func Compress(src, dst []byte) []byte {
 	return encoder.EncodeAll(src, dst)
