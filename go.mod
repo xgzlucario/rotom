@@ -8,6 +8,7 @@ require (
 	github.com/bytedance/sonic v1.10.2
 	github.com/deckarep/golang-set/v2 v2.4.0
 	github.com/dolthub/swiss v0.2.1
+	github.com/influxdata/tdigest v0.0.1
 	github.com/klauspost/compress v1.17.3
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/sakeven/RbTree v0.0.0-20220710124251-94e35f9fed6c
@@ -32,6 +33,6 @@ require (
 	golang.org/x/arch v0.6.0 // indirect
 	golang.org/x/sys v0.14.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
-	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
+	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -26,3 +26,8 @@ heap:
 
 gen-proto:
 	rm -rf proto && protoc --go_out=. --go_opt=Mrotom.proto=proto/ rotom.proto
+
+run-bench:
+	rm -rf *.db benchmark/*.db
+	go run benchmark/*.go
+	rm -rf *.db benchmark/*.db

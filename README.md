@@ -6,15 +6,17 @@ English | [中文](README_ZN.md) | [doc](https://www.yuque.com/1ucario/devdoc/nt
 
 ## 📃Introduction
 
-This is Rotom, a high-performance Key-Value memory database written in Go. It has built-in multiple commonly used data types, supports persistent storage, and can be used in Golang as an imported package or as a server.
+This is Rotom, a stand-alone high-performance Key-Value memory database written in Go. It has built-in multiple commonly used data types, supports persistent storage.
 
-Features:
+Currently supported features:
 
-1. Built-in data types like String, Map, Set, List, ZSet, BitMap, etc., supporting more than 30 commands.
-2. Microsecond-level expiration time (ttl).
-3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), it can avoid GC overhead and have stronger multithreaded performance.
+1. Built-in data types like String, Map, Set, List, ZSet, BitMap, etc., supporting more than 20 commands.
+2. Nanosecond level expiration time supported.
+3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), supports concurrency and avoids GC overhead.
 4. RDB + AOF hybrid persistence strategy.
-5. Supports being **imported** or **server** startup.
+5. Use zstd algorithm to compress log files with a compression ratio of 10:1.
+
+If you want to know more technical details about Rotom, please check out the [doc](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc).
 
 ## 🚚Usage
 
@@ -63,30 +65,9 @@ func main() {
 	// ...
 }
 ```
-Or start as a **server** and listen to port 7676:
-
-```go
-package main
-
-import (
-	"github.com/xgzlucario/rotom"
-)
-
-func main() {
-	db, err := rotom.Open(rotom.DefaultConfig)
-	if err != nil {
-		panic(err)
-	}
-
-	if err := db.Listen("0.0.0.0:7676"); err != nil {
-		panic(err)
-	}
-}
-```
-
 ## 🚀Performance
 
-Rotom has very fast performance, which is several times faster than Redis.
+Rotom has super multi-threading performance. The following is the bench test data.
 
 ### Test Environment
 
@@ -97,37 +78,76 @@ pkg: github.com/xgzlucario/GigaCache
 cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ```
 
-### Rotom
+### Benchmark
 
-200 clients inserting a total of 1 million data, completed in 617ms, reaching a qps of 1.61 million, p99 latency is 1.7ms, p999 latency is 5.8ms.
+```shell
+========== Set ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes
+cost: 412.600461ms
+50th: 245 ns
+90th: 304 ns
+99th: 913 ns
+db file size: 1.1MB
 
-```bash
-$ go run client/*.go
-1000000 requests cost: 617.811804ms
-[qps] 1618564.04 req/sec
-[latency] p90: 133.015µs | p95: 263.447µs | p99: 1.713789ms | p999: 5.780588ms
-```
+========== Set 8 parallel ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes
+cost: 194.788605ms
+50th: 348 ns
+90th: 811 ns
+99th: 18142 ns
+db file size: 4.2MB
 
-### Redis
+========== SetEx ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes, ttl 1min
+cost: 442.300466ms
+50th: 261 ns
+90th: 324 ns
+99th: 1005 ns
+db file size: 3.0MB
 
-200 clients inserting a total of 1 million data, using 8 threads, completed in 4.26s, reaching a qps of 235,000, P99 latency is 1.6ms.
+========== Get ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes
+cost: 354.636607ms
+50th: 231 ns
+90th: 294 ns
+99th: 562 ns
 
-```bash
-$ redis-benchmark -t set -r 100000000 -n 1000000 -c 200 --threads 8
-====== SET ======
-  1000000 requests completed in 4.26 seconds
-  200 parallel clients
-  3 bytes payload
-  keep alive: 1
-  host configuration "save": 3600 1 300 100 60 10000
-  host configuration "appendonly": no
-  multi-thread: yes
-  threads: 8
-  
-Summary:
-  throughput summary: 234962.41 requests per second
-  latency summary (msec):
-          avg       min       p50       p95       p99       max
-        0.823     0.040     0.783     1.247     1.623     8.407
+========== Get 8 parallel ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes
+cost: 64.410025ms
+50th: 249 ns
+90th: 347 ns
+99th: 595 ns
+
+========== HSet ==========
+size: 100*10000 enties
+desc: field 10 bytes, value 10 bytes
+cost: 498.104681ms
+50th: 225 ns
+90th: 279 ns
+99th: 452 ns
+db file size: 823.2KB
+
+========== HGet ==========
+size: 100*10000 enties
+desc: field 10 bytes, value 10 bytes
+cost: 318.662069ms
+50th: 213 ns
+90th: 250 ns
+99th: 536 ns
+
+========== BitSet ==========
+size: 100*10000 enties
+desc: offset uint32
+cost: 171.415936ms
+50th: 99 ns
+90th: 102 ns
+99th: 119 ns
+db file size: 895.1KB
 ```
 
