@@ -6,15 +6,17 @@
 
 ## 📃介绍
 
-这里是 Rotom，一个 Go 编写高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储，可以在 Golang 中以包引入的方式使用，也可以作为网络服务器使用。
+这里是 Rotom，一个使用 Golang 编写单机高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储。
 
 目前支持的功能：
 
-1. 内置数据类型 String，Map，Set，List，ZSet，BitMap 等，支持 30 多种命令
-2. 微秒级别的过期时间（ttl）
-3. 底层基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，能规避GC开销，多线程性能更强
+1. 内置数据类型 String，Map，Set，List，ZSet，BitMap 等，支持 20 多种命令
+2. 支持纳秒级别的过期时间
+3. 底层基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，支持并发，规避GC开销
 4. 基于 RDB + AOF 混合的持久化策略
-5. 支持**包引入**或**服务器**启动
+5. 使用 zstd 算法压缩日志文件，压缩比达到 10:1
+
+如果你想了解更多关于 Rotom 的技术细节，请查看 [在线文档](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc)
 
 ## 🚚如何使用
 
@@ -63,30 +65,9 @@ func main() {
 	// ...
 }
 ```
-或者以**服务器**方式启动并监听 7676 端口：
-
-```go
-package main
-
-import (
-	"github.com/xgzlucario/rotom"
-)
-
-func main() {
-	db, err := rotom.Open(rotom.DefaultConfig)
-	if err != nil {
-		panic(err)
-	}
-
-	if err := db.Listen("0.0.0.0:7676"); err != nil {
-		panic(err)
-	}
-}
-```
-
 ## 🚀性能
 
-Rotom 具有超强的多线程性能，比 Redis 快数倍。
+Rotom 具有超强的多线程性能，以下是压测数据。
 
 ### 测试环境
 
@@ -97,37 +78,78 @@ pkg: github.com/xgzlucario/GigaCache
 cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ```
 
-### Rotom
+### Benchmark
 
-使用 200 个 clients 插入共 100 万数据，617ms 完成，qps 达到 161 万，p99 延迟 1.7ms, p999 延迟 5.8ms。
-
-```bash
-$ go run client/*.go
-1000000 requests cost: 617.811804ms
-[qps] 1618564.04 req/sec
-[latency] p90: 133.015µs | p95: 263.447µs | p99: 1.713789ms | p999: 5.780588ms
-```
-
-### Redis
-
-使用 200 个 clients 插入共 100 万数据，使用 8 个线程，4.26s 完成，qps 23.5 万，p99 延迟 1.6ms。
+下面是部分命令的测试结果。
 
 ```bash
-$ redis-benchmark -t set -r 100000000 -n 1000000 -c 200 --threads 8
-====== SET ======
-  1000000 requests completed in 4.26 seconds
-  200 parallel clients
-  3 bytes payload
-  keep alive: 1
-  host configuration "save": 3600 1 300 100 60 10000
-  host configuration "appendonly": no
-  multi-thread: yes
-  threads: 8
-  
-Summary:
-  throughput summary: 234962.41 requests per second
-  latency summary (msec):
-          avg       min       p50       p95       p99       max
-        0.823     0.040     0.783     1.247     1.623     8.407
+========== Set ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes
+cost: 412.600461ms
+50th: 245 ns
+90th: 304 ns
+99th: 913 ns
+db file size: 1.1MB
+
+========== Set 8 parallel ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes
+cost: 194.788605ms
+50th: 348 ns
+90th: 811 ns
+99th: 18142 ns
+db file size: 4.2MB
+
+========== SetEx ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes, ttl 1min
+cost: 442.300466ms
+50th: 261 ns
+90th: 324 ns
+99th: 1005 ns
+db file size: 3.0MB
+
+========== Get ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes
+cost: 354.636607ms
+50th: 231 ns
+90th: 294 ns
+99th: 562 ns
+
+========== Get 8 parallel ==========
+size: 100*10000 enties
+desc: key 10 bytes, value 10 bytes
+cost: 64.410025ms
+50th: 249 ns
+90th: 347 ns
+99th: 595 ns
+
+========== HSet ==========
+size: 100*10000 enties
+desc: field 10 bytes, value 10 bytes
+cost: 498.104681ms
+50th: 225 ns
+90th: 279 ns
+99th: 452 ns
+db file size: 823.2KB
+
+========== HGet ==========
+size: 100*10000 enties
+desc: field 10 bytes, value 10 bytes
+cost: 318.662069ms
+50th: 213 ns
+90th: 250 ns
+99th: 536 ns
+
+========== BitSet ==========
+size: 100*10000 enties
+desc: offset uint32
+cost: 171.415936ms
+50th: 99 ns
+90th: 102 ns
+99th: 119 ns
+db file size: 895.1KB
 ```
 
