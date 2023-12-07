@@ -213,6 +213,35 @@ func benchHSet() {
 	fmt.Println()
 }
 
+func benchRPush() {
+	fmt.Println("========== RPush ==========")
+	fmt.Println("size: 100*10000 enties")
+	fmt.Println("desc: value 10 bytes")
+
+	start := time.Now()
+	td := tdigest.NewWithCompression(1000)
+
+	db := createDB()
+
+	for i := 0; i < 100*10000; i++ {
+		t1 := time.Now()
+
+		k := fmt.Sprintf("%010d", i)
+		db.RPush("mylist", k)
+
+		td.Add(float64(time.Since(t1)), 1)
+	}
+
+	fmt.Println("cost:", time.Since(start))
+	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
+	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
+	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
+	// wait for sync
+	time.Sleep(time.Second)
+	fmt.Printf("db file size: %v\n", fileSize(db.Path))
+	fmt.Println()
+}
+
 func benchHGet() {
 	fmt.Println("========== HGet ==========")
 	fmt.Println("size: 100*10000 enties")
@@ -321,6 +350,7 @@ func main() {
 	benchSetEx()
 	benchGet()
 	benchGet8parallel()
+	benchRPush()
 	benchHSet()
 	benchHGet()
 	benchBitSet()

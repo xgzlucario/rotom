@@ -74,11 +74,11 @@ var cmdTable = []Cmd{
 			e.SetTx(args[1].ToStr(), args[3], ts)
 
 		case TypeList:
-			ls := structx.NewList[string]()
-			if err := ls.UnmarshalJSON(args[3]); err != nil {
-				return err
-			}
-			e.cm.Set(args[1].ToStr(), ls)
+			// ls := structx.NewList[string](64)
+			// if err := ls.UnmarshalJSON(args[3]); err != nil {
+			// 	return err
+			// }
+			// e.cm.Set(args[1].ToStr(), ls)
 
 		case TypeSet:
 			s := structx.NewSet[string]()
@@ -244,7 +244,7 @@ type (
 	String = []byte
 	Map    = *structx.SyncMap
 	Set    = *structx.Set[string]
-	List   = *structx.List[string]
+	List   = *structx.UList[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
 	BitMap = *structx.Bitmap
 )
@@ -618,7 +618,7 @@ func (e *Engine) LPush(key, item string) error {
 		return err
 	}
 	e.encode(NewCodec(OpLPush).Str(key).Str(item))
-	ls.LPush(item)
+	ls.PushFront(item)
 
 	return nil
 }
@@ -630,7 +630,7 @@ func (e *Engine) RPush(key, item string) error {
 		return err
 	}
 	e.encode(NewCodec(OpRPush).Str(key).Str(item))
-	ls.RPush(item)
+	ls.PushBack(item)
 
 	return nil
 }
@@ -641,6 +641,7 @@ func (e *Engine) LPop(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	res, ok := ls.LPop()
 	if !ok {
 		return "", base.ErrEmptyList
@@ -671,7 +672,7 @@ func (e *Engine) LLen(key string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return ls.Len(), nil
+	return ls.Size(), nil
 }
 
 // BitTest
@@ -948,7 +949,7 @@ func (e *Engine) fetchSet(key string, setnx ...bool) (s Set, err error) {
 // fetchList
 func (e *Engine) fetchList(key string, setnx ...bool) (m List, err error) {
 	return fetch(e, key, func() List {
-		return structx.NewList[string]()
+		return structx.NewList[string](64)
 	}, setnx...)
 }
 
