@@ -635,6 +635,20 @@ func (e *Engine) RPush(key, item string) error {
 	return nil
 }
 
+// LIndex
+func (e *Engine) LIndex(key string, idx int) (string, error) {
+	ls, err := e.fetchList(key)
+	if err != nil {
+		return "", err
+	}
+
+	res, ok := ls.Index(idx)
+	if !ok {
+		return "", base.ErrIndexOutOfRange
+	}
+	return res, nil
+}
+
 // LPop
 func (e *Engine) LPop(key string) (string, error) {
 	ls, err := e.fetchList(key)

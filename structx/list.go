@@ -95,6 +95,18 @@ func (ul *UList[V]) RPop() (v V, ok bool) {
 	return
 }
 
+func (ul *UList[V]) Index(i int) (v V, ok bool) {
+	s := ul.Begin()
+	for s.IsValid() {
+		if i == 0 {
+			return s.Get(), true
+		}
+		s.Next()
+		i--
+	}
+	return
+}
+
 func hasCapacity[V any](llNode *list.Node[ulistBlk[V]]) bool {
 	if llNode == nil {
 		return false

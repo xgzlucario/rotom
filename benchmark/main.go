@@ -70,7 +70,9 @@ func benchSet() {
 		k := fmt.Sprintf("%010d", i)
 		db.Set(k, []byte(k))
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -105,7 +107,7 @@ func benchSet8parallel() {
 				k := fmt.Sprintf("%010d", start+n)
 				db.Set(k, []byte(k))
 
-				if i == 0 {
+				if i == 0 && n%10 == 0 {
 					td.Add(float64(time.Since(t1)), 1)
 				}
 			}
@@ -141,7 +143,9 @@ func benchSetEx() {
 		k := fmt.Sprintf("%010d", i)
 		db.SetEx(k, []byte(k), time.Minute)
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -174,7 +178,9 @@ func benchGet() {
 		t1 := time.Now()
 		db.Get(fmt.Sprintf("%010d", i))
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -200,7 +206,9 @@ func benchHSet() {
 		k := fmt.Sprintf("%010d", i)
 		db.HSet("mymap", k, []byte(k))
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -229,7 +237,9 @@ func benchRPush() {
 		k := fmt.Sprintf("%010d", i)
 		db.RPush("mylist", k)
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -262,7 +272,9 @@ func benchHGet() {
 		t1 := time.Now()
 		db.HGet("mymap", fmt.Sprintf("%010d", i))
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -287,7 +299,9 @@ func benchBitSet() {
 
 		db.BitSet("bm", uint32(i), true)
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -327,7 +341,7 @@ func benchGet8parallel() {
 				t1 := time.Now()
 				db.Get(fmt.Sprintf("%010d", start+n))
 
-				if i == 0 {
+				if i == 0 && n%10 == 0 {
 					td.Add(float64(time.Since(t1)), 1)
 				}
 			}
