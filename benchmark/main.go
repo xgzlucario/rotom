@@ -221,8 +221,8 @@ func benchHSet() {
 	fmt.Println()
 }
 
-func benchRPush() {
-	fmt.Println("========== RPush ==========")
+func benchLRPush() {
+	fmt.Println("========== LRPush ==========")
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: value 10 bytes")
 
@@ -235,7 +235,7 @@ func benchRPush() {
 		t1 := time.Now()
 
 		k := fmt.Sprintf("%010d", i)
-		db.RPush("mylist", k)
+		db.LRPush("mylist", k)
 
 		if i%10 == 0 {
 			td.Add(float64(time.Since(t1)), 1)
@@ -364,7 +364,7 @@ func main() {
 	benchSetEx()
 	benchGet()
 	benchGet8parallel()
-	benchRPush()
+	benchLRPush()
 	benchHSet()
 	benchHGet()
 	benchBitSet()

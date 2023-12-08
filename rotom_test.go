@@ -285,10 +285,10 @@ func TestList(t *testing.T) {
 		key := gofakeit.UUID()
 		animal := gofakeit.Animal()
 
-		err = db.RPush(key, animal)
+		err = db.LRPush(key, animal)
 		assert.Nil(err)
 
-		res, err := db.LPop(key)
+		res, err := db.LLPop(key)
 		assert.Nil(err)
 		assert.Equal(res, animal)
 
@@ -309,7 +309,7 @@ func TestList(t *testing.T) {
 		assert.Nil(err)
 		assert.Equal(res, animal)
 
-		res, err = db.RPop(key)
+		res, err = db.LRPop(key)
 		assert.Nil(err)
 		assert.Equal(res, animal)
 
@@ -324,35 +324,43 @@ func TestList(t *testing.T) {
 	err = db.LPush("map", "1")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	err = db.RPush("map", "1")
+	err = db.LRPush("map", "1")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	res, err := db.LPop("map")
+	res, err := db.LLPop("map")
 	assert.Equal(res, "")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	res, err = db.RPop("map")
+	res, err = db.LRPop("map")
 	assert.Equal(res, "")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+
+	s, err := db.LIndex("map", 1)
+	assert.Equal(s, "")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	n, err := db.LLen("map")
 	assert.Equal(n, 0)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	db.RPush("list", "1")
-	db.RPop("list")
+	db.LRPush("list", "1")
+	db.LRPop("list")
 
 	// empty list
-	res, err = db.LPop("list")
+	res, err = db.LLPop("list")
 	assert.Equal(res, "")
 	assert.Equal(err, base.ErrEmptyList)
 
-	res, err = db.RPop("list")
+	res, err = db.LRPop("list")
 	assert.Equal(res, "")
 	assert.Equal(err, base.ErrEmptyList)
+
+	res, err = db.LIndex("list", 9)
+	assert.Equal(res, "")
+	assert.Equal(err, base.ErrIndexOutOfRange)
 
 	for i := 0; i < 100; i++ {
-		db.RPush("list", gofakeit.Animal())
+		db.LRPush("list", gofakeit.Animal())
 	}
 
 	db.Shrink()

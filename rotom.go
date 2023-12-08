@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/crc32"
 	"log/slog"
 	"os"
 	"strconv"
@@ -34,10 +35,10 @@ const (
 	OpSInter
 	OpSDiff
 	// list
-	OpLPush
-	OpLPop
-	OpRPush
-	OpRPop
+	OpLLPush
+	OpLLPop
+	OpLRPush
+	OpLRPop
 	// bitmap
 	OpBitSet
 	OpBitFlip
@@ -152,22 +153,22 @@ var cmdTable = []Cmd{
 		return e.SDiff(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
 	// list
-	{OpLPush, 2, func(e *Engine, args []codeman.Result) error {
+	{OpLLPush, 2, func(e *Engine, args []codeman.Result) error {
 		// key, items
 		return e.LPush(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpLPop, 1, func(e *Engine, args []codeman.Result) error {
+	{OpLLPop, 1, func(e *Engine, args []codeman.Result) error {
 		// key
-		_, err := e.LPop(args[0].ToStr())
+		_, err := e.LLPop(args[0].ToStr())
 		return err
 	}},
-	{OpRPush, 2, func(e *Engine, args []codeman.Result) error {
+	{OpLRPush, 2, func(e *Engine, args []codeman.Result) error {
 		// key, items
-		return e.RPush(args[0].ToStr(), args[1].ToStrSlice()...)
+		return e.LRPush(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
-	{OpRPop, 1, func(e *Engine, args []codeman.Result) error {
+	{OpLRPop, 1, func(e *Engine, args []codeman.Result) error {
 		// key
-		_, err := e.RPop(args[0].ToStr())
+		_, err := e.LRPop(args[0].ToStr())
 		return err
 	}},
 	// bitmap
@@ -303,6 +304,9 @@ type Engine struct {
 
 	// data for built-in structure.
 	cm cmap.ConcurrentMap[string, any]
+
+	// crc.
+	crc *crc32.Table
 }
 
 // Open opens a database specified by config.
@@ -319,6 +323,7 @@ func Open(conf Config) (*Engine, error) {
 		tickers: [2]*base.Ticker{},
 		m:       cache.New(conf.ShardCount),
 		cm:      cmap.New[any](),
+		crc:     crc32.MakeTable(crc32.Castagnoli),
 	}
 
 	// load db from disk.
@@ -611,25 +616,25 @@ func (e *Engine) SDiff(dstKey string, srcKeys ...string) error {
 	return nil
 }
 
-// LPush
+// LLPush
 func (e *Engine) LPush(key string, items ...string) error {
 	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpLPush).Str(key).StrSlice(items))
+	e.encode(NewCodec(OpLLPush).Str(key).StrSlice(items))
 	ls.LPush(items...)
 
 	return nil
 }
 
-// RPush
-func (e *Engine) RPush(key string, items ...string) error {
+// LRPush
+func (e *Engine) LRPush(key string, items ...string) error {
 	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpRPush).Str(key).StrSlice(items))
+	e.encode(NewCodec(OpLRPush).Str(key).StrSlice(items))
 	ls.RPush(items...)
 
 	return nil
@@ -641,7 +646,6 @@ func (e *Engine) LIndex(key string, i int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	res, ok := ls.Index(i)
 	if !ok {
 		return "", base.ErrIndexOutOfRange
@@ -649,24 +653,23 @@ func (e *Engine) LIndex(key string, i int) (string, error) {
 	return res, nil
 }
 
-// LPop
-func (e *Engine) LPop(key string) (string, error) {
+// LLPop
+func (e *Engine) LLPop(key string) (string, error) {
 	ls, err := e.fetchList(key)
 	if err != nil {
 		return "", err
 	}
-
 	res, ok := ls.LPop()
 	if !ok {
 		return "", base.ErrEmptyList
 	}
-	e.encode(NewCodec(OpLPop).Str(key))
+	e.encode(NewCodec(OpLLPop).Str(key))
 
 	return res, nil
 }
 
-// RPop
-func (e *Engine) RPop(key string) (string, error) {
+// LRPop
+func (e *Engine) LRPop(key string) (string, error) {
 	ls, err := e.fetchList(key)
 	if err != nil {
 		return "", err
@@ -675,7 +678,7 @@ func (e *Engine) RPop(key string) (string, error) {
 	if !ok {
 		return "", base.ErrEmptyList
 	}
-	e.encode(NewCodec(OpRPop).Str(key))
+	e.encode(NewCodec(OpLRPop).Str(key))
 
 	return res, nil
 }
@@ -840,15 +843,20 @@ func (s *Engine) writeTo(buf *bytes.Buffer, path string) (int, error) {
 	}
 	defer fs.Close()
 
-	cbuf := codeman.Compress(buf.Bytes(), nil)
-	coder := codeman.NewCodec().Bytes(cbuf)
+	// encode block.
+	data := codeman.Compress(buf.Bytes(), nil)
+	crc := crc32.Checksum(data, s.crc)
+	coder := codeman.NewCodec().Bytes(data).Uint(crc)
 
 	n, err := fs.Write(coder.Content())
 	if err != nil {
 		return 0, err
 	}
 
+	// reset
 	buf.Reset()
+	coder.Recycle()
+
 	return n, nil
 }
 
@@ -866,22 +874,27 @@ func (e *Engine) load() error {
 
 	blkDecoder := codeman.NewDecoder(line)
 	for !blkDecoder.Done() {
-		// parse a block data.
-		blk, err := blkDecoder.Parse()
+		// decode data block.
+		dataBlock, err := blkDecoder.Parse()
+		if err != nil {
+			return err
+		}
+		crc, err := blkDecoder.Parse()
+		if err != nil {
+			return err
+		}
+		if crc.ToUint32() != crc32.Checksum(dataBlock, e.crc) {
+			return base.ErrCheckSum
+		}
+		data, err := codeman.Decompress(dataBlock, nil)
 		if err != nil {
 			return err
 		}
 
-		// decompress block.
-		data, err := codeman.Decompress(blk, nil)
-		if err != nil {
-			return err
-		}
-
-		dataDecoder := codeman.NewDecoder(data)
-		// parses data.
-		for !dataDecoder.Done() {
-			op, args, err := ParseRecord(dataDecoder)
+		recDecoder := codeman.NewDecoder(data)
+		// decoder records.
+		for !recDecoder.Done() {
+			op, args, err := ParseRecord(recDecoder)
 			if err != nil {
 				return err
 			}
