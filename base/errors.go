@@ -35,5 +35,7 @@ var (
 
 	ErrUnSupportOperation = errors.New("unsupport operation")
 
+	ErrIndexOutOfRange = errors.New("index out of range")
+
 	ErrEmptyList = errors.New("list is empty")
 )

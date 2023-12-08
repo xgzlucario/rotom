@@ -4,210 +4,121 @@ import (
 	"sync"
 
 	"github.com/bytedance/sonic"
+	"github.com/zyedidia/generic/ulist"
 )
-
-// List
-type List[T any] struct {
-	sync.RWMutex
-	len     int
-	tail    int
-	buckets []*LBucket[T]
-}
-
-type LBucket[T any] struct {
-	data []T
-}
 
 const (
-	bucketLength = 128
+	defaultEntryBlockSize = 64
 )
 
+// List implements a doubly-linked list.
+type List[V any] struct {
+	mu sync.RWMutex
+	ls *ulist.UList[V]
+}
+
 // NewList
-func NewList[T any]() *List[T] {
-	b := &LBucket[T]{
-		data: make([]T, 0, bucketLength),
+func NewList[V any]() *List[V] {
+	return &List[V]{
+		ls: ulist.New[V](defaultEntryBlockSize),
 	}
-	return &List[T]{
-		buckets: []*LBucket[T]{b},
-	}
-}
-
-// rpush
-func (l *List[T]) rpush(elem T) {
-	b := l.buckets[l.tail]
-
-	if b.isFull() {
-		l.tail++
-		b = &LBucket[T]{
-			data: make([]T, 0, bucketLength),
-		}
-		l.buckets = append(l.buckets, b)
-	}
-
-	b.data = append(b.data, elem)
-	l.len++
-}
-
-// RPush
-func (l *List[T]) RPush(elem T) {
-	l.Lock()
-	l.rpush(elem)
-	l.Unlock()
 }
 
 // LPush
-func (l *List[T]) LPush(elem T) {
-	l.Lock()
-	defer l.Unlock()
-	b := l.buckets[0]
-
-	if b.isFull() {
-		b = &LBucket[T]{
-			data: make([]T, 0, bucketLength),
-		}
-		l.buckets = append([]*LBucket[T]{b}, l.buckets...)
-		l.tail++
-
-		b.data = append(b.data, elem)
-
-	} else {
-		b.data = append([]T{elem}, b.data...)
+func (l *List[V]) LPush(items ...V) {
+	l.mu.Lock()
+	for i := len(items) - 1; i >= 0; i-- {
+		l.ls.PushFront(items[i])
 	}
-
-	l.len++
+	l.mu.Unlock()
 }
 
-// RPop
-func (l *List[T]) RPop() (val T, ok bool) {
-	l.Lock()
-	defer l.Unlock()
-	if l.len == 0 {
-		return
+// RPush
+func (l *List[V]) RPush(items ...V) {
+	l.mu.Lock()
+	for _, item := range items {
+		l.ls.PushBack(item)
 	}
-
-L:
-	b := l.buckets[l.tail]
-
-	if !b.isEmpty() {
-		val = b.data[len(b.data)-1]
-		b.data = b.data[:len(b.data)-1]
-		l.len--
-
-		return val, true
-
-	} else {
-		// delete bucket
-		clear(b.data)
-		l.buckets = l.buckets[:l.tail]
-		l.tail--
-		goto L
-	}
-}
-
-// LPop
-func (l *List[T]) LPop() (val T, ok bool) {
-	l.Lock()
-	defer l.Unlock()
-	if l.len == 0 {
-		return
-	}
-
-L:
-	b := l.buckets[0]
-
-	if !b.isEmpty() {
-		val = b.data[0]
-		b.data = b.data[1:]
-		l.len--
-
-		return val, true
-
-	} else {
-		// delete bucket
-		clear(b.data)
-		l.buckets = l.buckets[1:]
-		l.tail--
-		goto L
-	}
+	l.mu.Unlock()
 }
 
 // Index
-func (l *List[T]) Index(i int) (val T, ok bool) {
-	l.RLock()
-	defer l.RUnlock()
+func (l *List[V]) Index(i int) (v V, ok bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
-	if i < 0 {
-		return
-	}
-
-	var sum int
-	for _, b := range l.buckets {
-		if sum+len(b.data) > i {
-			return b.data[i-sum], true
+	for n := l.ls.Begin(); n.IsValid(); n.Next() {
+		if i == 0 {
+			return n.Get(), true
 		}
-		sum += len(b.data)
+		i--
 	}
-
 	return
 }
 
-// Range
-func (l *List[T]) Range(f func(elem T) bool) {
-	l.RLock()
-	defer l.RUnlock()
+// LPop
+func (l *List[V]) LPop() (v V, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	for _, b := range l.buckets {
-		for _, v := range b.data {
-			if !f(v) {
-				return
-			}
-		}
+	n := l.ls.Begin()
+	if n.IsValid() {
+		v = n.Get()
+		l.ls.Remove(n)
+		return v, true
 	}
+	return
 }
 
-// Len
-func (l *List[T]) Len() int {
-	l.RLock()
-	defer l.RUnlock()
+// RPop
+func (l *List[V]) RPop() (v V, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	return l.len
+	n := l.ls.End()
+	if n.IsValid() {
+		v = n.Get()
+		l.ls.Remove(n)
+		return v, true
+	}
+	return
+}
+
+// Size
+func (l *List[V]) Size() int {
+	l.mu.RLock()
+	n := l.ls.Size()
+	l.mu.RUnlock()
+	return n
 }
 
 // MarshalJSON
-func (l *List[T]) MarshalJSON() ([]byte, error) {
-	l.RLock()
-	defer l.RUnlock()
+func (l *List[V]) MarshalJSON() ([]byte, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
-	arr := make([]T, 0, l.len)
-	for _, b := range l.buckets {
-		arr = append(arr, b.data...)
+	arr := make([]V, 0, l.ls.Size())
+	for n := l.ls.Begin(); n.IsValid(); n.Next() {
+		arr = append(arr, n.Get())
 	}
 
 	return sonic.Marshal(arr)
 }
 
 // UnmarshalJSON
-func (l *List[T]) UnmarshalJSON(b []byte) error {
-	l.Lock()
-	defer l.Unlock()
+func (l *List[V]) UnmarshalJSON(src []byte) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	var arr []T
-	if err := sonic.Unmarshal(b, &arr); err != nil {
+	var items []V
+	if err := sonic.Unmarshal(src, &items); err != nil {
 		return err
 	}
-	for _, v := range arr {
-		l.rpush(v)
+
+	l = NewList[V]()
+	for _, item := range items {
+		l.ls.PushBack(item)
 	}
 
 	return nil
-}
-
-// isFull
-func (b *LBucket[T]) isFull() bool {
-	return len(b.data) == bucketLength
-}
-
-// isEmpty
-func (b *LBucket[T]) isEmpty() bool {
-	return len(b.data) == 0
 }

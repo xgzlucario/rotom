@@ -70,7 +70,9 @@ func benchSet() {
 		k := fmt.Sprintf("%010d", i)
 		db.Set(k, []byte(k))
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -105,7 +107,7 @@ func benchSet8parallel() {
 				k := fmt.Sprintf("%010d", start+n)
 				db.Set(k, []byte(k))
 
-				if i == 0 {
+				if i == 0 && n%10 == 0 {
 					td.Add(float64(time.Since(t1)), 1)
 				}
 			}
@@ -141,7 +143,9 @@ func benchSetEx() {
 		k := fmt.Sprintf("%010d", i)
 		db.SetEx(k, []byte(k), time.Minute)
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -174,7 +178,9 @@ func benchGet() {
 		t1 := time.Now()
 		db.Get(fmt.Sprintf("%010d", i))
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -200,7 +206,40 @@ func benchHSet() {
 		k := fmt.Sprintf("%010d", i)
 		db.HSet("mymap", k, []byte(k))
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
+	}
+
+	fmt.Println("cost:", time.Since(start))
+	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
+	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
+	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
+	// wait for sync
+	time.Sleep(time.Second)
+	fmt.Printf("db file size: %v\n", fileSize(db.Path))
+	fmt.Println()
+}
+
+func benchLRPush() {
+	fmt.Println("========== LRPush ==========")
+	fmt.Println("size: 100*10000 enties")
+	fmt.Println("desc: value 10 bytes")
+
+	start := time.Now()
+	td := tdigest.NewWithCompression(1000)
+
+	db := createDB()
+
+	for i := 0; i < 100*10000; i++ {
+		t1 := time.Now()
+
+		k := fmt.Sprintf("%010d", i)
+		db.LRPush("mylist", k)
+
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -233,7 +272,9 @@ func benchHGet() {
 		t1 := time.Now()
 		db.HGet("mymap", fmt.Sprintf("%010d", i))
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -258,7 +299,9 @@ func benchBitSet() {
 
 		db.BitSet("bm", uint32(i), true)
 
-		td.Add(float64(time.Since(t1)), 1)
+		if i%10 == 0 {
+			td.Add(float64(time.Since(t1)), 1)
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -298,7 +341,7 @@ func benchGet8parallel() {
 				t1 := time.Now()
 				db.Get(fmt.Sprintf("%010d", start+n))
 
-				if i == 0 {
+				if i == 0 && n%10 == 0 {
 					td.Add(float64(time.Since(t1)), 1)
 				}
 			}
@@ -321,6 +364,7 @@ func main() {
 	benchSetEx()
 	benchGet()
 	benchGet8parallel()
+	benchLRPush()
 	benchHSet()
 	benchHGet()
 	benchBitSet()
