@@ -304,7 +304,12 @@ func TestList(t *testing.T) {
 		err = db.LPush(key, animal)
 		assert.Nil(err)
 
-		res, err := db.RPop(key)
+		// Index
+		res, err := db.LIndex(key, 0)
+		assert.Nil(err)
+		assert.Equal(res, animal)
+
+		res, err = db.RPop(key)
 		assert.Nil(err)
 		assert.Equal(res, animal)
 

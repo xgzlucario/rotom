@@ -74,11 +74,11 @@ var cmdTable = []Cmd{
 			e.SetTx(args[1].ToStr(), args[3], ts)
 
 		case TypeList:
-			// ls := structx.NewList[string](64)
-			// if err := ls.UnmarshalJSON(args[3]); err != nil {
-			// 	return err
-			// }
-			// e.cm.Set(args[1].ToStr(), ls)
+			ls := structx.NewList[string]()
+			if err := ls.UnmarshalJSON(args[3]); err != nil {
+				return err
+			}
+			e.cm.Set(args[1].ToStr(), ls)
 
 		case TypeSet:
 			s := structx.NewSet[string]()
@@ -153,8 +153,8 @@ var cmdTable = []Cmd{
 	}},
 	// list
 	{OpLPush, 2, func(e *Engine, args []codeman.Result) error {
-		// key, item
-		return e.LPush(args[0].ToStr(), args[1].ToStr())
+		// key, items
+		return e.LPush(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
 	{OpLPop, 1, func(e *Engine, args []codeman.Result) error {
 		// key
@@ -162,8 +162,8 @@ var cmdTable = []Cmd{
 		return err
 	}},
 	{OpRPush, 2, func(e *Engine, args []codeman.Result) error {
-		// key, item
-		return e.RPush(args[0].ToStr(), args[1].ToStr())
+		// key, items
+		return e.RPush(args[0].ToStr(), args[1].ToStrSlice()...)
 	}},
 	{OpRPop, 1, func(e *Engine, args []codeman.Result) error {
 		// key
@@ -244,7 +244,7 @@ type (
 	String = []byte
 	Map    = *structx.SyncMap
 	Set    = *structx.Set[string]
-	List   = *structx.UList[string]
+	List   = *structx.List[string]
 	ZSet   = *structx.ZSet[string, float64, []byte]
 	BitMap = *structx.Bitmap
 )
@@ -612,37 +612,37 @@ func (e *Engine) SDiff(dstKey string, srcKeys ...string) error {
 }
 
 // LPush
-func (e *Engine) LPush(key, item string) error {
+func (e *Engine) LPush(key string, items ...string) error {
 	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpLPush).Str(key).Str(item))
-	ls.PushFront(item)
+	e.encode(NewCodec(OpLPush).Str(key).StrSlice(items))
+	ls.LPush(items...)
 
 	return nil
 }
 
 // RPush
-func (e *Engine) RPush(key, item string) error {
+func (e *Engine) RPush(key string, items ...string) error {
 	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpRPush).Str(key).Str(item))
-	ls.PushBack(item)
+	e.encode(NewCodec(OpRPush).Str(key).StrSlice(items))
+	ls.RPush(items...)
 
 	return nil
 }
 
 // LIndex
-func (e *Engine) LIndex(key string, idx int) (string, error) {
+func (e *Engine) LIndex(key string, i int) (string, error) {
 	ls, err := e.fetchList(key)
 	if err != nil {
 		return "", err
 	}
 
-	res, ok := ls.Index(idx)
+	res, ok := ls.Index(i)
 	if !ok {
 		return "", base.ErrIndexOutOfRange
 	}
@@ -963,7 +963,7 @@ func (e *Engine) fetchSet(key string, setnx ...bool) (s Set, err error) {
 // fetchList
 func (e *Engine) fetchList(key string, setnx ...bool) (m List, err error) {
 	return fetch(e, key, func() List {
-		return structx.NewList[string](64)
+		return structx.NewList[string]()
 	}, setnx...)
 }
 

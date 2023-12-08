@@ -1,204 +1,124 @@
 package structx
 
 import (
-	"github.com/zyedidia/generic/list"
+	"sync"
+
+	"github.com/bytedance/sonic"
+	"github.com/zyedidia/generic/ulist"
 )
 
-// Type alias for a block of entries.
-type ulistBlk[V any] []V
+const (
+	defaultEntryBlockSize = 64
+)
 
-// UList implements a doubly-linked unolled list.
-type UList[V any] struct {
-	ll              list.List[ulistBlk[V]]
-	entriesPerBlock int
-	size            int
+// List implements a doubly-linked list.
+type List[V any] struct {
+	mu sync.RWMutex
+	ls *ulist.UList[V]
 }
 
-// New returns an empty unrolled linked list.
-// 'entriesPerBlock' is the number of entries to store in each block.
-// This value should ideally be the size of a cache-line or multiples there-of.
-// See: https://en.wikipedia.org/wiki/Unrolled_linked_list
-func NewList[V any](entriesPerBlock int) *UList[V] {
-	return &UList[V]{
-		ll:              *list.New[ulistBlk[V]](),
-		entriesPerBlock: entriesPerBlock,
-		size:            0,
+// NewList
+func NewList[V any]() *List[V] {
+	return &List[V]{
+		ls: ulist.New[V](defaultEntryBlockSize),
 	}
 }
 
-// Size returns the number of entries in 'ul'.
-func (ul *UList[V]) Size() int {
-	return ul.size
-}
-
-// PushBack adds 'v' to the end of the ulist.
-func (ul *UList[V]) PushBack(v V) {
-	if !hasCapacity[V](ul.ll.Back) {
-		ul.ll.PushBack(ul.newBlock())
+// LPush
+func (l *List[V]) LPush(items ...V) {
+	l.mu.Lock()
+	for i := len(items) - 1; i >= 0; i-- {
+		l.ls.PushFront(items[i])
 	}
-	blk := ul.ll.Back.Value
-	blk = append(blk, v)
-	ul.ll.Back.Value = blk
-	ul.size++
+	l.mu.Unlock()
 }
 
-// PushFront adds 'v' to the beginning of the ulist.
-func (ul *UList[V]) PushFront(v V) {
-	if !hasCapacity[V](ul.ll.Front) {
-		ul.ll.PushFront(ul.newBlock())
+// RPush
+func (l *List[V]) RPush(items ...V) {
+	l.mu.Lock()
+	for _, item := range items {
+		l.ls.PushBack(item)
 	}
-	ul.prependToBlock(v, &ul.ll.Front.Value)
-	ul.size++
+	l.mu.Unlock()
 }
 
-// Begin returns an UListIter pointing to the first entry in the UList.
-func (ul *UList[V]) Begin() *UListIter[V] {
-	return newIterFront(ul)
-}
+// Index
+func (l *List[V]) Index(i int) (v V, ok bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
-// End returns an UListIter pointing to the last entry in the UList.
-func (ul *UList[V]) End() *UListIter[V] {
-	return newIterBack(ul)
-}
-
-// Remove deletes the entry in 'ul' pointed to by 'iter'.
-// 'iter' is moved forward in the process. i.e. iter.Get() returns the element in 'ul'
-// that occurs after the deleted entry.
-func (ul *UList[V]) Remove(iter *UListIter[V]) {
-	ul.size--
-	iter.node.Value = append(iter.node.Value[:iter.index], iter.node.Value[iter.index+1:]...)
-	if len(iter.node.Value) == 0 {
-		// Block got emptied.
-		ul.ll.Remove(iter.node)
-		iter.Next()
-		return
-	}
-}
-
-func (ul *UList[V]) LPop() (v V, ok bool) {
-	s := ul.Begin()
-	if s.IsValid() {
-		v = s.Get()
-		ul.Remove(s)
-		return v, true
-	}
-	return
-}
-
-func (ul *UList[V]) RPop() (v V, ok bool) {
-	s := ul.End()
-	if s.IsValid() {
-		v = s.Get()
-		ul.Remove(s)
-		return v, true
-	}
-	return
-}
-
-func (ul *UList[V]) Index(i int) (v V, ok bool) {
-	s := ul.Begin()
-	for s.IsValid() {
+	for n := l.ls.Begin(); n.IsValid(); n.Next() {
 		if i == 0 {
-			return s.Get(), true
+			return n.Get(), true
 		}
-		s.Next()
 		i--
 	}
 	return
 }
 
-func hasCapacity[V any](llNode *list.Node[ulistBlk[V]]) bool {
-	if llNode == nil {
-		return false
+// LPop
+func (l *List[V]) LPop() (v V, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	n := l.ls.Begin()
+	if n.IsValid() {
+		v = n.Get()
+		l.ls.Remove(n)
+		return v, true
 	}
-	return len(llNode.Value) < cap(llNode.Value)
+	return
 }
 
-func (ul *UList[V]) newBlock() ulistBlk[V] {
-	return make([]V, 0, ul.entriesPerBlock)
-}
+// RPop
+func (l *List[V]) RPop() (v V, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-func (ul *UList[V]) prependToBlock(v V, blkPtr *ulistBlk[V]) {
-	tmp := ul.newBlock()
-	tmp = append(tmp, v)
-	// 'append' returns a slice with capacity of the first variable.
-	// To maintain the propoer capacity, we use 'tmp' with an explicitly defined capacity.
-	*blkPtr = append(tmp, *blkPtr...)
-}
-
-// A UListIter points to an element in the UList.
-type UListIter[V any] struct {
-	node  *list.Node[ulistBlk[V]]
-	index int
-}
-
-// newIterFront returns a UListIter pointing to the first entry in 'ul'.
-// If 'ul' is empty, an invalid iterator is returned.
-func newIterFront[V any](ul *UList[V]) *UListIter[V] {
-	return &UListIter[V]{
-		node:  ul.ll.Front,
-		index: 0,
+	n := l.ls.End()
+	if n.IsValid() {
+		v = n.Get()
+		l.ls.Remove(n)
+		return v, true
 	}
+	return
 }
 
-// newIterBack returns a UListIter pointing to the last entry in 'ul'.
-// If 'ul' is empty, an invalid iterator is returned.
-func newIterBack[V any](ul *UList[V]) *UListIter[V] {
-	iter := UListIter[V]{
-		node:  ul.ll.Back,
-		index: 0,
-	}
-	if iter.node != nil {
-		blk := iter.node.Value
-		iter.index = len(blk) - 1
-	}
-	return &iter
+// Size
+func (l *List[V]) Size() int {
+	l.mu.RLock()
+	n := l.ls.Size()
+	l.mu.RUnlock()
+	return n
 }
 
-// IsValid returns true if the iterator points to a valid entry in the UList.
-func (iter *UListIter[V]) IsValid() bool {
-	if iter.node == nil {
-		return false
+// MarshalJSON
+func (l *List[V]) MarshalJSON() ([]byte, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	arr := make([]V, 0, l.ls.Size())
+	for n := l.ls.Begin(); n.IsValid(); n.Next() {
+		arr = append(arr, n.Get())
 	}
-	blk := iter.node.Value
-	return iter.index >= 0 && iter.index < len(blk)
+
+	return sonic.Marshal(arr)
 }
 
-// Get returns the entry in the UList that the 'iter' is pointing to.
-// This call should only ever be made when iter.IsValid() is true.
-func (iter *UListIter[V]) Get() V {
-	blk := iter.node.Value
-	return blk[iter.index]
-}
+// UnmarshalJSON
+func (l *List[V]) UnmarshalJSON(src []byte) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-// Next moves the iterator one step forward and returns true if the iterator is valid.
-func (iter *UListIter[V]) Next() bool {
-	iter.index++
-	blk := iter.node.Value
-	if iter.index >= len(blk) {
-		if iter.node.Next != nil {
-			iter.node = iter.node.Next
-			iter.index = 0
-		} else {
-			// By not going past len, we can recover to the end using Prev().
-			iter.index = len(blk)
-		}
+	var items []V
+	if err := sonic.Unmarshal(src, &items); err != nil {
+		return err
 	}
-	return iter.IsValid()
-}
 
-// Prev moves the iterator one step back and returns true if the iterator is valid.
-func (iter *UListIter[V]) Prev() bool {
-	iter.index--
-	if iter.index < 0 {
-		if iter.node.Prev != nil {
-			iter.node = iter.node.Prev
-			blk := iter.node.Value
-			iter.index = len(blk) - 1
-		} else {
-			// By not going further past -1, we can recover to the begin using Next().
-			iter.index = -1
-		}
+	l = NewList[V]()
+	for _, item := range items {
+		l.ls.PushBack(item)
 	}
-	return iter.IsValid()
+
+	return nil
 }
