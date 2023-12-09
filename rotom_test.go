@@ -1,6 +1,7 @@
 package rotom
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
-	"github.com/xgzlucario/rotom/codeman"
 	"golang.org/x/exp/maps"
 )
 
@@ -121,13 +121,13 @@ func TestDB(t *testing.T) {
 	// Load Error
 	os.WriteFile(db.Config.Path, []byte("fake"), 0644)
 	_, err = Open(db.Config)
-	assert.Equal(err, codeman.ErrParseData)
+	assert.NotNil(err, base.ErrCheckSum)
 
 	// error data type
 	db.encode(NewCodec(OpSetTx).Int(100).Str("key").Str("val"))
 	db.Close()
 	_, err = Open(db.Config)
-	assert.Equal(err, codeman.ErrParseData)
+	assert.NotNil(err, base.ErrCheckSum)
 }
 
 func TestSetTTL(t *testing.T) {
@@ -182,6 +182,9 @@ func TestSetTTL(t *testing.T) {
 
 	// get again
 	for k, v := range kvdata {
+		v.Ts /= timeCarry
+		v.Ts *= timeCarry
+
 		// expired
 		if v.Ts < cache.GetClock() {
 			_, _, err := db.Get(k)
@@ -611,28 +614,23 @@ func TestZSet(t *testing.T) {
 	// load
 	db.Shrink()
 	db.Close()
+
 	_, err = Open(db.Config)
 	assert.Nil(err)
 }
 
 func TestUtils(t *testing.T) {
-	println("===== TestUtils =====")
 	assert := assert.New(t)
 
-	cd, err := NewCodec(OpSetTx).Any("string")
-	assert.Nil(cd)
-	assert.NotNil(err)
+	assert.Panics(func() {
+		base.NewTicker(context.TODO(), -1, func() {})
+	})
 
-	decoder := codeman.NewDecoder(nil)
-	_, err = decoder.Parses(2)
-	assert.Equal(err, codeman.ErrDecoderIsDone)
+	ctx, cancel := context.WithCancel(context.Background())
+	ticker := base.NewTicker(ctx, time.Second, func() {})
+	ticker.Reset(time.Second)
 
-	// fake
-	decoder = codeman.NewDecoder([]byte{1, 2, 3, 4})
-	_, err = decoder.Parses(2)
-	assert.Equal(err, codeman.ErrParseData)
-
-	decoder = codeman.NewDecoder([]byte{byte(OpSetTx), 10, 255})
-	_, err = decoder.Parses(2)
-	assert.Equal(err, codeman.ErrParseData)
+	cancel()
+	err := ticker.Do()
+	assert.Equal(err, base.ErrTickerClosed)
 }

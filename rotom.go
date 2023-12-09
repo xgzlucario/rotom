@@ -8,7 +8,6 @@ import (
 	"hash/crc32"
 	"log/slog"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -53,61 +52,70 @@ const (
 	OpMarshalBinary
 )
 
+const (
+	timeCarry = 1e6
+)
+
 // Cmd
 type Cmd struct {
-	op      Operation
-	argsNum int
-	hook    func(*Engine, []codeman.Result) error
+	op   Operation
+	hook func(*Engine, *codeman.Parser) error
 }
 
 // cmdTable defines the rNum and callback function required for the operation.
 var cmdTable = []Cmd{
-	{OpSetTx, 4, func(e *Engine, args []codeman.Result) error {
+	{OpSetTx, func(e *Engine, decoder *codeman.Parser) error {
 		// type, key, ts, val
-		ts := args[2].ToInt64()
+		tp := decoder.ParseVarint().ToInt64()
+		key := decoder.Parse().ToStr()
+		ts := decoder.ParseVarint().ToInt64() * timeCarry
+		val := decoder.Parse()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
 		if ts < cache.GetClock() && ts != noTTL {
 			return nil
 		}
-
-		tp := args[0].ToInt64()
 		switch tp {
 		case TypeString:
-			e.SetTx(args[1].ToStr(), args[3], ts)
+			e.SetTx(key, val, int64(ts))
 
 		case TypeList:
 			ls := structx.NewList[string]()
-			if err := ls.UnmarshalJSON(args[3]); err != nil {
+			if err := ls.UnmarshalJSON(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), ls)
+			e.cm.Set(key, ls)
 
 		case TypeSet:
 			s := structx.NewSet[string]()
-			if err := s.UnmarshalJSON(args[3]); err != nil {
+			if err := s.UnmarshalJSON(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), s)
+			e.cm.Set(key, s)
 
 		case TypeMap:
 			m := structx.NewSyncMap()
-			if err := m.UnmarshalJSON(args[3]); err != nil {
+			if err := m.UnmarshalJSON(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), m)
+			e.cm.Set(key, m)
 
 		case TypeBitmap:
 			m := structx.NewBitmap()
-			if err := m.UnmarshalBinary(args[3]); err != nil {
+			if err := m.UnmarshalBinary(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), m)
+			e.cm.Set(key, m)
 
 		case TypeZSet:
 			m := structx.NewZSet[string, float64, []byte]()
-			if err := m.UnmarshalJSON(args[3]); err != nil {
+			if err := m.UnmarshalJSON(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), m)
+			e.cm.Set(key, m)
 
 		default:
 			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, tp)
@@ -115,109 +123,264 @@ var cmdTable = []Cmd{
 
 		return nil
 	}},
-	{OpRemove, 1, func(e *Engine, args []codeman.Result) error {
+
+	{OpRemove, func(e *Engine, decoder *codeman.Parser) error {
 		// keys
-		e.Remove(args[0].ToStrSlice()...)
+		keys := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		e.Remove(keys...)
 		return nil
 	}},
-	// map
-	{OpHSet, 3, func(e *Engine, args []codeman.Result) error {
+
+	{OpHSet, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, val
-		return e.HSet(args[0].ToStr(), args[1].ToStr(), args[2])
+		key := decoder.Parse().ToStr()
+		field := decoder.Parse().ToStr()
+		val := decoder.Parse()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.HSet(key, field, val)
 	}},
-	{OpHRemove, 2, func(e *Engine, args []codeman.Result) error {
-		// key, field
-		_, err := e.HRemove(args[0].ToStr(), args[1].ToStrSlice()...)
+
+	{OpHRemove, func(e *Engine, decoder *codeman.Parser) error {
+		// key, fields
+		key := decoder.Parse().ToStr()
+		fields := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		_, err := e.HRemove(key, fields...)
 		return err
 	}},
-	// set
-	{OpSAdd, 2, func(e *Engine, args []codeman.Result) error {
+
+	{OpSAdd, func(e *Engine, decoder *codeman.Parser) error {
 		// key, items
-		_, err := e.SAdd(args[0].ToStr(), args[1].ToStrSlice()...)
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		_, err := e.SAdd(key, items...)
 		return err
 	}},
-	{OpSRemove, 2, func(e *Engine, args []codeman.Result) error {
-		// key, item
-		return e.SRemove(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	{OpSUnion, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.SUnion(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	{OpSInter, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.SInter(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	{OpSDiff, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.SDiff(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	// list
-	{OpLLPush, 2, func(e *Engine, args []codeman.Result) error {
+
+	{OpSRemove, func(e *Engine, decoder *codeman.Parser) error {
 		// key, items
-		return e.LPush(args[0].ToStr(), args[1].ToStrSlice()...)
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.SRemove(key, items...)
 	}},
-	{OpLLPop, 1, func(e *Engine, args []codeman.Result) error {
+
+	{OpSUnion, func(e *Engine, decoder *codeman.Parser) error {
+		// key, items
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.SUnion(key, items...)
+	}},
+
+	{OpSInter, func(e *Engine, decoder *codeman.Parser) error {
+		// key, items
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.SUnion(key, items...)
+	}},
+
+	{OpSDiff, func(e *Engine, decoder *codeman.Parser) error {
+		// key, items
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.SDiff(key, items...)
+	}},
+
+	{OpLLPush, func(e *Engine, decoder *codeman.Parser) error {
+		// key, items
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.LPush(key, items...)
+	}},
+
+	{OpLLPop, func(e *Engine, decoder *codeman.Parser) error {
 		// key
-		_, err := e.LLPop(args[0].ToStr())
+		key := decoder.Parse().ToStr()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		_, err := e.LLPop(key)
 		return err
 	}},
-	{OpLRPush, 2, func(e *Engine, args []codeman.Result) error {
+
+	{OpLRPush, func(e *Engine, decoder *codeman.Parser) error {
 		// key, items
-		return e.LRPush(args[0].ToStr(), args[1].ToStrSlice()...)
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.LRPush(key, items...)
 	}},
-	{OpLRPop, 1, func(e *Engine, args []codeman.Result) error {
+
+	{OpLRPop, func(e *Engine, decoder *codeman.Parser) error {
 		// key
-		_, err := e.LRPop(args[0].ToStr())
+		key := decoder.Parse().ToStr()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		_, err := e.LRPop(key)
 		return err
 	}},
-	// bitmap
-	{OpBitSet, 3, func(e *Engine, args []codeman.Result) error {
+
+	{OpBitSet, func(e *Engine, decoder *codeman.Parser) error {
 		// key, offset, val
-		return e.BitSet(args[0].ToStr(), args[1].ToUint32(), args[2].ToBool())
+		key := decoder.Parse().ToStr()
+		offset := decoder.ParseVarint().ToUint32()
+		val := decoder.ParseVarint().ToBool()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.BitSet(key, offset, val)
 	}},
-	{OpBitFlip, 2, func(e *Engine, args []codeman.Result) error {
+
+	{OpBitFlip, func(e *Engine, decoder *codeman.Parser) error {
 		// key, offset
-		return e.BitFlip(args[0].ToStr(), args[1].ToUint32())
+		key := decoder.Parse().ToStr()
+		offset := decoder.ParseVarint().ToUint32()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.BitFlip(key, offset)
 	}},
-	{OpBitOr, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.BitOr(args[0].ToStr(), args[1].ToStrSlice()...)
+
+	{OpBitOr, func(e *Engine, decoder *codeman.Parser) error {
+		// key, items
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.BitOr(key, items...)
 	}},
-	{OpBitAnd, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.BitAnd(args[0].ToStr(), args[1].ToStrSlice()...)
+
+	{OpBitAnd, func(e *Engine, decoder *codeman.Parser) error {
+		// key, items
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.BitAnd(key, items...)
 	}},
-	{OpBitXor, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.BitXor(args[0].ToStr(), args[1].ToStrSlice()...)
+
+	{OpBitXor, func(e *Engine, decoder *codeman.Parser) error {
+		// key, items
+		key := decoder.Parse().ToStr()
+		items := decoder.Parse().ToStrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.BitXor(key, items...)
 	}},
-	// zset
-	{OpZAdd, 4, func(e *Engine, args []codeman.Result) error {
+
+	{OpZAdd, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, score, val
-		s, err := strconv.ParseFloat(args[2].ToStr(), 64)
-		if err != nil {
-			return err
+		key := decoder.Parse().ToStr()
+		field := decoder.Parse().ToStr()
+		score := decoder.ParseVarint().ToFloat64()
+		val := decoder.Parse()
+
+		if decoder.Error != nil {
+			return decoder.Error
 		}
-		return e.ZAdd(args[0].ToStr(), args[1].ToStr(), s, args[3])
+
+		return e.ZAdd(key, field, score, val)
 	}},
-	{OpZIncr, 3, func(e *Engine, args []codeman.Result) error {
+
+	{OpZIncr, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, score
-		s, err := strconv.ParseFloat(args[2].ToStr(), 64)
-		if err != nil {
-			return err
+		key := decoder.Parse().ToStr()
+		field := decoder.Parse().ToStr()
+		score := decoder.ParseVarint().ToFloat64()
+
+		if decoder.Error != nil {
+			return decoder.Error
 		}
-		_, err = e.ZIncr(args[0].ToStr(), args[1].ToStr(), s)
+
+		_, err := e.ZIncr(key, field, score)
 		return err
 	}},
-	{OpZRemove, 2, func(e *Engine, args []codeman.Result) error {
-		// key, val
-		return e.ZRemove(args[0].ToStr(), args[1].ToStr())
+
+	{OpZRemove, func(e *Engine, decoder *codeman.Parser) error {
+		// key, field
+		key := decoder.Parse().ToStr()
+		field := decoder.Parse().ToStr()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.ZRemove(key, field)
 	}},
-	// others
-	{OpMarshalBinary, 1, func(e *Engine, args []codeman.Result) error {
+
+	{OpMarshalBinary, func(e *Engine, decoder *codeman.Parser) error {
 		// val
-		return e.m.UnmarshalBinary(args[0])
+		val := decoder.Parse()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.m.UnmarshalBinary(val)
 	}},
 }
 
@@ -414,7 +577,7 @@ func (e *Engine) SetTx(key string, val []byte, ts int64) {
 	if ts < 0 {
 		return
 	}
-	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Bytes(val))
+	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 	e.m.SetTx(key, val, ts)
 }
 
@@ -732,8 +895,13 @@ func (e *Engine) BitFlip(key string, offset uint32) error {
 
 // BitOr
 func (e *Engine) BitOr(dstKey string, srcKeys ...string) error {
-	bm := structx.NewBitmap()
-	for _, key := range srcKeys {
+	bm, err := e.fetchBitMap(srcKeys[0])
+	if err != nil {
+		return err
+	}
+	bm = bm.Clone()
+
+	for _, key := range srcKeys[1:] {
 		tbm, err := e.fetchBitMap(key)
 		if err != nil {
 			return err
@@ -748,8 +916,13 @@ func (e *Engine) BitOr(dstKey string, srcKeys ...string) error {
 
 // BitXor
 func (e *Engine) BitXor(dstKey string, srcKeys ...string) error {
-	bm := structx.NewBitmap()
-	for _, key := range srcKeys {
+	bm, err := e.fetchBitMap(srcKeys[0])
+	if err != nil {
+		return err
+	}
+	bm = bm.Clone()
+
+	for _, key := range srcKeys[1:] {
 		tbm, err := e.fetchBitMap(key)
 		if err != nil {
 			return err
@@ -764,8 +937,13 @@ func (e *Engine) BitXor(dstKey string, srcKeys ...string) error {
 
 // BitAnd
 func (e *Engine) BitAnd(dstKey string, srcKeys ...string) error {
-	bm := structx.NewBitmap()
-	for _, key := range srcKeys {
+	bm, err := e.fetchBitMap(srcKeys[0])
+	if err != nil {
+		return err
+	}
+	bm = bm.Clone()
+
+	for _, key := range srcKeys[1:] {
 		tbm, err := e.fetchBitMap(key)
 		if err != nil {
 			return err
@@ -872,33 +1050,34 @@ func (e *Engine) load() error {
 
 	e.logInfo("loading db file size %s", formatSize(len(line)))
 
-	blkDecoder := codeman.NewDecoder(line)
-	for !blkDecoder.Done() {
-		// decode data block.
-		dataBlock, err := blkDecoder.Parse()
-		if err != nil {
-			return err
+	blkParser := codeman.NewParser(line)
+	for !blkParser.Done() {
+		// parse data block.
+		dataBlock := blkParser.Parse()
+		crc := uint32(blkParser.ParseVarint())
+
+		if blkParser.Error != nil {
+			return blkParser.Error
 		}
-		crc, err := blkDecoder.Parse()
-		if err != nil {
-			return err
-		}
-		if crc.ToUint32() != crc32.Checksum(dataBlock, e.crc) {
+		if crc != crc32.Checksum(dataBlock, e.crc) {
 			return base.ErrCheckSum
 		}
+
 		data, err := codeman.Decompress(dataBlock, nil)
 		if err != nil {
 			return err
 		}
 
-		recDecoder := codeman.NewDecoder(data)
-		// decoder records.
-		for !recDecoder.Done() {
-			op, args, err := ParseRecord(recDecoder)
-			if err != nil {
-				return err
+		recParser := codeman.NewParser(data)
+		for !recParser.Done() {
+			// parse records.
+			op := Operation(recParser.ParseVarint())
+
+			if recParser.Error != nil {
+				return recParser.Error
 			}
-			if err := cmdTable[op].hook(e, args); err != nil {
+
+			if err := cmdTable[op].hook(e, recParser); err != nil {
 				return err
 			}
 		}
