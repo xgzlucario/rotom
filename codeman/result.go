@@ -2,35 +2,23 @@ package codeman
 
 import (
 	"encoding/binary"
+	"math"
 )
 
-type Result []byte
+// AnyResult is the bytes result.
+type AnyResult []byte
 
-func (r Result) ToStr() string {
+func (r AnyResult) Str() string {
+	if r == nil {
+		return ""
+	}
 	return string(r)
 }
 
-func (r Result) ToBool() bool {
-	return r[0] == _true
-}
-
-func (r Result) ToInt64() int64 {
-	return int64(parseVarint(r))
-}
-
-func (r Result) ToInt() int {
-	return int(parseVarint(r))
-}
-
-func (r Result) ToUint32() uint32 {
-	return uint32(parseVarint(r))
-}
-
-func (r Result) ToUint64() uint64 {
-	return parseVarint(r)
-}
-
-func (r Result) ToStrSlice() []string {
+func (r AnyResult) StrSlice() []string {
+	if r == nil {
+		return nil
+	}
 	length, n := binary.Uvarint(r)
 	r = r[n:]
 	data := make([]string, 0, length)
@@ -43,7 +31,10 @@ func (r Result) ToStrSlice() []string {
 	return data
 }
 
-func (r Result) ToUint32Slice() []uint32 {
+func (r AnyResult) Uint32Slice() []uint32 {
+	if r == nil {
+		return nil
+	}
 	length, n := binary.Uvarint(r)
 	r = r[n:]
 	data := make([]uint32, 0, length)
@@ -53,4 +44,27 @@ func (r Result) ToUint32Slice() []uint32 {
 		data = append(data, uint32(k))
 	}
 	return data
+}
+
+// VarintResult is the varint result.
+type VarintResult uint64
+
+func (r VarintResult) Float64() float64 {
+	return math.Float64frombits(uint64(r))
+}
+
+func (r VarintResult) Bool() bool {
+	return r == 1
+}
+
+func (r VarintResult) Byte() byte {
+	return byte(r)
+}
+
+func (r VarintResult) Int64() int64 {
+	return int64(r)
+}
+
+func (r VarintResult) Uint32() uint32 {
+	return uint32(r)
 }

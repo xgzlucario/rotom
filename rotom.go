@@ -4,11 +4,11 @@ package rotom
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"log/slog"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -31,20 +31,14 @@ const (
 	// set
 	OpSAdd
 	OpSRemove
-	OpSUnion
-	OpSInter
-	OpSDiff
+	OpSMerge // union, inter, diff
 	// list
-	OpLLPush
-	OpLLPop
-	OpLRPush
-	OpLRPop
+	OpLPush // lpush, rpush
+	OpLPop  // lpop, rpop
 	// bitmap
 	OpBitSet
 	OpBitFlip
-	OpBitOr
-	OpBitAnd
-	OpBitXor
+	OpBitMerge // or, and, xor
 	// zset
 	OpZAdd
 	OpZIncr
@@ -53,61 +47,80 @@ const (
 	OpMarshalBinary
 )
 
+const (
+	mergeTypeAnd byte = iota + 1
+	mergeTypeOr
+	mergeTypeXOr
+
+	listDirectionLeft byte = iota + 1
+	listDirectionRight
+)
+
+const (
+	timeCarry = 1e6
+)
+
 // Cmd
 type Cmd struct {
-	op      Operation
-	argsNum int
-	hook    func(*Engine, []codeman.Result) error
+	op   Operation
+	hook func(*Engine, *codeman.Parser) error
 }
 
 // cmdTable defines the rNum and callback function required for the operation.
 var cmdTable = []Cmd{
-	{OpSetTx, 4, func(e *Engine, args []codeman.Result) error {
+	{OpSetTx, func(e *Engine, decoder *codeman.Parser) error {
 		// type, key, ts, val
-		ts := args[2].ToInt64()
+		tp := decoder.ParseVarint().Int64()
+		key := decoder.Parse().Str()
+		ts := decoder.ParseVarint().Int64() * timeCarry
+		val := decoder.Parse()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		// check ttl
 		if ts < cache.GetClock() && ts != noTTL {
 			return nil
 		}
-
-		tp := args[0].ToInt64()
 		switch tp {
 		case TypeString:
-			e.SetTx(args[1].ToStr(), args[3], ts)
+			e.SetTx(key, val, ts)
 
 		case TypeList:
 			ls := structx.NewList[string]()
-			if err := ls.UnmarshalJSON(args[3]); err != nil {
+			if err := ls.UnmarshalJSON(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), ls)
+			e.cm.Set(key, ls)
 
 		case TypeSet:
 			s := structx.NewSet[string]()
-			if err := s.UnmarshalJSON(args[3]); err != nil {
+			if err := s.UnmarshalJSON(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), s)
+			e.cm.Set(key, s)
 
 		case TypeMap:
 			m := structx.NewSyncMap()
-			if err := m.UnmarshalJSON(args[3]); err != nil {
+			if err := m.UnmarshalJSON(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), m)
+			e.cm.Set(key, m)
 
 		case TypeBitmap:
 			m := structx.NewBitmap()
-			if err := m.UnmarshalBinary(args[3]); err != nil {
+			if err := m.UnmarshalBinary(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), m)
+			e.cm.Set(key, m)
 
 		case TypeZSet:
 			m := structx.NewZSet[string, float64, []byte]()
-			if err := m.UnmarshalJSON(args[3]); err != nil {
+			if err := m.UnmarshalJSON(val); err != nil {
 				return err
 			}
-			e.cm.Set(args[1].ToStr(), m)
+			e.cm.Set(key, m)
 
 		default:
 			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, tp)
@@ -115,109 +128,225 @@ var cmdTable = []Cmd{
 
 		return nil
 	}},
-	{OpRemove, 1, func(e *Engine, args []codeman.Result) error {
+
+	{OpRemove, func(e *Engine, decoder *codeman.Parser) error {
 		// keys
-		e.Remove(args[0].ToStrSlice()...)
+		keys := decoder.Parse().StrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		e.Remove(keys...)
 		return nil
 	}},
-	// map
-	{OpHSet, 3, func(e *Engine, args []codeman.Result) error {
+
+	{OpHSet, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, val
-		return e.HSet(args[0].ToStr(), args[1].ToStr(), args[2])
+		key := decoder.Parse().Str()
+		field := decoder.Parse().Str()
+		val := decoder.Parse()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.HSet(key, field, val)
 	}},
-	{OpHRemove, 2, func(e *Engine, args []codeman.Result) error {
-		// key, field
-		_, err := e.HRemove(args[0].ToStr(), args[1].ToStrSlice()...)
+
+	{OpHRemove, func(e *Engine, decoder *codeman.Parser) error {
+		// key, fields
+		key := decoder.Parse().Str()
+		fields := decoder.Parse().StrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		_, err := e.HRemove(key, fields...)
 		return err
 	}},
-	// set
-	{OpSAdd, 2, func(e *Engine, args []codeman.Result) error {
+
+	{OpSAdd, func(e *Engine, decoder *codeman.Parser) error {
 		// key, items
-		_, err := e.SAdd(args[0].ToStr(), args[1].ToStrSlice()...)
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		_, err := e.SAdd(key, items...)
 		return err
 	}},
-	{OpSRemove, 2, func(e *Engine, args []codeman.Result) error {
-		// key, item
-		return e.SRemove(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	{OpSUnion, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.SUnion(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	{OpSInter, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.SInter(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	{OpSDiff, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.SDiff(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	// list
-	{OpLLPush, 2, func(e *Engine, args []codeman.Result) error {
+
+	{OpSRemove, func(e *Engine, decoder *codeman.Parser) error {
 		// key, items
-		return e.LPush(args[0].ToStr(), args[1].ToStrSlice()...)
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.SRemove(key, items...)
 	}},
-	{OpLLPop, 1, func(e *Engine, args []codeman.Result) error {
-		// key
-		_, err := e.LLPop(args[0].ToStr())
-		return err
+
+	{OpSMerge, func(e *Engine, decoder *codeman.Parser) error {
+		// op, key, items
+		op := decoder.ParseVarint().Byte()
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		switch op {
+		case mergeTypeAnd:
+			return e.SInter(key, items...)
+		case mergeTypeOr:
+			return e.SUnion(key, items...)
+		case mergeTypeXOr:
+			return e.SDiff(key, items...)
+		}
+		return errors.New("invalid bit op")
 	}},
-	{OpLRPush, 2, func(e *Engine, args []codeman.Result) error {
-		// key, items
-		return e.LRPush(args[0].ToStr(), args[1].ToStrSlice()...)
+
+	{OpLPush, func(e *Engine, decoder *codeman.Parser) error {
+		// direct, key, items
+		direct := decoder.ParseVarint().Byte()
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		switch direct {
+		case listDirectionLeft:
+			return e.LLPush(key, items...)
+		case listDirectionRight:
+			return e.LRPush(key, items...)
+		}
+		return errors.New("invalid list direction")
 	}},
-	{OpLRPop, 1, func(e *Engine, args []codeman.Result) error {
-		// key
-		_, err := e.LRPop(args[0].ToStr())
-		return err
+
+	{OpLPop, func(e *Engine, decoder *codeman.Parser) (err error) {
+		// direct, key
+		direct := decoder.ParseVarint().Byte()
+		key := decoder.Parse().Str()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		switch direct {
+		case listDirectionLeft:
+			_, err = e.LLPop(key)
+		case listDirectionRight:
+			_, err = e.LRPop(key)
+		default:
+			err = errors.New("invalid list direction")
+		}
+		return
 	}},
-	// bitmap
-	{OpBitSet, 3, func(e *Engine, args []codeman.Result) error {
+
+	{OpBitSet, func(e *Engine, decoder *codeman.Parser) error {
 		// key, offset, val
-		return e.BitSet(args[0].ToStr(), args[1].ToUint32(), args[2].ToBool())
+		key := decoder.Parse().Str()
+		offset := decoder.ParseVarint().Uint32()
+		val := decoder.ParseVarint().Bool()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.BitSet(key, offset, val)
 	}},
-	{OpBitFlip, 2, func(e *Engine, args []codeman.Result) error {
+
+	{OpBitFlip, func(e *Engine, decoder *codeman.Parser) error {
 		// key, offset
-		return e.BitFlip(args[0].ToStr(), args[1].ToUint32())
+		key := decoder.Parse().Str()
+		offset := decoder.ParseVarint().Uint32()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.BitFlip(key, offset)
 	}},
-	{OpBitOr, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.BitOr(args[0].ToStr(), args[1].ToStrSlice()...)
+
+	{OpBitMerge, func(e *Engine, decoder *codeman.Parser) error {
+		// op, key, items
+		op := decoder.ParseVarint().Byte()
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		switch op {
+		case mergeTypeAnd:
+			return e.BitAnd(key, items...)
+		case mergeTypeOr:
+			return e.BitOr(key, items...)
+		case mergeTypeXOr:
+			return e.BitXor(key, items...)
+		}
+		return errors.New("invalid bit op")
 	}},
-	{OpBitAnd, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.BitAnd(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	{OpBitXor, 2, func(e *Engine, args []codeman.Result) error {
-		// dstKey, srcKeys...
-		return e.BitXor(args[0].ToStr(), args[1].ToStrSlice()...)
-	}},
-	// zset
-	{OpZAdd, 4, func(e *Engine, args []codeman.Result) error {
+
+	{OpZAdd, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, score, val
-		s, err := strconv.ParseFloat(args[2].ToStr(), 64)
-		if err != nil {
-			return err
+		key := decoder.Parse().Str()
+		field := decoder.Parse().Str()
+		score := decoder.ParseVarint().Float64()
+		val := decoder.Parse()
+
+		if decoder.Error != nil {
+			return decoder.Error
 		}
-		return e.ZAdd(args[0].ToStr(), args[1].ToStr(), s, args[3])
+
+		return e.ZAdd(key, field, score, val)
 	}},
-	{OpZIncr, 3, func(e *Engine, args []codeman.Result) error {
+
+	{OpZIncr, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, score
-		s, err := strconv.ParseFloat(args[2].ToStr(), 64)
-		if err != nil {
-			return err
+		key := decoder.Parse().Str()
+		field := decoder.Parse().Str()
+		score := decoder.ParseVarint().Float64()
+
+		if decoder.Error != nil {
+			return decoder.Error
 		}
-		_, err = e.ZIncr(args[0].ToStr(), args[1].ToStr(), s)
+
+		_, err := e.ZIncr(key, field, score)
 		return err
 	}},
-	{OpZRemove, 2, func(e *Engine, args []codeman.Result) error {
-		// key, val
-		return e.ZRemove(args[0].ToStr(), args[1].ToStr())
+
+	{OpZRemove, func(e *Engine, decoder *codeman.Parser) error {
+		// key, field
+		key := decoder.Parse().Str()
+		field := decoder.Parse().Str()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.ZRemove(key, field)
 	}},
-	// others
-	{OpMarshalBinary, 1, func(e *Engine, args []codeman.Result) error {
+
+	{OpMarshalBinary, func(e *Engine, decoder *codeman.Parser) error {
 		// val
-		return e.m.UnmarshalBinary(args[0])
+		val := decoder.Parse()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.m.UnmarshalBinary(val)
 	}},
 }
 
@@ -385,6 +514,11 @@ func (e *Engine) encode(cd *codeman.Codec) {
 	cd.Recycle()
 }
 
+// NewCodec
+func NewCodec(op Operation) *codeman.Codec {
+	return codeman.NewCodec().Byte(byte(op))
+}
+
 // Get
 func (e *Engine) Get(key string) ([]byte, int64, error) {
 	// check
@@ -414,7 +548,7 @@ func (e *Engine) SetTx(key string, val []byte, ts int64) {
 	if ts < 0 {
 		return
 	}
-	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Bytes(val))
+	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
 	e.m.SetTx(key, val, ts)
 }
 
@@ -554,75 +688,75 @@ func (e *Engine) SMembers(key string) ([]string, error) {
 }
 
 // SUnion
-func (e *Engine) SUnion(dstKey string, srcKeys ...string) error {
-	srcSet, err := e.fetchSet(srcKeys[0])
+func (e *Engine) SUnion(dst string, src ...string) error {
+	srcSet, err := e.fetchSet(src[0])
 	if err != nil {
 		return err
 	}
 	s := srcSet.Clone()
 
-	for _, key := range srcKeys[1:] {
+	for _, key := range src[1:] {
 		ts, err := e.fetchSet(key)
 		if err != nil {
 			return err
 		}
 		s.Union(ts)
 	}
-	e.encode(NewCodec(OpSUnion).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, s)
+	e.encode(NewCodec(OpSMerge).Byte(mergeTypeOr).Str(dst).StrSlice(src))
+	e.cm.Set(dst, s)
 
 	return nil
 }
 
 // SInter
-func (e *Engine) SInter(dstKey string, srcKeys ...string) error {
-	srcSet, err := e.fetchSet(srcKeys[0])
+func (e *Engine) SInter(dst string, src ...string) error {
+	srcSet, err := e.fetchSet(src[0])
 	if err != nil {
 		return err
 	}
 	s := srcSet.Clone()
 
-	for _, key := range srcKeys[1:] {
+	for _, key := range src[1:] {
 		ts, err := e.fetchSet(key)
 		if err != nil {
 			return err
 		}
 		s.Intersect(ts)
 	}
-	e.encode(NewCodec(OpSInter).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, s)
+	e.encode(NewCodec(OpSMerge).Byte(mergeTypeAnd).Str(dst).StrSlice(src))
+	e.cm.Set(dst, s)
 
 	return nil
 }
 
 // SDiff
-func (e *Engine) SDiff(dstKey string, srcKeys ...string) error {
-	srcSet, err := e.fetchSet(srcKeys[0])
+func (e *Engine) SDiff(dst string, src ...string) error {
+	srcSet, err := e.fetchSet(src[0])
 	if err != nil {
 		return err
 	}
 	s := srcSet.Clone()
 
-	for _, key := range srcKeys[1:] {
+	for _, key := range src[1:] {
 		ts, err := e.fetchSet(key)
 		if err != nil {
 			return err
 		}
 		s.Difference(ts)
 	}
-	e.encode(NewCodec(OpSDiff).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, s)
+	e.encode(NewCodec(OpSMerge).Byte(mergeTypeXOr).Str(dst).StrSlice(src))
+	e.cm.Set(dst, s)
 
 	return nil
 }
 
 // LLPush
-func (e *Engine) LPush(key string, items ...string) error {
+func (e *Engine) LLPush(key string, items ...string) error {
 	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpLLPush).Str(key).StrSlice(items))
+	e.encode(NewCodec(OpLPush).Byte(listDirectionLeft).Str(key).StrSlice(items))
 	ls.LPush(items...)
 
 	return nil
@@ -634,7 +768,7 @@ func (e *Engine) LRPush(key string, items ...string) error {
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpLRPush).Str(key).StrSlice(items))
+	e.encode(NewCodec(OpLPush).Byte(listDirectionRight).Str(key).StrSlice(items))
 	ls.RPush(items...)
 
 	return nil
@@ -663,7 +797,7 @@ func (e *Engine) LLPop(key string) (string, error) {
 	if !ok {
 		return "", base.ErrEmptyList
 	}
-	e.encode(NewCodec(OpLLPop).Str(key))
+	e.encode(NewCodec(OpLPop).Byte(listDirectionLeft).Str(key))
 
 	return res, nil
 }
@@ -678,7 +812,7 @@ func (e *Engine) LRPop(key string) (string, error) {
 	if !ok {
 		return "", base.ErrEmptyList
 	}
-	e.encode(NewCodec(OpLRPop).Str(key))
+	e.encode(NewCodec(OpLPop).Byte(listDirectionRight).Str(key))
 
 	return res, nil
 }
@@ -730,50 +864,65 @@ func (e *Engine) BitFlip(key string, offset uint32) error {
 	return nil
 }
 
-// BitOr
-func (e *Engine) BitOr(dstKey string, srcKeys ...string) error {
-	bm := structx.NewBitmap()
-	for _, key := range srcKeys {
-		tbm, err := e.fetchBitMap(key)
-		if err != nil {
-			return err
-		}
-		bm.Or(tbm)
-	}
-	e.encode(NewCodec(OpBitOr).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, bm)
-
-	return nil
-}
-
-// BitXor
-func (e *Engine) BitXor(dstKey string, srcKeys ...string) error {
-	bm := structx.NewBitmap()
-	for _, key := range srcKeys {
-		tbm, err := e.fetchBitMap(key)
-		if err != nil {
-			return err
-		}
-		bm.Xor(tbm)
-	}
-	e.encode(NewCodec(OpBitXor).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, bm)
-
-	return nil
-}
-
 // BitAnd
-func (e *Engine) BitAnd(dstKey string, srcKeys ...string) error {
-	bm := structx.NewBitmap()
-	for _, key := range srcKeys {
+func (e *Engine) BitAnd(dst string, src ...string) error {
+	bm, err := e.fetchBitMap(src[0])
+	if err != nil {
+		return err
+	}
+	bm = bm.Clone()
+
+	for _, key := range src[1:] {
 		tbm, err := e.fetchBitMap(key)
 		if err != nil {
 			return err
 		}
 		bm.And(tbm)
 	}
-	e.encode(NewCodec(OpBitAnd).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, bm)
+	e.encode(NewCodec(OpBitMerge).Byte(mergeTypeAnd).Str(dst).StrSlice(src))
+	e.cm.Set(dst, bm)
+
+	return nil
+}
+
+// BitOr
+func (e *Engine) BitOr(dst string, src ...string) error {
+	bm, err := e.fetchBitMap(src[0])
+	if err != nil {
+		return err
+	}
+	bm = bm.Clone()
+
+	for _, key := range src[1:] {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.Or(tbm)
+	}
+	e.encode(NewCodec(OpBitMerge).Byte(mergeTypeOr).Str(dst).StrSlice(src))
+	e.cm.Set(dst, bm)
+
+	return nil
+}
+
+// BitXor
+func (e *Engine) BitXor(dst string, src ...string) error {
+	bm, err := e.fetchBitMap(src[0])
+	if err != nil {
+		return err
+	}
+	bm = bm.Clone()
+
+	for _, key := range src[1:] {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.Xor(tbm)
+	}
+	e.encode(NewCodec(OpBitMerge).Byte(mergeTypeXOr).Str(dst).StrSlice(src))
+	e.cm.Set(dst, bm)
 
 	return nil
 }
@@ -872,33 +1021,34 @@ func (e *Engine) load() error {
 
 	e.logInfo("loading db file size %s", formatSize(len(line)))
 
-	blkDecoder := codeman.NewDecoder(line)
-	for !blkDecoder.Done() {
-		// decode data block.
-		dataBlock, err := blkDecoder.Parse()
-		if err != nil {
-			return err
+	blkParser := codeman.NewParser(line)
+	for !blkParser.Done() {
+		// parse data block.
+		dataBlock := blkParser.Parse()
+		crc := uint32(blkParser.ParseVarint())
+
+		if blkParser.Error != nil {
+			return blkParser.Error
 		}
-		crc, err := blkDecoder.Parse()
-		if err != nil {
-			return err
-		}
-		if crc.ToUint32() != crc32.Checksum(dataBlock, e.crc) {
+		if crc != crc32.Checksum(dataBlock, e.crc) {
 			return base.ErrCheckSum
 		}
+
 		data, err := codeman.Decompress(dataBlock, nil)
 		if err != nil {
 			return err
 		}
 
-		recDecoder := codeman.NewDecoder(data)
-		// decoder records.
-		for !recDecoder.Done() {
-			op, args, err := ParseRecord(recDecoder)
-			if err != nil {
-				return err
+		recParser := codeman.NewParser(data)
+		for !recParser.Done() {
+			// parse records.
+			op := Operation(recParser.ParseVarint())
+
+			if recParser.Error != nil {
+				return recParser.Error
 			}
-			if err := cmdTable[op].hook(e, args); err != nil {
+
+			if err := cmdTable[op].hook(e, recParser); err != nil {
 				return err
 			}
 		}
