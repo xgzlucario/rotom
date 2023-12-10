@@ -57,6 +57,10 @@ func (r VarintResult) ToBool() bool {
 	return r == 1
 }
 
+func (r VarintResult) ToByte() byte {
+	return byte(r)
+}
+
 func (r VarintResult) ToInt64() int64 {
 	return int64(r)
 }

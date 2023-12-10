@@ -4,6 +4,7 @@ package rotom
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"log/slog"
@@ -30,9 +31,7 @@ const (
 	// set
 	OpSAdd
 	OpSRemove
-	OpSUnion
-	OpSInter
-	OpSDiff
+	OpSMerge // union, inter, diff
 	// list
 	OpLLPush
 	OpLLPop
@@ -41,15 +40,19 @@ const (
 	// bitmap
 	OpBitSet
 	OpBitFlip
-	OpBitOr
-	OpBitAnd
-	OpBitXor
+	OpBitMerge // or, and, xor
 	// zset
 	OpZAdd
 	OpZIncr
 	OpZRemove
 	// others
 	OpMarshalBinary
+)
+
+const (
+	MergeTypeAnd byte = iota + 1
+	MergeTypeOr
+	MergeTypeXOr
 )
 
 const (
@@ -75,12 +78,13 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
+		// check ttl
 		if ts < cache.GetClock() && ts != noTTL {
 			return nil
 		}
 		switch tp {
 		case TypeString:
-			e.SetTx(key, val, int64(ts))
+			e.SetTx(key, val, ts)
 
 		case TypeList:
 			ls := structx.NewList[string]()
@@ -187,8 +191,9 @@ var cmdTable = []Cmd{
 		return e.SRemove(key, items...)
 	}},
 
-	{OpSUnion, func(e *Engine, decoder *codeman.Parser) error {
-		// key, items
+	{OpSMerge, func(e *Engine, decoder *codeman.Parser) error {
+		// op, key, items
+		op := decoder.ParseVarint().ToByte()
 		key := decoder.Parse().ToStr()
 		items := decoder.Parse().ToStrSlice()
 
@@ -196,31 +201,15 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
-		return e.SUnion(key, items...)
-	}},
-
-	{OpSInter, func(e *Engine, decoder *codeman.Parser) error {
-		// key, items
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
+		switch op {
+		case MergeTypeAnd:
+			return e.SInter(key, items...)
+		case MergeTypeOr:
+			return e.SUnion(key, items...)
+		case MergeTypeXOr:
+			return e.SDiff(key, items...)
 		}
-
-		return e.SUnion(key, items...)
-	}},
-
-	{OpSDiff, func(e *Engine, decoder *codeman.Parser) error {
-		// key, items
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-
-		return e.SDiff(key, items...)
+		return errors.New("invalid bit op")
 	}},
 
 	{OpLLPush, func(e *Engine, decoder *codeman.Parser) error {
@@ -296,8 +285,9 @@ var cmdTable = []Cmd{
 		return e.BitFlip(key, offset)
 	}},
 
-	{OpBitOr, func(e *Engine, decoder *codeman.Parser) error {
-		// key, items
+	{OpBitMerge, func(e *Engine, decoder *codeman.Parser) error {
+		// op, key, items
+		op := decoder.ParseVarint().ToByte()
 		key := decoder.Parse().ToStr()
 		items := decoder.Parse().ToStrSlice()
 
@@ -305,31 +295,15 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
-		return e.BitOr(key, items...)
-	}},
-
-	{OpBitAnd, func(e *Engine, decoder *codeman.Parser) error {
-		// key, items
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
+		switch op {
+		case MergeTypeAnd:
+			return e.BitAnd(key, items...)
+		case MergeTypeOr:
+			return e.BitOr(key, items...)
+		case MergeTypeXOr:
+			return e.BitXor(key, items...)
 		}
-
-		return e.BitAnd(key, items...)
-	}},
-
-	{OpBitXor, func(e *Engine, decoder *codeman.Parser) error {
-		// key, items
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-
-		return e.BitXor(key, items...)
+		return errors.New("invalid bit op")
 	}},
 
 	{OpZAdd, func(e *Engine, decoder *codeman.Parser) error {
@@ -717,64 +691,64 @@ func (e *Engine) SMembers(key string) ([]string, error) {
 }
 
 // SUnion
-func (e *Engine) SUnion(dstKey string, srcKeys ...string) error {
-	srcSet, err := e.fetchSet(srcKeys[0])
+func (e *Engine) SUnion(dst string, src ...string) error {
+	srcSet, err := e.fetchSet(src[0])
 	if err != nil {
 		return err
 	}
 	s := srcSet.Clone()
 
-	for _, key := range srcKeys[1:] {
+	for _, key := range src[1:] {
 		ts, err := e.fetchSet(key)
 		if err != nil {
 			return err
 		}
 		s.Union(ts)
 	}
-	e.encode(NewCodec(OpSUnion).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, s)
+	e.encode(NewCodec(OpSMerge).Byte(MergeTypeOr).Str(dst).StrSlice(src))
+	e.cm.Set(dst, s)
 
 	return nil
 }
 
 // SInter
-func (e *Engine) SInter(dstKey string, srcKeys ...string) error {
-	srcSet, err := e.fetchSet(srcKeys[0])
+func (e *Engine) SInter(dst string, src ...string) error {
+	srcSet, err := e.fetchSet(src[0])
 	if err != nil {
 		return err
 	}
 	s := srcSet.Clone()
 
-	for _, key := range srcKeys[1:] {
+	for _, key := range src[1:] {
 		ts, err := e.fetchSet(key)
 		if err != nil {
 			return err
 		}
 		s.Intersect(ts)
 	}
-	e.encode(NewCodec(OpSInter).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, s)
+	e.encode(NewCodec(OpSMerge).Byte(MergeTypeAnd).Str(dst).StrSlice(src))
+	e.cm.Set(dst, s)
 
 	return nil
 }
 
 // SDiff
-func (e *Engine) SDiff(dstKey string, srcKeys ...string) error {
-	srcSet, err := e.fetchSet(srcKeys[0])
+func (e *Engine) SDiff(dst string, src ...string) error {
+	srcSet, err := e.fetchSet(src[0])
 	if err != nil {
 		return err
 	}
 	s := srcSet.Clone()
 
-	for _, key := range srcKeys[1:] {
+	for _, key := range src[1:] {
 		ts, err := e.fetchSet(key)
 		if err != nil {
 			return err
 		}
 		s.Difference(ts)
 	}
-	e.encode(NewCodec(OpSDiff).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, s)
+	e.encode(NewCodec(OpSMerge).Byte(MergeTypeXOr).Str(dst).StrSlice(src))
+	e.cm.Set(dst, s)
 
 	return nil
 }
@@ -893,65 +867,65 @@ func (e *Engine) BitFlip(key string, offset uint32) error {
 	return nil
 }
 
-// BitOr
-func (e *Engine) BitOr(dstKey string, srcKeys ...string) error {
-	bm, err := e.fetchBitMap(srcKeys[0])
-	if err != nil {
-		return err
-	}
-	bm = bm.Clone()
-
-	for _, key := range srcKeys[1:] {
-		tbm, err := e.fetchBitMap(key)
-		if err != nil {
-			return err
-		}
-		bm.Or(tbm)
-	}
-	e.encode(NewCodec(OpBitOr).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, bm)
-
-	return nil
-}
-
-// BitXor
-func (e *Engine) BitXor(dstKey string, srcKeys ...string) error {
-	bm, err := e.fetchBitMap(srcKeys[0])
-	if err != nil {
-		return err
-	}
-	bm = bm.Clone()
-
-	for _, key := range srcKeys[1:] {
-		tbm, err := e.fetchBitMap(key)
-		if err != nil {
-			return err
-		}
-		bm.Xor(tbm)
-	}
-	e.encode(NewCodec(OpBitXor).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, bm)
-
-	return nil
-}
-
 // BitAnd
-func (e *Engine) BitAnd(dstKey string, srcKeys ...string) error {
-	bm, err := e.fetchBitMap(srcKeys[0])
+func (e *Engine) BitAnd(dst string, src ...string) error {
+	bm, err := e.fetchBitMap(src[0])
 	if err != nil {
 		return err
 	}
 	bm = bm.Clone()
 
-	for _, key := range srcKeys[1:] {
+	for _, key := range src[1:] {
 		tbm, err := e.fetchBitMap(key)
 		if err != nil {
 			return err
 		}
 		bm.And(tbm)
 	}
-	e.encode(NewCodec(OpBitAnd).Str(dstKey).StrSlice(srcKeys))
-	e.cm.Set(dstKey, bm)
+	e.encode(NewCodec(OpBitMerge).Byte(MergeTypeAnd).Str(dst).StrSlice(src))
+	e.cm.Set(dst, bm)
+
+	return nil
+}
+
+// BitOr
+func (e *Engine) BitOr(dst string, src ...string) error {
+	bm, err := e.fetchBitMap(src[0])
+	if err != nil {
+		return err
+	}
+	bm = bm.Clone()
+
+	for _, key := range src[1:] {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.Or(tbm)
+	}
+	e.encode(NewCodec(OpBitMerge).Byte(MergeTypeOr).Str(dst).StrSlice(src))
+	e.cm.Set(dst, bm)
+
+	return nil
+}
+
+// BitXor
+func (e *Engine) BitXor(dst string, src ...string) error {
+	bm, err := e.fetchBitMap(src[0])
+	if err != nil {
+		return err
+	}
+	bm = bm.Clone()
+
+	for _, key := range src[1:] {
+		tbm, err := e.fetchBitMap(key)
+		if err != nil {
+			return err
+		}
+		bm.Xor(tbm)
+	}
+	e.encode(NewCodec(OpBitMerge).Byte(MergeTypeXOr).Str(dst).StrSlice(src))
+	e.cm.Set(dst, bm)
 
 	return nil
 }
