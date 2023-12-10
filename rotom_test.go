@@ -444,6 +444,8 @@ func TestSet(t *testing.T) {
 	}
 
 	// Error
+	db.SAdd("set", "1")
+
 	db.HSet("map", "key", []byte("1"))
 	n, err := db.SAdd("map", "1")
 	assert.Equal(n, 0)
@@ -464,20 +466,25 @@ func TestSet(t *testing.T) {
 	assert.Equal(m, nilStrings)
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	err = db.SUnion("map", "map")
+	err = db.SUnion("", "map", "set")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+	err = db.SUnion("", "set", "map")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	err = db.SDiff("map", "map")
+	err = db.SDiff("", "map", "set")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+	err = db.SDiff("", "set", "map")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
-	err = db.SInter("map", "map")
+	err = db.SInter("", "map", "set")
+	assert.ErrorContains(err, base.ErrWrongType.Error())
+	err = db.SInter("", "set", "map")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	db.Shrink()
 	db.Close()
 
 	// Load
-	// TODO: fix
 	_, err = Open(db.Config)
 	assert.Nil(err)
 }
@@ -504,6 +511,7 @@ func TestBitmap(t *testing.T) {
 		db.BitFlip(key, uint32(i))
 
 		// Error
+		db.BitSet("my-bitset", 1, true)
 		db.Set("none", []byte("1"))
 		err = db.BitSet("none", uint32(i), true)
 		assert.ErrorContains(err, base.ErrWrongType.Error())
@@ -523,13 +531,19 @@ func TestBitmap(t *testing.T) {
 		assert.Equal(n, uint64(0))
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 
-		err = db.BitAnd("none", "none")
+		err = db.BitAnd("", "none", "my-bitset")
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+		err = db.BitAnd("", "my-bitset", "none")
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 
-		err = db.BitOr("none", "none")
+		err = db.BitOr("", "none", "my-bitset")
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+		err = db.BitOr("", "my-bitset", "none")
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 
-		err = db.BitXor("none", "none")
+		err = db.BitXor("", "none", "my-bitset")
+		assert.ErrorContains(err, base.ErrWrongType.Error())
+		err = db.BitXor("", "my-bitset", "none")
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 	}
 
@@ -633,4 +647,24 @@ func TestUtils(t *testing.T) {
 	cancel()
 	err := ticker.Do()
 	assert.Equal(err, base.ErrTickerClosed)
+}
+
+func TestInvalidCodec(t *testing.T) {
+	println("===== TestInvalidCodec =====")
+	assert := assert.New(t)
+
+	// wrong codec sequences.
+	for _, op := range []Operation{
+		OpSetTx, OpRemove, OpHSet, OpHRemove, OpSAdd, OpSRemove, OpSMerge,
+		OpLPush, OpLPop, OpBitSet, OpBitMerge, OpBitFlip,
+		OpZAdd, OpZIncr, OpZRemove,
+		OpMarshalBinary,
+	} {
+		db, err := createDB()
+		assert.Nil(err)
+		db.encode(NewCodec(op).Int(100))
+		db.Close()
+		_, err = Open(db.Config)
+		assert.NotNil(err)
+	}
 }
