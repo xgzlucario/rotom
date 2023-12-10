@@ -304,7 +304,7 @@ func TestList(t *testing.T) {
 		key := gofakeit.UUID()
 		animal := gofakeit.Animal()
 
-		err = db.LPush(key, animal)
+		err = db.LLPush(key, animal)
 		assert.Nil(err)
 
 		// Index
@@ -324,7 +324,7 @@ func TestList(t *testing.T) {
 	// Error
 	db.HSet("map", "key", []byte("value"))
 
-	err = db.LPush("map", "1")
+	err = db.LLPush("map", "1")
 	assert.ErrorContains(err, base.ErrWrongType.Error())
 
 	err = db.LRPush("map", "1")

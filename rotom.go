@@ -33,10 +33,8 @@ const (
 	OpSRemove
 	OpSMerge // union, inter, diff
 	// list
-	OpLLPush
-	OpLLPop
-	OpLRPush
-	OpLRPop
+	OpLPush // lpush, rpush
+	OpLPop  // lpop, rpop
 	// bitmap
 	OpBitSet
 	OpBitFlip
@@ -50,9 +48,12 @@ const (
 )
 
 const (
-	MergeTypeAnd byte = iota + 1
-	MergeTypeOr
-	MergeTypeXOr
+	mergeTypeAnd byte = iota + 1
+	mergeTypeOr
+	mergeTypeXOr
+
+	listDirectionLeft byte = iota + 1
+	listDirectionRight
 )
 
 const (
@@ -69,9 +70,9 @@ type Cmd struct {
 var cmdTable = []Cmd{
 	{OpSetTx, func(e *Engine, decoder *codeman.Parser) error {
 		// type, key, ts, val
-		tp := decoder.ParseVarint().ToInt64()
-		key := decoder.Parse().ToStr()
-		ts := decoder.ParseVarint().ToInt64() * timeCarry
+		tp := decoder.ParseVarint().Int64()
+		key := decoder.Parse().Str()
+		ts := decoder.ParseVarint().Int64() * timeCarry
 		val := decoder.Parse()
 
 		if decoder.Error != nil {
@@ -130,7 +131,7 @@ var cmdTable = []Cmd{
 
 	{OpRemove, func(e *Engine, decoder *codeman.Parser) error {
 		// keys
-		keys := decoder.Parse().ToStrSlice()
+		keys := decoder.Parse().StrSlice()
 
 		if decoder.Error != nil {
 			return decoder.Error
@@ -142,8 +143,8 @@ var cmdTable = []Cmd{
 
 	{OpHSet, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, val
-		key := decoder.Parse().ToStr()
-		field := decoder.Parse().ToStr()
+		key := decoder.Parse().Str()
+		field := decoder.Parse().Str()
 		val := decoder.Parse()
 
 		if decoder.Error != nil {
@@ -155,8 +156,8 @@ var cmdTable = []Cmd{
 
 	{OpHRemove, func(e *Engine, decoder *codeman.Parser) error {
 		// key, fields
-		key := decoder.Parse().ToStr()
-		fields := decoder.Parse().ToStrSlice()
+		key := decoder.Parse().Str()
+		fields := decoder.Parse().StrSlice()
 
 		if decoder.Error != nil {
 			return decoder.Error
@@ -168,8 +169,8 @@ var cmdTable = []Cmd{
 
 	{OpSAdd, func(e *Engine, decoder *codeman.Parser) error {
 		// key, items
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
 
 		if decoder.Error != nil {
 			return decoder.Error
@@ -181,8 +182,8 @@ var cmdTable = []Cmd{
 
 	{OpSRemove, func(e *Engine, decoder *codeman.Parser) error {
 		// key, items
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
 
 		if decoder.Error != nil {
 			return decoder.Error
@@ -193,78 +194,69 @@ var cmdTable = []Cmd{
 
 	{OpSMerge, func(e *Engine, decoder *codeman.Parser) error {
 		// op, key, items
-		op := decoder.ParseVarint().ToByte()
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
+		op := decoder.ParseVarint().Byte()
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
 
 		if decoder.Error != nil {
 			return decoder.Error
 		}
 
 		switch op {
-		case MergeTypeAnd:
+		case mergeTypeAnd:
 			return e.SInter(key, items...)
-		case MergeTypeOr:
+		case mergeTypeOr:
 			return e.SUnion(key, items...)
-		case MergeTypeXOr:
+		case mergeTypeXOr:
 			return e.SDiff(key, items...)
 		}
 		return errors.New("invalid bit op")
 	}},
 
-	{OpLLPush, func(e *Engine, decoder *codeman.Parser) error {
-		// key, items
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
+	{OpLPush, func(e *Engine, decoder *codeman.Parser) error {
+		// direct, key, items
+		direct := decoder.ParseVarint().Byte()
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
 
 		if decoder.Error != nil {
 			return decoder.Error
 		}
 
-		return e.LPush(key, items...)
+		switch direct {
+		case listDirectionLeft:
+			return e.LLPush(key, items...)
+		case listDirectionRight:
+			return e.LRPush(key, items...)
+		}
+		return errors.New("invalid list direction")
 	}},
 
-	{OpLLPop, func(e *Engine, decoder *codeman.Parser) error {
-		// key
-		key := decoder.Parse().ToStr()
+	{OpLPop, func(e *Engine, decoder *codeman.Parser) (err error) {
+		// direct, key
+		direct := decoder.ParseVarint().Byte()
+		key := decoder.Parse().Str()
 
 		if decoder.Error != nil {
 			return decoder.Error
 		}
 
-		_, err := e.LLPop(key)
-		return err
-	}},
-
-	{OpLRPush, func(e *Engine, decoder *codeman.Parser) error {
-		// key, items
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
+		switch direct {
+		case listDirectionLeft:
+			_, err = e.LLPop(key)
+		case listDirectionRight:
+			_, err = e.LRPop(key)
+		default:
+			err = errors.New("invalid list direction")
 		}
-
-		return e.LRPush(key, items...)
-	}},
-
-	{OpLRPop, func(e *Engine, decoder *codeman.Parser) error {
-		// key
-		key := decoder.Parse().ToStr()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-
-		_, err := e.LRPop(key)
-		return err
+		return
 	}},
 
 	{OpBitSet, func(e *Engine, decoder *codeman.Parser) error {
 		// key, offset, val
-		key := decoder.Parse().ToStr()
-		offset := decoder.ParseVarint().ToUint32()
-		val := decoder.ParseVarint().ToBool()
+		key := decoder.Parse().Str()
+		offset := decoder.ParseVarint().Uint32()
+		val := decoder.ParseVarint().Bool()
 
 		if decoder.Error != nil {
 			return decoder.Error
@@ -275,8 +267,8 @@ var cmdTable = []Cmd{
 
 	{OpBitFlip, func(e *Engine, decoder *codeman.Parser) error {
 		// key, offset
-		key := decoder.Parse().ToStr()
-		offset := decoder.ParseVarint().ToUint32()
+		key := decoder.Parse().Str()
+		offset := decoder.ParseVarint().Uint32()
 
 		if decoder.Error != nil {
 			return decoder.Error
@@ -287,20 +279,20 @@ var cmdTable = []Cmd{
 
 	{OpBitMerge, func(e *Engine, decoder *codeman.Parser) error {
 		// op, key, items
-		op := decoder.ParseVarint().ToByte()
-		key := decoder.Parse().ToStr()
-		items := decoder.Parse().ToStrSlice()
+		op := decoder.ParseVarint().Byte()
+		key := decoder.Parse().Str()
+		items := decoder.Parse().StrSlice()
 
 		if decoder.Error != nil {
 			return decoder.Error
 		}
 
 		switch op {
-		case MergeTypeAnd:
+		case mergeTypeAnd:
 			return e.BitAnd(key, items...)
-		case MergeTypeOr:
+		case mergeTypeOr:
 			return e.BitOr(key, items...)
-		case MergeTypeXOr:
+		case mergeTypeXOr:
 			return e.BitXor(key, items...)
 		}
 		return errors.New("invalid bit op")
@@ -308,9 +300,9 @@ var cmdTable = []Cmd{
 
 	{OpZAdd, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, score, val
-		key := decoder.Parse().ToStr()
-		field := decoder.Parse().ToStr()
-		score := decoder.ParseVarint().ToFloat64()
+		key := decoder.Parse().Str()
+		field := decoder.Parse().Str()
+		score := decoder.ParseVarint().Float64()
 		val := decoder.Parse()
 
 		if decoder.Error != nil {
@@ -322,9 +314,9 @@ var cmdTable = []Cmd{
 
 	{OpZIncr, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, score
-		key := decoder.Parse().ToStr()
-		field := decoder.Parse().ToStr()
-		score := decoder.ParseVarint().ToFloat64()
+		key := decoder.Parse().Str()
+		field := decoder.Parse().Str()
+		score := decoder.ParseVarint().Float64()
 
 		if decoder.Error != nil {
 			return decoder.Error
@@ -336,8 +328,8 @@ var cmdTable = []Cmd{
 
 	{OpZRemove, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field
-		key := decoder.Parse().ToStr()
-		field := decoder.Parse().ToStr()
+		key := decoder.Parse().Str()
+		field := decoder.Parse().Str()
 
 		if decoder.Error != nil {
 			return decoder.Error
@@ -520,6 +512,11 @@ func (e *Engine) encode(cd *codeman.Codec) {
 	e.buf.Write(cd.Content())
 	e.Unlock()
 	cd.Recycle()
+}
+
+// NewCodec
+func NewCodec(op Operation) *codeman.Codec {
+	return codeman.NewCodec().Byte(byte(op))
 }
 
 // Get
@@ -705,7 +702,7 @@ func (e *Engine) SUnion(dst string, src ...string) error {
 		}
 		s.Union(ts)
 	}
-	e.encode(NewCodec(OpSMerge).Byte(MergeTypeOr).Str(dst).StrSlice(src))
+	e.encode(NewCodec(OpSMerge).Byte(mergeTypeOr).Str(dst).StrSlice(src))
 	e.cm.Set(dst, s)
 
 	return nil
@@ -726,7 +723,7 @@ func (e *Engine) SInter(dst string, src ...string) error {
 		}
 		s.Intersect(ts)
 	}
-	e.encode(NewCodec(OpSMerge).Byte(MergeTypeAnd).Str(dst).StrSlice(src))
+	e.encode(NewCodec(OpSMerge).Byte(mergeTypeAnd).Str(dst).StrSlice(src))
 	e.cm.Set(dst, s)
 
 	return nil
@@ -747,19 +744,19 @@ func (e *Engine) SDiff(dst string, src ...string) error {
 		}
 		s.Difference(ts)
 	}
-	e.encode(NewCodec(OpSMerge).Byte(MergeTypeXOr).Str(dst).StrSlice(src))
+	e.encode(NewCodec(OpSMerge).Byte(mergeTypeXOr).Str(dst).StrSlice(src))
 	e.cm.Set(dst, s)
 
 	return nil
 }
 
 // LLPush
-func (e *Engine) LPush(key string, items ...string) error {
+func (e *Engine) LLPush(key string, items ...string) error {
 	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpLLPush).Str(key).StrSlice(items))
+	e.encode(NewCodec(OpLPush).Byte(listDirectionLeft).Str(key).StrSlice(items))
 	ls.LPush(items...)
 
 	return nil
@@ -771,7 +768,7 @@ func (e *Engine) LRPush(key string, items ...string) error {
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpLRPush).Str(key).StrSlice(items))
+	e.encode(NewCodec(OpLPush).Byte(listDirectionRight).Str(key).StrSlice(items))
 	ls.RPush(items...)
 
 	return nil
@@ -800,7 +797,7 @@ func (e *Engine) LLPop(key string) (string, error) {
 	if !ok {
 		return "", base.ErrEmptyList
 	}
-	e.encode(NewCodec(OpLLPop).Str(key))
+	e.encode(NewCodec(OpLPop).Byte(listDirectionLeft).Str(key))
 
 	return res, nil
 }
@@ -815,7 +812,7 @@ func (e *Engine) LRPop(key string) (string, error) {
 	if !ok {
 		return "", base.ErrEmptyList
 	}
-	e.encode(NewCodec(OpLRPop).Str(key))
+	e.encode(NewCodec(OpLPop).Byte(listDirectionRight).Str(key))
 
 	return res, nil
 }
@@ -882,7 +879,7 @@ func (e *Engine) BitAnd(dst string, src ...string) error {
 		}
 		bm.And(tbm)
 	}
-	e.encode(NewCodec(OpBitMerge).Byte(MergeTypeAnd).Str(dst).StrSlice(src))
+	e.encode(NewCodec(OpBitMerge).Byte(mergeTypeAnd).Str(dst).StrSlice(src))
 	e.cm.Set(dst, bm)
 
 	return nil
@@ -903,7 +900,7 @@ func (e *Engine) BitOr(dst string, src ...string) error {
 		}
 		bm.Or(tbm)
 	}
-	e.encode(NewCodec(OpBitMerge).Byte(MergeTypeOr).Str(dst).StrSlice(src))
+	e.encode(NewCodec(OpBitMerge).Byte(mergeTypeOr).Str(dst).StrSlice(src))
 	e.cm.Set(dst, bm)
 
 	return nil
@@ -924,7 +921,7 @@ func (e *Engine) BitXor(dst string, src ...string) error {
 		}
 		bm.Xor(tbm)
 	}
-	e.encode(NewCodec(OpBitMerge).Byte(MergeTypeXOr).Str(dst).StrSlice(src))
+	e.encode(NewCodec(OpBitMerge).Byte(mergeTypeXOr).Str(dst).StrSlice(src))
 	e.cm.Set(dst, bm)
 
 	return nil
