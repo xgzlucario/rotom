@@ -17,19 +17,27 @@ func NewBitmap() *Bitmap {
 }
 
 // Add
-func (b *Bitmap) Add(i uint32) bool {
+func (b *Bitmap) Add(items ...uint32) (n int) {
 	b.Lock()
-	ok := b.bm.CheckedAdd(i)
+	for _, item := range items {
+		if b.bm.CheckedAdd(item) {
+			n++
+		}
+	}
 	b.Unlock()
-	return ok
+	return
 }
 
 // Remove
-func (b *Bitmap) Remove(i uint32) bool {
+func (b *Bitmap) Remove(items ...uint32) (n int) {
 	b.Lock()
-	ok := b.bm.CheckedRemove(i)
+	for _, item := range items {
+		if b.bm.CheckedRemove(item) {
+			n++
+		}
+	}
 	b.Unlock()
-	return ok
+	return
 }
 
 // Test

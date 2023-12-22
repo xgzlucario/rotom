@@ -43,8 +43,6 @@ const (
 	OpZAdd
 	OpZIncr
 	OpZRemove
-	// others
-	OpMarshalBinary
 )
 
 const (
@@ -57,7 +55,7 @@ const (
 )
 
 const (
-	timeCarry = 1e6
+	timeCarry = 1e9
 )
 
 // Cmd
@@ -80,7 +78,7 @@ var cmdTable = []Cmd{
 		}
 
 		// check ttl
-		if ts < cache.GetClock() && ts != noTTL {
+		if ts < cache.GetNanoSec() && ts != noTTL {
 			return nil
 		}
 		switch tp {
@@ -255,14 +253,15 @@ var cmdTable = []Cmd{
 	{OpBitSet, func(e *Engine, decoder *codeman.Parser) error {
 		// key, offset, val
 		key := decoder.Parse().Str()
-		offset := decoder.ParseVarint().Uint32()
 		val := decoder.ParseVarint().Bool()
+		offsets := decoder.Parse().Uint32Slice()
 
 		if decoder.Error != nil {
 			return decoder.Error
 		}
 
-		return e.BitSet(key, offset, val)
+		_, err := e.BitSet(key, val, offsets...)
+		return err
 	}},
 
 	{OpBitFlip, func(e *Engine, decoder *codeman.Parser) error {
@@ -336,17 +335,6 @@ var cmdTable = []Cmd{
 		}
 
 		return e.ZRemove(key, field)
-	}},
-
-	{OpMarshalBinary, func(e *Engine, decoder *codeman.Parser) error {
-		// val
-		val := decoder.Parse()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-
-		return e.m.UnmarshalBinary(val)
 	}},
 }
 
@@ -450,7 +438,7 @@ func Open(conf Config) (*Engine, error) {
 		buf:     bytes.NewBuffer(nil),
 		rwbuf:   bytes.NewBuffer(nil),
 		tickers: [2]*base.Ticker{},
-		m:       cache.New(conf.ShardCount),
+		m:       cache.New(cache.DefaultOption),
 		cm:      cmap.New[any](),
 		crc:     crc32.MakeTable(crc32.Castagnoli),
 	}
@@ -540,7 +528,7 @@ func (e *Engine) Set(key string, val []byte) {
 
 // SetEx store key-value pair with ttl.
 func (e *Engine) SetEx(key string, val []byte, ttl time.Duration) {
-	e.SetTx(key, val, cache.GetClock()+int64(ttl))
+	e.SetTx(key, val, cache.GetNanoSec()+int64(ttl))
 }
 
 // SetTx store key-value pair with deadline.
@@ -553,20 +541,11 @@ func (e *Engine) SetTx(key string, val []byte, ts int64) {
 }
 
 // Remove
-func (e *Engine) Remove(keys ...string) int {
+func (e *Engine) Remove(keys ...string) {
 	e.encode(NewCodec(OpRemove).StrSlice(keys))
-	var sum int
 	for _, key := range keys {
-		if e.m.Delete(key) {
-			sum++
-		}
+		e.m.Delete(key)
 	}
-	return sum
-}
-
-// Keys
-func (e *Engine) Keys() []string {
-	return append(e.m.Keys(), e.cm.Keys()...)
 }
 
 // Len
@@ -836,20 +815,21 @@ func (e *Engine) BitTest(key string, offset uint32) (bool, error) {
 }
 
 // BitSet
-func (e *Engine) BitSet(key string, offset uint32, val bool) error {
+func (e *Engine) BitSet(key string, val bool, offsets ...uint32) (int, error) {
 	bm, err := e.fetchBitMap(key, true)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	e.encode(NewCodec(OpBitSet).Str(key).Uint(offset).Bool(val))
+	e.encode(NewCodec(OpBitSet).Str(key).Bool(val).Uint32Slice(offsets))
 
+	var n int
 	if val {
-		bm.Add(offset)
+		n = bm.Add(offsets...)
 	} else {
-		bm.Remove(offset)
+		n = bm.Remove(offsets...)
 	}
 
-	return nil
+	return n, nil
 }
 
 // BitFlip
@@ -1061,17 +1041,15 @@ func (e *Engine) load() error {
 
 // rewrite write data to the file.
 func (e *Engine) shrink() {
-	data, err := e.m.MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
+	// Marshal String
+	e.m.Scan(func(key, value []byte, ttl int64) bool {
+		cd := NewCodec(OpSetTx).Int(TypeString).Bytes(key).Int(ttl / timeCarry).Bytes(value)
+		e.rwbuf.Write(cd.Content())
+		cd.Recycle()
+		return false
+	})
 
-	// Marshal bytes
-	cd := NewCodec(OpMarshalBinary).Bytes(data)
-	e.rwbuf.Write(cd.Content())
-	cd.Recycle()
-
-	// Marshal built-in structure
+	// Marshal built-in type
 	var _type Type
 	for t := range e.cm.IterBuffered() {
 		switch t.Val.(type) {

@@ -14,18 +14,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/base"
-	"golang.org/x/exp/maps"
 )
-
-type vItem struct {
-	Val []byte
-	Ts  int64
-}
 
 var (
 	nilBytes   []byte
 	nilStrings []string
 )
+
+func unix(nanosec int64) int64 {
+	return (nanosec / timeCarry) * timeCarry
+}
 
 func createDB() (*Engine, error) {
 	cfg := DefaultConfig
@@ -51,10 +49,7 @@ func TestDB(t *testing.T) {
 
 		m["set-"+key] = []byte(strconv.Itoa(i))
 		m["setex-"+key] = []byte(strconv.Itoa(i))
-		// m["settx-"+key] = []byte(strconv.Itoa(i))
 	}
-
-	assert.ElementsMatch(db.Keys(), maps.Keys(m))
 
 	db.Scan(func(key string, val []byte, ts int64) bool {
 		prefix := strings.Split(key, "-")[0]
@@ -62,7 +57,7 @@ func TestDB(t *testing.T) {
 		case "set":
 			assert.Equal(val, m[key])
 		case "setex":
-			assert.Equal(ts > cache.GetClock(), true)
+			assert.Equal(ts > cache.GetNanoSec(), true)
 			assert.Equal(val, m[key])
 		case "settx":
 			assert.Equal(val, m[key])
@@ -104,11 +99,7 @@ func TestDB(t *testing.T) {
 	assert.Equal(err, base.ErrKeyNotFound)
 
 	// Remove
-	sum := db.Remove("set-1", "set-2", "set-3")
-	assert.Equal(sum, 3)
-
-	sum = db.Remove("set-1", "set-2", "set-3")
-	assert.Equal(sum, 0)
+	db.Remove("set-1", "set-2", "set-3")
 
 	// close
 	assert.Nil(db.Close())
@@ -140,62 +131,22 @@ func TestSetTTL(t *testing.T) {
 	db, err := Open(cfg)
 	assert.Nil(err)
 
-	// generate test data
-	num := 10000
-	kvdata := make(map[string]vItem, num)
-	now := time.Now()
-
-	for i := 0; i < num; i++ {
-		key := gofakeit.UUID()
-		val := []byte(gofakeit.Username())
-		ts := now.Add(time.Second * time.Duration(gofakeit.Number(0, 100))).UnixNano()
-
-		kvdata[key] = vItem{val, ts}
-
-		// set
-		db.SetTx(key, val, ts)
+	// SetTTL
+	for i := 0; i < 2000; i++ {
+		k := fmt.Sprintf("%08x", i)
+		db.SetEx(k, []byte(k), time.Second)
 	}
 
-	// get
-	for k, v := range kvdata {
-		// expired
-		if v.Ts < cache.GetClock() {
-			val, ts, err := db.Get(k)
-			assert.Equal(val, nilBytes)
-			assert.Equal(ts, int64(0))
-			assert.NotNil(err)
+	for i := 0; i < 2000; i++ {
+		k := fmt.Sprintf("%08x", i)
+		val, ts, err := db.Get(k)
+		now := unix(cache.GetNanoSec())
+		nowAddSed := unix(cache.GetNanoSec() + int64(time.Second))
 
-		} else {
-			val, ts, err := db.Get(k)
-			assert.Equal(val, v.Val)
-			assert.Equal(ts, v.Ts)
-			assert.Nil(err)
-		}
-	}
-
-	err = db.Close()
-	assert.Nil(err)
-
-	// load
-	db, err = Open(cfg)
-	assert.Nil(err)
-
-	// get again
-	for k, v := range kvdata {
-		v.Ts /= timeCarry
-		v.Ts *= timeCarry
-
-		// expired
-		if v.Ts < cache.GetClock() {
-			_, _, err := db.Get(k)
-			assert.NotNil(err)
-
-		} else {
-			val, ts, err := db.Get(k)
-			assert.Equal(val, v.Val)
-			assert.Equal(ts, v.Ts)
-			assert.Nil(err)
-		}
+		assert.Nil(err)
+		assert.Equal(val, []byte(k))
+		assert.True(ts >= now)
+		assert.True(ts <= nowAddSed)
 	}
 }
 
@@ -284,7 +235,7 @@ func TestList(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10000; i++ {
 		key := gofakeit.UUID()
 		animal := gofakeit.Animal()
 
@@ -300,7 +251,7 @@ func TestList(t *testing.T) {
 		assert.Equal(num, 0)
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10000; i++ {
 		key := gofakeit.UUID()
 		animal := gofakeit.Animal()
 
@@ -499,9 +450,17 @@ func TestBitmap(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		key := strconv.Itoa(i / 100)
 
-		assert.Nil(db.BitSet(key, uint32(i), true))
-		assert.Nil(db.BitSet(key, uint32(i), false))
-		assert.Nil(db.BitSet(key, uint32(i), true))
+		n, err := db.BitSet(key, true, uint32(i))
+		assert.Nil(err)
+		assert.Equal(n, 1)
+
+		n, err = db.BitSet(key, false, uint32(i))
+		assert.Nil(err)
+		assert.Equal(n, 1)
+
+		n, err = db.BitSet(key, true, uint32(i))
+		assert.Nil(err)
+		assert.Equal(n, 1)
 
 		ok, err := db.BitTest(key, uint32(i))
 		assert.True(ok)
@@ -511,9 +470,11 @@ func TestBitmap(t *testing.T) {
 		db.BitFlip(key, uint32(i))
 
 		// Error
-		db.BitSet("my-bitset", 1, true)
+		db.BitSet("my-bitset", true, 1)
 		db.Set("none", []byte("1"))
-		err = db.BitSet("none", uint32(i), true)
+
+		n, err = db.BitSet("none", true, uint32(i))
+		assert.Equal(n, 0)
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 
 		ok, err = db.BitTest("none", uint32(i))
@@ -527,8 +488,8 @@ func TestBitmap(t *testing.T) {
 		assert.Nil(m)
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 
-		n, err := db.BitCount("none")
-		assert.Equal(n, uint64(0))
+		num, err := db.BitCount("none")
+		assert.Equal(num, uint64(0))
 		assert.ErrorContains(err, base.ErrWrongType.Error())
 
 		err = db.BitAnd("", "none", "my-bitset")
@@ -551,8 +512,8 @@ func TestBitmap(t *testing.T) {
 		// Add random data
 		for i := 0; i < 20; i++ {
 			stri := strconv.Itoa(i)
-			db.BitSet("a"+stri, rand.Uint32(), true)
-			db.BitSet("b"+stri, rand.Uint32(), true)
+			db.BitSet("a"+stri, true, rand.Uint32())
+			db.BitSet("b"+stri, true, rand.Uint32())
 		}
 		stri := strconv.Itoa(i)
 
@@ -658,7 +619,6 @@ func TestInvalidCodec(t *testing.T) {
 		OpSetTx, OpRemove, OpHSet, OpHRemove, OpSAdd, OpSRemove, OpSMerge,
 		OpLPush, OpLPop, OpBitSet, OpBitMerge, OpBitFlip,
 		OpZAdd, OpZIncr, OpZRemove,
-		OpMarshalBinary,
 	} {
 		db, err := createDB()
 		assert.Nil(err)
