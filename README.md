@@ -84,79 +84,79 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ========== Set ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 337.164876ms
-50th: 242 ns
-90th: 307 ns
-99th: 905 ns
+cost: 291.413216ms
+50th: 214 ns
+90th: 262 ns
+99th: 509 ns
 db file size: 838.5KB
 
 ========== Set 8 parallel ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 192.458463ms
-50th: 358 ns
-90th: 1373 ns
-99th: 29922 ns
-db file size: 4.1MB
+cost: 188.082777ms
+50th: 352 ns
+90th: 857 ns
+99th: 22406 ns
+db file size: 4.0MB
 
 ========== SetEx ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes, ttl 1min
-cost: 349.705129ms
-50th: 246 ns
-90th: 310 ns
-99th: 935 ns
-db file size: 1.9MB
+cost: 302.246712ms
+50th: 225 ns
+90th: 272 ns
+99th: 556 ns
+db file size: 790.9KB
 
 ========== Get ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 295.173803ms
-50th: 237 ns
-90th: 321 ns
-99th: 593 ns
+cost: 260.6399ms
+50th: 224 ns
+90th: 280 ns
+99th: 533 ns
 
 ========== Get 8 parallel ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 43.818633ms
-50th: 272 ns
-90th: 423 ns
-99th: 659 ns
+cost: 48.348878ms
+50th: 248 ns
+90th: 393 ns
+99th: 638 ns
 
 ========== LRPush ==========
 size: 100*10000 enties
 desc: value 10 bytes
-cost: 226.683466ms
-50th: 191 ns
-90th: 210 ns
-99th: 395 ns
-db file size: 277.9KB
+cost: 228.933463ms
+50th: 192 ns
+90th: 211 ns
+99th: 321 ns
+db file size: 260.0KB
 
 ========== HSet ==========
 size: 100*10000 enties
 desc: field 10 bytes, value 10 bytes
-cost: 386.041763ms
-50th: 215 ns
-90th: 282 ns
-99th: 493 ns
+cost: 398.351779ms
+50th: 224 ns
+90th: 278 ns
+99th: 443 ns
 db file size: 835.2KB
 
 ========== HGet ==========
 size: 100*10000 enties
 desc: field 10 bytes, value 10 bytes
-cost: 277.690778ms
-50th: 220 ns
-90th: 304 ns
-99th: 572 ns
+cost: 254.612279ms
+50th: 211 ns
+90th: 262 ns
+99th: 534 ns
 
 ========== BitSet ==========
 size: 100*10000 enties
 desc: offset uint32
-cost: 117.428111ms
-50th: 97 ns
-90th: 101 ns
-99th: 121 ns
-db file size: 907.3KB
+cost: 141.778962ms
+50th: 108 ns
+90th: 115 ns
+99th: 137 ns
+db file size: 898.2KB
 ```
 

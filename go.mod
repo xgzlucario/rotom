@@ -6,20 +6,20 @@ require (
 	github.com/RoaringBitmap/roaring v1.7.0
 	github.com/brianvoe/gofakeit/v6 v6.24.0
 	github.com/bytedance/sonic v1.10.2
-	github.com/deckarep/golang-set/v2 v2.5.0
+	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/dolthub/swiss v0.2.1
 	github.com/influxdata/tdigest v0.0.1
 	github.com/klauspost/compress v1.17.4
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/sakeven/RbTree v0.0.0-20220710124251-94e35f9fed6c
 	github.com/stretchr/testify v1.8.4
-	github.com/xgzlucario/GigaCache v0.0.0-20231222145813-67bbe00bf98d
+	github.com/xgzlucario/GigaCache v0.0.0-20231226161408-655de575becb
 	github.com/zyedidia/generic v1.2.2-0.20230819223407-98022f93823f
-	golang.org/x/exp v0.0.0-20231219180239-dc181d75b848
+	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b
 )
 
 require (
-	github.com/bits-and-blooms/bitset v1.12.0 // indirect
+	github.com/bits-and-blooms/bitset v1.13.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20230717121745-296ad89f973d // indirect
 	github.com/chenzhuoyu/iasm v0.9.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
