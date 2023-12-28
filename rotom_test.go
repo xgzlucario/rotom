@@ -12,6 +12,7 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
 	cache "github.com/xgzlucario/GigaCache"
+	"github.com/xgzlucario/rotom/codeman"
 )
 
 var (
@@ -556,31 +557,76 @@ func TestZSet(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
+	genKey := func(i int) string {
+		return fmt.Sprintf("key-%08x", i)
+	}
+
 	// ZAdd
 	for i := 0; i < 1000; i++ {
-		err := db.ZAdd("zset", fmt.Sprintf("key-%d", i), float64(i), nil)
+		err := db.ZAdd("zset", genKey(i), float64(i), []byte(fmt.Sprintf("val-%d", i)))
 		assert.Nil(err)
 	}
 
-	// Get
+	// ZGet
 	for i := 0; i < 1000; i++ {
-		val, score, err := db.ZGet("zset", fmt.Sprintf("key-%d", i))
+		val, score, err := db.ZGet("zset", genKey(i))
 		assert.Nil(err)
-		assert.Equal(val, nilBytes)
+		assert.Equal(val, []byte(fmt.Sprintf("val-%d", i)))
 		assert.Equal(score, float64(i))
+	}
+	for i := 1000; i < 2000; i++ {
+		val, score, err := db.ZGet("zset", genKey(i))
+		assert.Equal(err, ErrKeyNotFound)
+		assert.Equal(val, nilBytes)
+		assert.Equal(score, float64(0))
+	}
+
+	// ZSet
+	for i := 0; i < 1000; i++ {
+		err := db.ZSet("zset", genKey(i), []byte(fmt.Sprintf("new-val-%d", i)))
+		assert.Nil(err)
+	}
+	for i := 1000; i < 2000; i++ {
+		err := db.ZSet("zset", genKey(i), []byte(fmt.Sprintf("new-val-%d", i)))
+		assert.Nil(err)
+	}
+
+	// ZGet
+	for i := 0; i < 1000; i++ {
+		val, score, err := db.ZGet("zset", genKey(i))
+		assert.Nil(err)
+		assert.Equal(val, []byte(fmt.Sprintf("new-val-%d", i)))
+		assert.Equal(score, float64(i))
+	}
+	for i := 1000; i < 2000; i++ {
+		val, score, err := db.ZGet("zset", genKey(i))
+		assert.Nil(err)
+		assert.Equal(val, []byte(fmt.Sprintf("new-val-%d", i)))
+		assert.Equal(score, float64(0))
 	}
 
 	// ZIncr
 	for i := 0; i < 1000; i++ {
-		num, err := db.ZIncr("zset", fmt.Sprintf("key-%d", i), 3)
+		num, err := db.ZIncr("zset", genKey(i), 3)
 		assert.Nil(err)
 		assert.Equal(num, float64(i+3))
+	}
+	for i := 3000; i < 4000; i++ {
+		num, err := db.ZIncr("zset", genKey(i), 3)
+		assert.Nil(err)
+		assert.Equal(num, float64(3))
 	}
 
 	// ZRemove
 	for i := 0; i < 1000; i++ {
-		err := db.ZRemove("zset", fmt.Sprintf("key-%d", i))
+		res, err := db.ZRemove("zset", genKey(i))
 		assert.Nil(err)
+		assert.Equal(res, []byte(fmt.Sprintf("new-val-%d", i)))
+	}
+	for i := 5000; i < 6000; i++ {
+		res, err := db.ZRemove("zset", genKey(i))
+		assert.Nil(err)
+		assert.Equal(res, nilBytes)
 	}
 
 	// Test error
@@ -589,10 +635,13 @@ func TestZSet(t *testing.T) {
 	err = db.ZAdd("set", "key", 1, nil)
 	assert.ErrorContains(err, ErrWrongType.Error())
 
+	err = db.ZSet("set", "key", nil)
+	assert.ErrorContains(err, ErrWrongType.Error())
+
 	_, err = db.ZIncr("set", "key", 1)
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	err = db.ZRemove("set", "key")
+	_, err = db.ZRemove("set", "key")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	// load
@@ -619,5 +668,34 @@ func TestInvalidCodec(t *testing.T) {
 		db.Close()
 		_, err = Open(db.Config)
 		assert.NotNil(err)
+	}
+
+	// encode any.
+	codec, err := NewCodec(OpSetTx).Any([]string{"1"})
+	assert.Nil(codec)
+	assert.ErrorContains(err, ErrUnSupportDataType.Error())
+
+	// parse args.
+	codec = NewCodec(OpSetTx).Bool(true)
+	parser := codeman.NewParser(codec.Content())
+
+	n := parser.ParseVarint()
+	assert.Equal(uint64(n), uint64(OpSetTx))
+
+	bb := parser.ParseVarint()
+	assert.Equal(true, bb.Bool())
+
+	// parse done.
+	{
+		parser := codeman.NewParser(nil)
+		any := parser.Parse()
+		assert.Nil(any)
+		assert.ErrorContains(parser.Error, codeman.ErrParserIsDone.Error())
+	}
+	{
+		parser := codeman.NewParser(nil)
+		bb := parser.ParseVarint()
+		assert.False(bb.Bool())
+		assert.ErrorContains(parser.Error, codeman.ErrParserIsDone.Error())
 	}
 }

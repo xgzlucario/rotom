@@ -22,10 +22,7 @@ type Codec struct {
 }
 
 // NewCodec
-func NewCodec(want ...int) *Codec {
-	if len(want) > 0 {
-		return &Codec{b: codecPool.Get(want[0])[:0]}
-	}
+func NewCodec() *Codec {
 	return &Codec{b: codecPool.Get(16)[:0]}
 }
 
@@ -96,6 +93,7 @@ func (s *Codec) formatString(v string) *Codec {
 	return s
 }
 
+// Any encodes any type of data.
 func (s *Codec) Any(v any) (*Codec, error) {
 	buf, err := s.encode(v)
 	if err != nil {
@@ -117,9 +115,6 @@ func (s *Codec) encode(v any) ([]byte, error) {
 }
 
 func formatVarint[T Integer](buf []byte, n T) []byte {
-	if buf == nil {
-		buf = make([]byte, 0, binary.MaxVarintLen64)
-	}
 	return binary.AppendUvarint(buf, uint64(n))
 }
 

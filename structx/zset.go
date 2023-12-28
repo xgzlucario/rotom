@@ -2,6 +2,7 @@ package structx
 
 import (
 	"encoding/json"
+	"sync"
 
 	rbtree "github.com/sakeven/RbTree"
 	"golang.org/x/exp/constraints"
@@ -11,6 +12,7 @@ type Ordered constraints.Ordered
 
 // ZSet
 type ZSet[K, S Ordered, V any] struct {
+	sync.RWMutex
 	m    Map[K, *znode[S, V]]
 	tree *rbtree.Tree[S, K]
 }
@@ -30,6 +32,8 @@ func NewZSet[K, S Ordered, V any]() *ZSet[K, S, V] {
 
 // Get
 func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
+	z.RLock()
+	defer z.RUnlock()
 	item, ok := z.m.Get(key)
 	if !ok {
 		var v V
@@ -41,6 +45,7 @@ func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
 
 // Set upsert value by key.
 func (z *ZSet[K, S, V]) Set(key K, value V) {
+	z.Lock()
 	item, ok := z.m.Get(key)
 	if ok {
 		item.V = value
@@ -50,10 +55,12 @@ func (z *ZSet[K, S, V]) Set(key K, value V) {
 		z.m.Put(key, item)
 		z.tree.Insert(item.S, key)
 	}
+	z.Unlock()
 }
 
 // SetScore upsert score by key.
 func (z *ZSet[K, S, V]) SetScore(key K, score S) {
+	z.RLock()
 	item, ok := z.m.Get(key)
 	if ok {
 		z.updateScore(item, key, score)
@@ -62,6 +69,7 @@ func (z *ZSet[K, S, V]) SetScore(key K, score S) {
 		z.m.Put(key, &znode[S, V]{S: score})
 		z.tree.Insert(score, key)
 	}
+	z.RUnlock()
 }
 
 // update score of key.
@@ -73,6 +81,7 @@ func (z *ZSet[K, S, V]) updateScore(node *znode[S, V], key K, score S) {
 
 // SetWithScore upsert value and score by key.
 func (z *ZSet[K, S, V]) SetWithScore(key K, score S, value V) {
+	z.RLock()
 	item, ok := z.m.Get(key)
 	if ok {
 		item.V = value
@@ -82,10 +91,13 @@ func (z *ZSet[K, S, V]) SetWithScore(key K, score S, value V) {
 		z.m.Put(key, &znode[S, V]{S: score, V: value})
 		z.tree.Insert(score, key)
 	}
+	z.RUnlock()
 }
 
 // Incr
 func (z *ZSet[K, S, V]) Incr(key K, score S) S {
+	z.Lock()
+	defer z.Unlock()
 	item, ok := z.m.Get(key)
 	if ok {
 		z.updateScore(item, key, item.S+score)
@@ -100,6 +112,8 @@ func (z *ZSet[K, S, V]) Incr(key K, score S) S {
 
 // Delete
 func (z *ZSet[K, S, V]) Delete(key K) (v V, ok bool) {
+	z.Lock()
+	defer z.Unlock()
 	item, ok := z.m.Get(key)
 	if ok {
 		z.m.Delete(key)
@@ -111,18 +125,24 @@ func (z *ZSet[K, S, V]) Delete(key K) (v V, ok bool) {
 
 // Len
 func (z *ZSet[K, S, V]) Len() int {
+	z.RLock()
+	defer z.RUnlock()
 	return z.m.Count()
 }
 
 // Iter iterate all elements by scores.
 func (z *ZSet[K, S, V]) Iter(f func(k K, s S, v V) bool) {
-	iter := z.tree.Iterator()
-	for iter != nil {
-		item, _ := z.m.Get(iter.Value)
+	z.RLock()
+	defer z.RUnlock()
+
+	for iter := z.tree.Iterator(); ; iter = iter.Next() {
+		item, ok := z.m.Get(iter.Value)
+		if !ok {
+			continue
+		}
 		if f(iter.Value, iter.Key, item.V) {
 			return
 		}
-		iter = iter.Next()
 	}
 }
 
@@ -139,6 +159,9 @@ func (z *ZSet[K, S, V]) MarshalJSON() ([]byte, error) {
 		S: make([]S, 0, z.Len()),
 		V: make([]V, 0, z.Len()),
 	}
+	z.RLock()
+	defer z.RUnlock()
+
 	z.m.Iter(func(k K, item *znode[S, V]) bool {
 		tmp.K = append(tmp.K, k)
 		tmp.S = append(tmp.S, item.S)

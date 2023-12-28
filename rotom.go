@@ -45,6 +45,7 @@ const (
 	OpBitMerge // or, and, xor
 	// zset
 	OpZAdd
+	OpZSet
 	OpZIncr
 	OpZRemove
 )
@@ -315,6 +316,19 @@ var cmdTable = []Cmd{
 		return e.ZAdd(key, field, score, val)
 	}},
 
+	{OpZSet, func(e *Engine, decoder *codeman.Parser) error {
+		// key, field, val
+		key := decoder.Parse().Str()
+		field := decoder.Parse().Str()
+		val := decoder.Parse()
+
+		if decoder.Error != nil {
+			return decoder.Error
+		}
+
+		return e.ZSet(key, field, val)
+	}},
+
 	{OpZIncr, func(e *Engine, decoder *codeman.Parser) error {
 		// key, field, score
 		key := decoder.Parse().Str()
@@ -338,7 +352,8 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
-		return e.ZRemove(key, field)
+		_, err := e.ZRemove(key, field)
+		return err
 	}},
 }
 
@@ -924,6 +939,17 @@ func (e *Engine) ZAdd(zset, key string, score float64, val []byte) error {
 	return nil
 }
 
+// ZSet
+func (e *Engine) ZSet(zset, key string, val []byte) error {
+	zs, err := e.fetchZSet(zset, true)
+	if err != nil {
+		return err
+	}
+	e.encode(NewCodec(OpZAdd).Str(zset).Str(key).Float(0).Bytes(val))
+	zs.Set(key, val)
+	return nil
+}
+
 // ZIncr
 func (e *Engine) ZIncr(zset, key string, incr float64) (float64, error) {
 	zs, err := e.fetchZSet(zset, true)
@@ -936,15 +962,15 @@ func (e *Engine) ZIncr(zset, key string, incr float64) (float64, error) {
 }
 
 // ZRemove
-func (e *Engine) ZRemove(zset, key string) error {
+func (e *Engine) ZRemove(zset string, key string) ([]byte, error) {
 	zs, err := e.fetchZSet(zset)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	e.encode(NewCodec(OpZRemove).Str(zset).Str(key))
-	zs.Delete(key)
+	res, _ := zs.Delete(key)
 
-	return nil
+	return res, nil
 }
 
 // writeTo writes the buffer into the file at the specified path.
