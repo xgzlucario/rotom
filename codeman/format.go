@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"sync"
 
-	"github.com/xgzlucario/rotom/base"
+	cache "github.com/xgzlucario/GigaCache"
 )
 
 const (
@@ -15,9 +14,7 @@ const (
 	_false = 0
 )
 
-var codecPool = sync.Pool{
-	New: func() any { return &Codec{b: make([]byte, 0, 16)} },
-}
+var codecPool = cache.NewBufferPool()
 
 // Codec is the primary type for encoding data into a specific format.
 type Codec struct {
@@ -25,13 +22,15 @@ type Codec struct {
 }
 
 // NewCodec
-func NewCodec() *Codec {
-	return codecPool.Get().(*Codec)
+func NewCodec(want ...int) *Codec {
+	if len(want) > 0 {
+		return &Codec{b: codecPool.Get(want[0])[:0]}
+	}
+	return &Codec{b: codecPool.Get(16)[:0]}
 }
 
 func (s *Codec) Recycle() {
-	s.b = s.b[:0]
-	codecPool.Put(s)
+	codecPool.Put(s.b)
 }
 
 func (s *Codec) Content() []byte {
@@ -108,16 +107,16 @@ func (s *Codec) Any(v any) (*Codec, error) {
 
 func (s *Codec) encode(v any) ([]byte, error) {
 	switch v := v.(type) {
-	case base.Binarier:
+	case Binarier:
 		return v.MarshalBinary()
-	case base.Jsoner:
+	case Jsoner:
 		return v.MarshalJSON()
 	default:
-		return nil, fmt.Errorf("%w: %v", base.ErrUnSupportDataType, reflect.TypeOf(v))
+		return nil, fmt.Errorf("%w: %v", ErrUnSupportDataType, reflect.TypeOf(v))
 	}
 }
 
-func formatVarint[T base.Integer](buf []byte, n T) []byte {
+func formatVarint[T Integer](buf []byte, n T) []byte {
 	if buf == nil {
 		buf = make([]byte, 0, binary.MaxVarintLen64)
 	}
@@ -134,7 +133,7 @@ func formatStrSlice(s []string) []byte {
 	return data
 }
 
-func formatNumberSlice[T base.Integer](s []T) []byte {
+func formatNumberSlice[T Integer](s []T) []byte {
 	data := make([]byte, 0, len(s)+1)
 	data = binary.AppendUvarint(data, uint64(len(s)))
 	for _, v := range s {

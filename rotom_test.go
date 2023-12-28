@@ -1,7 +1,6 @@
 package rotom
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
 	cache "github.com/xgzlucario/GigaCache"
-	"github.com/xgzlucario/rotom/base"
 )
 
 var (
@@ -51,6 +49,9 @@ func TestDB(t *testing.T) {
 		m["setex-"+key] = []byte(strconv.Itoa(i))
 	}
 
+	// gc
+	db.GC()
+
 	db.Scan(func(key string, val []byte, ts int64) bool {
 		prefix := strings.Split(key, "-")[0]
 		switch prefix {
@@ -83,7 +84,7 @@ func TestDB(t *testing.T) {
 			assert.Equal(val, v)
 		case "settx":
 			assert.Equal(nil, v)
-			assert.Equal(err, base.ErrKeyNotFound)
+			assert.Equal(err, ErrKeyNotFound)
 		default:
 			panic("wrong key")
 		}
@@ -92,18 +93,18 @@ func TestDB(t *testing.T) {
 	// Error
 	val, _, err := db.Get("map")
 	assert.Equal(val, nilBytes)
-	assert.Equal(err, base.ErrKeyNotFound)
+	assert.Equal(err, ErrKeyNotFound)
 
 	val, _, err = db.Get("none")
 	assert.Equal(val, nilBytes)
-	assert.Equal(err, base.ErrKeyNotFound)
+	assert.Equal(err, ErrKeyNotFound)
 
 	// Remove
 	db.Remove("set-1", "set-2", "set-3")
 
 	// close
 	assert.Nil(db.Close())
-	assert.Equal(db.Close(), base.ErrDatabaseClosed)
+	assert.Equal(db.Close(), ErrDatabaseClosed)
 
 	// Load Success
 	_, err = Open(db.Config)
@@ -112,13 +113,13 @@ func TestDB(t *testing.T) {
 	// Load Error
 	os.WriteFile(db.Config.Path, []byte("fake"), 0644)
 	_, err = Open(db.Config)
-	assert.NotNil(err, base.ErrCheckSum)
+	assert.NotNil(err, ErrCheckSum)
 
 	// error data type
 	db.encode(NewCodec(OpSetTx).Int(100).Str("key").Str("val"))
 	db.Close()
 	_, err = Open(db.Config)
-	assert.NotNil(err, base.ErrCheckSum)
+	assert.NotNil(err, ErrCheckSum)
 }
 
 func TestSetTTL(t *testing.T) {
@@ -189,35 +190,35 @@ func TestHmap(t *testing.T) {
 	db.Set("fake", []byte("123"))
 
 	err = db.HSet("fake", "a", []byte("b"))
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	res, err := db.HLen("fake")
 	assert.Equal(res, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	m, err := db.HKeys("fake")
 	assert.Equal(m, nilStrings)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	n, err := db.HRemove("fake", "foo")
 	assert.Equal(n, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	db.HSet("map", "m1", []byte("m2"))
 	{
 		res, _, err := db.Get("map")
 		assert.Nil(res)
-		assert.Equal(err, base.ErrTypeAssert)
+		assert.Equal(err, ErrTypeAssert)
 	}
 	{
 		res, err := db.HGet("fake", "none")
 		assert.Nil(res)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 	}
 	{
 		res, err := db.HGet("map", "none")
 		assert.Nil(res)
-		assert.Equal(err, base.ErrFieldNotFound)
+		assert.Equal(err, ErrFieldNotFound)
 	}
 
 	db.Shrink()
@@ -276,26 +277,26 @@ func TestList(t *testing.T) {
 	db.HSet("map", "key", []byte("value"))
 
 	err = db.LLPush("map", "1")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.LRPush("map", "1")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	res, err := db.LLPop("map")
 	assert.Equal(res, "")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	res, err = db.LRPop("map")
 	assert.Equal(res, "")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	s, err := db.LIndex("map", 1)
 	assert.Equal(s, "")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	n, err := db.LLen("map")
 	assert.Equal(n, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	db.LRPush("list", "1")
 	db.LRPop("list")
@@ -303,15 +304,15 @@ func TestList(t *testing.T) {
 	// empty list
 	res, err = db.LLPop("list")
 	assert.Equal(res, "")
-	assert.Equal(err, base.ErrEmptyList)
+	assert.Equal(err, ErrEmptyList)
 
 	res, err = db.LRPop("list")
 	assert.Equal(res, "")
-	assert.Equal(err, base.ErrEmptyList)
+	assert.Equal(err, ErrEmptyList)
 
 	res, err = db.LIndex("list", 9)
 	assert.Equal(res, "")
-	assert.Equal(err, base.ErrIndexOutOfRange)
+	assert.Equal(err, ErrIndexOutOfRange)
 
 	for i := 0; i < 100; i++ {
 		db.LRPush("list", gofakeit.Animal())
@@ -400,37 +401,37 @@ func TestSet(t *testing.T) {
 	db.HSet("map", "key", []byte("1"))
 	n, err := db.SAdd("map", "1")
 	assert.Equal(n, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	ok, err := db.SHas("map", "1")
 	assert.False(ok)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.SRemove("map", "1")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	n, err = db.SCard("map")
 	assert.Equal(n, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	m, err := db.SMembers("map")
 	assert.Equal(m, nilStrings)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.SUnion("", "map", "set")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 	err = db.SUnion("", "set", "map")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.SDiff("", "map", "set")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 	err = db.SDiff("", "set", "map")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.SInter("", "map", "set")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 	err = db.SInter("", "set", "map")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	db.Shrink()
 	db.Close()
@@ -475,37 +476,37 @@ func TestBitmap(t *testing.T) {
 
 		n, err = db.BitSet("none", true, uint32(i))
 		assert.Equal(n, 0)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		ok, err = db.BitTest("none", uint32(i))
 		assert.False(ok)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		err = db.BitFlip("none", uint32(i))
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		m, err := db.BitArray("none")
 		assert.Nil(m)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		num, err := db.BitCount("none")
 		assert.Equal(num, uint64(0))
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		err = db.BitAnd("", "none", "my-bitset")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 		err = db.BitAnd("", "my-bitset", "none")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		err = db.BitOr("", "none", "my-bitset")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 		err = db.BitOr("", "my-bitset", "none")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		err = db.BitXor("", "none", "my-bitset")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 		err = db.BitXor("", "my-bitset", "none")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 	}
 
 	for i := 0; i < 1000; i++ {
@@ -561,6 +562,14 @@ func TestZSet(t *testing.T) {
 		assert.Nil(err)
 	}
 
+	// Get
+	for i := 0; i < 1000; i++ {
+		val, score, err := db.ZGet("zset", fmt.Sprintf("key-%d", i))
+		assert.Nil(err)
+		assert.Equal(val, nilBytes)
+		assert.Equal(score, float64(i))
+	}
+
 	// ZIncr
 	for i := 0; i < 1000; i++ {
 		num, err := db.ZIncr("zset", fmt.Sprintf("key-%d", i), 3)
@@ -578,13 +587,13 @@ func TestZSet(t *testing.T) {
 	db.SAdd("set", "1")
 
 	err = db.ZAdd("set", "key", 1, nil)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	_, err = db.ZIncr("set", "key", 1)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.ZRemove("set", "key")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	// load
 	db.Shrink()
@@ -592,22 +601,6 @@ func TestZSet(t *testing.T) {
 
 	_, err = Open(db.Config)
 	assert.Nil(err)
-}
-
-func TestUtils(t *testing.T) {
-	assert := assert.New(t)
-
-	assert.Panics(func() {
-		base.NewTicker(context.TODO(), -1, func() {})
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ticker := base.NewTicker(ctx, time.Second, func() {})
-	ticker.Reset(time.Second)
-
-	cancel()
-	err := ticker.Do()
-	assert.Equal(err, base.ErrTickerClosed)
 }
 
 func TestInvalidCodec(t *testing.T) {

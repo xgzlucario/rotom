@@ -4,19 +4,23 @@ package rotom
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"hash/crc32"
-	"log/slog"
 	"os"
 	"sync"
 	"time"
 
 	cmap "github.com/orcaman/concurrent-map/v2"
 	cache "github.com/xgzlucario/GigaCache"
-	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/codeman"
 	"github.com/xgzlucario/rotom/structx"
+)
+
+const (
+	noTTL = 0
+
+	KB = 1024
+	MB = 1024 * KB
 )
 
 // Operations.
@@ -121,7 +125,7 @@ var cmdTable = []Cmd{
 			e.cm.Set(key, m)
 
 		default:
-			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, tp)
+			return fmt.Errorf("%w: %d", ErrUnSupportDataType, tp)
 		}
 
 		return nil
@@ -208,7 +212,7 @@ var cmdTable = []Cmd{
 		case mergeTypeXOr:
 			return e.SDiff(key, items...)
 		}
-		return errors.New("invalid bit op")
+		return ErrInvalidBitmapOperation
 	}},
 
 	{OpLPush, func(e *Engine, decoder *codeman.Parser) error {
@@ -227,7 +231,7 @@ var cmdTable = []Cmd{
 		case listDirectionRight:
 			return e.LRPush(key, items...)
 		}
-		return errors.New("invalid list direction")
+		return ErrInvalidListDirect
 	}},
 
 	{OpLPop, func(e *Engine, decoder *codeman.Parser) (err error) {
@@ -245,7 +249,7 @@ var cmdTable = []Cmd{
 		case listDirectionRight:
 			_, err = e.LRPop(key)
 		default:
-			err = errors.New("invalid list direction")
+			err = ErrInvalidListDirect
 		}
 		return
 	}},
@@ -294,7 +298,7 @@ var cmdTable = []Cmd{
 		case mergeTypeXOr:
 			return e.BitXor(key, items...)
 		}
-		return errors.New("invalid bit op")
+		return ErrInvalidBitmapOperation
 	}},
 
 	{OpZAdd, func(e *Engine, decoder *codeman.Parser) error {
@@ -350,13 +354,6 @@ const (
 	TypeBitmap
 )
 
-const (
-	noTTL = 0
-
-	KB = 1024
-	MB = 1024 * KB
-)
-
 // Type aliases for structx types.
 type (
 	String = []byte
@@ -367,39 +364,6 @@ type (
 	BitMap = *structx.Bitmap
 )
 
-var (
-	// Default config for db
-	DefaultConfig = Config{
-		Path:             "rotom.db",
-		ShardCount:       1024,
-		SyncPolicy:       base.EverySecond,
-		ShrinkInterval:   time.Minute,
-		RunSkipLoadError: true,
-		Logger:           slog.Default(),
-	}
-
-	// No persistent config
-	NoPersistentConfig = Config{
-		ShardCount: 1024,
-		SyncPolicy: base.Never,
-		Logger:     slog.Default(),
-	}
-)
-
-// Config represents the configuration for a Store.
-type Config struct {
-	ShardCount int
-
-	Path string // Path of db file.
-
-	SyncPolicy     base.SyncPolicy // Data sync policy.
-	ShrinkInterval time.Duration   // Shrink db file interval.
-
-	RunSkipLoadError bool // Starts when loading db file error.
-
-	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
-}
-
 // Engine represents a rotom engine for storage.
 type Engine struct {
 	sync.Mutex
@@ -408,7 +372,7 @@ type Engine struct {
 	// context.
 	ctx     context.Context
 	cancel  context.CancelFunc
-	tickers [2]*base.Ticker
+	tickers [2]*Ticker
 
 	// if db loading encode not allowed.
 	loading bool
@@ -435,9 +399,9 @@ func Open(conf Config) (*Engine, error) {
 		ctx:     ctx,
 		cancel:  cancel,
 		loading: true,
-		buf:     bytes.NewBuffer(nil),
-		rwbuf:   bytes.NewBuffer(nil),
-		tickers: [2]*base.Ticker{},
+		buf:     bytes.NewBuffer(make([]byte, 0, 1024)),
+		rwbuf:   bytes.NewBuffer(make([]byte, 0, 1024)),
+		tickers: [2]*Ticker{},
 		m:       cache.New(cache.DefaultOption),
 		cm:      cmap.New[any](),
 		crc:     crc32.MakeTable(crc32.Castagnoli),
@@ -450,9 +414,9 @@ func Open(conf Config) (*Engine, error) {
 	}
 	e.loading = false
 
-	if e.SyncPolicy == base.EverySecond {
+	if e.SyncPolicy == EverySecond {
 		// sync buffer to disk.
-		e.tickers[0] = base.NewTicker(ctx, time.Second, func() {
+		e.tickers[0] = NewTicker(ctx, time.Second, func() {
 			e.Lock()
 			_, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()
@@ -462,7 +426,7 @@ func Open(conf Config) (*Engine, error) {
 		})
 
 		// shrink db.
-		e.tickers[1] = base.NewTicker(ctx, e.ShrinkInterval, func() {
+		e.tickers[1] = NewTicker(ctx, e.ShrinkInterval, func() {
 			e.Lock()
 			e.shrink()
 			e.Unlock()
@@ -478,7 +442,7 @@ func Open(conf Config) (*Engine, error) {
 func (e *Engine) Close() error {
 	select {
 	case <-e.ctx.Done():
-		return base.ErrDatabaseClosed
+		return ErrDatabaseClosed
 	default:
 		e.Lock()
 		_, err := e.writeTo(e.buf, e.Path)
@@ -490,7 +454,7 @@ func (e *Engine) Close() error {
 
 // encode
 func (e *Engine) encode(cd *codeman.Codec) {
-	if e.SyncPolicy == base.Never {
+	if e.SyncPolicy == Never {
 		return
 	}
 	if e.loading {
@@ -511,12 +475,12 @@ func NewCodec(op Operation) *codeman.Codec {
 func (e *Engine) Get(key string) ([]byte, int64, error) {
 	// check
 	if e.cm.Has(key) {
-		return nil, 0, base.ErrTypeAssert
+		return nil, 0, ErrTypeAssert
 	}
 	// get
 	val, ts, ok := e.m.Get(key)
 	if !ok {
-		return nil, 0, base.ErrKeyNotFound
+		return nil, 0, ErrKeyNotFound
 	}
 	return val, ts, nil
 }
@@ -541,16 +505,26 @@ func (e *Engine) SetTx(key string, val []byte, ts int64) {
 }
 
 // Remove
-func (e *Engine) Remove(keys ...string) {
+func (e *Engine) Remove(keys ...string) (n int) {
 	e.encode(NewCodec(OpRemove).StrSlice(keys))
 	for _, key := range keys {
-		e.m.Delete(key)
+		if e.m.Delete(key) {
+			n++
+		}
 	}
+	return
 }
 
 // Len
 func (e *Engine) Len() uint64 {
 	return e.m.Stat().Len + uint64(e.cm.Count())
+}
+
+// GC triggers the garbage collection to evict expired kv datas.
+func (e *Engine) GC() {
+	e.Lock()
+	e.m.Migrate()
+	e.Unlock()
 }
 
 // Scan
@@ -568,7 +542,7 @@ func (e *Engine) HGet(key, field string) ([]byte, error) {
 	}
 	res, ok := m.Get(field)
 	if !ok {
-		return nil, base.ErrFieldNotFound
+		return nil, ErrFieldNotFound
 	}
 	return res, nil
 }
@@ -761,7 +735,7 @@ func (e *Engine) LIndex(key string, i int) (string, error) {
 	}
 	res, ok := ls.Index(i)
 	if !ok {
-		return "", base.ErrIndexOutOfRange
+		return "", ErrIndexOutOfRange
 	}
 	return res, nil
 }
@@ -774,7 +748,7 @@ func (e *Engine) LLPop(key string) (string, error) {
 	}
 	res, ok := ls.LPop()
 	if !ok {
-		return "", base.ErrEmptyList
+		return "", ErrEmptyList
 	}
 	e.encode(NewCodec(OpLPop).Byte(listDirectionLeft).Str(key))
 
@@ -789,7 +763,7 @@ func (e *Engine) LRPop(key string) (string, error) {
 	}
 	res, ok := ls.RPop()
 	if !ok {
-		return "", base.ErrEmptyList
+		return "", ErrEmptyList
 	}
 	e.encode(NewCodec(OpLPop).Byte(listDirectionRight).Str(key))
 
@@ -925,6 +899,19 @@ func (e *Engine) BitCount(key string) (uint64, error) {
 	return bm.Len(), err
 }
 
+// ZGet
+func (e *Engine) ZGet(zset, key string) ([]byte, float64, error) {
+	zs, err := e.fetchZSet(zset)
+	if err != nil {
+		return nil, 0, err
+	}
+	val, score, ok := zs.Get(key)
+	if !ok {
+		return nil, 0, ErrKeyNotFound
+	}
+	return val, score, nil
+}
+
 // ZAdd
 func (e *Engine) ZAdd(zset, key string, score float64, val []byte) error {
 	zs, err := e.fetchZSet(zset, true)
@@ -1011,7 +998,7 @@ func (e *Engine) load() error {
 			return blkParser.Error
 		}
 		if crc != crc32.Checksum(dataBlock, e.crc) {
-			return base.ErrCheckSum
+			return ErrCheckSum
 		}
 
 		data, err := codeman.Decompress(dataBlock, nil)
@@ -1126,7 +1113,7 @@ func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err error) {
 	// check from bytes cache.
 	if _, _, ok := e.m.Get(key); ok {
-		return v, base.ErrWrongType
+		return v, ErrWrongType
 	}
 
 	item, ok := e.cm.Get(key)
@@ -1135,7 +1122,7 @@ func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err 
 		if ok {
 			return v, nil
 		}
-		return v, fmt.Errorf("%w: %T->%T", base.ErrWrongType, item, v)
+		return v, fmt.Errorf("%w: %T->%T", ErrWrongType, item, v)
 	}
 
 	v = new()
@@ -1146,7 +1133,7 @@ func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err 
 }
 
 // formatSize
-func formatSize[T base.Integer](size T) string {
+func formatSize[T codeman.Integer](size T) string {
 	switch {
 	case size < KB:
 		return fmt.Sprintf("%dB", size)

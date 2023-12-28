@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"strconv"
@@ -18,8 +19,10 @@ func main() {
 	}
 	defer db.Close()
 
-	for i := 0; ; i++ {
+	start := time.Now()
+	for i := 0; i < 1000*10000; i++ {
 		k := strconv.Itoa(i)
 		db.SetEx(k, []byte(k), time.Second)
 	}
+	fmt.Println(time.Since(start))
 }

@@ -14,7 +14,6 @@ func TestZSet(t *testing.T) {
 	// Test Set
 	for i := 0; i < 100; i++ {
 		z.Set("key"+strconv.Itoa(i), "value"+strconv.Itoa(i))
-		assert.True(z.Has("key" + strconv.Itoa(i)))
 	}
 	assert.Equal(z.Len(), 100)
 

@@ -4,22 +4,24 @@ import (
 	"encoding/json"
 
 	rbtree "github.com/sakeven/RbTree"
-	"github.com/xgzlucario/rotom/base"
+	"golang.org/x/exp/constraints"
 )
 
+type Ordered constraints.Ordered
+
 // ZSet
-type ZSet[K, S base.Ordered, V any] struct {
+type ZSet[K, S Ordered, V any] struct {
 	m    Map[K, *znode[S, V]]
 	tree *rbtree.Tree[S, K]
 }
 
-type znode[S base.Ordered, V any] struct {
+type znode[S Ordered, V any] struct {
 	S S
 	V V
 }
 
 // NewZSet
-func NewZSet[K, S base.Ordered, V any]() *ZSet[K, S, V] {
+func NewZSet[K, S Ordered, V any]() *ZSet[K, S, V] {
 	return &ZSet[K, S, V]{
 		m:    NewMap[K, *znode[S, V]](),
 		tree: rbtree.NewTree[S, K](),
@@ -35,11 +37,6 @@ func (z *ZSet[K, S, V]) Get(key K) (V, S, bool) {
 		return v, s, false
 	}
 	return item.V, item.S, ok
-}
-
-// Has
-func (z *ZSet[K, S, V]) Has(key K) bool {
-	return z.m.Has(key)
 }
 
 // Set upsert value by key.
@@ -129,7 +126,7 @@ func (z *ZSet[K, S, V]) Iter(f func(k K, s S, v V) bool) {
 	}
 }
 
-type zsetJSON[K, S base.Ordered, V any] struct {
+type zsetJSON[K, S Ordered, V any] struct {
 	K []K
 	S []S
 	V []V
