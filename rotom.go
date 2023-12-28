@@ -45,7 +45,6 @@ const (
 	OpBitMerge // or, and, xor
 	// zset
 	OpZAdd
-	OpZSet
 	OpZIncr
 	OpZRemove
 )
@@ -119,7 +118,7 @@ var cmdTable = []Cmd{
 			e.cm.Set(key, m)
 
 		case TypeZSet:
-			m := structx.NewZSet[string, float64, []byte]()
+			m := structx.NewZSet[string, float64]()
 			if err := m.UnmarshalJSON(val); err != nil {
 				return err
 			}
@@ -303,30 +302,16 @@ var cmdTable = []Cmd{
 	}},
 
 	{OpZAdd, func(e *Engine, decoder *codeman.Parser) error {
-		// key, field, score, val
+		// key, field, score
 		key := decoder.Parse().Str()
 		field := decoder.Parse().Str()
 		score := decoder.ParseVarint().Float64()
-		val := decoder.Parse()
 
 		if decoder.Error != nil {
 			return decoder.Error
 		}
 
-		return e.ZAdd(key, field, score, val)
-	}},
-
-	{OpZSet, func(e *Engine, decoder *codeman.Parser) error {
-		// key, field, val
-		key := decoder.Parse().Str()
-		field := decoder.Parse().Str()
-		val := decoder.Parse()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-
-		return e.ZSet(key, field, val)
+		return e.ZAdd(key, field, score)
 	}},
 
 	{OpZIncr, func(e *Engine, decoder *codeman.Parser) error {
@@ -375,7 +360,7 @@ type (
 	Map    = *structx.SyncMap
 	Set    = *structx.Set[string]
 	List   = *structx.List[string]
-	ZSet   = *structx.ZSet[string, float64, []byte]
+	ZSet   = *structx.ZSet[string, float64]
 	BitMap = *structx.Bitmap
 )
 
@@ -915,38 +900,48 @@ func (e *Engine) BitCount(key string) (uint64, error) {
 }
 
 // ZGet
-func (e *Engine) ZGet(zset, key string) ([]byte, float64, error) {
+func (e *Engine) ZGet(zset, key string) (float64, error) {
 	zs, err := e.fetchZSet(zset)
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
-	val, score, ok := zs.Get(key)
+	score, ok := zs.Get(key)
 	if !ok {
-		return nil, 0, ErrKeyNotFound
+		return 0, ErrKeyNotFound
 	}
-	return val, score, nil
+	return score, nil
 }
 
-// ZAdd
-func (e *Engine) ZAdd(zset, key string, score float64, val []byte) error {
-	zs, err := e.fetchZSet(zset, true)
+// ZCard
+func (e *Engine) ZCard(zset string) (int, error) {
+	zs, err := e.fetchZSet(zset)
+	if err != nil {
+		return 0, err
+	}
+	return zs.Len(), nil
+}
+
+// ZIter
+func (e *Engine) ZIter(zset string, f func(string, float64) bool) error {
+	zs, err := e.fetchZSet(zset)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpZAdd).Str(zset).Str(key).Float(score).Bytes(val))
-	zs.SetWithScore(key, score, val)
-
+	zs.Iter(func(k string, s float64) bool {
+		return f(k, s)
+	})
 	return nil
 }
 
-// ZSet
-func (e *Engine) ZSet(zset, key string, val []byte) error {
+// ZAdd
+func (e *Engine) ZAdd(zset, key string, score float64) error {
 	zs, err := e.fetchZSet(zset, true)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpZAdd).Str(zset).Str(key).Float(0).Bytes(val))
-	zs.Set(key, val)
+	e.encode(NewCodec(OpZAdd).Str(zset).Str(key).Float(score))
+	zs.Set(key, score)
+
 	return nil
 }
 
@@ -962,10 +957,10 @@ func (e *Engine) ZIncr(zset, key string, incr float64) (float64, error) {
 }
 
 // ZRemove
-func (e *Engine) ZRemove(zset string, key string) ([]byte, error) {
+func (e *Engine) ZRemove(zset string, key string) (float64, error) {
 	zs, err := e.fetchZSet(zset)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	e.encode(NewCodec(OpZRemove).Str(zset).Str(key))
 	res, _ := zs.Delete(key)
@@ -1131,7 +1126,7 @@ func (e *Engine) fetchBitMap(key string, setnx ...bool) (bm BitMap, err error) {
 // fetchZSet
 func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 	return fetch(e, key, func() ZSet {
-		return structx.NewZSet[string, float64, []byte]()
+		return structx.NewZSet[string, float64]()
 	}, setnx...)
 }
 

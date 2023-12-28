@@ -563,47 +563,39 @@ func TestZSet(t *testing.T) {
 
 	// ZAdd
 	for i := 0; i < 1000; i++ {
-		err := db.ZAdd("zset", genKey(i), float64(i), []byte(fmt.Sprintf("val-%d", i)))
+		err := db.ZAdd("zset", genKey(i), float64(i))
 		assert.Nil(err)
+		n, err := db.ZCard("zset")
+		assert.Nil(err)
+		assert.Equal(n, i+1)
 	}
 
 	// ZGet
 	for i := 0; i < 1000; i++ {
-		val, score, err := db.ZGet("zset", genKey(i))
+		score, err := db.ZGet("zset", genKey(i))
 		assert.Nil(err)
-		assert.Equal(val, []byte(fmt.Sprintf("val-%d", i)))
 		assert.Equal(score, float64(i))
 	}
 	for i := 1000; i < 2000; i++ {
-		val, score, err := db.ZGet("zset", genKey(i))
+		score, err := db.ZGet("zset", genKey(i))
 		assert.Equal(err, ErrKeyNotFound)
-		assert.Equal(val, nilBytes)
 		assert.Equal(score, float64(0))
 	}
 
-	// ZSet
-	for i := 0; i < 1000; i++ {
-		err := db.ZSet("zset", genKey(i), []byte(fmt.Sprintf("new-val-%d", i)))
-		assert.Nil(err)
-	}
-	for i := 1000; i < 2000; i++ {
-		err := db.ZSet("zset", genKey(i), []byte(fmt.Sprintf("new-val-%d", i)))
-		assert.Nil(err)
-	}
+	// Reload
+	db.Shrink()
+	db.Close()
+	db, err = Open(db.Config)
+	assert.Nil(err)
 
-	// ZGet
-	for i := 0; i < 1000; i++ {
-		val, score, err := db.ZGet("zset", genKey(i))
-		assert.Nil(err)
-		assert.Equal(val, []byte(fmt.Sprintf("new-val-%d", i)))
-		assert.Equal(score, float64(i))
-	}
-	for i := 1000; i < 2000; i++ {
-		val, score, err := db.ZGet("zset", genKey(i))
-		assert.Nil(err)
-		assert.Equal(val, []byte(fmt.Sprintf("new-val-%d", i)))
-		assert.Equal(score, float64(0))
-	}
+	// ZIter
+	count := 0
+	err = db.ZIter("zset", func(key string, score float64) bool {
+		count++
+		return count >= 1000
+	})
+	assert.Nil(err)
+	assert.Equal(count, 1000)
 
 	// ZIncr
 	for i := 0; i < 1000; i++ {
@@ -621,21 +613,19 @@ func TestZSet(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		res, err := db.ZRemove("zset", genKey(i))
 		assert.Nil(err)
-		assert.Equal(res, []byte(fmt.Sprintf("new-val-%d", i)))
+		assert.Equal(res, float64(i+3))
 	}
+
 	for i := 5000; i < 6000; i++ {
 		res, err := db.ZRemove("zset", genKey(i))
 		assert.Nil(err)
-		assert.Equal(res, nilBytes)
+		assert.Equal(res, float64(0))
 	}
 
 	// Test error
 	db.SAdd("set", "1")
 
-	err = db.ZAdd("set", "key", 1, nil)
-	assert.ErrorContains(err, ErrWrongType.Error())
-
-	err = db.ZSet("set", "key", nil)
+	err = db.ZAdd("set", "key", 1)
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	_, err = db.ZIncr("set", "key", 1)
@@ -644,12 +634,8 @@ func TestZSet(t *testing.T) {
 	_, err = db.ZRemove("set", "key")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	// load
-	db.Shrink()
-	db.Close()
-
-	_, err = Open(db.Config)
-	assert.Nil(err)
+	_, err = db.ZCard("set")
+	assert.ErrorContains(err, ErrWrongType.Error())
 }
 
 func TestInvalidCodec(t *testing.T) {
