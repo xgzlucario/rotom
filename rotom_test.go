@@ -238,7 +238,7 @@ func TestList(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 20000; i++ {
 		key := gofakeit.UUID()
 		animal := gofakeit.Animal()
 
@@ -631,6 +631,15 @@ func TestZSet(t *testing.T) {
 
 	// Test error
 	db.SAdd("set", "1")
+
+	n, err := db.ZGet("set", "1")
+	assert.Equal(n, float64(0))
+	assert.ErrorContains(err, ErrWrongType.Error())
+
+	err = db.ZIter("set", func(key string, score float64) bool {
+		return false
+	})
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.ZAdd("set", "key", 1)
 	assert.ErrorContains(err, ErrWrongType.Error())
