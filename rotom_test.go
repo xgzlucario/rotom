@@ -40,7 +40,7 @@ func TestDB(t *testing.T) {
 	m := make(map[string][]byte)
 
 	// Test db operations
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10000; i++ {
 		key := strconv.Itoa(i)
 		db.Set("set-"+key, []byte(strconv.Itoa(i)))
 		db.SetEx("setex-"+key, []byte(strconv.Itoa(i)), time.Minute)
@@ -101,7 +101,8 @@ func TestDB(t *testing.T) {
 	assert.Equal(err, ErrKeyNotFound)
 
 	// Remove
-	db.Remove("set-1", "set-2", "set-3")
+	n := db.Remove("set-1", "set-2", "set-3")
+	assert.Equal(n, 3)
 
 	// close
 	assert.Nil(db.Close())
@@ -610,7 +611,7 @@ func TestZSet(t *testing.T) {
 	}
 
 	// ZRemove
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 800; i++ {
 		res, err := db.ZRemove("zset", genKey(i))
 		assert.Nil(err)
 		assert.Equal(res, float64(i+3))
@@ -621,6 +622,12 @@ func TestZSet(t *testing.T) {
 		assert.Nil(err)
 		assert.Equal(res, float64(0))
 	}
+
+	// Reload
+	db.Shrink()
+	db.Close()
+	db, err = Open(db.Config)
+	assert.Nil(err)
 
 	// Test error
 	db.SAdd("set", "1")
