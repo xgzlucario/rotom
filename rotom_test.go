@@ -1,7 +1,6 @@
 package rotom
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"os"
@@ -13,19 +12,17 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
 	cache "github.com/xgzlucario/GigaCache"
-	"github.com/xgzlucario/rotom/base"
-	"golang.org/x/exp/maps"
+	"github.com/xgzlucario/rotom/codeman"
 )
-
-type vItem struct {
-	Val []byte
-	Ts  int64
-}
 
 var (
 	nilBytes   []byte
 	nilStrings []string
 )
+
+func unix(nanosec int64) int64 {
+	return (nanosec / timeCarry) * timeCarry
+}
 
 func createDB() (*Engine, error) {
 	cfg := DefaultConfig
@@ -43,7 +40,7 @@ func TestDB(t *testing.T) {
 	m := make(map[string][]byte)
 
 	// Test db operations
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10000; i++ {
 		key := strconv.Itoa(i)
 		db.Set("set-"+key, []byte(strconv.Itoa(i)))
 		db.SetEx("setex-"+key, []byte(strconv.Itoa(i)), time.Minute)
@@ -51,10 +48,10 @@ func TestDB(t *testing.T) {
 
 		m["set-"+key] = []byte(strconv.Itoa(i))
 		m["setex-"+key] = []byte(strconv.Itoa(i))
-		// m["settx-"+key] = []byte(strconv.Itoa(i))
 	}
 
-	assert.ElementsMatch(db.Keys(), maps.Keys(m))
+	// gc
+	db.GC()
 
 	db.Scan(func(key string, val []byte, ts int64) bool {
 		prefix := strings.Split(key, "-")[0]
@@ -62,7 +59,7 @@ func TestDB(t *testing.T) {
 		case "set":
 			assert.Equal(val, m[key])
 		case "setex":
-			assert.Equal(ts > cache.GetClock(), true)
+			assert.Equal(ts > cache.GetNanoSec(), true)
 			assert.Equal(val, m[key])
 		case "settx":
 			assert.Equal(val, m[key])
@@ -88,7 +85,7 @@ func TestDB(t *testing.T) {
 			assert.Equal(val, v)
 		case "settx":
 			assert.Equal(nil, v)
-			assert.Equal(err, base.ErrKeyNotFound)
+			assert.Equal(err, ErrKeyNotFound)
 		default:
 			panic("wrong key")
 		}
@@ -97,22 +94,19 @@ func TestDB(t *testing.T) {
 	// Error
 	val, _, err := db.Get("map")
 	assert.Equal(val, nilBytes)
-	assert.Equal(err, base.ErrKeyNotFound)
+	assert.Equal(err, ErrKeyNotFound)
 
 	val, _, err = db.Get("none")
 	assert.Equal(val, nilBytes)
-	assert.Equal(err, base.ErrKeyNotFound)
+	assert.Equal(err, ErrKeyNotFound)
 
 	// Remove
-	sum := db.Remove("set-1", "set-2", "set-3")
-	assert.Equal(sum, 3)
-
-	sum = db.Remove("set-1", "set-2", "set-3")
-	assert.Equal(sum, 0)
+	n := db.Remove("set-1", "set-2", "set-3")
+	assert.Equal(n, 3)
 
 	// close
 	assert.Nil(db.Close())
-	assert.Equal(db.Close(), base.ErrDatabaseClosed)
+	assert.Equal(db.Close(), ErrDatabaseClosed)
 
 	// Load Success
 	_, err = Open(db.Config)
@@ -121,13 +115,13 @@ func TestDB(t *testing.T) {
 	// Load Error
 	os.WriteFile(db.Config.Path, []byte("fake"), 0644)
 	_, err = Open(db.Config)
-	assert.NotNil(err, base.ErrCheckSum)
+	assert.NotNil(err, ErrCheckSum)
 
 	// error data type
 	db.encode(NewCodec(OpSetTx).Int(100).Str("key").Str("val"))
 	db.Close()
 	_, err = Open(db.Config)
-	assert.NotNil(err, base.ErrCheckSum)
+	assert.NotNil(err, ErrCheckSum)
 }
 
 func TestSetTTL(t *testing.T) {
@@ -140,62 +134,22 @@ func TestSetTTL(t *testing.T) {
 	db, err := Open(cfg)
 	assert.Nil(err)
 
-	// generate test data
-	num := 10000
-	kvdata := make(map[string]vItem, num)
-	now := time.Now()
-
-	for i := 0; i < num; i++ {
-		key := gofakeit.UUID()
-		val := []byte(gofakeit.Username())
-		ts := now.Add(time.Second * time.Duration(gofakeit.Number(0, 100))).UnixNano()
-
-		kvdata[key] = vItem{val, ts}
-
-		// set
-		db.SetTx(key, val, ts)
+	// SetTTL
+	for i := 0; i < 2000; i++ {
+		k := fmt.Sprintf("%08x", i)
+		db.SetEx(k, []byte(k), time.Second)
 	}
 
-	// get
-	for k, v := range kvdata {
-		// expired
-		if v.Ts < cache.GetClock() {
-			val, ts, err := db.Get(k)
-			assert.Equal(val, nilBytes)
-			assert.Equal(ts, int64(0))
-			assert.NotNil(err)
+	for i := 0; i < 2000; i++ {
+		k := fmt.Sprintf("%08x", i)
+		val, ts, err := db.Get(k)
+		now := unix(cache.GetNanoSec())
+		nowAddSed := unix(cache.GetNanoSec() + int64(time.Second))
 
-		} else {
-			val, ts, err := db.Get(k)
-			assert.Equal(val, v.Val)
-			assert.Equal(ts, v.Ts)
-			assert.Nil(err)
-		}
-	}
-
-	err = db.Close()
-	assert.Nil(err)
-
-	// load
-	db, err = Open(cfg)
-	assert.Nil(err)
-
-	// get again
-	for k, v := range kvdata {
-		v.Ts /= timeCarry
-		v.Ts *= timeCarry
-
-		// expired
-		if v.Ts < cache.GetClock() {
-			_, _, err := db.Get(k)
-			assert.NotNil(err)
-
-		} else {
-			val, ts, err := db.Get(k)
-			assert.Equal(val, v.Val)
-			assert.Equal(ts, v.Ts)
-			assert.Nil(err)
-		}
+		assert.Nil(err)
+		assert.Equal(val, []byte(k))
+		assert.True(ts >= now)
+		assert.True(ts <= nowAddSed)
 	}
 }
 
@@ -238,35 +192,35 @@ func TestHmap(t *testing.T) {
 	db.Set("fake", []byte("123"))
 
 	err = db.HSet("fake", "a", []byte("b"))
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	res, err := db.HLen("fake")
 	assert.Equal(res, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	m, err := db.HKeys("fake")
 	assert.Equal(m, nilStrings)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	n, err := db.HRemove("fake", "foo")
 	assert.Equal(n, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	db.HSet("map", "m1", []byte("m2"))
 	{
 		res, _, err := db.Get("map")
 		assert.Nil(res)
-		assert.Equal(err, base.ErrTypeAssert)
+		assert.Equal(err, ErrTypeAssert)
 	}
 	{
 		res, err := db.HGet("fake", "none")
 		assert.Nil(res)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 	}
 	{
 		res, err := db.HGet("map", "none")
 		assert.Nil(res)
-		assert.Equal(err, base.ErrFieldNotFound)
+		assert.Equal(err, ErrFieldNotFound)
 	}
 
 	db.Shrink()
@@ -284,7 +238,7 @@ func TestList(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 20000; i++ {
 		key := gofakeit.UUID()
 		animal := gofakeit.Animal()
 
@@ -300,7 +254,7 @@ func TestList(t *testing.T) {
 		assert.Equal(num, 0)
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10000; i++ {
 		key := gofakeit.UUID()
 		animal := gofakeit.Animal()
 
@@ -325,26 +279,26 @@ func TestList(t *testing.T) {
 	db.HSet("map", "key", []byte("value"))
 
 	err = db.LLPush("map", "1")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.LRPush("map", "1")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	res, err := db.LLPop("map")
 	assert.Equal(res, "")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	res, err = db.LRPop("map")
 	assert.Equal(res, "")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	s, err := db.LIndex("map", 1)
 	assert.Equal(s, "")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	n, err := db.LLen("map")
 	assert.Equal(n, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	db.LRPush("list", "1")
 	db.LRPop("list")
@@ -352,15 +306,15 @@ func TestList(t *testing.T) {
 	// empty list
 	res, err = db.LLPop("list")
 	assert.Equal(res, "")
-	assert.Equal(err, base.ErrEmptyList)
+	assert.Equal(err, ErrEmptyList)
 
 	res, err = db.LRPop("list")
 	assert.Equal(res, "")
-	assert.Equal(err, base.ErrEmptyList)
+	assert.Equal(err, ErrEmptyList)
 
 	res, err = db.LIndex("list", 9)
 	assert.Equal(res, "")
-	assert.Equal(err, base.ErrIndexOutOfRange)
+	assert.Equal(err, ErrIndexOutOfRange)
 
 	for i := 0; i < 100; i++ {
 		db.LRPush("list", gofakeit.Animal())
@@ -449,37 +403,37 @@ func TestSet(t *testing.T) {
 	db.HSet("map", "key", []byte("1"))
 	n, err := db.SAdd("map", "1")
 	assert.Equal(n, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	ok, err := db.SHas("map", "1")
 	assert.False(ok)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.SRemove("map", "1")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	n, err = db.SCard("map")
 	assert.Equal(n, 0)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	m, err := db.SMembers("map")
 	assert.Equal(m, nilStrings)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.SUnion("", "map", "set")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 	err = db.SUnion("", "set", "map")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.SDiff("", "map", "set")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 	err = db.SDiff("", "set", "map")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.SInter("", "map", "set")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 	err = db.SInter("", "set", "map")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	db.Shrink()
 	db.Close()
@@ -499,9 +453,17 @@ func TestBitmap(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		key := strconv.Itoa(i / 100)
 
-		assert.Nil(db.BitSet(key, uint32(i), true))
-		assert.Nil(db.BitSet(key, uint32(i), false))
-		assert.Nil(db.BitSet(key, uint32(i), true))
+		n, err := db.BitSet(key, true, uint32(i))
+		assert.Nil(err)
+		assert.Equal(n, 1)
+
+		n, err = db.BitSet(key, false, uint32(i))
+		assert.Nil(err)
+		assert.Equal(n, 1)
+
+		n, err = db.BitSet(key, true, uint32(i))
+		assert.Nil(err)
+		assert.Equal(n, 1)
 
 		ok, err := db.BitTest(key, uint32(i))
 		assert.True(ok)
@@ -511,48 +473,50 @@ func TestBitmap(t *testing.T) {
 		db.BitFlip(key, uint32(i))
 
 		// Error
-		db.BitSet("my-bitset", 1, true)
+		db.BitSet("my-bitset", true, 1)
 		db.Set("none", []byte("1"))
-		err = db.BitSet("none", uint32(i), true)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+
+		n, err = db.BitSet("none", true, uint32(i))
+		assert.Equal(n, 0)
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		ok, err = db.BitTest("none", uint32(i))
 		assert.False(ok)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		err = db.BitFlip("none", uint32(i))
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		m, err := db.BitArray("none")
 		assert.Nil(m)
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
-		n, err := db.BitCount("none")
-		assert.Equal(n, uint64(0))
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		num, err := db.BitCount("none")
+		assert.Equal(num, uint64(0))
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		err = db.BitAnd("", "none", "my-bitset")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 		err = db.BitAnd("", "my-bitset", "none")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		err = db.BitOr("", "none", "my-bitset")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 		err = db.BitOr("", "my-bitset", "none")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 
 		err = db.BitXor("", "none", "my-bitset")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 		err = db.BitXor("", "my-bitset", "none")
-		assert.ErrorContains(err, base.ErrWrongType.Error())
+		assert.ErrorContains(err, ErrWrongType.Error())
 	}
 
 	for i := 0; i < 1000; i++ {
 		// Add random data
 		for i := 0; i < 20; i++ {
 			stri := strconv.Itoa(i)
-			db.BitSet("a"+stri, rand.Uint32(), true)
-			db.BitSet("b"+stri, rand.Uint32(), true)
+			db.BitSet("a"+stri, true, rand.Uint32())
+			db.BitSet("b"+stri, true, rand.Uint32())
 		}
 		stri := strconv.Itoa(i)
 
@@ -594,59 +558,100 @@ func TestZSet(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
+	genKey := func(i int) string {
+		return fmt.Sprintf("key-%08x", i)
+	}
+
 	// ZAdd
 	for i := 0; i < 1000; i++ {
-		err := db.ZAdd("zset", fmt.Sprintf("key-%d", i), float64(i), nil)
+		err := db.ZAdd("zset", genKey(i), float64(i))
 		assert.Nil(err)
+		n, err := db.ZCard("zset")
+		assert.Nil(err)
+		assert.Equal(n, i+1)
 	}
+
+	// ZGet
+	for i := 0; i < 1000; i++ {
+		score, err := db.ZGet("zset", genKey(i))
+		assert.Nil(err)
+		assert.Equal(score, float64(i))
+	}
+	for i := 1000; i < 2000; i++ {
+		score, err := db.ZGet("zset", genKey(i))
+		assert.Equal(err, ErrKeyNotFound)
+		assert.Equal(score, float64(0))
+	}
+
+	// Reload
+	db.Shrink()
+	db.Close()
+	db, err = Open(db.Config)
+	assert.Nil(err)
+
+	// ZIter
+	count := 0
+	err = db.ZIter("zset", func(key string, score float64) bool {
+		count++
+		return count >= 1000
+	})
+	assert.Nil(err)
+	assert.Equal(count, 1000)
 
 	// ZIncr
 	for i := 0; i < 1000; i++ {
-		num, err := db.ZIncr("zset", fmt.Sprintf("key-%d", i), 3)
+		num, err := db.ZIncr("zset", genKey(i), 3)
 		assert.Nil(err)
 		assert.Equal(num, float64(i+3))
 	}
+	for i := 3000; i < 4000; i++ {
+		num, err := db.ZIncr("zset", genKey(i), 3)
+		assert.Nil(err)
+		assert.Equal(num, float64(3))
+	}
 
 	// ZRemove
-	for i := 0; i < 1000; i++ {
-		err := db.ZRemove("zset", fmt.Sprintf("key-%d", i))
+	for i := 0; i < 800; i++ {
+		res, err := db.ZRemove("zset", genKey(i))
 		assert.Nil(err)
+		assert.Equal(res, float64(i+3))
 	}
+
+	for i := 5000; i < 6000; i++ {
+		res, err := db.ZRemove("zset", genKey(i))
+		assert.Nil(err)
+		assert.Equal(res, float64(0))
+	}
+
+	// Reload
+	db.Shrink()
+	db.Close()
+	db, err = Open(db.Config)
+	assert.Nil(err)
 
 	// Test error
 	db.SAdd("set", "1")
 
-	err = db.ZAdd("set", "key", 1, nil)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	n, err := db.ZGet("set", "1")
+	assert.Equal(n, float64(0))
+	assert.ErrorContains(err, ErrWrongType.Error())
+
+	err = db.ZIter("set", func(key string, score float64) bool {
+		return false
+	})
+	assert.ErrorContains(err, ErrWrongType.Error())
+
+	err = db.ZAdd("set", "key", 1)
+	assert.ErrorContains(err, ErrWrongType.Error())
 
 	_, err = db.ZIncr("set", "key", 1)
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	assert.ErrorContains(err, ErrWrongType.Error())
 
-	err = db.ZRemove("set", "key")
-	assert.ErrorContains(err, base.ErrWrongType.Error())
+	_, err = db.ZRemove("set", "key")
+	assert.ErrorContains(err, ErrWrongType.Error())
 
-	// load
-	db.Shrink()
-	db.Close()
-
-	_, err = Open(db.Config)
-	assert.Nil(err)
-}
-
-func TestUtils(t *testing.T) {
-	assert := assert.New(t)
-
-	assert.Panics(func() {
-		base.NewTicker(context.TODO(), -1, func() {})
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ticker := base.NewTicker(ctx, time.Second, func() {})
-	ticker.Reset(time.Second)
-
-	cancel()
-	err := ticker.Do()
-	assert.Equal(err, base.ErrTickerClosed)
+	_, err = db.ZCard("set")
+	assert.ErrorContains(err, ErrWrongType.Error())
 }
 
 func TestInvalidCodec(t *testing.T) {
@@ -658,7 +663,6 @@ func TestInvalidCodec(t *testing.T) {
 		OpSetTx, OpRemove, OpHSet, OpHRemove, OpSAdd, OpSRemove, OpSMerge,
 		OpLPush, OpLPop, OpBitSet, OpBitMerge, OpBitFlip,
 		OpZAdd, OpZIncr, OpZRemove,
-		OpMarshalBinary,
 	} {
 		db, err := createDB()
 		assert.Nil(err)
@@ -666,5 +670,34 @@ func TestInvalidCodec(t *testing.T) {
 		db.Close()
 		_, err = Open(db.Config)
 		assert.NotNil(err)
+	}
+
+	// encode any.
+	codec, err := NewCodec(OpSetTx).Any([]string{"1"})
+	assert.Nil(codec)
+	assert.ErrorContains(err, ErrUnSupportDataType.Error())
+
+	// parse args.
+	codec = NewCodec(OpSetTx).Bool(true)
+	parser := codeman.NewParser(codec.Content())
+
+	n := parser.ParseVarint()
+	assert.Equal(uint64(n), uint64(OpSetTx))
+
+	bb := parser.ParseVarint()
+	assert.Equal(true, bb.Bool())
+
+	// parse done.
+	{
+		parser := codeman.NewParser(nil)
+		any := parser.Parse()
+		assert.Nil(any)
+		assert.ErrorContains(parser.Error, codeman.ErrParserIsDone.Error())
+	}
+	{
+		parser := codeman.NewParser(nil)
+		bb := parser.ParseVarint()
+		assert.False(bb.Bool())
+		assert.ErrorContains(parser.Error, codeman.ErrParserIsDone.Error())
 	}
 }

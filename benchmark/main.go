@@ -297,7 +297,7 @@ func benchBitSet() {
 	for i := 0; i < 100*10000; i++ {
 		t1 := time.Now()
 
-		db.BitSet("bm", uint32(i), true)
+		db.BitSet("bm", true, uint32(i))
 
 		if i%10 == 0 {
 			td.Add(float64(time.Since(t1)), 1)

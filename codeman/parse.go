@@ -6,8 +6,9 @@ import (
 )
 
 var (
-	ErrParserIsDone = errors.New("Parser is done")
-	ErrParseData    = errors.New("parse data error")
+	ErrParserIsDone      = errors.New("rotom/codeman: parser is done")
+	ErrParseData         = errors.New("rotom/codeman: parse data error")
+	ErrUnSupportDataType = errors.New("rotom/codeman: unsupport data type")
 )
 
 type Parser struct {
@@ -21,7 +22,7 @@ func NewParser(buf []byte) *Parser {
 }
 
 // Parse
-func (s *Parser) Parse() (res AnyResult) {
+func (s *Parser) Parse() (res anyResult) {
 	if s.Error != nil {
 		return nil
 	}
@@ -30,7 +31,7 @@ func (s *Parser) Parse() (res AnyResult) {
 }
 
 // ParseVarint
-func (s *Parser) ParseVarint() (num VarintResult) {
+func (s *Parser) ParseVarint() (num varintResult) {
 	if s.Error != nil {
 		return 0
 	}
@@ -39,16 +40,13 @@ func (s *Parser) ParseVarint() (num VarintResult) {
 }
 
 // Parse parses a record from Parser.
-func (s *Parser) parse() (AnyResult, error) {
+func (s *Parser) parse() (anyResult, error) {
 	if s.Done() {
 		return nil, ErrParserIsDone
 	}
 
 	// parses varint length.
 	num, i := binary.Uvarint(s.b)
-	if i == 0 {
-		return nil, ErrParseData
-	}
 	klen := int(num)
 
 	// bound check.
@@ -63,19 +61,16 @@ func (s *Parser) parse() (AnyResult, error) {
 }
 
 // Parse parses a record from Parser.
-func (s *Parser) parseVarint() (VarintResult, error) {
+func (s *Parser) parseVarint() (varintResult, error) {
 	if s.Done() {
 		return 0, ErrParserIsDone
 	}
 
 	// parses varint.
 	num, i := binary.Uvarint(s.b)
-	if i == 0 {
-		return 0, ErrParseData
-	}
 	s.b = s.b[i:]
 
-	return VarintResult(num), nil
+	return varintResult(num), nil
 }
 
 func (s *Parser) Done() bool {

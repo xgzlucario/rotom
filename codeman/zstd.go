@@ -15,7 +15,6 @@ var (
 // Compress
 func Compress(src, dst []byte) []byte {
 	if dst == nil {
-		// Assuming 25% compression.
 		dst = make([]byte, 0, len(src)/4)
 	}
 	return encoder.EncodeAll(src, dst)

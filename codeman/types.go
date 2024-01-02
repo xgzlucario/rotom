@@ -1,4 +1,4 @@
-package base
+package codeman
 
 import (
 	"golang.org/x/exp/constraints"
@@ -19,19 +19,3 @@ type Binarier interface {
 	MarshalBinary() ([]byte, error)
 	UnmarshalBinary([]byte) error
 }
-
-// Writer
-type Writer interface {
-	WriteString(string) error
-	WriteByte(byte) error
-	Write([]byte) error
-}
-
-// SyncPolicy represents how often data is synced to disk.
-type SyncPolicy byte
-
-const (
-	Never SyncPolicy = iota
-	EverySecond
-	// TODO: Sync
-)

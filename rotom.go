@@ -4,19 +4,23 @@ package rotom
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"hash/crc32"
-	"log/slog"
 	"os"
 	"sync"
 	"time"
 
 	cmap "github.com/orcaman/concurrent-map/v2"
 	cache "github.com/xgzlucario/GigaCache"
-	"github.com/xgzlucario/rotom/base"
 	"github.com/xgzlucario/rotom/codeman"
 	"github.com/xgzlucario/rotom/structx"
+)
+
+const (
+	noTTL = 0
+
+	KB = 1024
+	MB = 1024 * KB
 )
 
 // Operations.
@@ -43,8 +47,6 @@ const (
 	OpZAdd
 	OpZIncr
 	OpZRemove
-	// others
-	OpMarshalBinary
 )
 
 const (
@@ -57,7 +59,7 @@ const (
 )
 
 const (
-	timeCarry = 1e6
+	timeCarry = 1e9
 )
 
 // Cmd
@@ -80,7 +82,7 @@ var cmdTable = []Cmd{
 		}
 
 		// check ttl
-		if ts < cache.GetClock() && ts != noTTL {
+		if ts < cache.GetNanoSec() && ts != noTTL {
 			return nil
 		}
 		switch tp {
@@ -116,14 +118,14 @@ var cmdTable = []Cmd{
 			e.cm.Set(key, m)
 
 		case TypeZSet:
-			m := structx.NewZSet[string, float64, []byte]()
+			m := structx.NewZSet[string, float64]()
 			if err := m.UnmarshalJSON(val); err != nil {
 				return err
 			}
 			e.cm.Set(key, m)
 
 		default:
-			return fmt.Errorf("%w: %d", base.ErrUnSupportDataType, tp)
+			return fmt.Errorf("%w: %d", ErrUnSupportDataType, tp)
 		}
 
 		return nil
@@ -210,7 +212,7 @@ var cmdTable = []Cmd{
 		case mergeTypeXOr:
 			return e.SDiff(key, items...)
 		}
-		return errors.New("invalid bit op")
+		return ErrInvalidBitmapOperation
 	}},
 
 	{OpLPush, func(e *Engine, decoder *codeman.Parser) error {
@@ -229,7 +231,7 @@ var cmdTable = []Cmd{
 		case listDirectionRight:
 			return e.LRPush(key, items...)
 		}
-		return errors.New("invalid list direction")
+		return ErrInvalidListDirect
 	}},
 
 	{OpLPop, func(e *Engine, decoder *codeman.Parser) (err error) {
@@ -247,7 +249,7 @@ var cmdTable = []Cmd{
 		case listDirectionRight:
 			_, err = e.LRPop(key)
 		default:
-			err = errors.New("invalid list direction")
+			err = ErrInvalidListDirect
 		}
 		return
 	}},
@@ -255,14 +257,15 @@ var cmdTable = []Cmd{
 	{OpBitSet, func(e *Engine, decoder *codeman.Parser) error {
 		// key, offset, val
 		key := decoder.Parse().Str()
-		offset := decoder.ParseVarint().Uint32()
 		val := decoder.ParseVarint().Bool()
+		offsets := decoder.Parse().Uint32Slice()
 
 		if decoder.Error != nil {
 			return decoder.Error
 		}
 
-		return e.BitSet(key, offset, val)
+		_, err := e.BitSet(key, val, offsets...)
+		return err
 	}},
 
 	{OpBitFlip, func(e *Engine, decoder *codeman.Parser) error {
@@ -295,21 +298,20 @@ var cmdTable = []Cmd{
 		case mergeTypeXOr:
 			return e.BitXor(key, items...)
 		}
-		return errors.New("invalid bit op")
+		return ErrInvalidBitmapOperation
 	}},
 
 	{OpZAdd, func(e *Engine, decoder *codeman.Parser) error {
-		// key, field, score, val
+		// key, field, score
 		key := decoder.Parse().Str()
 		field := decoder.Parse().Str()
 		score := decoder.ParseVarint().Float64()
-		val := decoder.Parse()
 
 		if decoder.Error != nil {
 			return decoder.Error
 		}
 
-		return e.ZAdd(key, field, score, val)
+		return e.ZAdd(key, field, score)
 	}},
 
 	{OpZIncr, func(e *Engine, decoder *codeman.Parser) error {
@@ -335,18 +337,8 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
-		return e.ZRemove(key, field)
-	}},
-
-	{OpMarshalBinary, func(e *Engine, decoder *codeman.Parser) error {
-		// val
-		val := decoder.Parse()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-
-		return e.m.UnmarshalBinary(val)
+		_, err := e.ZRemove(key, field)
+		return err
 	}},
 }
 
@@ -362,55 +354,15 @@ const (
 	TypeBitmap
 )
 
-const (
-	noTTL = 0
-
-	KB = 1024
-	MB = 1024 * KB
-)
-
 // Type aliases for structx types.
 type (
 	String = []byte
 	Map    = *structx.SyncMap
 	Set    = *structx.Set[string]
 	List   = *structx.List[string]
-	ZSet   = *structx.ZSet[string, float64, []byte]
+	ZSet   = *structx.ZSet[string, float64]
 	BitMap = *structx.Bitmap
 )
-
-var (
-	// Default config for db
-	DefaultConfig = Config{
-		Path:             "rotom.db",
-		ShardCount:       1024,
-		SyncPolicy:       base.EverySecond,
-		ShrinkInterval:   time.Minute,
-		RunSkipLoadError: true,
-		Logger:           slog.Default(),
-	}
-
-	// No persistent config
-	NoPersistentConfig = Config{
-		ShardCount: 1024,
-		SyncPolicy: base.Never,
-		Logger:     slog.Default(),
-	}
-)
-
-// Config represents the configuration for a Store.
-type Config struct {
-	ShardCount int
-
-	Path string // Path of db file.
-
-	SyncPolicy     base.SyncPolicy // Data sync policy.
-	ShrinkInterval time.Duration   // Shrink db file interval.
-
-	RunSkipLoadError bool // Starts when loading db file error.
-
-	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
-}
 
 // Engine represents a rotom engine for storage.
 type Engine struct {
@@ -420,7 +372,7 @@ type Engine struct {
 	// context.
 	ctx     context.Context
 	cancel  context.CancelFunc
-	tickers [2]*base.Ticker
+	tickers [2]*Ticker
 
 	// if db loading encode not allowed.
 	loading bool
@@ -447,10 +399,10 @@ func Open(conf Config) (*Engine, error) {
 		ctx:     ctx,
 		cancel:  cancel,
 		loading: true,
-		buf:     bytes.NewBuffer(nil),
-		rwbuf:   bytes.NewBuffer(nil),
-		tickers: [2]*base.Ticker{},
-		m:       cache.New(conf.ShardCount),
+		buf:     bytes.NewBuffer(make([]byte, 0, 1024)),
+		rwbuf:   bytes.NewBuffer(make([]byte, 0, 1024)),
+		tickers: [2]*Ticker{},
+		m:       cache.New(cache.DefaultOption),
 		cm:      cmap.New[any](),
 		crc:     crc32.MakeTable(crc32.Castagnoli),
 	}
@@ -462,9 +414,9 @@ func Open(conf Config) (*Engine, error) {
 	}
 	e.loading = false
 
-	if e.SyncPolicy == base.EverySecond {
+	if e.SyncPolicy == EverySecond {
 		// sync buffer to disk.
-		e.tickers[0] = base.NewTicker(ctx, time.Second, func() {
+		e.tickers[0] = NewTicker(ctx, time.Second, func() {
 			e.Lock()
 			_, err := e.writeTo(e.buf, e.Path)
 			e.Unlock()
@@ -474,7 +426,7 @@ func Open(conf Config) (*Engine, error) {
 		})
 
 		// shrink db.
-		e.tickers[1] = base.NewTicker(ctx, e.ShrinkInterval, func() {
+		e.tickers[1] = NewTicker(ctx, e.ShrinkInterval, func() {
 			e.Lock()
 			e.shrink()
 			e.Unlock()
@@ -490,7 +442,7 @@ func Open(conf Config) (*Engine, error) {
 func (e *Engine) Close() error {
 	select {
 	case <-e.ctx.Done():
-		return base.ErrDatabaseClosed
+		return ErrDatabaseClosed
 	default:
 		e.Lock()
 		_, err := e.writeTo(e.buf, e.Path)
@@ -502,7 +454,7 @@ func (e *Engine) Close() error {
 
 // encode
 func (e *Engine) encode(cd *codeman.Codec) {
-	if e.SyncPolicy == base.Never {
+	if e.SyncPolicy == Never {
 		return
 	}
 	if e.loading {
@@ -523,12 +475,12 @@ func NewCodec(op Operation) *codeman.Codec {
 func (e *Engine) Get(key string) ([]byte, int64, error) {
 	// check
 	if e.cm.Has(key) {
-		return nil, 0, base.ErrTypeAssert
+		return nil, 0, ErrTypeAssert
 	}
 	// get
 	val, ts, ok := e.m.Get(key)
 	if !ok {
-		return nil, 0, base.ErrKeyNotFound
+		return nil, 0, ErrKeyNotFound
 	}
 	return val, ts, nil
 }
@@ -540,7 +492,7 @@ func (e *Engine) Set(key string, val []byte) {
 
 // SetEx store key-value pair with ttl.
 func (e *Engine) SetEx(key string, val []byte, ttl time.Duration) {
-	e.SetTx(key, val, cache.GetClock()+int64(ttl))
+	e.SetTx(key, val, cache.GetNanoSec()+int64(ttl))
 }
 
 // SetTx store key-value pair with deadline.
@@ -553,25 +505,26 @@ func (e *Engine) SetTx(key string, val []byte, ts int64) {
 }
 
 // Remove
-func (e *Engine) Remove(keys ...string) int {
+func (e *Engine) Remove(keys ...string) (n int) {
 	e.encode(NewCodec(OpRemove).StrSlice(keys))
-	var sum int
 	for _, key := range keys {
 		if e.m.Delete(key) {
-			sum++
+			n++
 		}
 	}
-	return sum
-}
-
-// Keys
-func (e *Engine) Keys() []string {
-	return append(e.m.Keys(), e.cm.Keys()...)
+	return
 }
 
 // Len
 func (e *Engine) Len() uint64 {
 	return e.m.Stat().Len + uint64(e.cm.Count())
+}
+
+// GC triggers the garbage collection to evict expired kv datas.
+func (e *Engine) GC() {
+	e.Lock()
+	e.m.Migrate()
+	e.Unlock()
 }
 
 // Scan
@@ -589,7 +542,7 @@ func (e *Engine) HGet(key, field string) ([]byte, error) {
 	}
 	res, ok := m.Get(field)
 	if !ok {
-		return nil, base.ErrFieldNotFound
+		return nil, ErrFieldNotFound
 	}
 	return res, nil
 }
@@ -782,7 +735,7 @@ func (e *Engine) LIndex(key string, i int) (string, error) {
 	}
 	res, ok := ls.Index(i)
 	if !ok {
-		return "", base.ErrIndexOutOfRange
+		return "", ErrIndexOutOfRange
 	}
 	return res, nil
 }
@@ -795,7 +748,7 @@ func (e *Engine) LLPop(key string) (string, error) {
 	}
 	res, ok := ls.LPop()
 	if !ok {
-		return "", base.ErrEmptyList
+		return "", ErrEmptyList
 	}
 	e.encode(NewCodec(OpLPop).Byte(listDirectionLeft).Str(key))
 
@@ -810,7 +763,7 @@ func (e *Engine) LRPop(key string) (string, error) {
 	}
 	res, ok := ls.RPop()
 	if !ok {
-		return "", base.ErrEmptyList
+		return "", ErrEmptyList
 	}
 	e.encode(NewCodec(OpLPop).Byte(listDirectionRight).Str(key))
 
@@ -836,20 +789,21 @@ func (e *Engine) BitTest(key string, offset uint32) (bool, error) {
 }
 
 // BitSet
-func (e *Engine) BitSet(key string, offset uint32, val bool) error {
+func (e *Engine) BitSet(key string, val bool, offsets ...uint32) (int, error) {
 	bm, err := e.fetchBitMap(key, true)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	e.encode(NewCodec(OpBitSet).Str(key).Uint(offset).Bool(val))
+	e.encode(NewCodec(OpBitSet).Str(key).Bool(val).Uint32Slice(offsets))
 
+	var n int
 	if val {
-		bm.Add(offset)
+		n = bm.Add(offsets...)
 	} else {
-		bm.Remove(offset)
+		n = bm.Remove(offsets...)
 	}
 
-	return nil
+	return n, nil
 }
 
 // BitFlip
@@ -945,14 +899,48 @@ func (e *Engine) BitCount(key string) (uint64, error) {
 	return bm.Len(), err
 }
 
+// ZGet
+func (e *Engine) ZGet(zset, key string) (float64, error) {
+	zs, err := e.fetchZSet(zset)
+	if err != nil {
+		return 0, err
+	}
+	score, ok := zs.Get(key)
+	if !ok {
+		return 0, ErrKeyNotFound
+	}
+	return score, nil
+}
+
+// ZCard
+func (e *Engine) ZCard(zset string) (int, error) {
+	zs, err := e.fetchZSet(zset)
+	if err != nil {
+		return 0, err
+	}
+	return zs.Len(), nil
+}
+
+// ZIter
+func (e *Engine) ZIter(zset string, f func(string, float64) bool) error {
+	zs, err := e.fetchZSet(zset)
+	if err != nil {
+		return err
+	}
+	zs.Iter(func(k string, s float64) bool {
+		return f(k, s)
+	})
+	return nil
+}
+
 // ZAdd
-func (e *Engine) ZAdd(zset, key string, score float64, val []byte) error {
+func (e *Engine) ZAdd(zset, key string, score float64) error {
 	zs, err := e.fetchZSet(zset, true)
 	if err != nil {
 		return err
 	}
-	e.encode(NewCodec(OpZAdd).Str(zset).Str(key).Float(score).Bytes(val))
-	zs.SetWithScore(key, score, val)
+	e.encode(NewCodec(OpZAdd).Str(zset).Str(key).Float(score))
+	zs.Set(key, score)
 
 	return nil
 }
@@ -969,15 +957,15 @@ func (e *Engine) ZIncr(zset, key string, incr float64) (float64, error) {
 }
 
 // ZRemove
-func (e *Engine) ZRemove(zset, key string) error {
+func (e *Engine) ZRemove(zset string, key string) (float64, error) {
 	zs, err := e.fetchZSet(zset)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	e.encode(NewCodec(OpZRemove).Str(zset).Str(key))
-	zs.Delete(key)
+	res, _ := zs.Delete(key)
 
-	return nil
+	return res, nil
 }
 
 // writeTo writes the buffer into the file at the specified path.
@@ -1031,7 +1019,7 @@ func (e *Engine) load() error {
 			return blkParser.Error
 		}
 		if crc != crc32.Checksum(dataBlock, e.crc) {
-			return base.ErrCheckSum
+			return ErrCheckSum
 		}
 
 		data, err := codeman.Decompress(dataBlock, nil)
@@ -1061,17 +1049,15 @@ func (e *Engine) load() error {
 
 // rewrite write data to the file.
 func (e *Engine) shrink() {
-	data, err := e.m.MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
+	// Marshal String
+	e.m.Scan(func(key, value []byte, ttl int64) bool {
+		cd := NewCodec(OpSetTx).Int(TypeString).Bytes(key).Int(ttl / timeCarry).Bytes(value)
+		e.rwbuf.Write(cd.Content())
+		cd.Recycle()
+		return false
+	})
 
-	// Marshal bytes
-	cd := NewCodec(OpMarshalBinary).Bytes(data)
-	e.rwbuf.Write(cd.Content())
-	cd.Recycle()
-
-	// Marshal built-in structure
+	// Marshal built-in type
 	var _type Type
 	for t := range e.cm.IterBuffered() {
 		switch t.Val.(type) {
@@ -1140,7 +1126,7 @@ func (e *Engine) fetchBitMap(key string, setnx ...bool) (bm BitMap, err error) {
 // fetchZSet
 func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 	return fetch(e, key, func() ZSet {
-		return structx.NewZSet[string, float64, []byte]()
+		return structx.NewZSet[string, float64]()
 	}, setnx...)
 }
 
@@ -1148,7 +1134,7 @@ func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err error) {
 	// check from bytes cache.
 	if _, _, ok := e.m.Get(key); ok {
-		return v, base.ErrWrongType
+		return v, ErrWrongType
 	}
 
 	item, ok := e.cm.Get(key)
@@ -1157,7 +1143,7 @@ func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err 
 		if ok {
 			return v, nil
 		}
-		return v, fmt.Errorf("%w: %T->%T", base.ErrWrongType, item, v)
+		return v, fmt.Errorf("%w: %T->%T", ErrWrongType, item, v)
 	}
 
 	v = new()
@@ -1168,7 +1154,7 @@ func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err 
 }
 
 // formatSize
-func formatSize[T base.Integer](size T) string {
+func formatSize[T codeman.Integer](size T) string {
 	switch {
 	case size < KB:
 		return fmt.Sprintf("%dB", size)

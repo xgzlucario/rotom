@@ -1,4 +1,4 @@
-package base
+package rotom
 
 import (
 	"errors"
@@ -25,7 +25,7 @@ var (
 
 	ErrNotNumberic = errors.New("value is not numberic")
 
-	ErrCheckSum = errors.New("crc checksum error, record line is invalid")
+	ErrCheckSum = errors.New("crc checksum error")
 
 	ErrInvalidArgs = errors.New("invalid args")
 
@@ -38,4 +38,8 @@ var (
 	ErrIndexOutOfRange = errors.New("index out of range")
 
 	ErrEmptyList = errors.New("list is empty")
+
+	ErrInvalidBitmapOperation = errors.New("invalid bitmap operation")
+
+	ErrInvalidListDirect = errors.New("invalid list direct")
 )

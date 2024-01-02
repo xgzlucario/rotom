@@ -10,8 +10,8 @@ type Set[T comparable] struct {
 }
 
 // NewSet
-func NewSet[T comparable](val ...T) *Set[T] {
-	return &Set[T]{mapset.NewSet[T](val...)}
+func NewSet[T comparable]() *Set[T] {
+	return &Set[T]{mapset.NewSet[T]()}
 }
 
 // Clone
