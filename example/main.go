@@ -13,7 +13,7 @@ import (
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
-	db, err := rotom.Open(rotom.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultOptions)
 	if err != nil {
 		panic(err)
 	}

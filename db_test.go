@@ -3,7 +3,6 @@ package rotom
 import (
 	"fmt"
 	"math/rand"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,14 +19,10 @@ var (
 	nilStrings []string
 )
 
-func unix(nanosec int64) int64 {
-	return (nanosec / timeCarry) * timeCarry
-}
-
-func createDB() (*Engine, error) {
-	cfg := DefaultConfig
-	cfg.Path = fmt.Sprintf("%s-%d.db", gofakeit.UUID(), time.Now().UnixNano())
-	return Open(cfg)
+func createDB() (*DB, error) {
+	options := DefaultOptions
+	options.DirPath = fmt.Sprintf("tmp-%s", gofakeit.UUID())
+	return Open(options)
 }
 
 func TestDB(t *testing.T) {
@@ -109,48 +104,8 @@ func TestDB(t *testing.T) {
 	assert.Equal(db.Close(), ErrDatabaseClosed)
 
 	// Load Success
-	_, err = Open(db.Config)
+	_, err = Open(*db.Options)
 	assert.Nil(err)
-
-	// Load Error
-	os.WriteFile(db.Config.Path, []byte("fake"), 0644)
-	_, err = Open(db.Config)
-	assert.NotNil(err, ErrCheckSum)
-
-	// error data type
-	db.encode(NewCodec(OpSetTx).Int(100).Str("key").Str("val"))
-	db.Close()
-	_, err = Open(db.Config)
-	assert.NotNil(err, ErrCheckSum)
-}
-
-func TestSetTTL(t *testing.T) {
-	println("===== TestSetTTL =====")
-	assert := assert.New(t)
-
-	cfg := DefaultConfig
-	cfg.Path = gofakeit.UUID() + ".db"
-
-	db, err := Open(cfg)
-	assert.Nil(err)
-
-	// SetTTL
-	for i := 0; i < 2000; i++ {
-		k := fmt.Sprintf("%08x", i)
-		db.SetEx(k, []byte(k), time.Second)
-	}
-
-	for i := 0; i < 2000; i++ {
-		k := fmt.Sprintf("%08x", i)
-		val, ts, err := db.Get(k)
-		now := unix(cache.GetNanoSec())
-		nowAddSed := unix(cache.GetNanoSec() + int64(time.Second))
-
-		assert.Nil(err)
-		assert.Equal(val, []byte(k))
-		assert.True(ts >= now)
-		assert.True(ts <= nowAddSed)
-	}
 }
 
 func TestHmap(t *testing.T) {
@@ -223,11 +178,15 @@ func TestHmap(t *testing.T) {
 		assert.Equal(err, ErrFieldNotFound)
 	}
 
+	// reload
+	db.Close()
+	db, err = Open(*db.Options)
+	assert.Nil(err)
+
+	// shrink and reload
 	db.Shrink()
 	db.Close()
-
-	// Load
-	_, err = Open(db.Config)
+	_, err = Open(*db.Options)
 	assert.Nil(err)
 }
 
@@ -320,11 +279,15 @@ func TestList(t *testing.T) {
 		db.LRPush("list", gofakeit.Animal())
 	}
 
+	// reload
+	db.Close()
+	db, err = Open(*db.Options)
+	assert.Nil(err)
+
+	// shrink and reload
 	db.Shrink()
 	db.Close()
-
-	// Load
-	_, err = Open(db.Config)
+	_, err = Open(*db.Options)
 	assert.Nil(err)
 }
 
@@ -435,11 +398,15 @@ func TestSet(t *testing.T) {
 	err = db.SInter("", "set", "map")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
+	// reload
+	db.Close()
+	db, err = Open(*db.Options)
+	assert.Nil(err)
+
+	// shrink and reload
 	db.Shrink()
 	db.Close()
-
-	// Load
-	_, err = Open(db.Config)
+	_, err = Open(*db.Options)
 	assert.Nil(err)
 }
 
@@ -543,11 +510,15 @@ func TestBitmap(t *testing.T) {
 		assert.ElementsMatch(m1, m2)
 	}
 
+	// reload
+	db.Close()
+	db, err = Open(*db.Options)
+	assert.Nil(err)
+
+	// shrink and reload
 	db.Shrink()
 	db.Close()
-
-	// Load
-	_, err = Open(db.Config)
+	_, err = Open(*db.Options)
 	assert.Nil(err)
 }
 
@@ -558,45 +529,58 @@ func TestZSet(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
-	genKey := func(i int) string {
-		return fmt.Sprintf("key-%08x", i)
-	}
+	genKey := func(i int) string { return fmt.Sprintf("key-%06d", i) }
 
 	// ZAdd
 	for i := 0; i < 1000; i++ {
 		err := db.ZAdd("zset", genKey(i), float64(i))
 		assert.Nil(err)
+
+		// card
 		n, err := db.ZCard("zset")
 		assert.Nil(err)
 		assert.Equal(n, i+1)
 	}
 
-	// ZGet
-	for i := 0; i < 1000; i++ {
-		score, err := db.ZGet("zset", genKey(i))
+	check := func() {
+		// exist
+		for i := 0; i < 1000; i++ {
+			// card
+			n, err := db.ZCard("zset")
+			assert.Nil(err)
+			assert.Equal(n, 1000)
+
+			// zget
+			score, err := db.ZGet("zset", genKey(i))
+			assert.Nil(err)
+			assert.Equal(score, float64(i))
+		}
+
+		// not exist
+		for i := 1000; i < 2000; i++ {
+			score, err := db.ZGet("zset", genKey(i))
+			assert.Equal(err, ErrKeyNotFound)
+			assert.Equal(score, float64(0))
+		}
+
+		// iter
+		count := 0
+		err = db.ZIter("zset", func(key string, score float64) bool {
+			count++
+			return count >= 1000
+		})
 		assert.Nil(err)
-		assert.Equal(score, float64(i))
+		assert.Equal(count, 1000)
 	}
-	for i := 1000; i < 2000; i++ {
-		score, err := db.ZGet("zset", genKey(i))
-		assert.Equal(err, ErrKeyNotFound)
-		assert.Equal(score, float64(0))
-	}
+
+	check()
 
 	// Reload
-	db.Shrink()
 	db.Close()
-	db, err = Open(db.Config)
+	db, err = Open(*db.Options)
 	assert.Nil(err)
 
-	// ZIter
-	count := 0
-	err = db.ZIter("zset", func(key string, score float64) bool {
-		count++
-		return count >= 1000
-	})
-	assert.Nil(err)
-	assert.Equal(count, 1000)
+	check()
 
 	// ZIncr
 	for i := 0; i < 1000; i++ {
@@ -612,21 +596,24 @@ func TestZSet(t *testing.T) {
 
 	// ZRemove
 	for i := 0; i < 800; i++ {
-		res, err := db.ZRemove("zset", genKey(i))
+		err := db.ZRemove("zset", genKey(i))
 		assert.Nil(err)
-		assert.Equal(res, float64(i+3))
 	}
 
 	for i := 5000; i < 6000; i++ {
-		res, err := db.ZRemove("zset", genKey(i))
+		err := db.ZRemove("zset", genKey(i))
 		assert.Nil(err)
-		assert.Equal(res, float64(0))
 	}
 
-	// Reload
+	// reload
+	db.Close()
+	db, err = Open(*db.Options)
+	assert.Nil(err)
+
+	// shrink and reload
 	db.Shrink()
 	db.Close()
-	db, err = Open(db.Config)
+	db, err = Open(*db.Options)
 	assert.Nil(err)
 
 	// Test error
@@ -647,7 +634,7 @@ func TestZSet(t *testing.T) {
 	_, err = db.ZIncr("set", "key", 1)
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	_, err = db.ZRemove("set", "key")
+	err = db.ZRemove("set", "key")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	_, err = db.ZCard("set")
@@ -668,7 +655,7 @@ func TestInvalidCodec(t *testing.T) {
 		assert.Nil(err)
 		db.encode(NewCodec(op).Int(100))
 		db.Close()
-		_, err = Open(db.Config)
+		_, err = Open(*db.Options)
 		assert.NotNil(err)
 	}
 

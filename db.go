@@ -2,25 +2,21 @@
 package rotom
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"hash/crc32"
-	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	cmap "github.com/orcaman/concurrent-map/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/codeman"
 	"github.com/xgzlucario/rotom/structx"
+	"github.com/xgzlucario/rotom/wal"
 )
 
 const (
 	noTTL = 0
-
-	KB = 1024
-	MB = 1024 * KB
 )
 
 // Operations.
@@ -58,36 +54,31 @@ const (
 	listDirectionRight
 )
 
-const (
-	timeCarry = 1e9
-)
-
 // Cmd
 type Cmd struct {
 	op   Operation
-	hook func(*Engine, *codeman.Parser) error
+	hook func(*DB, *codeman.Parser) error
 }
 
 // cmdTable defines the rNum and callback function required for the operation.
 var cmdTable = []Cmd{
-	{OpSetTx, func(e *Engine, decoder *codeman.Parser) error {
+	{OpSetTx, func(e *DB, decoder *codeman.Parser) error {
 		// type, key, ts, val
 		tp := decoder.ParseVarint().Int64()
 		key := decoder.Parse().Str()
-		ts := decoder.ParseVarint().Int64() * timeCarry
+		ts := decoder.ParseVarint().Int64()
 		val := decoder.Parse()
 
 		if decoder.Error != nil {
 			return decoder.Error
 		}
 
-		// check ttl
-		if ts < cache.GetNanoSec() && ts != noTTL {
-			return nil
-		}
 		switch tp {
 		case TypeString:
-			e.SetTx(key, val, ts)
+			// check ttl
+			if ts > cache.GetNanoSec() || ts == noTTL {
+				e.SetTx(key, val, ts)
+			}
 
 		case TypeList:
 			ls := structx.NewList[string]()
@@ -131,7 +122,7 @@ var cmdTable = []Cmd{
 		return nil
 	}},
 
-	{OpRemove, func(e *Engine, decoder *codeman.Parser) error {
+	{OpRemove, func(e *DB, decoder *codeman.Parser) error {
 		// keys
 		keys := decoder.Parse().StrSlice()
 
@@ -143,7 +134,7 @@ var cmdTable = []Cmd{
 		return nil
 	}},
 
-	{OpHSet, func(e *Engine, decoder *codeman.Parser) error {
+	{OpHSet, func(e *DB, decoder *codeman.Parser) error {
 		// key, field, val
 		key := decoder.Parse().Str()
 		field := decoder.Parse().Str()
@@ -156,7 +147,7 @@ var cmdTable = []Cmd{
 		return e.HSet(key, field, val)
 	}},
 
-	{OpHRemove, func(e *Engine, decoder *codeman.Parser) error {
+	{OpHRemove, func(e *DB, decoder *codeman.Parser) error {
 		// key, fields
 		key := decoder.Parse().Str()
 		fields := decoder.Parse().StrSlice()
@@ -169,7 +160,7 @@ var cmdTable = []Cmd{
 		return err
 	}},
 
-	{OpSAdd, func(e *Engine, decoder *codeman.Parser) error {
+	{OpSAdd, func(e *DB, decoder *codeman.Parser) error {
 		// key, items
 		key := decoder.Parse().Str()
 		items := decoder.Parse().StrSlice()
@@ -182,7 +173,7 @@ var cmdTable = []Cmd{
 		return err
 	}},
 
-	{OpSRemove, func(e *Engine, decoder *codeman.Parser) error {
+	{OpSRemove, func(e *DB, decoder *codeman.Parser) error {
 		// key, items
 		key := decoder.Parse().Str()
 		items := decoder.Parse().StrSlice()
@@ -194,7 +185,7 @@ var cmdTable = []Cmd{
 		return e.SRemove(key, items...)
 	}},
 
-	{OpSMerge, func(e *Engine, decoder *codeman.Parser) error {
+	{OpSMerge, func(e *DB, decoder *codeman.Parser) error {
 		// op, key, items
 		op := decoder.ParseVarint().Byte()
 		key := decoder.Parse().Str()
@@ -215,7 +206,7 @@ var cmdTable = []Cmd{
 		return ErrInvalidBitmapOperation
 	}},
 
-	{OpLPush, func(e *Engine, decoder *codeman.Parser) error {
+	{OpLPush, func(e *DB, decoder *codeman.Parser) error {
 		// direct, key, items
 		direct := decoder.ParseVarint().Byte()
 		key := decoder.Parse().Str()
@@ -234,7 +225,7 @@ var cmdTable = []Cmd{
 		return ErrInvalidListDirect
 	}},
 
-	{OpLPop, func(e *Engine, decoder *codeman.Parser) (err error) {
+	{OpLPop, func(e *DB, decoder *codeman.Parser) (err error) {
 		// direct, key
 		direct := decoder.ParseVarint().Byte()
 		key := decoder.Parse().Str()
@@ -254,7 +245,7 @@ var cmdTable = []Cmd{
 		return
 	}},
 
-	{OpBitSet, func(e *Engine, decoder *codeman.Parser) error {
+	{OpBitSet, func(e *DB, decoder *codeman.Parser) error {
 		// key, offset, val
 		key := decoder.Parse().Str()
 		val := decoder.ParseVarint().Bool()
@@ -268,7 +259,7 @@ var cmdTable = []Cmd{
 		return err
 	}},
 
-	{OpBitFlip, func(e *Engine, decoder *codeman.Parser) error {
+	{OpBitFlip, func(e *DB, decoder *codeman.Parser) error {
 		// key, offset
 		key := decoder.Parse().Str()
 		offset := decoder.ParseVarint().Uint32()
@@ -280,7 +271,7 @@ var cmdTable = []Cmd{
 		return e.BitFlip(key, offset)
 	}},
 
-	{OpBitMerge, func(e *Engine, decoder *codeman.Parser) error {
+	{OpBitMerge, func(e *DB, decoder *codeman.Parser) error {
 		// op, key, items
 		op := decoder.ParseVarint().Byte()
 		key := decoder.Parse().Str()
@@ -301,7 +292,7 @@ var cmdTable = []Cmd{
 		return ErrInvalidBitmapOperation
 	}},
 
-	{OpZAdd, func(e *Engine, decoder *codeman.Parser) error {
+	{OpZAdd, func(e *DB, decoder *codeman.Parser) error {
 		// key, field, score
 		key := decoder.Parse().Str()
 		field := decoder.Parse().Str()
@@ -314,7 +305,7 @@ var cmdTable = []Cmd{
 		return e.ZAdd(key, field, score)
 	}},
 
-	{OpZIncr, func(e *Engine, decoder *codeman.Parser) error {
+	{OpZIncr, func(e *DB, decoder *codeman.Parser) error {
 		// key, field, score
 		key := decoder.Parse().Str()
 		field := decoder.Parse().Str()
@@ -328,7 +319,7 @@ var cmdTable = []Cmd{
 		return err
 	}},
 
-	{OpZRemove, func(e *Engine, decoder *codeman.Parser) error {
+	{OpZRemove, func(e *DB, decoder *codeman.Parser) error {
 		// key, field
 		key := decoder.Parse().Str()
 		field := decoder.Parse().Str()
@@ -337,8 +328,7 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
-		_, err := e.ZRemove(key, field)
-		return err
+		return e.ZRemove(key, field)
 	}},
 }
 
@@ -364,10 +354,10 @@ type (
 	BitMap = *structx.Bitmap
 )
 
-// Engine represents a rotom engine for storage.
-type Engine struct {
+// DB represents a rotom database engine.
+type DB struct {
 	sync.Mutex
-	Config
+	*Options
 
 	// context.
 	ctx     context.Context
@@ -377,92 +367,81 @@ type Engine struct {
 	// if db loading encode not allowed.
 	loading bool
 
-	buf   *bytes.Buffer
-	rwbuf *bytes.Buffer
+	// write ahead log.
+	internalKey atomic.Uint64
+	wal         *wal.Log
 
 	// data for bytes.
 	m *cache.GigaCache
 
 	// data for built-in structure.
 	cm cmap.ConcurrentMap[string, any]
-
-	// crc.
-	crc *crc32.Table
 }
 
-// Open opens a database specified by config.
-// The file will be created automatically if not exist.
-func Open(conf Config) (*Engine, error) {
+// Open opens a database by options.
+func Open(options Options) (*DB, error) {
+	// create wal.
+	wal, err := wal.Open(options.DirPath, wal.DefaultOptions)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
-	e := &Engine{
-		Config:  conf,
+	db := &DB{
+		Options: &options,
 		ctx:     ctx,
 		cancel:  cancel,
 		loading: true,
-		buf:     bytes.NewBuffer(make([]byte, 0, 1024)),
-		rwbuf:   bytes.NewBuffer(make([]byte, 0, 1024)),
 		tickers: [2]*Ticker{},
+		wal:     wal,
 		m:       cache.New(cache.DefaultOption),
 		cm:      cmap.New[any](),
-		crc:     crc32.MakeTable(crc32.Castagnoli),
 	}
 
-	// load db from disk.
-	if err := e.load(); err != nil {
-		e.logError("db load error: %v", err)
+	// load db from wal.
+	if err := db.loadFromWal(); err != nil {
 		return nil, err
 	}
-	e.loading = false
+	db.loading = false
 
-	if e.SyncPolicy == EverySecond {
-		// sync buffer to disk.
-		e.tickers[0] = NewTicker(ctx, time.Second, func() {
-			e.Lock()
-			_, err := e.writeTo(e.buf, e.Path)
-			e.Unlock()
-			if err != nil {
-				e.logError("writeTo buffer error: %v", err)
-			}
+	if db.SyncPolicy == EverySecond {
+		// sync to disk.
+		db.tickers[0] = NewTicker(ctx, time.Second, func() {
+			db.wal.Sync()
 		})
 
 		// shrink db.
-		e.tickers[1] = NewTicker(ctx, e.ShrinkInterval, func() {
-			e.Lock()
-			e.shrink()
-			e.Unlock()
+		db.tickers[1] = NewTicker(ctx, db.ShrinkInterval, func() {
+			db.shrink()
 		})
 	}
 
-	e.logInfo("rotom is ready to go")
+	db.logInfo("rotom is ready to go")
 
-	return e, nil
+	return db, nil
 }
 
-// Close closes the db engine.
-func (e *Engine) Close() error {
+// Close closes the db.
+func (db *DB) Close() error {
 	select {
-	case <-e.ctx.Done():
+	case <-db.ctx.Done():
 		return ErrDatabaseClosed
 	default:
-		e.Lock()
-		_, err := e.writeTo(e.buf, e.Path)
-		e.Unlock()
-		e.cancel()
-		return err
+		db.wal.Sync()
+		db.cancel()
+		return db.wal.Close()
 	}
 }
 
 // encode
-func (e *Engine) encode(cd *codeman.Codec) {
-	if e.SyncPolicy == Never {
+func (db *DB) encode(cd *codeman.Codec) {
+	if db.SyncPolicy == Never {
 		return
 	}
-	if e.loading {
+	if db.loading {
 		return
 	}
-	e.Lock()
-	e.buf.Write(cd.Content())
-	e.Unlock()
+	db.wal.Write(db.internalKey.Add(1), cd.Content())
 	cd.Recycle()
 }
 
@@ -472,7 +451,7 @@ func NewCodec(op Operation) *codeman.Codec {
 }
 
 // Get
-func (e *Engine) Get(key string) ([]byte, int64, error) {
+func (e *DB) Get(key string) ([]byte, int64, error) {
 	// check
 	if e.cm.Has(key) {
 		return nil, 0, ErrTypeAssert
@@ -486,26 +465,26 @@ func (e *Engine) Get(key string) ([]byte, int64, error) {
 }
 
 // Set store key-value pair.
-func (e *Engine) Set(key string, val []byte) {
+func (e *DB) Set(key string, val []byte) {
 	e.SetTx(key, val, noTTL)
 }
 
 // SetEx store key-value pair with ttl.
-func (e *Engine) SetEx(key string, val []byte, ttl time.Duration) {
+func (e *DB) SetEx(key string, val []byte, ttl time.Duration) {
 	e.SetTx(key, val, cache.GetNanoSec()+int64(ttl))
 }
 
 // SetTx store key-value pair with deadline.
-func (e *Engine) SetTx(key string, val []byte, ts int64) {
+func (e *DB) SetTx(key string, val []byte, ts int64) {
 	if ts < 0 {
 		return
 	}
-	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts / timeCarry).Bytes(val))
+	e.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Bytes(val))
 	e.m.SetTx(key, val, ts)
 }
 
 // Remove
-func (e *Engine) Remove(keys ...string) (n int) {
+func (e *DB) Remove(keys ...string) (n int) {
 	e.encode(NewCodec(OpRemove).StrSlice(keys))
 	for _, key := range keys {
 		if e.m.Delete(key) {
@@ -516,26 +495,26 @@ func (e *Engine) Remove(keys ...string) (n int) {
 }
 
 // Len
-func (e *Engine) Len() uint64 {
+func (e *DB) Len() uint64 {
 	return e.m.Stat().Len + uint64(e.cm.Count())
 }
 
 // GC triggers the garbage collection to evict expired kv datas.
-func (e *Engine) GC() {
+func (e *DB) GC() {
 	e.Lock()
 	e.m.Migrate()
 	e.Unlock()
 }
 
 // Scan
-func (e *Engine) Scan(f func(string, []byte, int64) bool) {
+func (e *DB) Scan(f func(string, []byte, int64) bool) {
 	e.m.Scan(func(key, value []byte, ttl int64) bool {
 		return f(string(key), value, ttl)
 	})
 }
 
 // HGet
-func (e *Engine) HGet(key, field string) ([]byte, error) {
+func (e *DB) HGet(key, field string) ([]byte, error) {
 	m, err := e.fetchMap(key)
 	if err != nil {
 		return nil, err
@@ -548,7 +527,7 @@ func (e *Engine) HGet(key, field string) ([]byte, error) {
 }
 
 // HLen
-func (e *Engine) HLen(key string) (int, error) {
+func (e *DB) HLen(key string) (int, error) {
 	m, err := e.fetchMap(key)
 	if err != nil {
 		return 0, err
@@ -557,7 +536,7 @@ func (e *Engine) HLen(key string) (int, error) {
 }
 
 // HSet
-func (e *Engine) HSet(key, field string, val []byte) error {
+func (e *DB) HSet(key, field string, val []byte) error {
 	m, err := e.fetchMap(key, true)
 	if err != nil {
 		return err
@@ -569,7 +548,7 @@ func (e *Engine) HSet(key, field string, val []byte) error {
 }
 
 // HRemove
-func (e *Engine) HRemove(key string, fields ...string) (n int, err error) {
+func (e *DB) HRemove(key string, fields ...string) (n int, err error) {
 	m, err := e.fetchMap(key)
 	if err != nil {
 		return 0, err
@@ -584,7 +563,7 @@ func (e *Engine) HRemove(key string, fields ...string) (n int, err error) {
 }
 
 // HKeys
-func (e *Engine) HKeys(key string) ([]string, error) {
+func (e *DB) HKeys(key string) ([]string, error) {
 	m, err := e.fetchMap(key)
 	if err != nil {
 		return nil, err
@@ -593,7 +572,7 @@ func (e *Engine) HKeys(key string) ([]string, error) {
 }
 
 // SAdd
-func (e *Engine) SAdd(key string, items ...string) (int, error) {
+func (e *DB) SAdd(key string, items ...string) (int, error) {
 	s, err := e.fetchSet(key, true)
 	if err != nil {
 		return 0, err
@@ -603,7 +582,7 @@ func (e *Engine) SAdd(key string, items ...string) (int, error) {
 }
 
 // SRemove
-func (e *Engine) SRemove(key string, items ...string) error {
+func (e *DB) SRemove(key string, items ...string) error {
 	s, err := e.fetchSet(key)
 	if err != nil {
 		return err
@@ -614,7 +593,7 @@ func (e *Engine) SRemove(key string, items ...string) error {
 }
 
 // SHas returns whether the given items are all in the set.
-func (e *Engine) SHas(key string, items ...string) (bool, error) {
+func (e *DB) SHas(key string, items ...string) (bool, error) {
 	s, err := e.fetchSet(key)
 	if err != nil {
 		return false, err
@@ -623,7 +602,7 @@ func (e *Engine) SHas(key string, items ...string) (bool, error) {
 }
 
 // SCard
-func (e *Engine) SCard(key string) (int, error) {
+func (e *DB) SCard(key string) (int, error) {
 	s, err := e.fetchSet(key)
 	if err != nil {
 		return 0, err
@@ -632,7 +611,7 @@ func (e *Engine) SCard(key string) (int, error) {
 }
 
 // SMembers
-func (e *Engine) SMembers(key string) ([]string, error) {
+func (e *DB) SMembers(key string) ([]string, error) {
 	s, err := e.fetchSet(key)
 	if err != nil {
 		return nil, err
@@ -641,7 +620,7 @@ func (e *Engine) SMembers(key string) ([]string, error) {
 }
 
 // SUnion
-func (e *Engine) SUnion(dst string, src ...string) error {
+func (e *DB) SUnion(dst string, src ...string) error {
 	srcSet, err := e.fetchSet(src[0])
 	if err != nil {
 		return err
@@ -662,7 +641,7 @@ func (e *Engine) SUnion(dst string, src ...string) error {
 }
 
 // SInter
-func (e *Engine) SInter(dst string, src ...string) error {
+func (e *DB) SInter(dst string, src ...string) error {
 	srcSet, err := e.fetchSet(src[0])
 	if err != nil {
 		return err
@@ -683,7 +662,7 @@ func (e *Engine) SInter(dst string, src ...string) error {
 }
 
 // SDiff
-func (e *Engine) SDiff(dst string, src ...string) error {
+func (e *DB) SDiff(dst string, src ...string) error {
 	srcSet, err := e.fetchSet(src[0])
 	if err != nil {
 		return err
@@ -704,7 +683,7 @@ func (e *Engine) SDiff(dst string, src ...string) error {
 }
 
 // LLPush
-func (e *Engine) LLPush(key string, items ...string) error {
+func (e *DB) LLPush(key string, items ...string) error {
 	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
@@ -716,7 +695,7 @@ func (e *Engine) LLPush(key string, items ...string) error {
 }
 
 // LRPush
-func (e *Engine) LRPush(key string, items ...string) error {
+func (e *DB) LRPush(key string, items ...string) error {
 	ls, err := e.fetchList(key, true)
 	if err != nil {
 		return err
@@ -728,7 +707,7 @@ func (e *Engine) LRPush(key string, items ...string) error {
 }
 
 // LIndex
-func (e *Engine) LIndex(key string, i int) (string, error) {
+func (e *DB) LIndex(key string, i int) (string, error) {
 	ls, err := e.fetchList(key)
 	if err != nil {
 		return "", err
@@ -741,7 +720,7 @@ func (e *Engine) LIndex(key string, i int) (string, error) {
 }
 
 // LLPop
-func (e *Engine) LLPop(key string) (string, error) {
+func (e *DB) LLPop(key string) (string, error) {
 	ls, err := e.fetchList(key)
 	if err != nil {
 		return "", err
@@ -756,7 +735,7 @@ func (e *Engine) LLPop(key string) (string, error) {
 }
 
 // LRPop
-func (e *Engine) LRPop(key string) (string, error) {
+func (e *DB) LRPop(key string) (string, error) {
 	ls, err := e.fetchList(key)
 	if err != nil {
 		return "", err
@@ -771,7 +750,7 @@ func (e *Engine) LRPop(key string) (string, error) {
 }
 
 // LLen
-func (e *Engine) LLen(key string) (int, error) {
+func (e *DB) LLen(key string) (int, error) {
 	ls, err := e.fetchList(key)
 	if err != nil {
 		return 0, err
@@ -780,7 +759,7 @@ func (e *Engine) LLen(key string) (int, error) {
 }
 
 // BitTest
-func (e *Engine) BitTest(key string, offset uint32) (bool, error) {
+func (e *DB) BitTest(key string, offset uint32) (bool, error) {
 	bm, err := e.fetchBitMap(key)
 	if err != nil {
 		return false, err
@@ -789,7 +768,7 @@ func (e *Engine) BitTest(key string, offset uint32) (bool, error) {
 }
 
 // BitSet
-func (e *Engine) BitSet(key string, val bool, offsets ...uint32) (int, error) {
+func (e *DB) BitSet(key string, val bool, offsets ...uint32) (int, error) {
 	bm, err := e.fetchBitMap(key, true)
 	if err != nil {
 		return 0, err
@@ -807,7 +786,7 @@ func (e *Engine) BitSet(key string, val bool, offsets ...uint32) (int, error) {
 }
 
 // BitFlip
-func (e *Engine) BitFlip(key string, offset uint32) error {
+func (e *DB) BitFlip(key string, offset uint32) error {
 	bm, err := e.fetchBitMap(key)
 	if err != nil {
 		return err
@@ -819,7 +798,7 @@ func (e *Engine) BitFlip(key string, offset uint32) error {
 }
 
 // BitAnd
-func (e *Engine) BitAnd(dst string, src ...string) error {
+func (e *DB) BitAnd(dst string, src ...string) error {
 	bm, err := e.fetchBitMap(src[0])
 	if err != nil {
 		return err
@@ -840,7 +819,7 @@ func (e *Engine) BitAnd(dst string, src ...string) error {
 }
 
 // BitOr
-func (e *Engine) BitOr(dst string, src ...string) error {
+func (e *DB) BitOr(dst string, src ...string) error {
 	bm, err := e.fetchBitMap(src[0])
 	if err != nil {
 		return err
@@ -861,7 +840,7 @@ func (e *Engine) BitOr(dst string, src ...string) error {
 }
 
 // BitXor
-func (e *Engine) BitXor(dst string, src ...string) error {
+func (e *DB) BitXor(dst string, src ...string) error {
 	bm, err := e.fetchBitMap(src[0])
 	if err != nil {
 		return err
@@ -882,7 +861,7 @@ func (e *Engine) BitXor(dst string, src ...string) error {
 }
 
 // BitArray
-func (e *Engine) BitArray(key string) ([]uint32, error) {
+func (e *DB) BitArray(key string) ([]uint32, error) {
 	bm, err := e.fetchBitMap(key)
 	if err != nil {
 		return nil, err
@@ -891,7 +870,7 @@ func (e *Engine) BitArray(key string) ([]uint32, error) {
 }
 
 // BitCount
-func (e *Engine) BitCount(key string) (uint64, error) {
+func (e *DB) BitCount(key string) (uint64, error) {
 	bm, err := e.fetchBitMap(key)
 	if err != nil {
 		return 0, err
@@ -900,7 +879,7 @@ func (e *Engine) BitCount(key string) (uint64, error) {
 }
 
 // ZGet
-func (e *Engine) ZGet(zset, key string) (float64, error) {
+func (e *DB) ZGet(zset, key string) (float64, error) {
 	zs, err := e.fetchZSet(zset)
 	if err != nil {
 		return 0, err
@@ -913,7 +892,7 @@ func (e *Engine) ZGet(zset, key string) (float64, error) {
 }
 
 // ZCard
-func (e *Engine) ZCard(zset string) (int, error) {
+func (e *DB) ZCard(zset string) (int, error) {
 	zs, err := e.fetchZSet(zset)
 	if err != nil {
 		return 0, err
@@ -922,7 +901,7 @@ func (e *Engine) ZCard(zset string) (int, error) {
 }
 
 // ZIter
-func (e *Engine) ZIter(zset string, f func(string, float64) bool) error {
+func (e *DB) ZIter(zset string, f func(string, float64) bool) error {
 	zs, err := e.fetchZSet(zset)
 	if err != nil {
 		return err
@@ -934,7 +913,7 @@ func (e *Engine) ZIter(zset string, f func(string, float64) bool) error {
 }
 
 // ZAdd
-func (e *Engine) ZAdd(zset, key string, score float64) error {
+func (e *DB) ZAdd(zset, key string, score float64) error {
 	zs, err := e.fetchZSet(zset, true)
 	if err != nil {
 		return err
@@ -946,7 +925,7 @@ func (e *Engine) ZAdd(zset, key string, score float64) error {
 }
 
 // ZIncr
-func (e *Engine) ZIncr(zset, key string, incr float64) (float64, error) {
+func (e *DB) ZIncr(zset, key string, incr float64) (float64, error) {
 	zs, err := e.fetchZSet(zset, true)
 	if err != nil {
 		return 0, err
@@ -957,109 +936,80 @@ func (e *Engine) ZIncr(zset, key string, incr float64) (float64, error) {
 }
 
 // ZRemove
-func (e *Engine) ZRemove(zset string, key string) (float64, error) {
+func (e *DB) ZRemove(zset string, key string) error {
 	zs, err := e.fetchZSet(zset)
 	if err != nil {
-		return 0, err
-	}
-	e.encode(NewCodec(OpZRemove).Str(zset).Str(key))
-	res, _ := zs.Delete(key)
-
-	return res, nil
-}
-
-// writeTo writes the buffer into the file at the specified path.
-func (s *Engine) writeTo(buf *bytes.Buffer, path string) (int, error) {
-	if buf.Len() == 0 {
-		return 0, nil
-	}
-
-	fs, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		return 0, err
-	}
-	defer fs.Close()
-
-	// encode block.
-	data := codeman.Compress(buf.Bytes(), nil)
-	crc := crc32.Checksum(data, s.crc)
-	coder := codeman.NewCodec().Bytes(data).Uint(crc)
-
-	n, err := fs.Write(coder.Content())
-	if err != nil {
-		return 0, err
-	}
-
-	// reset
-	buf.Reset()
-	coder.Recycle()
-
-	return n, nil
-}
-
-// load reads the persisted data from the shard file and loads it into memory.
-func (e *Engine) load() error {
-	line, err := os.ReadFile(e.Path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
 		return err
 	}
+	e.encode(NewCodec(OpZRemove).Str(zset).Str(key))
+	zs.Delete(key)
 
-	e.logInfo("loading db file size %s", formatSize(len(line)))
+	return nil
+}
 
-	blkParser := codeman.NewParser(line)
-	for !blkParser.Done() {
-		// parse data block.
-		dataBlock := blkParser.Parse()
-		crc := uint32(blkParser.ParseVarint())
+// loadFromWal load data to mem from wal.
+func (db *DB) loadFromWal() error {
+	// load wal file.
+	firstIndex, err := db.wal.FirstIndex()
+	if err != nil {
+		return err
+	}
+	lastIndex, err := db.wal.LastIndex()
+	if err != nil {
+		return err
+	}
+	if lastIndex == 0 {
+		return nil
+	}
 
-		if blkParser.Error != nil {
-			return blkParser.Error
-		}
-		if crc != crc32.Checksum(dataBlock, e.crc) {
-			return ErrCheckSum
-		}
+	db.logInfo("loading db from wal index[%d, %d]", firstIndex, lastIndex)
 
-		data, err := codeman.Decompress(dataBlock, nil)
+	// read.
+	for i := firstIndex; i <= lastIndex; i++ {
+		data, err := db.wal.Read(i)
 		if err != nil {
 			return err
 		}
+		db.internalKey.Store(i)
 
-		recParser := codeman.NewParser(data)
-		for !recParser.Done() {
+		parser := codeman.NewParser(data)
+		for !parser.Done() {
 			// parse records.
-			op := Operation(recParser.ParseVarint())
+			op := Operation(parser.ParseVarint())
 
-			if recParser.Error != nil {
-				return recParser.Error
+			if parser.Error != nil {
+				return parser.Error
 			}
 
-			if err := cmdTable[op].hook(e, recParser); err != nil {
+			if err := cmdTable[op].hook(db, parser); err != nil {
 				return err
 			}
 		}
 	}
 
-	e.logInfo("db load complete")
+	db.logInfo("db load complete")
 
 	return nil
 }
 
 // rewrite write data to the file.
-func (e *Engine) shrink() {
-	// Marshal String
-	e.m.Scan(func(key, value []byte, ttl int64) bool {
-		cd := NewCodec(OpSetTx).Int(TypeString).Bytes(key).Int(ttl / timeCarry).Bytes(value)
-		e.rwbuf.Write(cd.Content())
+func (db *DB) shrink() {
+	db.Lock()
+	defer db.Unlock()
+
+	lastIndexBefore := db.internalKey.Load()
+
+	// marshal bytes.
+	db.m.Scan(func(key, value []byte, ts int64) bool {
+		cd := NewCodec(OpSetTx).Int(TypeString).Bytes(key).Int(ts).Bytes(value)
+		db.wal.Write(db.internalKey.Add(1), cd.Content())
 		cd.Recycle()
 		return false
 	})
 
-	// Marshal built-in type
+	// marshal built-in types.
 	var _type Type
-	for t := range e.cm.IterBuffered() {
+	for t := range db.cm.IterBuffered() {
 		switch t.Val.(type) {
 		case Map:
 			_type = TypeMap
@@ -1072,66 +1022,66 @@ func (e *Engine) shrink() {
 		case ZSet:
 			_type = TypeZSet
 		}
-		// SetTx
 		if cd, err := NewCodec(OpSetTx).Int(_type).Str(t.Key).Int(0).Any(t.Val); err == nil {
-			e.rwbuf.Write(cd.Content())
+			db.wal.Write(db.internalKey.Add(1), cd.Content())
 			cd.Recycle()
 		}
 	}
 
-	// Flush buffer to file
-	tmpPath := fmt.Sprintf("%v.tmp", time.Now())
-	e.writeTo(e.rwbuf, tmpPath)
-	e.writeTo(e.buf, tmpPath)
+	// sync
+	if err := db.wal.Sync(); err != nil {
+		panic(err)
+	}
+	if err := db.wal.TruncateFront(lastIndexBefore); err != nil {
+		panic(err)
+	}
 
-	os.Rename(tmpPath, e.Path)
-
-	e.logInfo("rotom rewrite done")
+	db.logInfo("rotom shrink done")
 }
 
 // Shrink forced to shrink db file.
 // Warning: will panic if SyncPolicy is never.
-func (e *Engine) Shrink() error {
+func (e *DB) Shrink() error {
 	return e.tickers[1].Do()
 }
 
 // fetchMap
-func (e *Engine) fetchMap(key string, setnx ...bool) (m Map, err error) {
+func (e *DB) fetchMap(key string, setnx ...bool) (m Map, err error) {
 	return fetch(e, key, func() Map {
 		return structx.NewSyncMap()
 	}, setnx...)
 }
 
 // fetchSet
-func (e *Engine) fetchSet(key string, setnx ...bool) (s Set, err error) {
+func (e *DB) fetchSet(key string, setnx ...bool) (s Set, err error) {
 	return fetch(e, key, func() Set {
 		return structx.NewSet[string]()
 	}, setnx...)
 }
 
 // fetchList
-func (e *Engine) fetchList(key string, setnx ...bool) (m List, err error) {
+func (e *DB) fetchList(key string, setnx ...bool) (m List, err error) {
 	return fetch(e, key, func() List {
 		return structx.NewList[string]()
 	}, setnx...)
 }
 
 // fetchBitMap
-func (e *Engine) fetchBitMap(key string, setnx ...bool) (bm BitMap, err error) {
+func (e *DB) fetchBitMap(key string, setnx ...bool) (bm BitMap, err error) {
 	return fetch(e, key, func() BitMap {
 		return structx.NewBitmap()
 	}, setnx...)
 }
 
 // fetchZSet
-func (e *Engine) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
+func (e *DB) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 	return fetch(e, key, func() ZSet {
 		return structx.NewZSet[string, float64]()
 	}, setnx...)
 }
 
 // fetch
-func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err error) {
+func fetch[T any](e *DB, key string, new func() T, setnx ...bool) (v T, err error) {
 	// check from bytes cache.
 	if _, _, ok := e.m.Get(key); ok {
 		return v, ErrWrongType
@@ -1153,28 +1103,9 @@ func fetch[T any](e *Engine, key string, new func() T, setnx ...bool) (v T, err 
 	return v, nil
 }
 
-// formatSize
-func formatSize[T codeman.Integer](size T) string {
-	switch {
-	case size < KB:
-		return fmt.Sprintf("%dB", size)
-	case size < MB:
-		return fmt.Sprintf("%.1fKB", float64(size)/KB)
-	default:
-		return fmt.Sprintf("%.1fMB", float64(size)/MB)
-	}
-}
-
 // logInfo
-func (e *Engine) logInfo(msg string, r ...any) {
+func (e *DB) logInfo(msg string, r ...any) {
 	if e.Logger != nil {
 		e.Logger.Info(fmt.Sprintf(msg, r...))
-	}
-}
-
-// logError
-func (e *Engine) logError(msg string, r ...any) {
-	if e.Logger != nil {
-		e.Logger.Error(fmt.Sprintf(msg, r...))
 	}
 }

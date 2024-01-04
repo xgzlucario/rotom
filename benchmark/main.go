@@ -14,13 +14,10 @@ const (
 	KB = 1 << (10 * (iota + 1))
 	MB
 	GB
-	TB
 )
 
 func convertSize(size int64) string {
 	switch {
-	case size >= TB:
-		return fmt.Sprintf("%.1fTB", float64(size)/TB)
 	case size >= GB:
 		return fmt.Sprintf("%.1fGB", float64(size)/GB)
 	case size >= MB:
@@ -41,12 +38,12 @@ func fileSize(filename string) string {
 	return convertSize(size)
 }
 
-func createDB() *rotom.Engine {
-	cfg := rotom.DefaultConfig
-	cfg.Logger = nil
-	cfg.Path = fmt.Sprintf("%d.db", time.Now().UnixNano())
+func createDB() *rotom.DB {
+	options := rotom.DefaultOptions
+	options.Logger = nil
+	options.DirPath = fmt.Sprintf("%d", time.Now().UnixNano())
 
-	db, err := rotom.Open(cfg)
+	db, err := rotom.Open(options)
 	if err != nil {
 		panic(err)
 	}
@@ -81,7 +78,7 @@ func benchSet() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", fileSize(db.Path))
+	fmt.Printf("db file size: %v\n", fileSize(db.DirPath))
 	fmt.Println()
 }
 
@@ -123,7 +120,7 @@ func benchSet8parallel() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", fileSize(db.Path))
+	fmt.Printf("db file size: %v\n", fileSize(db.DirPath))
 	fmt.Println()
 }
 
@@ -154,7 +151,7 @@ func benchSetEx() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", fileSize(db.Path))
+	fmt.Printf("db file size: %v\n", fileSize(db.DirPath))
 	fmt.Println()
 }
 
@@ -217,7 +214,7 @@ func benchHSet() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", fileSize(db.Path))
+	fmt.Printf("db file size: %v\n", fileSize(db.DirPath))
 	fmt.Println()
 }
 
@@ -248,7 +245,7 @@ func benchLRPush() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", fileSize(db.Path))
+	fmt.Printf("db file size: %v\n", fileSize(db.DirPath))
 	fmt.Println()
 }
 
@@ -310,7 +307,7 @@ func benchBitSet() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", fileSize(db.Path))
+	fmt.Printf("db file size: %v\n", fileSize(db.DirPath))
 	fmt.Println()
 }
 
