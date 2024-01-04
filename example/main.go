@@ -22,7 +22,7 @@ func main() {
 	start := time.Now()
 	for i := 0; i < 1000*10000; i++ {
 		k := strconv.Itoa(i)
-		db.SetEx(k, []byte(k), time.Second)
+		db.SetEx(k, []byte(k), time.Hour)
 	}
 	fmt.Println(time.Since(start))
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	cmap "github.com/orcaman/concurrent-map/v2"
@@ -360,16 +359,18 @@ type DB struct {
 	*Options
 
 	// context.
-	ctx     context.Context
-	cancel  context.CancelFunc
-	tickers [2]*Ticker
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	// ticker.
+	syncTicker   *time.Ticker
+	shrinkTicker *time.Ticker
 
 	// if db loading encode not allowed.
 	loading bool
 
 	// write ahead log.
-	internalKey atomic.Uint64
-	wal         *wal.Log
+	wal *wal.Log
 
 	// data for bytes.
 	m *cache.GigaCache
@@ -381,10 +382,11 @@ type DB struct {
 // Open opens a database by options.
 func Open(options Options) (*DB, error) {
 	// create wal.
-	wal, err := wal.Open(options.DirPath, wal.DefaultOptions)
+	wal, err := wal.Open(options.DirPath)
 	if err != nil {
 		return nil, err
 	}
+	wal.SetEnabledCompress(true)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	db := &DB{
@@ -392,7 +394,6 @@ func Open(options Options) (*DB, error) {
 		ctx:     ctx,
 		cancel:  cancel,
 		loading: true,
-		tickers: [2]*Ticker{},
 		wal:     wal,
 		m:       cache.New(cache.DefaultOption),
 		cm:      cmap.New[any](),
@@ -404,16 +405,35 @@ func Open(options Options) (*DB, error) {
 	}
 	db.loading = false
 
+	// start timer.
 	if db.SyncPolicy == EverySecond {
-		// sync to disk.
-		db.tickers[0] = NewTicker(ctx, time.Second, func() {
-			db.wal.Sync()
-		})
+		// start sync ticker.
+		db.syncTicker = time.NewTicker(time.Second)
+		go func() {
+			for {
+				select {
+				case <-db.ctx.Done():
+					db.syncTicker.Stop()
+					return
+				case <-db.syncTicker.C:
+					db.wal.Sync()
+				}
+			}
+		}()
 
-		// shrink db.
-		db.tickers[1] = NewTicker(ctx, db.ShrinkInterval, func() {
-			db.shrink()
-		})
+		// start shrink ticker.
+		db.shrinkTicker = time.NewTicker(db.ShrinkInterval)
+		go func() {
+			for {
+				select {
+				case <-db.ctx.Done():
+					db.shrinkTicker.Stop()
+					return
+				case <-db.shrinkTicker.C:
+					db.shrink()
+				}
+			}
+		}()
 	}
 
 	db.logInfo("rotom is ready to go")
@@ -441,7 +461,7 @@ func (db *DB) encode(cd *codeman.Codec) {
 	if db.loading {
 		return
 	}
-	db.wal.Write(db.internalKey.Add(1), cd.Content())
+	db.wal.Write(cd.Content())
 	cd.Recycle()
 }
 
@@ -949,29 +969,10 @@ func (e *DB) ZRemove(zset string, key string) error {
 
 // loadFromWal load data to mem from wal.
 func (db *DB) loadFromWal() error {
-	// load wal file.
-	firstIndex, err := db.wal.FirstIndex()
-	if err != nil {
-		return err
-	}
-	lastIndex, err := db.wal.LastIndex()
-	if err != nil {
-		return err
-	}
-	if lastIndex == 0 {
-		return nil
-	}
+	db.logInfo("start loading db from wal")
 
-	db.logInfo("loading db from wal index[%d, %d]", firstIndex, lastIndex)
-
-	// read.
-	for i := firstIndex; i <= lastIndex; i++ {
-		data, err := db.wal.Read(i)
-		if err != nil {
-			return err
-		}
-		db.internalKey.Store(i)
-
+	// iter all wal.
+	return db.wal.Range(func(data []byte) error {
 		parser := codeman.NewParser(data)
 		for !parser.Done() {
 			// parse records.
@@ -985,11 +986,8 @@ func (db *DB) loadFromWal() error {
 				return err
 			}
 		}
-	}
-
-	db.logInfo("db load complete")
-
-	return nil
+		return nil
+	})
 }
 
 // rewrite write data to the file.
@@ -997,33 +995,31 @@ func (db *DB) shrink() {
 	db.Lock()
 	defer db.Unlock()
 
-	lastIndexBefore := db.internalKey.Load()
-
 	// marshal bytes.
 	db.m.Scan(func(key, value []byte, ts int64) bool {
 		cd := NewCodec(OpSetTx).Int(TypeString).Bytes(key).Int(ts).Bytes(value)
-		db.wal.Write(db.internalKey.Add(1), cd.Content())
+		db.wal.Write(cd.Content())
 		cd.Recycle()
 		return false
 	})
 
 	// marshal built-in types.
-	var _type Type
+	var types Type
 	for t := range db.cm.IterBuffered() {
 		switch t.Val.(type) {
 		case Map:
-			_type = TypeMap
+			types = TypeMap
 		case BitMap:
-			_type = TypeBitmap
+			types = TypeBitmap
 		case List:
-			_type = TypeList
+			types = TypeList
 		case Set:
-			_type = TypeSet
+			types = TypeSet
 		case ZSet:
-			_type = TypeZSet
+			types = TypeZSet
 		}
-		if cd, err := NewCodec(OpSetTx).Int(_type).Str(t.Key).Int(0).Any(t.Val); err == nil {
-			db.wal.Write(db.internalKey.Add(1), cd.Content())
+		if cd, err := NewCodec(OpSetTx).Int(types).Str(t.Key).Int(0).Any(t.Val); err == nil {
+			db.wal.Write(cd.Content())
 			cd.Recycle()
 		}
 	}
@@ -1032,17 +1028,18 @@ func (db *DB) shrink() {
 	if err := db.wal.Sync(); err != nil {
 		panic(err)
 	}
-	if err := db.wal.TruncateFront(lastIndexBefore); err != nil {
-		panic(err)
-	}
 
 	db.logInfo("rotom shrink done")
 }
 
 // Shrink forced to shrink db file.
 // Warning: will panic if SyncPolicy is never.
-func (e *DB) Shrink() error {
-	return e.tickers[1].Do()
+func (e *DB) Shrink() {
+	if e.SyncPolicy == Never {
+		panic("rotom: shrink is not allowed when SyncPolicy is never")
+	}
+	e.shrinkTicker.Reset(e.ShrinkInterval)
+	e.shrink()
 }
 
 // fetchMap
