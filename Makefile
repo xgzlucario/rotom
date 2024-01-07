@@ -16,7 +16,7 @@ test-cover:
 	go tool cover -html=coverage.txt -o coverage.html
 
 	rm coverage.txt
-	rm *.db
+	rm -r tmp*
 
 pprof:
 	go tool pprof -http=:18081 "http://localhost:6060/debug/pprof/profile?seconds=60"

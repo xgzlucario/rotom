@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 	"strconv"
@@ -13,16 +12,14 @@ import (
 func main() {
 	go http.ListenAndServe("localhost:6060", nil)
 
-	db, err := rotom.Open(rotom.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultOptions)
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 
-	start := time.Now()
-	for i := 0; i < 1000*10000; i++ {
+	for i := 0; ; i++ {
 		k := strconv.Itoa(i)
-		db.SetEx(k, []byte(k), time.Second)
+		db.SetEx(k, []byte(k), time.Second*10)
 	}
-	fmt.Println(time.Since(start))
 }

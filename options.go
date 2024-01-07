@@ -15,9 +15,8 @@ const (
 )
 
 var (
-	// Default config for db
-	DefaultConfig = Config{
-		Path:             "rotom.db",
+	DefaultOptions = Options{
+		DirPath:          "rotom",
 		ShardCount:       1024,
 		SyncPolicy:       EverySecond,
 		ShrinkInterval:   time.Minute,
@@ -25,19 +24,18 @@ var (
 		Logger:           slog.Default(),
 	}
 
-	// No persistent config
-	NoPersistentConfig = Config{
+	NoPersistentOptions = Options{
 		ShardCount: 1024,
 		SyncPolicy: Never,
 		Logger:     slog.Default(),
 	}
 )
 
-// Config represents the configuration for a Store.
-type Config struct {
+// Options represents the configuration for a Store.
+type Options struct {
 	ShardCount int
 
-	Path string // Path of db file.
+	DirPath string // Dir path of db file.
 
 	SyncPolicy     SyncPolicy    // Data sync policy.
 	ShrinkInterval time.Duration // Shrink db file interval.
