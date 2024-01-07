@@ -22,6 +22,7 @@ var (
 func createDB() (*DB, error) {
 	options := DefaultOptions
 	options.DirPath = fmt.Sprintf("tmp-%s", gofakeit.UUID())
+	options.ShrinkInterval = time.Second * 3
 	return Open(options)
 }
 
@@ -705,4 +706,25 @@ func TestInvalidCodec(t *testing.T) {
 		assert.False(bb.Bool())
 		assert.ErrorContains(parser.Error, codeman.ErrParserIsDone.Error())
 	}
+}
+
+func TestSyncNever(t *testing.T) {
+	println("===== TestSyncNever =====")
+	assert := assert.New(t)
+
+	options := DefaultOptions
+	options.DirPath = fmt.Sprintf("tmp-%s", gofakeit.UUID())
+	options.SyncPolicy = Never
+	db, err := Open(options)
+	assert.Nil(err)
+
+	// set
+	for i := 0; i < 1000; i++ {
+		key := strconv.Itoa(i)
+		db.Set(key, []byte(key))
+	}
+
+	assert.Panics(func() {
+		db.Shrink()
+	})
 }
