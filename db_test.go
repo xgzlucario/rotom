@@ -116,32 +116,61 @@ func TestHmap(t *testing.T) {
 	assert.Nil(err)
 	defer db.Close()
 
-	for i := 0; i < 1000; i++ {
-		// HSet
-		key := "key" + strconv.Itoa(i/100)
-		err := db.HSet("map", key, []byte(key))
-		assert.Nil(err)
+	check := func() {
+		for i := 0; i < 8000; i++ {
+			mapkey := "map" + strconv.Itoa(i%100)
+			key := "key" + strconv.Itoa(i)
+			val := []byte(strconv.Itoa(i))
 
-		// HGet
-		res, err := db.HGet("map", key)
-		assert.Nil(err)
-		assert.Equal(res, []byte(key))
+			// HGet
+			res, err := db.HGet(mapkey, key)
+			assert.Nil(err)
+			assert.Equal(res, val)
 
-		// HLen
-		num, err := db.HLen("map")
-		assert.Nil(err)
-		assert.Equal(num, 1)
+			// HLen
+			num, err := db.HLen(mapkey)
+			assert.Nil(err)
 
-		// HKeys
-		keys, err := db.HKeys("map")
-		assert.Nil(err)
-		assert.ElementsMatch(keys, []string{key})
-
-		// HRemove
-		n, err := db.HRemove("map", key)
-		assert.Nil(err)
-		assert.Equal(n, 1)
+			// HKeys
+			keys, err := db.HKeys(mapkey)
+			assert.Nil(err)
+			assert.Equal(len(keys), num)
+		}
 	}
+
+	for i := 0; i < 10000; i++ {
+		mapkey := "map" + strconv.Itoa(i%100)
+		key := "key" + strconv.Itoa(i)
+		val := []byte(strconv.Itoa(i))
+
+		// HSet
+		err := db.HSet(mapkey, key, val)
+		assert.Nil(err)
+
+		if i > 8000 {
+			// HRemove
+			n, err := db.HRemove(mapkey, key)
+			assert.Nil(err)
+			assert.Equal(n, 1)
+		}
+	}
+
+	check()
+
+	// reload
+	db.Close()
+	db, err = Open(*db.Options)
+	assert.Nil(err)
+
+	check()
+
+	// shrink and reload
+	db.Shrink()
+	db.Close()
+	_, err = Open(*db.Options)
+	assert.Nil(err)
+
+	check()
 
 	// Error
 	db.Set("fake", []byte("123"))
@@ -177,17 +206,6 @@ func TestHmap(t *testing.T) {
 		assert.Nil(res)
 		assert.Equal(err, ErrFieldNotFound)
 	}
-
-	// reload
-	db.Close()
-	db, err = Open(*db.Options)
-	assert.Nil(err)
-
-	// shrink and reload
-	db.Shrink()
-	db.Close()
-	_, err = Open(*db.Options)
-	assert.Nil(err)
 }
 
 func TestList(t *testing.T) {

@@ -355,7 +355,8 @@ type (
 
 // DB represents a rotom database engine.
 type DB struct {
-	sync.Mutex
+	// mu guards wal.
+	mu sync.Mutex
 	*Options
 
 	// context.
@@ -386,7 +387,6 @@ func Open(options Options) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	wal.SetEnabledCompress(true)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	db := &DB{
@@ -416,7 +416,9 @@ func Open(options Options) (*DB, error) {
 					db.syncTicker.Stop()
 					return
 				case <-db.syncTicker.C:
+					db.mu.Lock()
 					db.wal.Sync()
+					db.mu.Unlock()
 				}
 			}
 		}()
@@ -430,7 +432,9 @@ func Open(options Options) (*DB, error) {
 					db.shrinkTicker.Stop()
 					return
 				case <-db.shrinkTicker.C:
-					db.shrink()
+					if err := db.shrink(); err != nil {
+						panic(err)
+					}
 				}
 			}
 		}()
@@ -461,7 +465,9 @@ func (db *DB) encode(cd *codeman.Codec) {
 	if db.loading {
 		return
 	}
+	db.mu.Lock()
 	db.wal.Write(cd.Content())
+	db.mu.Unlock()
 	cd.Recycle()
 }
 
@@ -520,15 +526,15 @@ func (e *DB) Len() uint64 {
 }
 
 // GC triggers the garbage collection to evict expired kv datas.
-func (e *DB) GC() {
-	e.Lock()
-	e.m.Migrate()
-	e.Unlock()
+func (db *DB) GC() {
+	db.mu.Lock()
+	db.m.Migrate()
+	db.mu.Unlock()
 }
 
 // Scan
-func (e *DB) Scan(f func(string, []byte, int64) bool) {
-	e.m.Scan(func(key, value []byte, ttl int64) bool {
+func (db *DB) Scan(f func(string, []byte, int64) bool) {
+	db.m.Scan(func(key, value []byte, ttl int64) bool {
 		return f(string(key), value, ttl)
 	})
 }
@@ -969,6 +975,9 @@ func (e *DB) ZRemove(zset string, key string) error {
 
 // loadFromWal load data to mem from wal.
 func (db *DB) loadFromWal() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	db.logInfo("start loading db from wal")
 
 	// iter all wal.
@@ -991,9 +1000,14 @@ func (db *DB) loadFromWal() error {
 }
 
 // rewrite write data to the file.
-func (db *DB) shrink() {
-	db.Lock()
-	defer db.Unlock()
+func (db *DB) shrink() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	// create new segment file.
+	if err := db.wal.OpenNewActiveSegment(); err != nil {
+		return err
+	}
 
 	// marshal bytes.
 	db.m.Scan(func(key, value []byte, ts int64) bool {
@@ -1023,23 +1037,25 @@ func (db *DB) shrink() {
 			cd.Recycle()
 		}
 	}
-
 	// sync
 	if err := db.wal.Sync(); err != nil {
-		panic(err)
+		return err
 	}
 
 	db.logInfo("rotom shrink done")
+
+	// remove all old segment files.
+	return db.wal.RemoveOldSegments(db.wal.ActiveSegmentID())
 }
 
 // Shrink forced to shrink db file.
 // Warning: will panic if SyncPolicy is never.
-func (e *DB) Shrink() {
-	if e.SyncPolicy == Never {
+func (db *DB) Shrink() {
+	if db.SyncPolicy == Never {
 		panic("rotom: shrink is not allowed when SyncPolicy is never")
 	}
-	e.shrinkTicker.Reset(e.ShrinkInterval)
-	e.shrink()
+	db.shrinkTicker.Reset(db.ShrinkInterval)
+	db.shrink()
 }
 
 // fetchMap
