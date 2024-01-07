@@ -73,11 +73,11 @@ func (l *Log) Range(f func([]byte) error) error {
 		index := 0
 		for index < len(val) {
 			// read length
-			len, n := binary.Uvarint(val[index:])
+			length, n := binary.Uvarint(val[index:])
 			index += n
 			// read data
-			data = val[index : index+int(len)]
-			index += int(len)
+			data = val[index : index+int(length)]
+			index += int(length)
 
 			if err := f(data); err != nil {
 				return err

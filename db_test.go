@@ -695,8 +695,8 @@ func TestInvalidCodec(t *testing.T) {
 	// parse done.
 	{
 		parser := codeman.NewParser(nil)
-		any := parser.Parse()
-		assert.Nil(any)
+		data := parser.Parse()
+		assert.Nil(data)
 		assert.ErrorContains(parser.Error, codeman.ErrParserIsDone.Error())
 	}
 	{
