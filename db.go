@@ -121,7 +121,6 @@ var cmdTable = []Cmd{
 		default:
 			return fmt.Errorf("%w: %d", ErrUnSupportDataType, tp)
 		}
-
 		return nil
 	}},
 
@@ -132,7 +131,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		db.Remove(keys...)
 		return nil
 	}},
@@ -146,7 +144,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.HSet(key, field, val)
 	}},
 
@@ -158,7 +155,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		_, err := db.HRemove(key, fields...)
 		return err
 	}},
@@ -171,7 +167,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		_, err := db.SAdd(key, items...)
 		return err
 	}},
@@ -184,7 +179,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.SRemove(key, items...)
 	}},
 
@@ -257,7 +251,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		_, err := db.BitSet(key, val, offsets...)
 		return err
 	}},
@@ -270,7 +263,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.BitFlip(key, offset)
 	}},
 
@@ -304,7 +296,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.ZAdd(key, field, score)
 	}},
 
@@ -317,7 +308,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		_, err := db.ZIncr(key, field, score)
 		return err
 	}},
@@ -330,7 +320,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.ZRemove(key, field)
 	}},
 }
@@ -359,7 +348,7 @@ type (
 
 // DB represents a rotom database engindb.
 type DB struct {
-	// mu guards wal.
+	// mu guards wal data.
 	mu sync.Mutex
 	*Options
 
@@ -804,6 +793,15 @@ func (db *DB) LLen(key string) (int, error) {
 		return 0, err
 	}
 	return ls.Size(), nil
+}
+
+// LKeys
+func (db *DB) LKeys(key string) ([]string, error) {
+	ls, err := db.fetchList(key)
+	if err != nil {
+		return nil, err
+	}
+	return ls.Keys(), nil
 }
 
 // BitTest

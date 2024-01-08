@@ -216,41 +216,33 @@ func TestList(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
-	for i := 0; i < 20000; i++ {
-		key := gofakeit.UUID()
-		animal := gofakeit.Animal()
-
-		err = db.LRPush(key, animal)
-		assert.Nil(err)
-
-		res, err := db.LLPop(key)
-		assert.Nil(err)
-		assert.Equal(res, animal)
-
-		num, err := db.LLen(key)
-		assert.Nil(err)
-		assert.Equal(num, 0)
-	}
-
 	for i := 0; i < 10000; i++ {
-		key := gofakeit.UUID()
-		animal := gofakeit.Animal()
+		key := "list" + strconv.Itoa(i/100)
+		val := gofakeit.Animal()
 
-		err = db.LLPush(key, animal)
-		assert.Nil(err)
+		if i%2 == 0 {
+			assert.Nil(db.LRPush(key, val))
+		} else {
+			assert.Nil(db.LLPush(key, val))
+		}
 
-		// Index
-		res, err := db.LIndex(key, 0)
-		assert.Nil(err)
-		assert.Equal(res, animal)
-
-		res, err = db.LRPop(key)
-		assert.Nil(err)
-		assert.Equal(res, animal)
+		if i > 8000 {
+			if i%2 == 0 {
+				res, err := db.LRPop(key)
+				assert.Nil(err)
+				assert.Equal(res, val)
+			} else {
+				res, err := db.LLPop(key)
+				assert.Nil(err)
+				assert.Equal(res, val)
+			}
+		}
 
 		num, err := db.LLen(key)
 		assert.Nil(err)
-		assert.Equal(num, 0)
+		keys, err := db.LKeys(key)
+		assert.Nil(err)
+		assert.Equal(len(keys), num)
 	}
 
 	// Error
@@ -278,24 +270,26 @@ func TestList(t *testing.T) {
 	assert.Equal(n, 0)
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	db.LRPush("list", "1")
-	db.LRPop("list")
-
 	// empty list
-	res, err = db.LLPop("list")
-	assert.Equal(res, "")
-	assert.Equal(err, ErrEmptyList)
+	{
+		db.LRPush("list", "1")
+		db.LRPop("list")
 
-	res, err = db.LRPop("list")
-	assert.Equal(res, "")
-	assert.Equal(err, ErrEmptyList)
+		res, err = db.LLPop("list")
+		assert.Equal(res, "")
+		assert.Equal(err, ErrEmptyList)
 
-	res, err = db.LIndex("list", 9)
-	assert.Equal(res, "")
-	assert.Equal(err, ErrIndexOutOfRange)
+		res, err = db.LRPop("list")
+		assert.Equal(res, "")
+		assert.Equal(err, ErrEmptyList)
 
-	for i := 0; i < 100; i++ {
-		db.LRPush("list", gofakeit.Animal())
+		res, err = db.LIndex("list", 9)
+		assert.Equal(res, "")
+		assert.Equal(err, ErrIndexOutOfRange)
+
+		for i := 0; i < 100; i++ {
+			db.LRPush("list", gofakeit.Animal())
+		}
 	}
 
 	// reload
@@ -713,10 +707,17 @@ func TestRace(t *testing.T) {
 	assert := assert.New(t)
 
 	// open invalid options.
-	invalidOptions := DefaultOptions
-	invalidOptions.DirPath = ""
-	_, err := Open(invalidOptions)
-	assert.NotNil(err)
+	{
+		invalidOptions := DefaultOptions
+		invalidOptions.DirPath = ""
+		_, err := Open(invalidOptions)
+		assert.NotNil(err)
+
+		invalidOptions.DirPath = "test1"
+		invalidOptions.ShardCount = -1
+		_, err = Open(invalidOptions)
+		assert.NotNil(err)
+	}
 
 	// dirpath race.
 	options := DefaultOptions
