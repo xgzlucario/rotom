@@ -708,23 +708,25 @@ func TestInvalidCodec(t *testing.T) {
 	}
 }
 
-func TestSyncNever(t *testing.T) {
-	println("===== TestSyncNever =====")
+func TestRace(t *testing.T) {
+	println("===== TestRace =====")
 	assert := assert.New(t)
 
+	// open invalid options.
+	invalidOptions := DefaultOptions
+	invalidOptions.DirPath = ""
+	_, err := Open(invalidOptions)
+	assert.NotNil(err)
+
+	// dirpath race.
 	options := DefaultOptions
-	options.DirPath = fmt.Sprintf("tmp-%s", gofakeit.UUID())
-	options.SyncPolicy = Never
+	options.DirPath = "tmp-race"
+	options.ShrinkInterval = time.Second * 3
 	db, err := Open(options)
 	assert.Nil(err)
+	assert.NotNil(db)
 
-	// set
-	for i := 0; i < 1000; i++ {
-		key := strconv.Itoa(i)
-		db.Set(key, []byte(key))
-	}
-
-	assert.Panics(func() {
-		db.Shrink()
-	})
+	// open another db.
+	_, err = Open(options)
+	assert.Equal(err, ErrDatabaseIsUsing)
 }

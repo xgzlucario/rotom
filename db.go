@@ -4,9 +4,11 @@ package rotom
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/gofrs/flock"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/codeman"
@@ -51,6 +53,8 @@ const (
 
 	listDirectionLeft byte = iota + 1
 	listDirectionRight
+
+	fileLockName = "flock"
 )
 
 // Cmd
@@ -368,7 +372,8 @@ type DB struct {
 	shrinkTicker *time.Ticker
 
 	// if db loading encode not allowed.
-	loading bool
+	fileLock *flock.Flock
+	loading  bool
 
 	// write ahead log.
 	wal *wal.Log
@@ -382,21 +387,37 @@ type DB struct {
 
 // Open opens a database by options.
 func Open(options Options) (*DB, error) {
+	if err := checkOptions(options); err != nil {
+		return nil, err
+	}
+
 	// create wal.
 	wal, err := wal.Open(options.DirPath)
 	if err != nil {
 		return nil, err
 	}
 
+	// create file lock, prevent multiple processes from using the same db directory.
+	fileLock := flock.New(filepath.Join(options.DirPath, fileLockName))
+	hold, err := fileLock.TryLock()
+	if err != nil {
+		return nil, err
+	}
+	if !hold {
+		return nil, ErrDatabaseIsUsing
+	}
+
+	// init db instance.
 	ctx, cancel := context.WithCancel(context.Background())
 	db := &DB{
-		Options: &options,
-		ctx:     ctx,
-		cancel:  cancel,
-		loading: true,
-		wal:     wal,
-		m:       cache.New(cache.DefaultOption),
-		cm:      cmap.New[any](),
+		Options:  &options,
+		ctx:      ctx,
+		cancel:   cancel,
+		loading:  true,
+		fileLock: fileLock,
+		wal:      wal,
+		m:        cache.New(cache.DefaultOption),
+		cm:       cmap.New[any](),
 	}
 
 	// load db from wal.
@@ -440,28 +461,28 @@ func Open(options Options) (*DB, error) {
 		}()
 	}
 
-	db.logInfo("rotom is ready to go")
-
 	return db, nil
 }
 
-// Close closes the db.
+// Close the database, close all data files and release file lock.
 func (db *DB) Close() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	select {
 	case <-db.ctx.Done():
 		return ErrDatabaseClosed
 	default:
-		db.wal.Sync()
+		if err := db.wal.Close(); err != nil {
+			return err
+		}
 		db.cancel()
-		return db.wal.Close()
+		return db.fileLock.Unlock()
 	}
 }
 
 // encode
 func (db *DB) encode(cd *codeman.Codec) {
-	if db.SyncPolicy == Never {
-		return
-	}
 	if db.loading {
 		return
 	}
@@ -502,6 +523,7 @@ func (db *DB) SetEx(key string, val []byte, ttl time.Duration) {
 
 // SetTx store key-value pair with deadlindb.
 func (db *DB) SetTx(key string, val []byte, ts int64) {
+	// you should check ts outside.
 	if ts < 0 {
 		return
 	}
@@ -978,8 +1000,6 @@ func (db *DB) loadFromWal() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	db.logInfo("start loading db from wal")
-
 	// iter all wal.
 	return db.wal.Range(func(data []byte) error {
 		parser := codeman.NewParser(data)
@@ -1042,18 +1062,12 @@ func (db *DB) shrink() error {
 		return err
 	}
 
-	db.logInfo("rotom shrink done")
-
 	// remove all old segment files.
 	return db.wal.RemoveOldSegments(db.wal.ActiveSegmentID())
 }
 
-// Shrink forced to shrink db fildb.
-// Warning: will panic if SyncPolicy is never.
+// Shrink forced to shrink db file.
 func (db *DB) Shrink() {
-	if db.SyncPolicy == Never {
-		panic("rotom: shrink is not allowed when SyncPolicy is never")
-	}
 	db.shrinkTicker.Reset(db.ShrinkInterval)
 	db.shrink()
 }
@@ -1114,11 +1128,4 @@ func fetch[T any](db *DB, key string, new func() T, setnx ...bool) (v T, err err
 		db.cm.Set(key, v)
 	}
 	return v, nil
-}
-
-// logInfo
-func (db *DB) logInfo(msg string, r ...any) {
-	if db.Logger != nil {
-		db.Logger.Info(fmt.Sprintf(msg, r...))
-	}
 }
