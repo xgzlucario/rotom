@@ -37,9 +37,7 @@ var (
 
 	ErrEmptyList = errors.New("list is empty")
 
-	ErrInvalidBitmapOperation = errors.New("invalid bitmap operation")
-
-	ErrInvalidListDirect = errors.New("invalid list direct")
+	ErrInvalidMergeOperation = errors.New("invalid merge operation")
 
 	ErrDatabaseIsUsing = errors.New("database is using")
 )

@@ -51,8 +51,8 @@ const (
 	mergeTypeOr
 	mergeTypeXOr
 
-	listDirectionLeft byte = iota + 1
-	listDirectionRight
+	listDirectionLeft  = 'L'
+	listDirectionRight = 'R'
 
 	fileLockName = "flock"
 )
@@ -200,7 +200,7 @@ var cmdTable = []Cmd{
 		case mergeTypeXOr:
 			return db.SDiff(key, items...)
 		}
-		return ErrInvalidBitmapOperation
+		return ErrInvalidMergeOperation
 	}},
 
 	{OpLPush, func(db *DB, decoder *codeman.Parser) error {
@@ -213,13 +213,10 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
-		switch direct {
-		case listDirectionLeft:
+		if direct == listDirectionLeft {
 			return db.LLPush(key, items...)
-		case listDirectionRight:
-			return db.LRPush(key, items...)
 		}
-		return ErrInvalidListDirect
+		return db.LRPush(key, items...)
 	}},
 
 	{OpLPop, func(db *DB, decoder *codeman.Parser) (err error) {
@@ -231,14 +228,11 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
-		switch direct {
-		case listDirectionLeft:
+		if direct == listDirectionLeft {
 			_, err = db.LLPop(key)
-		case listDirectionRight:
-			_, err = db.LRPop(key)
-		default:
-			err = ErrInvalidListDirect
+			return
 		}
+		_, err = db.LRPop(key)
 		return
 	}},
 
@@ -284,7 +278,7 @@ var cmdTable = []Cmd{
 		case mergeTypeXOr:
 			return db.BitXor(key, items...)
 		}
-		return ErrInvalidBitmapOperation
+		return ErrInvalidMergeOperation
 	}},
 
 	{OpZAdd, func(db *DB, decoder *codeman.Parser) error {
@@ -398,6 +392,8 @@ func Open(options Options) (*DB, error) {
 
 	// init db instance.
 	ctx, cancel := context.WithCancel(context.Background())
+	cacheOptions := cache.DefaultOption
+	cacheOptions.ShardCount = options.ShardCount
 	db := &DB{
 		Options:  &options,
 		ctx:      ctx,
@@ -405,7 +401,7 @@ func Open(options Options) (*DB, error) {
 		loading:  true,
 		fileLock: fileLock,
 		wal:      wal,
-		m:        cache.New(cache.DefaultOption),
+		m:        cache.New(cacheOptions),
 		cm:       cmap.New[any](),
 	}
 
@@ -1022,7 +1018,7 @@ func (db *DB) shrink() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	// create new segment fildb.
+	// create new segment file.
 	if err := db.wal.OpenNewActiveSegment(); err != nil {
 		return err
 	}

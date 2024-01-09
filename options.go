@@ -26,7 +26,7 @@ var (
 // Options represents the configuration for a Store.
 type Options struct {
 	// ShardCount is the shard numbers to underlying GigaCache used.
-	ShardCount int
+	ShardCount uint32
 
 	// Dir path if the db storage path.
 	DirPath string
@@ -43,7 +43,7 @@ type Options struct {
 
 // checkOptions checks the validity of the options.
 func checkOptions(option Options) error {
-	if option.ShardCount <= 0 {
+	if option.ShardCount == 0 {
 		return errors.New("invalid shard count")
 	}
 	if option.DirPath == "" {
