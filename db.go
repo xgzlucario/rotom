@@ -1,4 +1,4 @@
-// Package rotom provides an in-memory key-value databasdb.
+// Package rotom provides an in-memory key-value database.
 package rotom
 
 import (
