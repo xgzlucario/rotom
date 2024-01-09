@@ -63,7 +63,7 @@ type Cmd struct {
 	hook func(*DB, *codeman.Parser) error
 }
 
-// cmdTable defines the rNum and callback function required for the operation.
+// cmdTable defines how each cmd is to be replayed through log redo to recover the database..
 var cmdTable = []Cmd{
 	{OpSetTx, func(db *DB, decoder *codeman.Parser) error {
 		// type, key, ts, val
@@ -330,7 +330,7 @@ const (
 	TypeBitmap
 )
 
-// Type aliases for structx types.
+// Type aliases for built-in structx types.
 type (
 	String = []byte
 	Map    = *structx.SyncMap
@@ -340,7 +340,7 @@ type (
 	BitMap = *structx.Bitmap
 )
 
-// DB represents a rotom database engindb.
+// DB represents a rotom database.
 type DB struct {
 	// mu guards wal data.
 	mu sync.Mutex
@@ -368,7 +368,7 @@ type DB struct {
 	cm cmap.ConcurrentMap[string, any]
 }
 
-// Open opens a database by options.
+// Open create a new db instance by options.
 func Open(options Options) (*DB, error) {
 	if err := checkOptions(options); err != nil {
 		return nil, err
