@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
-	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/codeman"
 )
 
@@ -21,6 +19,7 @@ var (
 
 func createDB() (*DB, error) {
 	options := DefaultOptions
+	options.ShardCount = 4
 	options.DirPath = fmt.Sprintf("tmp-%s", gofakeit.UUID())
 	options.ShrinkInterval = time.Second * 3
 	return Open(options)
@@ -33,59 +32,53 @@ func TestDB(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
-	m := make(map[string][]byte)
-
 	// Test db operations
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 20000; i++ {
 		key := strconv.Itoa(i)
-		db.Set("set-"+key, []byte(strconv.Itoa(i)))
-		db.SetEx("setex-"+key, []byte(strconv.Itoa(i)), time.Minute)
-		db.SetTx("settx-"+key, []byte(strconv.Itoa(i)), -1)
-
-		m["set-"+key] = []byte(strconv.Itoa(i))
-		m["setex-"+key] = []byte(strconv.Itoa(i))
+		val := []byte(strconv.Itoa(i))
+		db.Set("set-"+key, val)
+		db.SetEx("ttl-"+key, val, time.Minute)
+		db.SetEx("expired-"+key, val, time.Second)
+		db.SetTx("invalid-"+key, val, -1)
 	}
 
 	// gc
 	db.GC()
+	time.Sleep(time.Second * 2)
 
-	db.Scan(func(key string, val []byte, ts int64) bool {
-		prefix := strings.Split(key, "-")[0]
-		switch prefix {
-		case "set":
-			assert.Equal(val, m[key])
-		case "setex":
-			assert.Equal(ts > cache.GetNanoSec(), true)
-			assert.Equal(val, m[key])
-		case "settx":
-			assert.Equal(val, m[key])
-		default:
-			panic("wrong key")
-		}
-		return true
-	})
-
-	// Len
-	num := db.Len()
-	assert.Equal(int(num), len(m))
-
-	// Get
-	for k, v := range m {
-		val, _, err := db.Get(k)
-
-		prefix := strings.Split(k, "-")[0]
-		switch prefix {
-		case "set":
-			assert.Equal(val, v)
-		case "setex":
-			assert.Equal(val, v)
-		case "settx":
-			assert.Equal(nil, v)
-			assert.Equal(err, ErrKeyNotFound)
-		default:
-			panic("wrong key")
-		}
+	// Test get.
+	var ts int64
+	for i := 0; i < 10000; i++ {
+		key := strconv.Itoa(i)
+		// set
+		val, _, err := db.Get("set-" + key)
+		assert.Nil(err)
+		assert.Equal(val, []byte(key))
+		// ttl
+		val, ts, err = db.Get("ttl-" + key)
+		assert.Nil(err)
+		assert.Equal(val, []byte(key))
+		assert.True(ts > time.Now().UnixNano())
+		// expired
+		val, ts, err = db.Get("expired-" + key)
+		assert.Equal(val, nilBytes)
+		assert.Equal(err, ErrKeyNotFound)
+		assert.Equal(ts, int64(0))
+		// invalid
+		val, ts, err = db.Get("invalid-" + key)
+		assert.Equal(val, nilBytes)
+		assert.Equal(err, ErrKeyNotFound)
+		assert.Equal(ts, int64(0))
 	}
+
+	// Scan
+	var count int
+	db.Scan(func(key string, val []byte, ts int64) bool {
+		count++
+		return false
+	})
+	assert.Equal(count, 40000)
+	assert.Equal(int(db.Len()), 60000)
 
 	// Error
 	val, _, err := db.Get("map")
@@ -216,41 +209,38 @@ func TestList(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
-	for i := 0; i < 20000; i++ {
-		key := gofakeit.UUID()
-		animal := gofakeit.Animal()
-
-		err = db.LRPush(key, animal)
-		assert.Nil(err)
-
-		res, err := db.LLPop(key)
-		assert.Nil(err)
-		assert.Equal(res, animal)
-
-		num, err := db.LLen(key)
-		assert.Nil(err)
-		assert.Equal(num, 0)
-	}
-
 	for i := 0; i < 10000; i++ {
-		key := gofakeit.UUID()
-		animal := gofakeit.Animal()
+		key := "list" + strconv.Itoa(i/100)
+		val := gofakeit.Animal()
 
-		err = db.LLPush(key, animal)
-		assert.Nil(err)
+		if i%2 == 0 {
+			assert.Nil(db.LRPush(key, val))
 
-		// Index
-		res, err := db.LIndex(key, 0)
-		assert.Nil(err)
-		assert.Equal(res, animal)
+		} else {
+			assert.Nil(db.LLPush(key, val))
+			// check
+			res, err := db.LIndex(key, 0)
+			assert.Nil(err)
+			assert.Equal(res, val)
+		}
 
-		res, err = db.LRPop(key)
-		assert.Nil(err)
-		assert.Equal(res, animal)
+		if i > 8000 {
+			if i%2 == 0 {
+				res, err := db.LRPop(key)
+				assert.Nil(err)
+				assert.Equal(res, val)
+			} else {
+				res, err := db.LLPop(key)
+				assert.Nil(err)
+				assert.Equal(res, val)
+			}
+		}
 
 		num, err := db.LLen(key)
 		assert.Nil(err)
-		assert.Equal(num, 0)
+		keys, err := db.LKeys(key)
+		assert.Nil(err)
+		assert.Equal(len(keys), num)
 	}
 
 	// Error
@@ -260,6 +250,9 @@ func TestList(t *testing.T) {
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.LRPush("map", "1")
+	assert.ErrorContains(err, ErrWrongType.Error())
+
+	_, err = db.LKeys("map")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	res, err := db.LLPop("map")
@@ -278,24 +271,26 @@ func TestList(t *testing.T) {
 	assert.Equal(n, 0)
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	db.LRPush("list", "1")
-	db.LRPop("list")
-
 	// empty list
-	res, err = db.LLPop("list")
-	assert.Equal(res, "")
-	assert.Equal(err, ErrEmptyList)
+	{
+		db.LRPush("list", "1")
+		db.LRPop("list")
 
-	res, err = db.LRPop("list")
-	assert.Equal(res, "")
-	assert.Equal(err, ErrEmptyList)
+		res, err = db.LLPop("list")
+		assert.Equal(res, "")
+		assert.Equal(err, ErrEmptyList)
 
-	res, err = db.LIndex("list", 9)
-	assert.Equal(res, "")
-	assert.Equal(err, ErrIndexOutOfRange)
+		res, err = db.LRPop("list")
+		assert.Equal(res, "")
+		assert.Equal(err, ErrEmptyList)
 
-	for i := 0; i < 100; i++ {
-		db.LRPush("list", gofakeit.Animal())
+		res, err = db.LIndex("list", 9)
+		assert.Equal(res, "")
+		assert.Equal(err, ErrIndexOutOfRange)
+
+		for i := 0; i < 100; i++ {
+			db.LRPush("list", gofakeit.Animal())
+		}
 	}
 
 	// reload
@@ -708,23 +703,48 @@ func TestInvalidCodec(t *testing.T) {
 	}
 }
 
-func TestSyncNever(t *testing.T) {
-	println("===== TestSyncNever =====")
+func TestRace(t *testing.T) {
+	println("===== TestRace =====")
 	assert := assert.New(t)
 
-	options := DefaultOptions
-	options.DirPath = fmt.Sprintf("tmp-%s", gofakeit.UUID())
-	options.SyncPolicy = Never
-	db, err := Open(options)
-	assert.Nil(err)
+	// open invalid options.
+	{
+		invalidOptions := DefaultOptions
+		invalidOptions.DirPath = ""
+		_, err := Open(invalidOptions)
+		assert.NotNil(err)
 
-	// set
-	for i := 0; i < 1000; i++ {
-		key := strconv.Itoa(i)
-		db.Set(key, []byte(key))
+		invalidOptions.DirPath = "test1"
+		invalidOptions.ShardCount = 0
+		_, err = Open(invalidOptions)
+		assert.NotNil(err)
 	}
 
-	assert.Panics(func() {
-		db.Shrink()
-	})
+	// dirpath race.
+	options := DefaultOptions
+	options.DirPath = "tmp-race"
+	options.ShrinkInterval = time.Second * 3
+	db, err := Open(options)
+	assert.Nil(err)
+	assert.NotNil(db)
+
+	// open another db.
+	_, err = Open(options)
+	assert.Equal(err, ErrDatabaseIsUsing)
+}
+
+func TestUnmarshalError(t *testing.T) {
+	println("===== TestUnmarshalError =====")
+	assert := assert.New(t)
+
+	for _, types := range []int64{TypeMap, TypeList, TypeSet, TypeZSet, TypeBitmap} {
+		db, err := createDB()
+		assert.Nil(err)
+
+		// unmarshal error.
+		db.encode(NewCodec(OpSetTx).Int(types).Str("key").Int(0).Bytes([]byte("error")))
+		db.Close()
+		_, err = Open(*db.Options)
+		assert.NotNil(err)
+	}
 }

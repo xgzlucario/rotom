@@ -1,7 +1,7 @@
 package rotom
 
 import (
-	"log/slog"
+	"errors"
 	"time"
 )
 
@@ -9,9 +9,8 @@ import (
 type SyncPolicy byte
 
 const (
-	Never SyncPolicy = iota
-	EverySecond
-	// TODO: Sync
+	EverySecond SyncPolicy = iota
+	// TODO: Sync, Never
 )
 
 var (
@@ -21,26 +20,34 @@ var (
 		SyncPolicy:       EverySecond,
 		ShrinkInterval:   time.Minute,
 		RunSkipLoadError: true,
-		Logger:           slog.Default(),
-	}
-
-	NoPersistentOptions = Options{
-		ShardCount: 1024,
-		SyncPolicy: Never,
-		Logger:     slog.Default(),
 	}
 )
 
 // Options represents the configuration for a Store.
 type Options struct {
-	ShardCount int
+	// ShardCount is the shard numbers to underlying GigaCache used.
+	ShardCount uint32
 
-	DirPath string // Dir path of db file.
+	// Dir path if the db storage path.
+	DirPath string
 
-	SyncPolicy     SyncPolicy    // Data sync policy.
-	ShrinkInterval time.Duration // Shrink db file interval.
+	// Data sync policy.
+	SyncPolicy SyncPolicy
 
-	RunSkipLoadError bool // Starts when loading db file error.
+	// Shrink db file interval.
+	ShrinkInterval time.Duration
 
-	Logger *slog.Logger // Logger for db, set <nil> if you don't want to use it.
+	// Starts when loading db file error.
+	RunSkipLoadError bool
+}
+
+// checkOptions checks the validity of the options.
+func checkOptions(option Options) error {
+	if option.ShardCount == 0 {
+		return errors.New("invalid shard count")
+	}
+	if option.DirPath == "" {
+		return errors.New("invalid dir path")
+	}
+	return nil
 }

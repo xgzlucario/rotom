@@ -1,12 +1,14 @@
-// Package rotom provides an in-memory key-value databasdb.
+// Package rotom provides an in-memory key-value database.
 package rotom
 
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/gofrs/flock"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/codeman"
@@ -49,8 +51,10 @@ const (
 	mergeTypeOr
 	mergeTypeXOr
 
-	listDirectionLeft byte = iota + 1
-	listDirectionRight
+	listDirectionLeft  = 'L'
+	listDirectionRight = 'R'
+
+	fileLockName = "flock"
 )
 
 // Cmd
@@ -59,7 +63,7 @@ type Cmd struct {
 	hook func(*DB, *codeman.Parser) error
 }
 
-// cmdTable defines the rNum and callback function required for the operation.
+// cmdTable defines how each cmd is to be replayed through log redo to recover the database..
 var cmdTable = []Cmd{
 	{OpSetTx, func(db *DB, decoder *codeman.Parser) error {
 		// type, key, ts, val
@@ -117,7 +121,6 @@ var cmdTable = []Cmd{
 		default:
 			return fmt.Errorf("%w: %d", ErrUnSupportDataType, tp)
 		}
-
 		return nil
 	}},
 
@@ -128,7 +131,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		db.Remove(keys...)
 		return nil
 	}},
@@ -142,7 +144,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.HSet(key, field, val)
 	}},
 
@@ -154,7 +155,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		_, err := db.HRemove(key, fields...)
 		return err
 	}},
@@ -167,7 +167,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		_, err := db.SAdd(key, items...)
 		return err
 	}},
@@ -180,7 +179,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.SRemove(key, items...)
 	}},
 
@@ -202,7 +200,7 @@ var cmdTable = []Cmd{
 		case mergeTypeXOr:
 			return db.SDiff(key, items...)
 		}
-		return ErrInvalidBitmapOperation
+		return ErrInvalidMergeOperation
 	}},
 
 	{OpLPush, func(db *DB, decoder *codeman.Parser) error {
@@ -215,13 +213,10 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
-		switch direct {
-		case listDirectionLeft:
+		if direct == listDirectionLeft {
 			return db.LLPush(key, items...)
-		case listDirectionRight:
-			return db.LRPush(key, items...)
 		}
-		return ErrInvalidListDirect
+		return db.LRPush(key, items...)
 	}},
 
 	{OpLPop, func(db *DB, decoder *codeman.Parser) (err error) {
@@ -233,14 +228,11 @@ var cmdTable = []Cmd{
 			return decoder.Error
 		}
 
-		switch direct {
-		case listDirectionLeft:
+		if direct == listDirectionLeft {
 			_, err = db.LLPop(key)
-		case listDirectionRight:
-			_, err = db.LRPop(key)
-		default:
-			err = ErrInvalidListDirect
+			return
 		}
+		_, err = db.LRPop(key)
 		return
 	}},
 
@@ -253,7 +245,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		_, err := db.BitSet(key, val, offsets...)
 		return err
 	}},
@@ -266,7 +257,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.BitFlip(key, offset)
 	}},
 
@@ -288,7 +278,7 @@ var cmdTable = []Cmd{
 		case mergeTypeXOr:
 			return db.BitXor(key, items...)
 		}
-		return ErrInvalidBitmapOperation
+		return ErrInvalidMergeOperation
 	}},
 
 	{OpZAdd, func(db *DB, decoder *codeman.Parser) error {
@@ -300,7 +290,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.ZAdd(key, field, score)
 	}},
 
@@ -313,7 +302,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		_, err := db.ZIncr(key, field, score)
 		return err
 	}},
@@ -326,7 +314,6 @@ var cmdTable = []Cmd{
 		if decoder.Error != nil {
 			return decoder.Error
 		}
-
 		return db.ZRemove(key, field)
 	}},
 }
@@ -343,7 +330,7 @@ const (
 	TypeBitmap
 )
 
-// Type aliases for structx types.
+// Type aliases for built-in structx types.
 type (
 	String = []byte
 	Map    = *structx.SyncMap
@@ -353,9 +340,9 @@ type (
 	BitMap = *structx.Bitmap
 )
 
-// DB represents a rotom database engindb.
+// DB represents a rotom database.
 type DB struct {
-	// mu guards wal.
+	// mu guards wal data.
 	mu sync.Mutex
 	*Options
 
@@ -368,7 +355,8 @@ type DB struct {
 	shrinkTicker *time.Ticker
 
 	// if db loading encode not allowed.
-	loading bool
+	fileLock *flock.Flock
+	loading  bool
 
 	// write ahead log.
 	wal *wal.Log
@@ -380,23 +368,41 @@ type DB struct {
 	cm cmap.ConcurrentMap[string, any]
 }
 
-// Open opens a database by options.
+// Open create a new db instance by options.
 func Open(options Options) (*DB, error) {
+	if err := checkOptions(options); err != nil {
+		return nil, err
+	}
+
 	// create wal.
 	wal, err := wal.Open(options.DirPath)
 	if err != nil {
 		return nil, err
 	}
 
+	// create file lock, prevent multiple processes from using the same db directory.
+	fileLock := flock.New(filepath.Join(options.DirPath, fileLockName))
+	hold, err := fileLock.TryLock()
+	if err != nil {
+		return nil, err
+	}
+	if !hold {
+		return nil, ErrDatabaseIsUsing
+	}
+
+	// init db instance.
 	ctx, cancel := context.WithCancel(context.Background())
+	cacheOptions := cache.DefaultOption
+	cacheOptions.ShardCount = options.ShardCount
 	db := &DB{
-		Options: &options,
-		ctx:     ctx,
-		cancel:  cancel,
-		loading: true,
-		wal:     wal,
-		m:       cache.New(cache.DefaultOption),
-		cm:      cmap.New[any](),
+		Options:  &options,
+		ctx:      ctx,
+		cancel:   cancel,
+		loading:  true,
+		fileLock: fileLock,
+		wal:      wal,
+		m:        cache.New(cacheOptions),
+		cm:       cmap.New[any](),
 	}
 
 	// load db from wal.
@@ -440,28 +446,28 @@ func Open(options Options) (*DB, error) {
 		}()
 	}
 
-	db.logInfo("rotom is ready to go")
-
 	return db, nil
 }
 
-// Close closes the db.
+// Close the database, close all data files and release file lock.
 func (db *DB) Close() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
 	select {
 	case <-db.ctx.Done():
 		return ErrDatabaseClosed
 	default:
-		db.wal.Sync()
+		if err := db.wal.Close(); err != nil {
+			return err
+		}
 		db.cancel()
-		return db.wal.Close()
+		return db.fileLock.Unlock()
 	}
 }
 
 // encode
 func (db *DB) encode(cd *codeman.Codec) {
-	if db.SyncPolicy == Never {
-		return
-	}
 	if db.loading {
 		return
 	}
@@ -502,6 +508,7 @@ func (db *DB) SetEx(key string, val []byte, ttl time.Duration) {
 
 // SetTx store key-value pair with deadlindb.
 func (db *DB) SetTx(key string, val []byte, ts int64) {
+	// you should check ts outside.
 	if ts < 0 {
 		return
 	}
@@ -784,6 +791,15 @@ func (db *DB) LLen(key string) (int, error) {
 	return ls.Size(), nil
 }
 
+// LKeys
+func (db *DB) LKeys(key string) ([]string, error) {
+	ls, err := db.fetchList(key)
+	if err != nil {
+		return nil, err
+	}
+	return ls.Keys(), nil
+}
+
 // BitTest
 func (db *DB) BitTest(key string, offset uint32) (bool, error) {
 	bm, err := db.fetchBitMap(key)
@@ -978,8 +994,6 @@ func (db *DB) loadFromWal() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	db.logInfo("start loading db from wal")
-
 	// iter all wal.
 	return db.wal.Range(func(data []byte) error {
 		parser := codeman.NewParser(data)
@@ -1004,7 +1018,7 @@ func (db *DB) shrink() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	// create new segment fildb.
+	// create new segment file.
 	if err := db.wal.OpenNewActiveSegment(); err != nil {
 		return err
 	}
@@ -1042,18 +1056,12 @@ func (db *DB) shrink() error {
 		return err
 	}
 
-	db.logInfo("rotom shrink done")
-
 	// remove all old segment files.
 	return db.wal.RemoveOldSegments(db.wal.ActiveSegmentID())
 }
 
-// Shrink forced to shrink db fildb.
-// Warning: will panic if SyncPolicy is never.
+// Shrink forced to shrink db file.
 func (db *DB) Shrink() {
-	if db.SyncPolicy == Never {
-		panic("rotom: shrink is not allowed when SyncPolicy is never")
-	}
 	db.shrinkTicker.Reset(db.ShrinkInterval)
 	db.shrink()
 }
@@ -1114,11 +1122,4 @@ func fetch[T any](db *DB, key string, new func() T, setnx ...bool) (v T, err err
 		db.cm.Set(key, v)
 	}
 	return v, nil
-}
-
-// logInfo
-func (db *DB) logInfo(msg string, r ...any) {
-	if db.Logger != nil {
-		db.Logger.Info(fmt.Sprintf(msg, r...))
-	}
 }

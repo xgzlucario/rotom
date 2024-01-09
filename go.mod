@@ -8,6 +8,7 @@ require (
 	github.com/bytedance/sonic v1.10.2
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/dolthub/swiss v0.2.1
+	github.com/gofrs/flock v0.8.1
 	github.com/influxdata/tdigest v0.0.1
 	github.com/klauspost/compress v1.17.4
 	github.com/orcaman/concurrent-map/v2 v2.0.1

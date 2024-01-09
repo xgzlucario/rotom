@@ -116,5 +116,9 @@ func (l *Log) RemoveOldSegments(maxSegmentID uint32) error {
 
 // Close
 func (l *Log) Close() error {
+	// sync before closed.
+	if err := l.Sync(); err != nil {
+		return err
+	}
 	return l.log.Close()
 }

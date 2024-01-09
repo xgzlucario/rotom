@@ -14,9 +14,7 @@ test-cover:
 	-coverpkg=./... \
 	-coverprofile=coverage.txt -covermode=atomic
 	go tool cover -html=coverage.txt -o coverage.html
-
-	rm coverage.txt
-	rm -r tmp*
+	make clean
 
 pprof:
 	go tool pprof -http=:18081 "http://localhost:6060/debug/pprof/profile?seconds=60"
@@ -25,6 +23,9 @@ heap:
 	go tool pprof http://localhost:6060/debug/pprof/heap
 
 run-bench:
-	rm -rf *.db benchmark/*.db
 	go run benchmark/*.go
-	rm -rf *.db benchmark/*.db
+	make clean
+
+clean:
+	rm -f coverage.txt
+	rm -r tmp-*

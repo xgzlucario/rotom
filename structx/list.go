@@ -92,8 +92,8 @@ func (l *List[V]) Size() int {
 	return n
 }
 
-// MarshalJSON
-func (l *List[V]) MarshalJSON() ([]byte, error) {
+// Keys
+func (l *List[V]) Keys() []V {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
@@ -101,8 +101,12 @@ func (l *List[V]) MarshalJSON() ([]byte, error) {
 	for n := l.ls.Begin(); n.IsValid(); n.Next() {
 		arr = append(arr, n.Get())
 	}
+	return arr
+}
 
-	return sonic.Marshal(arr)
+// MarshalJSON
+func (l *List[V]) MarshalJSON() ([]byte, error) {
+	return sonic.Marshal(l.Keys())
 }
 
 // UnmarshalJSON

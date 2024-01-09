@@ -25,8 +25,6 @@ var (
 
 	ErrNotNumberic = errors.New("value is not numberic")
 
-	ErrCheckSum = errors.New("crc checksum error")
-
 	ErrInvalidArgs = errors.New("invalid args")
 
 	ErrInvalidResponse = errors.New("invalid response")
@@ -39,7 +37,7 @@ var (
 
 	ErrEmptyList = errors.New("list is empty")
 
-	ErrInvalidBitmapOperation = errors.New("invalid bitmap operation")
+	ErrInvalidMergeOperation = errors.New("invalid merge operation")
 
-	ErrInvalidListDirect = errors.New("invalid list direct")
+	ErrDatabaseIsUsing = errors.New("database is using")
 )

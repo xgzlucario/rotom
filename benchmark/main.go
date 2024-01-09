@@ -45,7 +45,6 @@ func dirSize(dirPath string) string {
 
 func createDB() *rotom.DB {
 	options := rotom.DefaultOptions
-	options.Logger = nil
 	options.DirPath = fmt.Sprintf("tmp-%d", time.Now().UnixNano())
 
 	db, err := rotom.Open(options)
