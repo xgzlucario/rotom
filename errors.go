@@ -40,4 +40,6 @@ var (
 	ErrInvalidMergeOperation = errors.New("invalid merge operation")
 
 	ErrDatabaseIsUsing = errors.New("database is using")
+
+	ErrShrinkRunning = errors.New("shrink is running")
 )

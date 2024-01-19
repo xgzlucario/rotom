@@ -82,7 +82,7 @@ func benchSet() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("db file size: %v\n", dirSize(db.GetOptions().DirPath))
 	fmt.Println()
 }
 
@@ -124,7 +124,7 @@ func benchSet8parallel() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("db file size: %v\n", dirSize(db.GetOptions().DirPath))
 	fmt.Println()
 }
 
@@ -155,7 +155,7 @@ func benchSetEx() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("db file size: %v\n", dirSize(db.GetOptions().DirPath))
 	fmt.Println()
 }
 
@@ -218,7 +218,7 @@ func benchHSet() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("db file size: %v\n", dirSize(db.GetOptions().DirPath))
 	fmt.Println()
 }
 
@@ -249,7 +249,7 @@ func benchLRPush() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("db file size: %v\n", dirSize(db.GetOptions().DirPath))
 	fmt.Println()
 }
 
@@ -311,7 +311,7 @@ func benchBitSet() {
 	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
 	// wait for sync
 	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("db file size: %v\n", dirSize(db.GetOptions().DirPath))
 	fmt.Println()
 }
 

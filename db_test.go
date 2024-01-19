@@ -20,8 +20,8 @@ var (
 func createDB() (*DB, error) {
 	options := DefaultOptions
 	options.ShardCount = 4
-	options.DirPath = fmt.Sprintf("tmp-%s", gofakeit.UUID())
-	options.ShrinkInterval = time.Second * 3
+	options.DirPath = fmt.Sprintf("tmp-%x", time.Now().UnixNano())
+	options.ShrinkCronExpr = "0/3 * 0/1 * * ?" // every 3 seconds
 	return Open(options)
 }
 
@@ -98,7 +98,7 @@ func TestDB(t *testing.T) {
 	assert.Equal(db.Close(), ErrDatabaseClosed)
 
 	// Load Success
-	_, err = Open(*db.Options)
+	_, err = Open(db.GetOptions())
 	assert.Nil(err)
 }
 
@@ -153,7 +153,7 @@ func TestHmap(t *testing.T) {
 
 	// reload
 	db.Close()
-	db, err = Open(*db.Options)
+	db, err = Open(db.GetOptions())
 	assert.Nil(err)
 
 	check()
@@ -161,7 +161,7 @@ func TestHmap(t *testing.T) {
 	// shrink and reload
 	db.Shrink()
 	db.Close()
-	_, err = Open(*db.Options)
+	_, err = Open(db.GetOptions())
 	assert.Nil(err)
 
 	check()
@@ -295,13 +295,13 @@ func TestList(t *testing.T) {
 
 	// reload
 	db.Close()
-	db, err = Open(*db.Options)
+	db, err = Open(db.GetOptions())
 	assert.Nil(err)
 
 	// shrink and reload
 	db.Shrink()
 	db.Close()
-	_, err = Open(*db.Options)
+	_, err = Open(db.GetOptions())
 	assert.Nil(err)
 }
 
@@ -414,13 +414,13 @@ func TestSet(t *testing.T) {
 
 	// reload
 	db.Close()
-	db, err = Open(*db.Options)
+	db, err = Open(db.GetOptions())
 	assert.Nil(err)
 
 	// shrink and reload
 	db.Shrink()
 	db.Close()
-	_, err = Open(*db.Options)
+	_, err = Open(db.GetOptions())
 	assert.Nil(err)
 }
 
@@ -526,13 +526,13 @@ func TestBitmap(t *testing.T) {
 
 	// reload
 	db.Close()
-	db, err = Open(*db.Options)
+	db, err = Open(db.GetOptions())
 	assert.Nil(err)
 
 	// shrink and reload
 	db.Shrink()
 	db.Close()
-	_, err = Open(*db.Options)
+	_, err = Open(db.GetOptions())
 	assert.Nil(err)
 }
 
@@ -591,7 +591,7 @@ func TestZSet(t *testing.T) {
 
 	// Reload
 	db.Close()
-	db, err = Open(*db.Options)
+	db, err = Open(db.GetOptions())
 	assert.Nil(err)
 
 	check()
@@ -621,13 +621,13 @@ func TestZSet(t *testing.T) {
 
 	// reload
 	db.Close()
-	db, err = Open(*db.Options)
+	db, err = Open(db.GetOptions())
 	assert.Nil(err)
 
 	// shrink and reload
 	db.Shrink()
 	db.Close()
-	db, err = Open(*db.Options)
+	db, err = Open(db.GetOptions())
 	assert.Nil(err)
 
 	// Test error
@@ -667,19 +667,19 @@ func TestInvalidCodec(t *testing.T) {
 	} {
 		db, err := createDB()
 		assert.Nil(err)
-		db.encode(NewCodec(op).Int(100))
+		db.encode(newCodec(op).Int(100))
 		db.Close()
-		_, err = Open(*db.Options)
+		_, err = Open(db.GetOptions())
 		assert.NotNil(err)
 	}
 
 	// encode any.
-	codec, err := NewCodec(OpSetTx).Any([]string{"1"})
+	codec, err := newCodec(OpSetTx).Any([]string{"1"})
 	assert.Nil(codec)
 	assert.ErrorContains(err, ErrUnSupportDataType.Error())
 
 	// parse args.
-	codec = NewCodec(OpSetTx).Bool(true)
+	codec = newCodec(OpSetTx).Bool(true)
 	parser := codeman.NewParser(codec.Content())
 
 	n := parser.ParseVarint()
@@ -723,7 +723,7 @@ func TestRace(t *testing.T) {
 	// dirpath race.
 	options := DefaultOptions
 	options.DirPath = "tmp-race"
-	options.ShrinkInterval = time.Second * 3
+	options.ShrinkCronExpr = "0/3 * 0/1 * * ?" // every 3 seconds
 	db, err := Open(options)
 	assert.Nil(err)
 	assert.NotNil(db)
@@ -742,9 +742,9 @@ func TestUnmarshalError(t *testing.T) {
 		assert.Nil(err)
 
 		// unmarshal error.
-		db.encode(NewCodec(OpSetTx).Int(types).Str("key").Int(0).Bytes([]byte("error")))
+		db.encode(newCodec(OpSetTx).Int(types).Str("key").Int(0).Bytes([]byte("error")))
 		db.Close()
-		_, err = Open(*db.Options)
+		_, err = Open(db.GetOptions())
 		assert.NotNil(err)
 	}
 }
