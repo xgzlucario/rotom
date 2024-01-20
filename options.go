@@ -17,7 +17,7 @@ var (
 		DirPath:          "rotom",
 		ShardCount:       1024,
 		SyncPolicy:       EverySecond,
-		ShrinkCronExpr:   "0 0 0/1 * * ?", // every hour default
+		ShrinkCronExpr:   "0 0 0/1 * * ?", // every hour.
 		RunSkipLoadError: true,
 	}
 )
@@ -30,16 +30,18 @@ type Options struct {
 	// ShardCount is the shard numbers for underlying hashmap.
 	ShardCount uint32
 
-	// SyncPolicy
+	// SyncPolicy is whether to synchronize writes to disk.
+	// Setting `Sync` is required for durability of a single write operation, but also results in slower writes.
+	// Setting `EverySecond` is much faster, but less durable as it relies on the OS to flush the writes to disk.
 	SyncPolicy SyncPolicy
 
-	// ShrinkCronExpr
-	// auto shrink will be triggered when cron expr is satisfied.
+	// ShrinkCronExpr sauto shrink will be triggered when cron expr is satisfied.
 	// cron expression follows the standard cron expression.
 	// e.g. "0 0 * * *" means merge at 00:00:00 every day.
+	// Setting empty string "" will disable auto shrink.
 	ShrinkCronExpr string
 
-	// Starts when loading db file error.
+	// Skip error when loading db file when startup.
 	RunSkipLoadError bool
 }
 
