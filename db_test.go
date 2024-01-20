@@ -709,21 +709,20 @@ func TestRace(t *testing.T) {
 
 	// open invalid options.
 	{
-		invalidOptions := DefaultOptions
-		invalidOptions.DirPath = ""
-		_, err := Open(invalidOptions)
+		options := DefaultOptions
+		options.DirPath = ""
+		_, err := Open(options)
 		assert.NotNil(err)
 
-		invalidOptions.DirPath = "test1"
-		invalidOptions.ShardCount = 0
-		_, err = Open(invalidOptions)
+		options.DirPath = "test1"
+		options.ShardCount = 0
+		_, err = Open(options)
 		assert.NotNil(err)
 	}
 
 	// dirpath race.
 	options := DefaultOptions
 	options.DirPath = "tmp-race"
-	options.ShrinkCronExpr = "0/3 * 0/1 * * ?" // every 3 seconds
 	db, err := Open(options)
 	assert.Nil(err)
 	assert.NotNil(db)
@@ -747,4 +746,32 @@ func TestUnmarshalError(t *testing.T) {
 		_, err = Open(db.GetOptions())
 		assert.NotNil(err)
 	}
+}
+
+func TestShrink(t *testing.T) {
+	println("===== TestShrink =====")
+	assert := assert.New(t)
+
+	db, err := createDB()
+	assert.Nil(err)
+
+	// shrink
+	for i := 0; i < 10000; i++ {
+		db.Set("key"+strconv.Itoa(i), []byte("value"))
+	}
+
+	go func() {
+		time.Sleep(time.Millisecond)
+		err = db.Shrink()
+		assert.Equal(err, ErrShrinkRunning)
+	}()
+
+	err = db.Shrink()
+	assert.Nil(err)
+
+	// wrong shrink cron expr.
+	options := DefaultOptions
+	options.ShrinkCronExpr = "error"
+	_, err = Open(options)
+	assert.NotNil(err)
 }

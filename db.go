@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -79,12 +80,6 @@ var cmdTable = []Cmd{
 		}
 
 		switch tp {
-		case TypeString:
-			// check ttl
-			if ts > cache.GetNanoSec() || ts == noTTL {
-				db.SetTx(key, val, ts)
-			}
-
 		case TypeList:
 			ls := structx.NewList[string]()
 			if err := ls.UnmarshalJSON(val); err != nil {
@@ -121,7 +116,10 @@ var cmdTable = []Cmd{
 			db.cm.Set(key, m)
 
 		default:
-			return fmt.Errorf("%w: %d", ErrUnSupportDataType, tp)
+			// default String, check ttl before.
+			if ts > cache.GetNanoSec() || ts == noTTL {
+				db.SetTx(key, val, ts)
+			}
 		}
 		return nil
 	}},
@@ -199,10 +197,9 @@ var cmdTable = []Cmd{
 			return db.SInter(key, items...)
 		case mergeTypeOr:
 			return db.SUnion(key, items...)
-		case mergeTypeXOr:
+		default:
 			return db.SDiff(key, items...)
 		}
-		return ErrInvalidMergeOperation
 	}},
 
 	{OpLPush, func(db *DB, decoder *codeman.Parser) error {
@@ -277,10 +274,9 @@ var cmdTable = []Cmd{
 			return db.BitAnd(key, items...)
 		case mergeTypeOr:
 			return db.BitOr(key, items...)
-		case mergeTypeXOr:
+		default:
 			return db.BitXor(key, items...)
 		}
-		return ErrInvalidMergeOperation
 	}},
 
 	{OpZAdd, func(db *DB, decoder *codeman.Parser) error {
@@ -350,7 +346,7 @@ type DB struct {
 	wal       *wal.WAL
 	loading   bool // is loading finished from wal.
 	closed    bool
-	shrinking bool
+	shrinking uint32
 	m         *cache.GigaCache                // data for bytes.
 	cm        cmap.ConcurrentMap[string, any] // data for built-in types.
 	cron      *cron.Cron                      // cron scheduler for auto merge task.
@@ -405,7 +401,7 @@ func Open(options Options) (*DB, error) {
 		if _, err = db.cron.AddFunc("* * * * * ?", func() {
 			db.Sync()
 		}); err != nil {
-			return nil, err
+			panic(err)
 		}
 	}
 	if len(options.ShrinkCronExpr) > 0 {
@@ -1001,16 +997,14 @@ func (db *DB) loadFromWal() error {
 
 // Shrink rewrite db file.
 func (db *DB) Shrink() error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	if db.shrinking {
+	// cas
+	if !atomic.CompareAndSwapUint32(&db.shrinking, 0, 1) {
 		return ErrShrinkRunning
 	}
-	db.shrinking = true
-	defer func() {
-		db.shrinking = false
-	}()
+	defer atomic.StoreUint32(&db.shrinking, 0)
+
+	db.mu.Lock()
+	defer db.mu.Unlock()
 
 	// create new segment file.
 	if err := db.wal.OpenNewActiveSegment(); err != nil {
@@ -1058,16 +1052,12 @@ func (db *DB) Shrink() error {
 func (db *DB) removeOldSegments(maxSegmentID uint32) error {
 	maxSegmentName := fmt.Sprintf("%09d", maxSegmentID)
 
-	filepath.WalkDir(db.options.DirPath, func(path string, file os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	return filepath.WalkDir(db.options.DirPath, func(path string, file os.DirEntry, err error) error {
 		if file.Name() < maxSegmentName {
-			os.Remove(path)
+			return os.Remove(path)
 		}
-		return nil
+		return err
 	})
-	return nil
 }
 
 func (db *DB) fetchMap(key string, setnx ...bool) (m Map, err error) {
