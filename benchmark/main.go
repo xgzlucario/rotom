@@ -260,8 +260,8 @@ func benchGet8parallel() {
 	for i := 0; i < 8; i++ {
 		i := i
 		go func() {
-			start := i * 100 * 10000
-			for n := 0; n < 100*10000/8; n++ {
+			start := i * N
+			for n := 0; n < N/8; n++ {
 				t1 := time.Now()
 				db.Get(fmt.Sprintf("%010d", start+n))
 

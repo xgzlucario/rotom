@@ -6,15 +6,15 @@ English | [中文](README_ZN.md) | [doc](https://www.yuque.com/1ucario/devdoc/nt
 
 ## 📃Introduction
 
-This is Rotom, a stand-alone high-performance Key-Value memory database written in Go. It has built-in multiple commonly used data types, supports persistent storage.
+Welcome to Rotom, an embedded high-performance Key-Value in-memory database written in Golang, featuring built-in support for multiple common data types and persistent storage capabilities.
+s
+Currently features:
 
-Currently supported features:
-
-1. Built-in data types like String, Map, Set, List, ZSet, BitMap, etc., supporting more than 20 commands.
-2. Nanosecond level expiration time supported.
-3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), supports concurrency and avoids GC overhead.
-4. RDB + AOF hybrid persistence strategy.
-5. Use zstd algorithm to compress log files with a compression ratio of 10:1.
+1. Built-in data types such as String, Map, Set, List, ZSet, and BitMap, with support for over 20 commands.
+2. Individual and precise per-key expiry support down to the second.
+3. An underlying hashmap tailored specifically for managing data in the GB range, saving about 40% of memory compared to stdmap, with better performance and reduced GC overhead.
+4. An integrated encoding/decoding library that more effective than protobuf.
+5. Persistent logging, along with log-based recovery of the database.
 
 If you want to know more technical details about Rotom, please check out the [doc](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc).
 
@@ -41,7 +41,7 @@ import (
 )
 
 func main() {
-	db, err := rotom.Open(rotom.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultOptions)
 	if err != nil {
 		panic(err)
 	}

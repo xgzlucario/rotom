@@ -6,15 +6,15 @@
 
 ## 📃介绍
 
-这里是 Rotom，一个使用 Golang 编写单机高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储。
+这里是 Rotom，一个使用 Golang 编写的嵌入式高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储。
 
-目前支持的功能：
+目前实现的特性：
 
 1. 内置数据类型 String，Map，Set，List，ZSet，BitMap 等，支持 20 多种命令
-2. 支持纳秒级别的过期时间
-3. 底层基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，支持并发，规避GC开销
-4. 基于 RDB + AOF 混合的持久化策略
-5. 使用 zstd 算法压缩日志文件，压缩比达到 10:1
+2. 每个键值对独立的、秒级的过期时间支持
+3. 底层 hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，被设计用来专门管理 GB 级别的数据量，比 `stdmap` 节省约 40% 的内存，性能更强，GC开销更小
+4. 内置编解码库，比 protobuf 性能更好
+5. 持久化日志，以及根据日志重做恢复数据库
 
 如果你想了解更多关于 Rotom 的技术细节，请查看 [在线文档](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc)
 
@@ -41,7 +41,7 @@ import (
 )
 
 func main() {
-	db, err := rotom.Open(rotom.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultOptions)
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +67,7 @@ func main() {
 ```
 ## 🚀性能
 
-Rotom 具有超强的多线程性能，以下是压测数据。
+Rotom 具有超强的性能，下面是一些功能的测试结果。
 
 ### 测试环境
 
