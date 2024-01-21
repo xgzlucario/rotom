@@ -7,7 +7,7 @@ English | [中文](README_ZN.md) | [doc](https://www.yuque.com/1ucario/devdoc/nt
 ## 📃Introduction
 
 Welcome to Rotom, an embedded high-performance Key-Value in-memory database written in Go, has many built-in data types, Support for persistence and data recovery.
-s
+
 Currently features:
 
 1. Built-in data types String, Map, Set, List, ZSet, and BitMap.
