@@ -6,17 +6,17 @@ English | [中文](README_ZN.md) | [doc](https://www.yuque.com/1ucario/devdoc/nt
 
 ## 📃Introduction
 
-Welcome to Rotom, an embedded high-performance Key-Value in-memory database written in Golang, featuring built-in support for multiple common data types and persistent storage capabilities.
+Welcome to Rotom, an embedded high-performance Key-Value in-memory database written in Go, has many built-in data types, Support for persistence and data recovery.
 s
 Currently features:
 
-1. Built-in data types such as String, Map, Set, List, ZSet, and BitMap, with support for over 20 commands.
-2. Individual and precise per-key expiry support down to the second.
-3. An underlying hashmap [GigaCache](https://github.com/xgzlucario/GigaCache) tailored specifically for managing data in the GB range, saving about 40% of memory compared to stdmap, with better performance and reduced GC overhead.
-4. An integrated encoding/decoding library that more effective than protobuf.
-5. Persistent logging, along with log-based recovery of the database.
+1. Built-in data types String, Map, Set, List, ZSet, and BitMap.
+2. Second level ttl supported for each key-value pair.
+3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), which is managing GB-level data, saving about 40% of memory compared to `stdmap`, with better performance and reduced GC overhead.
+4. Internal encoding/decoding lib that more effective than `protobuf`.
+5. Persistent log support, and can recover database from logs.
 
-If you want to know more technical details about Rotom, please check out the [doc](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc).
+If you want to know more technical details, check out [doc](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc).
 
 ## 🚚Usage
 
