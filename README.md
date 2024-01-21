@@ -6,15 +6,15 @@ English | [中文](README_ZN.md) | [doc](https://www.yuque.com/1ucario/devdoc/nt
 
 ## 📃Introduction
 
-This is Rotom, a stand-alone high-performance Key-Value memory database written in Go. It has built-in multiple commonly used data types, supports persistent storage.
+Welcome to Rotom, an embedded high-performance Key-Value in-memory database written in Golang, featuring built-in support for multiple common data types and persistent storage capabilities.
+s
+Currently features:
 
-Currently supported features:
-
-1. Built-in data types like String, Map, Set, List, ZSet, BitMap, etc., supporting more than 20 commands.
-2. Nanosecond level expiration time supported.
-3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), supports concurrency and avoids GC overhead.
-4. RDB + AOF hybrid persistence strategy.
-5. Use zstd algorithm to compress log files with a compression ratio of 10:1.
+1. Built-in data types such as String, Map, Set, List, ZSet, and BitMap, with support for over 20 commands.
+2. Individual and precise per-key expiry support down to the second.
+3. An underlying hashmap tailored specifically for managing data in the GB range, saving about 40% of memory compared to stdmap, with better performance and reduced GC overhead.
+4. An integrated encoding/decoding library that more effective than protobuf.
+5. Persistent logging, along with log-based recovery of the database.
 
 If you want to know more technical details about Rotom, please check out the [doc](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc).
 
@@ -41,7 +41,7 @@ import (
 )
 
 func main() {
-	db, err := rotom.Open(rotom.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultOptions)
 	if err != nil {
 		panic(err)
 	}
@@ -80,83 +80,86 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 
 ### Benchmark
 
-```shell
+```bash
 ========== Set ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 291.413216ms
-50th: 214 ns
-90th: 262 ns
-99th: 509 ns
-db file size: 838.5KB
-
-========== Set 8 parallel ==========
-size: 100*10000 enties
-desc: key 10 bytes, value 10 bytes
-cost: 188.082777ms
-50th: 352 ns
-90th: 857 ns
-99th: 22406 ns
-db file size: 4.0MB
+cost: 1.120466957s
+qps: 892467.60
+50th: 990 ns
+90th: 1107 ns
+99th: 1724 ns
 
 ========== SetEx ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes, ttl 1min
-cost: 302.246712ms
-50th: 225 ns
-90th: 272 ns
-99th: 556 ns
-db file size: 790.9KB
+cost: 1.125406833s
+qps: 888551.77
+50th: 986 ns
+90th: 1092 ns
+99th: 2110 ns
 
 ========== Get ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 260.6399ms
-50th: 224 ns
-90th: 280 ns
-99th: 533 ns
+cost: 255.023737ms
+qps: 3920845.99
+50th: 212 ns
+90th: 267 ns
+99th: 532 ns
 
 ========== Get 8 parallel ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 48.348878ms
-50th: 248 ns
-90th: 393 ns
-99th: 638 ns
+cost: 138.089874ms
+qps: 7240728.26
+50th: 173 ns
+90th: 261 ns
+99th: 501 ns
 
 ========== LRPush ==========
 size: 100*10000 enties
 desc: value 10 bytes
-cost: 228.933463ms
-50th: 192 ns
-90th: 211 ns
-99th: 321 ns
-db file size: 260.0KB
+cost: 1.033844185s
+qps: 967248.36
+50th: 936 ns
+90th: 1011 ns
+99th: 1609 ns
 
 ========== HSet ==========
 size: 100*10000 enties
 desc: field 10 bytes, value 10 bytes
-cost: 398.351779ms
-50th: 224 ns
-90th: 278 ns
-99th: 443 ns
-db file size: 835.2KB
+cost: 1.182939928s
+qps: 845337.51
+50th: 987 ns
+90th: 1117 ns
+99th: 1850 ns
 
 ========== HGet ==========
 size: 100*10000 enties
 desc: field 10 bytes, value 10 bytes
-cost: 254.612279ms
-50th: 211 ns
-90th: 262 ns
-99th: 534 ns
+cost: 292.57105ms
+qps: 3417634.25
+50th: 220 ns
+90th: 306 ns
+99th: 575 ns
 
 ========== BitSet ==========
 size: 100*10000 enties
 desc: offset uint32
-cost: 141.778962ms
-50th: 108 ns
-90th: 115 ns
-99th: 137 ns
-db file size: 898.2KB
+cost: 916.172391ms
+qps: 1091477.02
+50th: 833 ns
+90th: 880 ns
+99th: 1219 ns
+
+========== ZSet ==========
+size: 100*10000 enties
+desc: field 10 bytes, incr float64
+cost: 1.321257444s
+qps: 756843.75
+50th: 1121 ns
+90th: 1248 ns
+99th: 2025 ns
 ```
 

@@ -2,18 +2,21 @@
 package rotom
 
 import (
-	"context"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofrs/flock"
 	cmap "github.com/orcaman/concurrent-map/v2"
+	"github.com/robfig/cron/v3"
+	"github.com/rosedblabs/wal"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/codeman"
 	"github.com/xgzlucario/rotom/structx"
-	"github.com/xgzlucario/rotom/wal"
 )
 
 const (
@@ -54,7 +57,7 @@ const (
 	listDirectionLeft  = 'L'
 	listDirectionRight = 'R'
 
-	fileLockName = "flock"
+	fileLockName = "FLOCK"
 )
 
 // Cmd
@@ -77,12 +80,6 @@ var cmdTable = []Cmd{
 		}
 
 		switch tp {
-		case TypeString:
-			// check ttl
-			if ts > cache.GetNanoSec() || ts == noTTL {
-				db.SetTx(key, val, ts)
-			}
-
 		case TypeList:
 			ls := structx.NewList[string]()
 			if err := ls.UnmarshalJSON(val); err != nil {
@@ -119,7 +116,10 @@ var cmdTable = []Cmd{
 			db.cm.Set(key, m)
 
 		default:
-			return fmt.Errorf("%w: %d", ErrUnSupportDataType, tp)
+			// default String, check ttl before.
+			if ts > cache.GetNanoSec() || ts == noTTL {
+				db.SetTx(key, val, ts)
+			}
 		}
 		return nil
 	}},
@@ -197,10 +197,9 @@ var cmdTable = []Cmd{
 			return db.SInter(key, items...)
 		case mergeTypeOr:
 			return db.SUnion(key, items...)
-		case mergeTypeXOr:
+		default:
 			return db.SDiff(key, items...)
 		}
-		return ErrInvalidMergeOperation
 	}},
 
 	{OpLPush, func(db *DB, decoder *codeman.Parser) error {
@@ -275,10 +274,9 @@ var cmdTable = []Cmd{
 			return db.BitAnd(key, items...)
 		case mergeTypeOr:
 			return db.BitOr(key, items...)
-		case mergeTypeXOr:
+		default:
 			return db.BitXor(key, items...)
 		}
-		return ErrInvalidMergeOperation
 	}},
 
 	{OpZAdd, func(db *DB, decoder *codeman.Parser) error {
@@ -330,7 +328,7 @@ const (
 	TypeBitmap
 )
 
-// Type aliases for built-in structx types.
+// Type aliases for built-in types.
 type (
 	String = []byte
 	Map    = *structx.SyncMap
@@ -342,30 +340,16 @@ type (
 
 // DB represents a rotom database.
 type DB struct {
-	// mu guards wal data.
-	mu sync.Mutex
-	*Options
-
-	// context.
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	// ticker.
-	syncTicker   *time.Ticker
-	shrinkTicker *time.Ticker
-
-	// if db loading encode not allowed.
-	fileLock *flock.Flock
-	loading  bool
-
-	// write ahead log.
-	wal *wal.Log
-
-	// data for bytes.
-	m *cache.GigaCache
-
-	// data for built-in structurdb.
-	cm cmap.ConcurrentMap[string, any]
+	mu        sync.Mutex
+	options   *Options
+	fileLock  *flock.Flock
+	wal       *wal.WAL
+	loading   bool // is loading finished from wal.
+	closed    bool
+	shrinking uint32
+	m         *cache.GigaCache                // data for bytes.
+	cm        cmap.ConcurrentMap[string, any] // data for built-in types.
+	cron      *cron.Cron                      // cron scheduler for auto merge task.
 }
 
 // Open create a new db instance by options.
@@ -375,7 +359,10 @@ func Open(options Options) (*DB, error) {
 	}
 
 	// create wal.
-	wal, err := wal.Open(options.DirPath)
+	walOptions := wal.DefaultOptions
+	walOptions.DirPath = options.DirPath
+	walOptions.Sync = (options.SyncPolicy == Sync)
+	wal, err := wal.Open(walOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -391,13 +378,10 @@ func Open(options Options) (*DB, error) {
 	}
 
 	// init db instance.
-	ctx, cancel := context.WithCancel(context.Background())
 	cacheOptions := cache.DefaultOption
 	cacheOptions.ShardCount = options.ShardCount
 	db := &DB{
-		Options:  &options,
-		ctx:      ctx,
-		cancel:   cancel,
+		options:  &options,
 		loading:  true,
 		fileLock: fileLock,
 		wal:      wal,
@@ -411,40 +395,24 @@ func Open(options Options) (*DB, error) {
 	}
 	db.loading = false
 
-	// start timer.
-	if db.SyncPolicy == EverySecond {
-		// start sync ticker.
-		db.syncTicker = time.NewTicker(time.Second)
-		go func() {
-			for {
-				select {
-				case <-db.ctx.Done():
-					db.syncTicker.Stop()
-					return
-				case <-db.syncTicker.C:
-					db.mu.Lock()
-					db.wal.Sync()
-					db.mu.Unlock()
-				}
-			}
-		}()
-
-		// start shrink ticker.
-		db.shrinkTicker = time.NewTicker(db.ShrinkInterval)
-		go func() {
-			for {
-				select {
-				case <-db.ctx.Done():
-					db.shrinkTicker.Stop()
-					return
-				case <-db.shrinkTicker.C:
-					if err := db.shrink(); err != nil {
-						panic(err)
-					}
-				}
-			}
-		}()
+	// start backend cron job.
+	db.cron = cron.New(cron.WithSeconds())
+	if db.options.SyncPolicy == EverySecond {
+		if _, err = db.cron.AddFunc("* * * * * ?", func() {
+			db.Sync()
+		}); err != nil {
+			panic(err)
+		}
 	}
+	if len(options.ShrinkCronExpr) > 0 {
+		if _, err = db.cron.AddFunc(options.ShrinkCronExpr, func() {
+			db.Shrink()
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	db.cron.Start()
 
 	return db, nil
 }
@@ -454,31 +422,44 @@ func (db *DB) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	select {
-	case <-db.ctx.Done():
+	if db.closed {
 		return ErrDatabaseClosed
-	default:
-		if err := db.wal.Close(); err != nil {
-			return err
-		}
-		db.cancel()
-		return db.fileLock.Unlock()
 	}
+
+	if err := db.wal.Close(); err != nil {
+		return err
+	}
+
+	// release file lock.
+	if err := db.fileLock.Unlock(); err != nil {
+		return err
+	}
+
+	db.cron.Stop()
+	db.closed = true
+
+	return nil
 }
 
-// encode
+// GetOptions
+func (db *DB) GetOptions() Options {
+	return *db.options
+}
+
 func (db *DB) encode(cd *codeman.Codec) {
 	if db.loading {
 		return
 	}
-	db.mu.Lock()
 	db.wal.Write(cd.Content())
-	db.mu.Unlock()
 	cd.Recycle()
 }
 
-// NewCodec
-func NewCodec(op Operation) *codeman.Codec {
+// Sync
+func (db *DB) Sync() error {
+	return db.wal.Sync()
+}
+
+func newCodec(op Operation) *codeman.Codec {
 	return codeman.NewCodec().Byte(byte(op))
 }
 
@@ -508,17 +489,16 @@ func (db *DB) SetEx(key string, val []byte, ttl time.Duration) {
 
 // SetTx store key-value pair with deadlindb.
 func (db *DB) SetTx(key string, val []byte, ts int64) {
-	// you should check ts outside.
 	if ts < 0 {
 		return
 	}
-	db.encode(NewCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Bytes(val))
+	db.encode(newCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Bytes(val))
 	db.m.SetTx(key, val, ts)
 }
 
 // Remove
 func (db *DB) Remove(keys ...string) (n int) {
-	db.encode(NewCodec(OpRemove).StrSlice(keys))
+	db.encode(newCodec(OpRemove).StrSlice(keys))
 	for _, key := range keys {
 		if db.m.Delete(key) {
 			n++
@@ -574,7 +554,7 @@ func (db *DB) HSet(key, field string, val []byte) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpHSet).Str(key).Str(field).Bytes(val))
+	db.encode(newCodec(OpHSet).Str(key).Str(field).Bytes(val))
 	m.Set(field, val)
 
 	return nil
@@ -586,7 +566,7 @@ func (db *DB) HRemove(key string, fields ...string) (n int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	db.encode(NewCodec(OpHRemove).Str(key).StrSlice(fields))
+	db.encode(newCodec(OpHRemove).Str(key).StrSlice(fields))
 	for _, k := range fields {
 		if m.Delete(k) {
 			n++
@@ -610,7 +590,7 @@ func (db *DB) SAdd(key string, items ...string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	db.encode(NewCodec(OpSAdd).Str(key).StrSlice(items))
+	db.encode(newCodec(OpSAdd).Str(key).StrSlice(items))
 	return s.Append(items...), nil
 }
 
@@ -620,7 +600,7 @@ func (db *DB) SRemove(key string, items ...string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpSRemove).Str(key).StrSlice(items))
+	db.encode(newCodec(OpSRemove).Str(key).StrSlice(items))
 	s.RemoveAll(items...)
 	return nil
 }
@@ -667,7 +647,7 @@ func (db *DB) SUnion(dst string, src ...string) error {
 		}
 		s.Union(ts)
 	}
-	db.encode(NewCodec(OpSMerge).Byte(mergeTypeOr).Str(dst).StrSlice(src))
+	db.encode(newCodec(OpSMerge).Byte(mergeTypeOr).Str(dst).StrSlice(src))
 	db.cm.Set(dst, s)
 
 	return nil
@@ -688,7 +668,7 @@ func (db *DB) SInter(dst string, src ...string) error {
 		}
 		s.Intersect(ts)
 	}
-	db.encode(NewCodec(OpSMerge).Byte(mergeTypeAnd).Str(dst).StrSlice(src))
+	db.encode(newCodec(OpSMerge).Byte(mergeTypeAnd).Str(dst).StrSlice(src))
 	db.cm.Set(dst, s)
 
 	return nil
@@ -709,7 +689,7 @@ func (db *DB) SDiff(dst string, src ...string) error {
 		}
 		s.Difference(ts)
 	}
-	db.encode(NewCodec(OpSMerge).Byte(mergeTypeXOr).Str(dst).StrSlice(src))
+	db.encode(newCodec(OpSMerge).Byte(mergeTypeXOr).Str(dst).StrSlice(src))
 	db.cm.Set(dst, s)
 
 	return nil
@@ -721,7 +701,7 @@ func (db *DB) LLPush(key string, items ...string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpLPush).Byte(listDirectionLeft).Str(key).StrSlice(items))
+	db.encode(newCodec(OpLPush).Byte(listDirectionLeft).Str(key).StrSlice(items))
 	ls.LPush(items...)
 
 	return nil
@@ -733,7 +713,7 @@ func (db *DB) LRPush(key string, items ...string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpLPush).Byte(listDirectionRight).Str(key).StrSlice(items))
+	db.encode(newCodec(OpLPush).Byte(listDirectionRight).Str(key).StrSlice(items))
 	ls.RPush(items...)
 
 	return nil
@@ -762,7 +742,7 @@ func (db *DB) LLPop(key string) (string, error) {
 	if !ok {
 		return "", ErrEmptyList
 	}
-	db.encode(NewCodec(OpLPop).Byte(listDirectionLeft).Str(key))
+	db.encode(newCodec(OpLPop).Byte(listDirectionLeft).Str(key))
 
 	return res, nil
 }
@@ -777,7 +757,7 @@ func (db *DB) LRPop(key string) (string, error) {
 	if !ok {
 		return "", ErrEmptyList
 	}
-	db.encode(NewCodec(OpLPop).Byte(listDirectionRight).Str(key))
+	db.encode(newCodec(OpLPop).Byte(listDirectionRight).Str(key))
 
 	return res, nil
 }
@@ -815,7 +795,7 @@ func (db *DB) BitSet(key string, val bool, offsets ...uint32) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	db.encode(NewCodec(OpBitSet).Str(key).Bool(val).Uint32Slice(offsets))
+	db.encode(newCodec(OpBitSet).Str(key).Bool(val).Uint32Slice(offsets))
 
 	var n int
 	if val {
@@ -833,7 +813,7 @@ func (db *DB) BitFlip(key string, offset uint32) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpBitFlip).Str(key).Uint(offset))
+	db.encode(newCodec(OpBitFlip).Str(key).Uint(offset))
 	bm.Flip(uint64(offset))
 
 	return nil
@@ -854,7 +834,7 @@ func (db *DB) BitAnd(dst string, src ...string) error {
 		}
 		bm.And(tbm)
 	}
-	db.encode(NewCodec(OpBitMerge).Byte(mergeTypeAnd).Str(dst).StrSlice(src))
+	db.encode(newCodec(OpBitMerge).Byte(mergeTypeAnd).Str(dst).StrSlice(src))
 	db.cm.Set(dst, bm)
 
 	return nil
@@ -875,7 +855,7 @@ func (db *DB) BitOr(dst string, src ...string) error {
 		}
 		bm.Or(tbm)
 	}
-	db.encode(NewCodec(OpBitMerge).Byte(mergeTypeOr).Str(dst).StrSlice(src))
+	db.encode(newCodec(OpBitMerge).Byte(mergeTypeOr).Str(dst).StrSlice(src))
 	db.cm.Set(dst, bm)
 
 	return nil
@@ -896,7 +876,7 @@ func (db *DB) BitXor(dst string, src ...string) error {
 		}
 		bm.Xor(tbm)
 	}
-	db.encode(NewCodec(OpBitMerge).Byte(mergeTypeXOr).Str(dst).StrSlice(src))
+	db.encode(newCodec(OpBitMerge).Byte(mergeTypeXOr).Str(dst).StrSlice(src))
 	db.cm.Set(dst, bm)
 
 	return nil
@@ -960,7 +940,7 @@ func (db *DB) ZAdd(zset, key string, score float64) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpZAdd).Str(zset).Str(key).Float(score))
+	db.encode(newCodec(OpZAdd).Str(zset).Str(key).Float(score))
 	zs.Set(key, score)
 
 	return nil
@@ -972,7 +952,7 @@ func (db *DB) ZIncr(zset, key string, incr float64) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	db.encode(NewCodec(OpZIncr).Str(zset).Str(key).Float(incr))
+	db.encode(newCodec(OpZIncr).Str(zset).Str(key).Float(incr))
 
 	return zs.Incr(key, incr), nil
 }
@@ -983,7 +963,7 @@ func (db *DB) ZRemove(zset string, key string) error {
 	if err != nil {
 		return err
 	}
-	db.encode(NewCodec(OpZRemove).Str(zset).Str(key))
+	db.encode(newCodec(OpZRemove).Str(zset).Str(key))
 	zs.Delete(key)
 
 	return nil
@@ -991,11 +971,13 @@ func (db *DB) ZRemove(zset string, key string) error {
 
 // loadFromWal load data to mem from wal.
 func (db *DB) loadFromWal() error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	// iter all wal.
-	return db.wal.Range(func(data []byte) error {
+	reader := db.wal.NewReader()
+	for {
+		data, _, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		// parse records data.
 		parser := codeman.NewParser(data)
 		for !parser.Done() {
 			// parse records.
@@ -1009,12 +991,18 @@ func (db *DB) loadFromWal() error {
 				return err
 			}
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
-// rewrite write data to the fildb.
-func (db *DB) shrink() error {
+// Shrink rewrite db file.
+func (db *DB) Shrink() error {
+	// cas
+	if !atomic.CompareAndSwapUint32(&db.shrinking, 0, 1) {
+		return ErrShrinkRunning
+	}
+	defer atomic.StoreUint32(&db.shrinking, 0)
+
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -1025,7 +1013,7 @@ func (db *DB) shrink() error {
 
 	// marshal bytes.
 	db.m.Scan(func(key, value []byte, ts int64) bool {
-		cd := NewCodec(OpSetTx).Int(TypeString).Bytes(key).Int(ts).Bytes(value)
+		cd := newCodec(OpSetTx).Int(TypeString).Bytes(key).Int(ts).Bytes(value)
 		db.wal.Write(cd.Content())
 		cd.Recycle()
 		return false
@@ -1046,64 +1034,63 @@ func (db *DB) shrink() error {
 		case ZSet:
 			types = TypeZSet
 		}
-		if cd, err := NewCodec(OpSetTx).Int(types).Str(t.Key).Int(0).Any(t.Val); err == nil {
+		if cd, err := newCodec(OpSetTx).Int(types).Str(t.Key).Int(0).Any(t.Val); err == nil {
 			db.wal.Write(cd.Content())
 			cd.Recycle()
 		}
 	}
+
 	// sync
 	if err := db.wal.Sync(); err != nil {
 		return err
 	}
 
 	// remove all old segment files.
-	return db.wal.RemoveOldSegments(db.wal.ActiveSegmentID())
+	return db.removeOldSegments(db.wal.ActiveSegmentID())
 }
 
-// Shrink forced to shrink db file.
-func (db *DB) Shrink() {
-	db.shrinkTicker.Reset(db.ShrinkInterval)
-	db.shrink()
+func (db *DB) removeOldSegments(maxSegmentID uint32) error {
+	maxSegmentName := fmt.Sprintf("%09d", maxSegmentID)
+
+	return filepath.WalkDir(db.options.DirPath, func(path string, file os.DirEntry, err error) error {
+		if file.Name() < maxSegmentName {
+			return os.Remove(path)
+		}
+		return err
+	})
 }
 
-// fetchMap
 func (db *DB) fetchMap(key string, setnx ...bool) (m Map, err error) {
 	return fetch(db, key, func() Map {
 		return structx.NewSyncMap()
 	}, setnx...)
 }
 
-// fetchSet
 func (db *DB) fetchSet(key string, setnx ...bool) (s Set, err error) {
 	return fetch(db, key, func() Set {
 		return structx.NewSet[string]()
 	}, setnx...)
 }
 
-// fetchList
 func (db *DB) fetchList(key string, setnx ...bool) (m List, err error) {
 	return fetch(db, key, func() List {
 		return structx.NewList[string]()
 	}, setnx...)
 }
 
-// fetchBitMap
 func (db *DB) fetchBitMap(key string, setnx ...bool) (bm BitMap, err error) {
 	return fetch(db, key, func() BitMap {
 		return structx.NewBitmap()
 	}, setnx...)
 }
 
-// fetchZSet
 func (db *DB) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 	return fetch(db, key, func() ZSet {
 		return structx.NewZSet[string, float64]()
 	}, setnx...)
 }
 
-// fetch
 func fetch[T any](db *DB, key string, new func() T, setnx ...bool) (v T, err error) {
-	// check from bytes cache.
 	if _, _, ok := db.m.Get(key); ok {
 		return v, ErrWrongType
 	}

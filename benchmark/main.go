@@ -2,45 +2,43 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
-	"github.com/influxdata/tdigest"
 	"github.com/xgzlucario/rotom"
 )
 
-const (
-	KB = 1 << (10 * (iota + 1))
-	MB
-)
+const N = 100 * 10000
 
-func convertSize(size int64) string {
-	switch {
-	case size >= MB:
-		return fmt.Sprintf("%.1fMB", float64(size)/MB)
-	case size >= KB:
-		return fmt.Sprintf("%.1fKB", float64(size)/KB)
-	default:
-		return fmt.Sprintf("%dB", size)
-	}
+type Quantile struct {
+	mu sync.Mutex
+	f  []float64
 }
 
-func dirSize(dirPath string) string {
-	var size int64
-	filepath.WalkDir(dirPath, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		size += info.Size()
-		return nil
-	})
-	return convertSize(size)
+func NewQuantile(size int) *Quantile {
+	return &Quantile{f: make([]float64, 0, size)}
+}
+
+func (q *Quantile) Add(v float64) {
+	q.f = append(q.f, v)
+}
+
+func (q *Quantile) SyncAdd(v float64) {
+	q.mu.Lock()
+	q.f = append(q.f, v)
+	q.mu.Unlock()
+}
+
+func (q *Quantile) Quantile(p float64) float64 {
+	return q.f[int(float64(len(q.f))*p)]
+}
+
+func (q *Quantile) Print() {
+	slices.Sort(q.f)
+	fmt.Printf("50th: %.0f ns\n", q.Quantile(0.5))
+	fmt.Printf("90th: %.0f ns\n", q.Quantile(0.9))
+	fmt.Printf("99th: %.0f ns\n", q.Quantile(0.99))
 }
 
 func createDB() *rotom.DB {
@@ -60,71 +58,20 @@ func benchSet() {
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: key 10 bytes, value 10 bytes")
 
-	start := time.Now()
-	td := tdigest.NewWithCompression(1000)
-
+	quant := NewQuantile(N)
 	db := createDB()
+	start := time.Now()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		t1 := time.Now()
-
 		k := fmt.Sprintf("%010d", i)
 		db.Set(k, []byte(k))
-
-		if i%10 == 0 {
-			td.Add(float64(time.Since(t1)), 1)
-		}
+		quant.Add(float64(time.Since(t1)))
 	}
 
 	fmt.Println("cost:", time.Since(start))
-	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
-	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
-	// wait for sync
-	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
-	fmt.Println()
-}
-
-func benchSet8parallel() {
-	fmt.Println("========== Set 8 parallel ==========")
-	fmt.Println("size: 100*10000 enties")
-	fmt.Println("desc: key 10 bytes, value 10 bytes")
-
-	start := time.Now()
-	td := tdigest.NewWithCompression(1000)
-
-	db := createDB()
-
-	var wg sync.WaitGroup
-	wg.Add(8)
-
-	for i := 0; i < 8; i++ {
-		i := i
-		go func() {
-			start := i * 100 * 10000
-			for n := 0; n < 100*10000/8; n++ {
-				t1 := time.Now()
-				k := fmt.Sprintf("%010d", start+n)
-				db.Set(k, []byte(k))
-
-				if i == 0 && n%10 == 0 {
-					td.Add(float64(time.Since(t1)), 1)
-				}
-			}
-			wg.Done()
-		}()
-	}
-
-	wg.Wait()
-
-	fmt.Println("cost:", time.Since(start))
-	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
-	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
-	// wait for sync
-	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
 	fmt.Println()
 }
 
@@ -133,29 +80,20 @@ func benchSetEx() {
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: key 10 bytes, value 10 bytes, ttl 1min")
 
-	start := time.Now()
-	td := tdigest.NewWithCompression(1000)
-
+	quant := NewQuantile(N)
 	db := createDB()
+	start := time.Now()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		t1 := time.Now()
-
 		k := fmt.Sprintf("%010d", i)
 		db.SetEx(k, []byte(k), time.Minute)
-
-		if i%10 == 0 {
-			td.Add(float64(time.Since(t1)), 1)
-		}
+		quant.Add(float64(time.Since(t1)))
 	}
 
 	fmt.Println("cost:", time.Since(start))
-	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
-	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
-	// wait for sync
-	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
 	fmt.Println()
 }
 
@@ -164,30 +102,25 @@ func benchGet() {
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: key 10 bytes, value 10 bytes")
 
-	td := tdigest.NewWithCompression(1000)
-
+	quant := NewQuantile(N)
 	db := createDB()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		k := fmt.Sprintf("%010d", i)
 		db.Set(k, []byte(k))
 	}
 
 	start := time.Now()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		t1 := time.Now()
 		db.Get(fmt.Sprintf("%010d", i))
-
-		if i%10 == 0 {
-			td.Add(float64(time.Since(t1)), 1)
-		}
+		quant.Add(float64(time.Since(t1)))
 	}
 
 	fmt.Println("cost:", time.Since(start))
-	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
-	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
 	fmt.Println()
 }
 
@@ -196,29 +129,20 @@ func benchHSet() {
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: field 10 bytes, value 10 bytes")
 
-	start := time.Now()
-	td := tdigest.NewWithCompression(1000)
-
+	quant := NewQuantile(N)
 	db := createDB()
+	start := time.Now()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		t1 := time.Now()
-
 		k := fmt.Sprintf("%010d", i)
 		db.HSet("mymap", k, []byte(k))
-
-		if i%10 == 0 {
-			td.Add(float64(time.Since(t1)), 1)
-		}
+		quant.Add(float64(time.Since(t1)))
 	}
 
 	fmt.Println("cost:", time.Since(start))
-	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
-	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
-	// wait for sync
-	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
 	fmt.Println()
 }
 
@@ -227,29 +151,20 @@ func benchLRPush() {
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: value 10 bytes")
 
-	start := time.Now()
-	td := tdigest.NewWithCompression(1000)
-
+	quant := NewQuantile(N)
 	db := createDB()
+	start := time.Now()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		t1 := time.Now()
-
 		k := fmt.Sprintf("%010d", i)
 		db.LRPush("mylist", k)
-
-		if i%10 == 0 {
-			td.Add(float64(time.Since(t1)), 1)
-		}
+		quant.Add(float64(time.Since(t1)))
 	}
 
 	fmt.Println("cost:", time.Since(start))
-	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
-	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
-	// wait for sync
-	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
 	fmt.Println()
 }
 
@@ -258,30 +173,26 @@ func benchHGet() {
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: field 10 bytes, value 10 bytes")
 
-	td := tdigest.NewWithCompression(1000)
-
+	quant := NewQuantile(N)
 	db := createDB()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		k := fmt.Sprintf("%010d", i)
 		db.HSet("mymap", k, []byte(k))
 	}
 
 	start := time.Now()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		t1 := time.Now()
-		db.HGet("mymap", fmt.Sprintf("%010d", i))
-
-		if i%10 == 0 {
-			td.Add(float64(time.Since(t1)), 1)
-		}
+		k := fmt.Sprintf("%010d", i)
+		db.HGet("mymap", k)
+		quant.Add(float64(time.Since(t1)))
 	}
 
 	fmt.Println("cost:", time.Since(start))
-	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
-	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
 	fmt.Println()
 }
 
@@ -290,28 +201,41 @@ func benchBitSet() {
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: offset uint32")
 
-	start := time.Now()
-	td := tdigest.NewWithCompression(1000)
-
+	quant := NewQuantile(N)
 	db := createDB()
+	start := time.Now()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		t1 := time.Now()
-
 		db.BitSet("bm", true, uint32(i))
-
-		if i%10 == 0 {
-			td.Add(float64(time.Since(t1)), 1)
-		}
+		quant.Add(float64(time.Since(t1)))
 	}
 
 	fmt.Println("cost:", time.Since(start))
-	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
-	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
-	// wait for sync
-	time.Sleep(time.Second)
-	fmt.Printf("db file size: %v\n", dirSize(db.DirPath))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
+	fmt.Println()
+}
+
+func benchZSet() {
+	fmt.Println("========== ZSet ==========")
+	fmt.Println("size: 100*10000 enties")
+	fmt.Println("desc: field 10 bytes, incr float64")
+
+	quant := NewQuantile(N)
+	db := createDB()
+	start := time.Now()
+
+	for i := 0; i < N; i++ {
+		t1 := time.Now()
+		k := fmt.Sprintf("%010d", i)
+		db.ZIncr("myzset", k, float64(i))
+		quant.Add(float64(time.Since(t1)))
+	}
+
+	fmt.Println("cost:", time.Since(start))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
 	fmt.Println()
 }
 
@@ -320,11 +244,10 @@ func benchGet8parallel() {
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: key 10 bytes, value 10 bytes")
 
-	td := tdigest.NewWithCompression(1000)
-
+	quant := NewQuantile(N)
 	db := createDB()
 
-	for i := 0; i < 100*10000; i++ {
+	for i := 0; i < N; i++ {
 		k := fmt.Sprintf("%010d", i)
 		db.Set(k, []byte(k))
 	}
@@ -337,14 +260,12 @@ func benchGet8parallel() {
 	for i := 0; i < 8; i++ {
 		i := i
 		go func() {
-			start := i * 100 * 10000
-			for n := 0; n < 100*10000/8; n++ {
+			start := i * N
+			for n := 0; n < N/8; n++ {
 				t1 := time.Now()
 				db.Get(fmt.Sprintf("%010d", start+n))
 
-				if i == 0 && n%10 == 0 {
-					td.Add(float64(time.Since(t1)), 1)
-				}
+				quant.SyncAdd(float64(time.Since(t1)))
 			}
 			wg.Done()
 		}()
@@ -353,15 +274,13 @@ func benchGet8parallel() {
 	wg.Wait()
 
 	fmt.Println("cost:", time.Since(start))
-	fmt.Printf("50th: %.0f ns\n", td.Quantile(0.5))
-	fmt.Printf("90th: %.0f ns\n", td.Quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", td.Quantile(0.99))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
 	fmt.Println()
 }
 
 func main() {
 	benchSet()
-	benchSet8parallel()
 	benchSetEx()
 	benchGet()
 	benchGet8parallel()
@@ -369,4 +288,5 @@ func main() {
 	benchHSet()
 	benchHGet()
 	benchBitSet()
+	benchZSet()
 }

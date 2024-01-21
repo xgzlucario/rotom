@@ -6,15 +6,15 @@
 
 ## 📃介绍
 
-这里是 Rotom，一个使用 Golang 编写单机高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储。
+这里是 Rotom，一个使用 Golang 编写的嵌入式高性能 Key-Value 内存数据库，内置多种常用数据类型，支持持久化存储。
 
-目前支持的功能：
+目前实现的特性：
 
 1. 内置数据类型 String，Map，Set，List，ZSet，BitMap 等，支持 20 多种命令
-2. 支持纳秒级别的过期时间
-3. 底层基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，支持并发，规避GC开销
-4. 基于 RDB + AOF 混合的持久化策略
-5. 使用 zstd 算法压缩日志文件，压缩比达到 10:1
+2. 每个键值对独立的、秒级的过期时间支持
+3. 底层 hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，被设计用来专门管理 GB 级别的数据量，比 `stdmap` 节省约 40% 的内存，性能更强，GC开销更小
+4. 内置编解码库，比 protobuf 性能更好
+5. 持久化日志，以及根据日志重做恢复数据库
 
 如果你想了解更多关于 Rotom 的技术细节，请查看 [在线文档](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc)
 
@@ -41,7 +41,7 @@ import (
 )
 
 func main() {
-	db, err := rotom.Open(rotom.DefaultConfig)
+	db, err := rotom.Open(rotom.DefaultOptions)
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +67,7 @@ func main() {
 ```
 ## 🚀性能
 
-Rotom 具有超强的多线程性能，以下是压测数据。
+Rotom 具有超强的性能，下面是一些功能的测试结果。
 
 ### 测试环境
 
@@ -86,79 +86,82 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ========== Set ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 291.413216ms
-50th: 214 ns
-90th: 262 ns
-99th: 509 ns
-db file size: 838.5KB
-
-========== Set 8 parallel ==========
-size: 100*10000 enties
-desc: key 10 bytes, value 10 bytes
-cost: 188.082777ms
-50th: 352 ns
-90th: 857 ns
-99th: 22406 ns
-db file size: 4.0MB
+cost: 1.120466957s
+qps: 892467.60
+50th: 990 ns
+90th: 1107 ns
+99th: 1724 ns
 
 ========== SetEx ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes, ttl 1min
-cost: 302.246712ms
-50th: 225 ns
-90th: 272 ns
-99th: 556 ns
-db file size: 790.9KB
+cost: 1.125406833s
+qps: 888551.77
+50th: 986 ns
+90th: 1092 ns
+99th: 2110 ns
 
 ========== Get ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 260.6399ms
-50th: 224 ns
-90th: 280 ns
-99th: 533 ns
+cost: 255.023737ms
+qps: 3920845.99
+50th: 212 ns
+90th: 267 ns
+99th: 532 ns
 
 ========== Get 8 parallel ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes
-cost: 48.348878ms
-50th: 248 ns
-90th: 393 ns
-99th: 638 ns
+cost: 138.089874ms
+qps: 7240728.26
+50th: 173 ns
+90th: 261 ns
+99th: 501 ns
 
 ========== LRPush ==========
 size: 100*10000 enties
 desc: value 10 bytes
-cost: 228.933463ms
-50th: 192 ns
-90th: 211 ns
-99th: 321 ns
-db file size: 260.0KB
+cost: 1.033844185s
+qps: 967248.36
+50th: 936 ns
+90th: 1011 ns
+99th: 1609 ns
 
 ========== HSet ==========
 size: 100*10000 enties
 desc: field 10 bytes, value 10 bytes
-cost: 398.351779ms
-50th: 224 ns
-90th: 278 ns
-99th: 443 ns
-db file size: 835.2KB
+cost: 1.182939928s
+qps: 845337.51
+50th: 987 ns
+90th: 1117 ns
+99th: 1850 ns
 
 ========== HGet ==========
 size: 100*10000 enties
 desc: field 10 bytes, value 10 bytes
-cost: 254.612279ms
-50th: 211 ns
-90th: 262 ns
-99th: 534 ns
+cost: 292.57105ms
+qps: 3417634.25
+50th: 220 ns
+90th: 306 ns
+99th: 575 ns
 
 ========== BitSet ==========
 size: 100*10000 enties
 desc: offset uint32
-cost: 141.778962ms
-50th: 108 ns
-90th: 115 ns
-99th: 137 ns
-db file size: 898.2KB
+cost: 916.172391ms
+qps: 1091477.02
+50th: 833 ns
+90th: 880 ns
+99th: 1219 ns
+
+========== ZSet ==========
+size: 100*10000 enties
+desc: field 10 bytes, incr float64
+cost: 1.321257444s
+qps: 756843.75
+50th: 1121 ns
+90th: 1248 ns
+99th: 2025 ns
 ```
 

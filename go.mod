@@ -9,15 +9,14 @@ require (
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/dolthub/swiss v0.2.1
 	github.com/gofrs/flock v0.8.1
-	github.com/influxdata/tdigest v0.0.1
-	github.com/klauspost/compress v1.17.4
 	github.com/orcaman/concurrent-map/v2 v2.0.1
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/rosedblabs/wal v1.3.6
 	github.com/sakeven/RbTree v0.0.0-20220710124251-94e35f9fed6c
 	github.com/stretchr/testify v1.8.4
 	github.com/xgzlucario/GigaCache v0.0.0-20231226161408-655de575becb
 	github.com/zyedidia/generic v1.2.2-0.20230819223407-98022f93823f
-	golang.org/x/exp v0.0.0-20240103183307-be819d1f06fc
+	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
 )
 
 require (
