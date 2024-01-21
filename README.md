@@ -12,7 +12,7 @@ Currently features:
 
 1. Built-in data types String, Map, Set, List, ZSet, and BitMap.
 2. Second level ttl supported for each key-value pair.
-3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), which is managing GB-level data, saving about 40% of memory compared to `stdmap`, with better performance and reduced GC overhead.
+3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), which is managing GB-level data, saving 50% memory compared to `stdmap`, with better performance and reduced GC overhead.
 4. Internal encoding/decoding lib that more effective than `protobuf`.
 5. Persistent log support, and can recover database from logs.
 
