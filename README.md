@@ -12,7 +12,7 @@ Currently features:
 
 1. Built-in data types such as String, Map, Set, List, ZSet, and BitMap, with support for over 20 commands.
 2. Individual and precise per-key expiry support down to the second.
-3. An underlying hashmap tailored specifically for managing data in the GB range, saving about 40% of memory compared to stdmap, with better performance and reduced GC overhead.
+3. An underlying hashmap [GigaCache](https://github.com/xgzlucario/GigaCache) tailored specifically for managing data in the GB range, saving about 40% of memory compared to stdmap, with better performance and reduced GC overhead.
 4. An integrated encoding/decoding library that more effective than protobuf.
 5. Persistent logging, along with log-based recovery of the database.
 
