@@ -9,9 +9,6 @@ import (
 type anyResult []byte
 
 func (r anyResult) Str() string {
-	if r == nil {
-		return "<nil>"
-	}
 	return string(r)
 }
 

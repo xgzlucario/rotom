@@ -60,13 +60,12 @@ const (
 	fileLockName = "FLOCK"
 )
 
-// Cmd
 type Cmd struct {
 	op   Operation
 	hook func(*DB, *codeman.Parser) error
 }
 
-// cmdTable defines how each cmd is to be replayed through log redo to recover the database..
+// cmdTable defines how each command recover database from redo log(wal log).
 var cmdTable = []Cmd{
 	{OpSetTx, func(db *DB, decoder *codeman.Parser) error {
 		// type, key, ts, val
@@ -74,10 +73,6 @@ var cmdTable = []Cmd{
 		key := decoder.Parse().Str()
 		ts := decoder.ParseVarint().Int64()
 		val := decoder.Parse()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 
 		switch tp {
 		case TypeList:
@@ -128,9 +123,6 @@ var cmdTable = []Cmd{
 		// keys
 		keys := decoder.Parse().StrSlice()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		db.Remove(keys...)
 		return nil
 	}},
@@ -141,9 +133,6 @@ var cmdTable = []Cmd{
 		field := decoder.Parse().Str()
 		val := decoder.Parse()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		return db.HSet(key, field, val)
 	}},
 
@@ -152,9 +141,6 @@ var cmdTable = []Cmd{
 		key := decoder.Parse().Str()
 		fields := decoder.Parse().StrSlice()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		_, err := db.HRemove(key, fields...)
 		return err
 	}},
@@ -164,9 +150,6 @@ var cmdTable = []Cmd{
 		key := decoder.Parse().Str()
 		items := decoder.Parse().StrSlice()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		_, err := db.SAdd(key, items...)
 		return err
 	}},
@@ -176,9 +159,6 @@ var cmdTable = []Cmd{
 		key := decoder.Parse().Str()
 		items := decoder.Parse().StrSlice()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		return db.SRemove(key, items...)
 	}},
 
@@ -187,10 +167,6 @@ var cmdTable = []Cmd{
 		op := decoder.ParseVarint().Byte()
 		key := decoder.Parse().Str()
 		items := decoder.Parse().StrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 
 		switch op {
 		case mergeTypeAnd:
@@ -208,10 +184,6 @@ var cmdTable = []Cmd{
 		key := decoder.Parse().Str()
 		items := decoder.Parse().StrSlice()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-
 		if direct == listDirectionLeft {
 			return db.LLPush(key, items...)
 		}
@@ -223,15 +195,11 @@ var cmdTable = []Cmd{
 		direct := decoder.ParseVarint().Byte()
 		key := decoder.Parse().Str()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-
 		if direct == listDirectionLeft {
 			_, err = db.LLPop(key)
-			return
+		} else {
+			_, err = db.LRPop(key)
 		}
-		_, err = db.LRPop(key)
 		return
 	}},
 
@@ -241,9 +209,6 @@ var cmdTable = []Cmd{
 		val := decoder.ParseVarint().Bool()
 		offsets := decoder.Parse().Uint32Slice()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		_, err := db.BitSet(key, val, offsets...)
 		return err
 	}},
@@ -253,9 +218,6 @@ var cmdTable = []Cmd{
 		key := decoder.Parse().Str()
 		offset := decoder.ParseVarint().Uint32()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		return db.BitFlip(key, offset)
 	}},
 
@@ -264,10 +226,6 @@ var cmdTable = []Cmd{
 		op := decoder.ParseVarint().Byte()
 		key := decoder.Parse().Str()
 		items := decoder.Parse().StrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 
 		switch op {
 		case mergeTypeAnd:
@@ -285,9 +243,6 @@ var cmdTable = []Cmd{
 		field := decoder.Parse().Str()
 		score := decoder.ParseVarint().Float64()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		return db.ZAdd(key, field, score)
 	}},
 
@@ -297,9 +252,6 @@ var cmdTable = []Cmd{
 		field := decoder.Parse().Str()
 		score := decoder.ParseVarint().Float64()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		_, err := db.ZIncr(key, field, score)
 		return err
 	}},
@@ -309,9 +261,6 @@ var cmdTable = []Cmd{
 		key := decoder.Parse().Str()
 		field := decoder.Parse().Str()
 
-		if decoder.Error != nil {
-			return decoder.Error
-		}
 		return db.ZRemove(key, field)
 	}},
 }
@@ -813,7 +762,7 @@ func (db *DB) BitFlip(key string, offset uint32) error {
 	if err != nil {
 		return err
 	}
-	db.encode(newCodec(OpBitFlip).Str(key).Uint(offset))
+	db.encode(newCodec(OpBitFlip).Str(key).Uint32(offset))
 	bm.Flip(uint64(offset))
 
 	return nil
@@ -977,16 +926,11 @@ func (db *DB) loadFromWal() error {
 		if err == io.EOF {
 			break
 		}
+
 		// parse records data.
 		parser := codeman.NewParser(data)
 		for !parser.Done() {
-			// parse records.
 			op := Operation(parser.ParseVarint())
-
-			if parser.Error != nil {
-				return parser.Error
-			}
-
 			if err := cmdTable[op].hook(db, parser); err != nil {
 				return err
 			}
@@ -1021,23 +965,34 @@ func (db *DB) Shrink() error {
 
 	// marshal built-in types.
 	var types Type
+	var data []byte
+	var err error
+
 	for t := range db.cm.IterBuffered() {
-		switch t.Val.(type) {
+		switch item := t.Val.(type) {
 		case Map:
 			types = TypeMap
+			data, err = item.MarshalJSON()
 		case BitMap:
 			types = TypeBitmap
+			data, err = item.MarshalBinary()
 		case List:
 			types = TypeList
+			data, err = item.MarshalJSON()
 		case Set:
 			types = TypeSet
+			data, err = item.MarshalJSON()
 		case ZSet:
 			types = TypeZSet
+			data, err = item.MarshalJSON()
 		}
-		if cd, err := newCodec(OpSetTx).Int(types).Str(t.Key).Int(0).Any(t.Val); err == nil {
-			db.wal.Write(cd.Content())
-			cd.Recycle()
+
+		if err != nil {
+			return err
 		}
+		cd := newCodec(OpSetTx).Int(types).Str(t.Key).Int(0).Bytes(data)
+		db.wal.Write(cd.Content())
+		cd.Recycle()
 	}
 
 	// sync
