@@ -73,11 +73,13 @@ func (s *Codec) Float(f float64) *Codec {
 }
 
 func (s *Codec) StrSlice(v []string) *Codec {
-	return s.format(formatStrSlice(v))
+	s.b = append(s.b, formatStrSlice(v)...)
+	return s
 }
 
 func (s *Codec) Uint32Slice(v []uint32) *Codec {
-	return s.format(formatNumberSlice(v))
+	s.b = append(s.b, formatNumberSlice(v)...)
+	return s
 }
 
 // format uses variable-length encoding of incoming bytes.

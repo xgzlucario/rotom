@@ -52,28 +52,17 @@ func (s *Reader) Str() string {
 }
 
 func (s *Reader) StrSlice() []string {
-	r := s.read()
-	length, n := binary.Uvarint(r)
-	r = r[n:]
-	data := make([]string, 0, length)
-	for i := uint64(0); i < length; i++ {
-		klen, n := binary.Uvarint(r)
-		r = r[n:]
-		data = append(data, string(r[:klen]))
-		r = r[klen:]
+	data := make([]string, s.readVarint())
+	for i := range data {
+		data[i] = s.Str()
 	}
 	return data
 }
 
 func (s *Reader) Uint32Slice() []uint32 {
-	r := s.read()
-	length, n := binary.Uvarint(r)
-	r = r[n:]
-	data := make([]uint32, 0, length)
-	for i := uint64(0); i < length; i++ {
-		k, n := binary.Uvarint(r)
-		r = r[n:]
-		data = append(data, uint32(k))
+	data := make([]uint32, s.readVarint())
+	for i := range data {
+		data[i] = s.Uint32()
 	}
 	return data
 }
