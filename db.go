@@ -62,17 +62,17 @@ const (
 
 type Cmd struct {
 	op   Operation
-	hook func(*DB, *codeman.Parser) error
+	hook func(*DB, *codeman.Reader) error
 }
 
 // cmdTable defines how each command recover database from redo log(wal log).
 var cmdTable = []Cmd{
-	{OpSetTx, func(db *DB, decoder *codeman.Parser) error {
+	{OpSetTx, func(db *DB, reader *codeman.Reader) error {
 		// type, key, ts, val
-		tp := decoder.ParseVarint().Int64()
-		key := decoder.Parse().Str()
-		ts := decoder.ParseVarint().Int64()
-		val := decoder.Parse()
+		tp := reader.Int64()
+		key := reader.Str()
+		ts := reader.Int64()
+		val := reader.RawBytes()
 
 		switch tp {
 		case TypeList:
@@ -111,62 +111,41 @@ var cmdTable = []Cmd{
 			db.cm.Set(key, m)
 
 		default:
-			// default String, check ttl before.
+			// default String, check ttl.
 			if ts > cache.GetNanoSec() || ts == noTTL {
 				db.SetTx(key, val, ts)
 			}
 		}
 		return nil
 	}},
-
-	{OpRemove, func(db *DB, decoder *codeman.Parser) error {
+	{OpRemove, func(db *DB, reader *codeman.Reader) error {
 		// keys
-		keys := decoder.Parse().StrSlice()
-
-		db.Remove(keys...)
+		db.Remove(reader.StrSlice()...)
 		return nil
 	}},
-
-	{OpHSet, func(db *DB, decoder *codeman.Parser) error {
+	{OpHSet, func(db *DB, reader *codeman.Reader) error {
 		// key, field, val
-		key := decoder.Parse().Str()
-		field := decoder.Parse().Str()
-		val := decoder.Parse()
-
-		return db.HSet(key, field, val)
+		return db.HSet(reader.Str(), reader.Str(), reader.RawBytes())
 	}},
-
-	{OpHRemove, func(db *DB, decoder *codeman.Parser) error {
+	{OpHRemove, func(db *DB, reader *codeman.Reader) error {
 		// key, fields
-		key := decoder.Parse().Str()
-		fields := decoder.Parse().StrSlice()
-
-		_, err := db.HRemove(key, fields...)
+		_, err := db.HRemove(reader.Str(), reader.StrSlice()...)
 		return err
 	}},
-
-	{OpSAdd, func(db *DB, decoder *codeman.Parser) error {
+	{OpSAdd, func(db *DB, reader *codeman.Reader) error {
 		// key, items
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
-
-		_, err := db.SAdd(key, items...)
+		_, err := db.SAdd(reader.Str(), reader.StrSlice()...)
 		return err
 	}},
-
-	{OpSRemove, func(db *DB, decoder *codeman.Parser) error {
+	{OpSRemove, func(db *DB, reader *codeman.Reader) error {
 		// key, items
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
-
-		return db.SRemove(key, items...)
+		return db.SRemove(reader.Str(), reader.StrSlice()...)
 	}},
-
-	{OpSMerge, func(db *DB, decoder *codeman.Parser) error {
+	{OpSMerge, func(db *DB, reader *codeman.Reader) error {
 		// op, key, items
-		op := decoder.ParseVarint().Byte()
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
+		op := reader.Byte()
+		key := reader.Str()
+		items := reader.StrSlice()
 
 		switch op {
 		case mergeTypeAnd:
@@ -177,23 +156,21 @@ var cmdTable = []Cmd{
 			return db.SDiff(key, items...)
 		}
 	}},
-
-	{OpLPush, func(db *DB, decoder *codeman.Parser) error {
+	{OpLPush, func(db *DB, reader *codeman.Reader) error {
 		// direct, key, items
-		direct := decoder.ParseVarint().Byte()
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
+		direct := reader.Byte()
+		key := reader.Str()
+		items := reader.StrSlice()
 
 		if direct == listDirectionLeft {
 			return db.LLPush(key, items...)
 		}
 		return db.LRPush(key, items...)
 	}},
-
-	{OpLPop, func(db *DB, decoder *codeman.Parser) (err error) {
+	{OpLPop, func(db *DB, reader *codeman.Reader) (err error) {
 		// direct, key
-		direct := decoder.ParseVarint().Byte()
-		key := decoder.Parse().Str()
+		direct := reader.Byte()
+		key := reader.Str()
 
 		if direct == listDirectionLeft {
 			_, err = db.LLPop(key)
@@ -202,30 +179,20 @@ var cmdTable = []Cmd{
 		}
 		return
 	}},
-
-	{OpBitSet, func(db *DB, decoder *codeman.Parser) error {
-		// key, offset, val
-		key := decoder.Parse().Str()
-		val := decoder.ParseVarint().Bool()
-		offsets := decoder.Parse().Uint32Slice()
-
-		_, err := db.BitSet(key, val, offsets...)
+	{OpBitSet, func(db *DB, reader *codeman.Reader) error {
+		// key, val, offsets
+		_, err := db.BitSet(reader.Str(), reader.Bool(), reader.Uint32Slice()...)
 		return err
 	}},
-
-	{OpBitFlip, func(db *DB, decoder *codeman.Parser) error {
+	{OpBitFlip, func(db *DB, reader *codeman.Reader) error {
 		// key, offset
-		key := decoder.Parse().Str()
-		offset := decoder.ParseVarint().Uint32()
-
-		return db.BitFlip(key, offset)
+		return db.BitFlip(reader.Str(), reader.Uint32())
 	}},
-
-	{OpBitMerge, func(db *DB, decoder *codeman.Parser) error {
+	{OpBitMerge, func(db *DB, reader *codeman.Reader) error {
 		// op, key, items
-		op := decoder.ParseVarint().Byte()
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
+		op := reader.Byte()
+		key := reader.Str()
+		items := reader.StrSlice()
 
 		switch op {
 		case mergeTypeAnd:
@@ -236,32 +203,18 @@ var cmdTable = []Cmd{
 			return db.BitXor(key, items...)
 		}
 	}},
-
-	{OpZAdd, func(db *DB, decoder *codeman.Parser) error {
+	{OpZAdd, func(db *DB, reader *codeman.Reader) error {
 		// key, field, score
-		key := decoder.Parse().Str()
-		field := decoder.Parse().Str()
-		score := decoder.ParseVarint().Float64()
-
-		return db.ZAdd(key, field, score)
+		return db.ZAdd(reader.Str(), reader.Str(), reader.Float64())
 	}},
-
-	{OpZIncr, func(db *DB, decoder *codeman.Parser) error {
+	{OpZIncr, func(db *DB, reader *codeman.Reader) error {
 		// key, field, score
-		key := decoder.Parse().Str()
-		field := decoder.Parse().Str()
-		score := decoder.ParseVarint().Float64()
-
-		_, err := db.ZIncr(key, field, score)
+		_, err := db.ZIncr(reader.Str(), reader.Str(), reader.Float64())
 		return err
 	}},
-
-	{OpZRemove, func(db *DB, decoder *codeman.Parser) error {
+	{OpZRemove, func(db *DB, reader *codeman.Reader) error {
 		// key, field
-		key := decoder.Parse().Str()
-		field := decoder.Parse().Str()
-
-		return db.ZRemove(key, field)
+		return db.ZRemove(reader.Str(), reader.Str())
 	}},
 }
 
@@ -927,11 +880,10 @@ func (db *DB) loadFromWal() error {
 			break
 		}
 
-		// parse records data.
-		parser := codeman.NewParser(data)
-		for !parser.Done() {
-			op := Operation(parser.ParseVarint())
-			if err := cmdTable[op].hook(db, parser); err != nil {
+		// read all records.
+		for rd := codeman.NewReader(data); !rd.Done(); {
+			op := Operation(rd.Byte())
+			if err := cmdTable[op].hook(db, rd); err != nil {
 				return err
 			}
 		}

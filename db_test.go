@@ -659,21 +659,20 @@ func TestInvalidCodec(t *testing.T) {
 	println("===== TestInvalidCodec =====")
 	assert := assert.New(t)
 
-	// parse args.
+	// read args.
 	codec := newCodec(OpSetTx).Bool(true)
-	parser := codeman.NewParser(codec.Content())
+	reader := codeman.NewReader(codec.Content())
 
-	n := parser.ParseVarint()
+	n := reader.Uint32()
 	assert.Equal(uint64(n), uint64(OpSetTx))
 
-	bb := parser.ParseVarint()
-	assert.Equal(true, bb.Bool())
+	assert.Equal(true, reader.Bool())
 
 	assert.Panics(func() {
-		parser.Parse()
+		reader.StrSlice()
 	})
 	assert.Panics(func() {
-		parser.ParseVarint()
+		reader.Byte()
 	})
 }
 

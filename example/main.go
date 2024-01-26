@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
-	"strconv"
 	"time"
 
 	"github.com/xgzlucario/rotom"
@@ -23,7 +22,7 @@ func main() {
 		if i%10000 == 0 {
 			fmt.Println(i/10000, "w")
 		}
-		k := strconv.Itoa(i)
+		k := fmt.Sprintf("%09x", i)
 		db.SetEx(k, []byte(k), time.Second*10)
 	}
 }
