@@ -2,11 +2,10 @@ package codeman
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
-	"reflect"
 
 	cache "github.com/xgzlucario/GigaCache"
+	"golang.org/x/exp/constraints"
 )
 
 const (
@@ -21,9 +20,11 @@ type Codec struct {
 	b []byte
 }
 
+type Integer constraints.Integer
+
 // NewCodec
 func NewCodec() *Codec {
-	return &Codec{b: codecPool.Get(16)[:0]}
+	return &Codec{b: codecPool.Get(32)[:0]}
 }
 
 func (s *Codec) Recycle() {
@@ -56,7 +57,7 @@ func (s *Codec) Bool(v bool) *Codec {
 	return s
 }
 
-func (s *Codec) Uint(v uint32) *Codec {
+func (s *Codec) Uint32(v uint32) *Codec {
 	s.b = formatVarint(s.b, v)
 	return s
 }
@@ -72,11 +73,13 @@ func (s *Codec) Float(f float64) *Codec {
 }
 
 func (s *Codec) StrSlice(v []string) *Codec {
-	return s.format(formatStrSlice(v))
+	s.b = append(s.b, formatStrSlice(v)...)
+	return s
 }
 
 func (s *Codec) Uint32Slice(v []uint32) *Codec {
-	return s.format(formatNumberSlice(v))
+	s.b = append(s.b, formatNumberSlice(v)...)
+	return s
 }
 
 // format uses variable-length encoding of incoming bytes.
@@ -91,27 +94,6 @@ func (s *Codec) formatString(v string) *Codec {
 	s.b = formatVarint(s.b, len(v))
 	s.b = append(s.b, v...)
 	return s
-}
-
-// Any encodes any type of data.
-func (s *Codec) Any(v any) (*Codec, error) {
-	buf, err := s.encode(v)
-	if err != nil {
-		return nil, err
-	}
-	s.format(buf)
-	return s, nil
-}
-
-func (s *Codec) encode(v any) ([]byte, error) {
-	switch v := v.(type) {
-	case Binarier:
-		return v.MarshalBinary()
-	case Jsoner:
-		return v.MarshalJSON()
-	default:
-		return nil, fmt.Errorf("%w: %v", ErrUnSupportDataType, reflect.TypeOf(v))
-	}
 }
 
 func formatVarint[T Integer](buf []byte, n T) []byte {

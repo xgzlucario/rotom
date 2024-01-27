@@ -60,24 +60,19 @@ const (
 	fileLockName = "FLOCK"
 )
 
-// Cmd
 type Cmd struct {
 	op   Operation
-	hook func(*DB, *codeman.Parser) error
+	hook func(*DB, *codeman.Reader) error
 }
 
-// cmdTable defines how each cmd is to be replayed through log redo to recover the database..
+// cmdTable defines how each command recover database from redo log(wal log).
 var cmdTable = []Cmd{
-	{OpSetTx, func(db *DB, decoder *codeman.Parser) error {
+	{OpSetTx, func(db *DB, reader *codeman.Reader) error {
 		// type, key, ts, val
-		tp := decoder.ParseVarint().Int64()
-		key := decoder.Parse().Str()
-		ts := decoder.ParseVarint().Int64()
-		val := decoder.Parse()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
+		tp := reader.Int64()
+		key := reader.Str()
+		ts := reader.Int64()
+		val := reader.RawBytes()
 
 		switch tp {
 		case TypeList:
@@ -116,81 +111,41 @@ var cmdTable = []Cmd{
 			db.cm.Set(key, m)
 
 		default:
-			// default String, check ttl before.
+			// default String, check ttl.
 			if ts > cache.GetNanoSec() || ts == noTTL {
 				db.SetTx(key, val, ts)
 			}
 		}
 		return nil
 	}},
-
-	{OpRemove, func(db *DB, decoder *codeman.Parser) error {
+	{OpRemove, func(db *DB, reader *codeman.Reader) error {
 		// keys
-		keys := decoder.Parse().StrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		db.Remove(keys...)
+		db.Remove(reader.StrSlice()...)
 		return nil
 	}},
-
-	{OpHSet, func(db *DB, decoder *codeman.Parser) error {
+	{OpHSet, func(db *DB, reader *codeman.Reader) error {
 		// key, field, val
-		key := decoder.Parse().Str()
-		field := decoder.Parse().Str()
-		val := decoder.Parse()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		return db.HSet(key, field, val)
+		return db.HSet(reader.Str(), reader.Str(), reader.RawBytes())
 	}},
-
-	{OpHRemove, func(db *DB, decoder *codeman.Parser) error {
+	{OpHRemove, func(db *DB, reader *codeman.Reader) error {
 		// key, fields
-		key := decoder.Parse().Str()
-		fields := decoder.Parse().StrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		_, err := db.HRemove(key, fields...)
+		_, err := db.HRemove(reader.Str(), reader.StrSlice()...)
 		return err
 	}},
-
-	{OpSAdd, func(db *DB, decoder *codeman.Parser) error {
+	{OpSAdd, func(db *DB, reader *codeman.Reader) error {
 		// key, items
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		_, err := db.SAdd(key, items...)
+		_, err := db.SAdd(reader.Str(), reader.StrSlice()...)
 		return err
 	}},
-
-	{OpSRemove, func(db *DB, decoder *codeman.Parser) error {
+	{OpSRemove, func(db *DB, reader *codeman.Reader) error {
 		// key, items
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		return db.SRemove(key, items...)
+		return db.SRemove(reader.Str(), reader.StrSlice()...)
 	}},
-
-	{OpSMerge, func(db *DB, decoder *codeman.Parser) error {
+	{OpSMerge, func(db *DB, reader *codeman.Reader) error {
 		// op, key, items
-		op := decoder.ParseVarint().Byte()
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
+		op := reader.Byte()
+		key := reader.Str()
+		items := reader.StrSlice()
 
 		switch op {
 		case mergeTypeAnd:
@@ -201,73 +156,43 @@ var cmdTable = []Cmd{
 			return db.SDiff(key, items...)
 		}
 	}},
-
-	{OpLPush, func(db *DB, decoder *codeman.Parser) error {
+	{OpLPush, func(db *DB, reader *codeman.Reader) error {
 		// direct, key, items
-		direct := decoder.ParseVarint().Byte()
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
+		direct := reader.Byte()
+		key := reader.Str()
+		items := reader.StrSlice()
 
 		if direct == listDirectionLeft {
 			return db.LLPush(key, items...)
 		}
 		return db.LRPush(key, items...)
 	}},
-
-	{OpLPop, func(db *DB, decoder *codeman.Parser) (err error) {
+	{OpLPop, func(db *DB, reader *codeman.Reader) (err error) {
 		// direct, key
-		direct := decoder.ParseVarint().Byte()
-		key := decoder.Parse().Str()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
+		direct := reader.Byte()
+		key := reader.Str()
 
 		if direct == listDirectionLeft {
 			_, err = db.LLPop(key)
-			return
+		} else {
+			_, err = db.LRPop(key)
 		}
-		_, err = db.LRPop(key)
 		return
 	}},
-
-	{OpBitSet, func(db *DB, decoder *codeman.Parser) error {
-		// key, offset, val
-		key := decoder.Parse().Str()
-		val := decoder.ParseVarint().Bool()
-		offsets := decoder.Parse().Uint32Slice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		_, err := db.BitSet(key, val, offsets...)
+	{OpBitSet, func(db *DB, reader *codeman.Reader) error {
+		// key, val, offsets
+		_, err := db.BitSet(reader.Str(), reader.Bool(), reader.Uint32Slice()...)
 		return err
 	}},
-
-	{OpBitFlip, func(db *DB, decoder *codeman.Parser) error {
+	{OpBitFlip, func(db *DB, reader *codeman.Reader) error {
 		// key, offset
-		key := decoder.Parse().Str()
-		offset := decoder.ParseVarint().Uint32()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		return db.BitFlip(key, offset)
+		return db.BitFlip(reader.Str(), reader.Uint32())
 	}},
-
-	{OpBitMerge, func(db *DB, decoder *codeman.Parser) error {
+	{OpBitMerge, func(db *DB, reader *codeman.Reader) error {
 		// op, key, items
-		op := decoder.ParseVarint().Byte()
-		key := decoder.Parse().Str()
-		items := decoder.Parse().StrSlice()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
+		op := reader.Byte()
+		key := reader.Str()
+		items := reader.StrSlice()
 
 		switch op {
 		case mergeTypeAnd:
@@ -278,41 +203,18 @@ var cmdTable = []Cmd{
 			return db.BitXor(key, items...)
 		}
 	}},
-
-	{OpZAdd, func(db *DB, decoder *codeman.Parser) error {
+	{OpZAdd, func(db *DB, reader *codeman.Reader) error {
 		// key, field, score
-		key := decoder.Parse().Str()
-		field := decoder.Parse().Str()
-		score := decoder.ParseVarint().Float64()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		return db.ZAdd(key, field, score)
+		return db.ZAdd(reader.Str(), reader.Str(), reader.Float64())
 	}},
-
-	{OpZIncr, func(db *DB, decoder *codeman.Parser) error {
+	{OpZIncr, func(db *DB, reader *codeman.Reader) error {
 		// key, field, score
-		key := decoder.Parse().Str()
-		field := decoder.Parse().Str()
-		score := decoder.ParseVarint().Float64()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		_, err := db.ZIncr(key, field, score)
+		_, err := db.ZIncr(reader.Str(), reader.Str(), reader.Float64())
 		return err
 	}},
-
-	{OpZRemove, func(db *DB, decoder *codeman.Parser) error {
+	{OpZRemove, func(db *DB, reader *codeman.Reader) error {
 		// key, field
-		key := decoder.Parse().Str()
-		field := decoder.Parse().Str()
-
-		if decoder.Error != nil {
-			return decoder.Error
-		}
-		return db.ZRemove(key, field)
+		return db.ZRemove(reader.Str(), reader.Str())
 	}},
 }
 
@@ -813,7 +715,7 @@ func (db *DB) BitFlip(key string, offset uint32) error {
 	if err != nil {
 		return err
 	}
-	db.encode(newCodec(OpBitFlip).Str(key).Uint(offset))
+	db.encode(newCodec(OpBitFlip).Str(key).Uint32(offset))
 	bm.Flip(uint64(offset))
 
 	return nil
@@ -977,17 +879,11 @@ func (db *DB) loadFromWal() error {
 		if err == io.EOF {
 			break
 		}
-		// parse records data.
-		parser := codeman.NewParser(data)
-		for !parser.Done() {
-			// parse records.
-			op := Operation(parser.ParseVarint())
 
-			if parser.Error != nil {
-				return parser.Error
-			}
-
-			if err := cmdTable[op].hook(db, parser); err != nil {
+		// read all records.
+		for rd := codeman.NewReader(data); !rd.Done(); {
+			op := Operation(rd.Byte())
+			if err := cmdTable[op].hook(db, rd); err != nil {
 				return err
 			}
 		}
@@ -1021,23 +917,34 @@ func (db *DB) Shrink() error {
 
 	// marshal built-in types.
 	var types Type
+	var data []byte
+	var err error
+
 	for t := range db.cm.IterBuffered() {
-		switch t.Val.(type) {
+		switch item := t.Val.(type) {
 		case Map:
 			types = TypeMap
+			data, err = item.MarshalJSON()
 		case BitMap:
 			types = TypeBitmap
+			data, err = item.MarshalBinary()
 		case List:
 			types = TypeList
+			data, err = item.MarshalJSON()
 		case Set:
 			types = TypeSet
+			data, err = item.MarshalJSON()
 		case ZSet:
 			types = TypeZSet
+			data, err = item.MarshalJSON()
 		}
-		if cd, err := newCodec(OpSetTx).Int(types).Str(t.Key).Int(0).Any(t.Val); err == nil {
-			db.wal.Write(cd.Content())
-			cd.Recycle()
+
+		if err != nil {
+			return err
 		}
+		cd := newCodec(OpSetTx).Int(types).Str(t.Key).Int(0).Bytes(data)
+		db.wal.Write(cd.Content())
+		cd.Recycle()
 	}
 
 	// sync

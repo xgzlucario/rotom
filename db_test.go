@@ -659,48 +659,21 @@ func TestInvalidCodec(t *testing.T) {
 	println("===== TestInvalidCodec =====")
 	assert := assert.New(t)
 
-	// wrong codec sequences.
-	for _, op := range []Operation{
-		OpSetTx, OpRemove, OpHSet, OpHRemove, OpSAdd, OpSRemove, OpSMerge,
-		OpLPush, OpLPop, OpBitSet, OpBitMerge, OpBitFlip,
-		OpZAdd, OpZIncr, OpZRemove,
-	} {
-		db, err := createDB()
-		assert.Nil(err)
-		db.encode(newCodec(op).Int(100))
-		db.Close()
-		_, err = Open(db.GetOptions())
-		assert.NotNil(err)
-	}
+	// read args.
+	codec := newCodec(OpSetTx).Bool(true)
+	reader := codeman.NewReader(codec.Content())
 
-	// encode any.
-	codec, err := newCodec(OpSetTx).Any([]string{"1"})
-	assert.Nil(codec)
-	assert.ErrorContains(err, ErrUnSupportDataType.Error())
-
-	// parse args.
-	codec = newCodec(OpSetTx).Bool(true)
-	parser := codeman.NewParser(codec.Content())
-
-	n := parser.ParseVarint()
+	n := reader.Uint32()
 	assert.Equal(uint64(n), uint64(OpSetTx))
 
-	bb := parser.ParseVarint()
-	assert.Equal(true, bb.Bool())
+	assert.Equal(true, reader.Bool())
 
-	// parse done.
-	{
-		parser := codeman.NewParser(nil)
-		data := parser.Parse()
-		assert.Nil(data)
-		assert.ErrorContains(parser.Error, codeman.ErrParserIsDone.Error())
-	}
-	{
-		parser := codeman.NewParser(nil)
-		bb := parser.ParseVarint()
-		assert.False(bb.Bool())
-		assert.ErrorContains(parser.Error, codeman.ErrParserIsDone.Error())
-	}
+	assert.Panics(func() {
+		reader.StrSlice()
+	})
+	assert.Panics(func() {
+		reader.Byte()
+	})
 }
 
 func TestRace(t *testing.T) {
