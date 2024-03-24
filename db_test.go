@@ -75,7 +75,7 @@ func TestDB(t *testing.T) {
 	var count int
 	db.Scan(func(key string, val []byte, ts int64) bool {
 		count++
-		return false
+		return true
 	})
 	assert.Equal(count, 40000)
 	assert.Equal(int(db.Len()), 60000)

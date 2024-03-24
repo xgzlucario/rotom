@@ -21,6 +21,15 @@ import (
 
 const (
 	noTTL = 0
+
+	mergeTypeAnd byte = iota + 1
+	mergeTypeOr
+	mergeTypeXOr
+
+	listDirectionLeft  = 'L'
+	listDirectionRight = 'R'
+
+	fileLockName = "FLOCK"
 )
 
 // Operations.
@@ -47,17 +56,6 @@ const (
 	OpZAdd
 	OpZIncr
 	OpZRemove
-)
-
-const (
-	mergeTypeAnd byte = iota + 1
-	mergeTypeOr
-	mergeTypeXOr
-
-	listDirectionLeft  = 'L'
-	listDirectionRight = 'R'
-
-	fileLockName = "FLOCK"
 )
 
 type Cmd struct {
@@ -280,7 +278,7 @@ func Open(options Options) (*DB, error) {
 	}
 
 	// init db instance.
-	cacheOptions := cache.DefaultOption
+	cacheOptions := cache.DefaultOptions
 	cacheOptions.ShardCount = options.ShardCount
 	db := &DB{
 		options:  &options,
@@ -402,16 +400,15 @@ func (db *DB) SetTx(key string, val []byte, ts int64) {
 func (db *DB) Remove(keys ...string) (n int) {
 	db.encode(newCodec(OpRemove).StrSlice(keys))
 	for _, key := range keys {
-		if db.m.Delete(key) {
-			n++
-		}
+		db.m.Remove(key)
+		n++
 	}
 	return
 }
 
 // Len
-func (db *DB) Len() uint64 {
-	return db.m.Stat().Len + uint64(db.cm.Count())
+func (db *DB) Len() int {
+	return db.m.Stat().Len + db.cm.Count()
 }
 
 // GC triggers the garbage collection to evict expired kv datas.
