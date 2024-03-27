@@ -88,7 +88,7 @@ func (z *ZSet[K, S]) Delete(key K) (s S, ok bool) {
 func (z *ZSet[K, S]) Len() int {
 	z.RLock()
 	defer z.RUnlock()
-	return z.m.Count()
+	return z.m.Len()
 }
 
 // Iter iterate all elements by scores.
@@ -114,9 +114,9 @@ func (z *ZSet[K, S]) UnmarshalJSON(src []byte) error {
 		return err
 	}
 
-	z.m.Iter(func(k K, s S) bool {
+	z.m.All(func(k K, s S) bool {
 		z.tree.Insert(s, k)
-		return false
+		return true
 	})
 
 	return nil

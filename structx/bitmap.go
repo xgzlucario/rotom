@@ -49,9 +49,9 @@ func (b *Bitmap) Test(i uint32) bool {
 }
 
 // Flip
-func (b *Bitmap) Flip(i uint64) {
+func (b *Bitmap) Flip(start, end uint64) {
 	b.Lock()
-	b.bm.Flip(i, i)
+	b.bm.Flip(start, end)
 	b.Unlock()
 }
 

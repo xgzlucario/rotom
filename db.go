@@ -21,6 +21,15 @@ import (
 
 const (
 	noTTL = 0
+
+	mergeTypeAnd byte = iota + 1
+	mergeTypeOr
+	mergeTypeXOr
+
+	listDirectionLeft  = 'L'
+	listDirectionRight = 'R'
+
+	fileLockName = "FLOCK"
 )
 
 // Operations.
@@ -47,17 +56,6 @@ const (
 	OpZAdd
 	OpZIncr
 	OpZRemove
-)
-
-const (
-	mergeTypeAnd byte = iota + 1
-	mergeTypeOr
-	mergeTypeXOr
-
-	listDirectionLeft  = 'L'
-	listDirectionRight = 'R'
-
-	fileLockName = "FLOCK"
 )
 
 type Cmd struct {
@@ -186,7 +184,7 @@ var cmdTable = []Cmd{
 	}},
 	{OpBitFlip, func(db *DB, reader *codeman.Reader) error {
 		// key, offset
-		return db.BitFlip(reader.Str(), reader.Uint32())
+		return db.BitFlip(reader.Str(), reader.Uint32(), reader.Uint32())
 	}},
 	{OpBitMerge, func(db *DB, reader *codeman.Reader) error {
 		// op, key, items
@@ -280,7 +278,7 @@ func Open(options Options) (*DB, error) {
 	}
 
 	// init db instance.
-	cacheOptions := cache.DefaultOption
+	cacheOptions := cache.DefaultOptions
 	cacheOptions.ShardCount = options.ShardCount
 	db := &DB{
 		options:  &options,
@@ -402,7 +400,7 @@ func (db *DB) SetTx(key string, val []byte, ts int64) {
 func (db *DB) Remove(keys ...string) (n int) {
 	db.encode(newCodec(OpRemove).StrSlice(keys))
 	for _, key := range keys {
-		if db.m.Delete(key) {
+		if db.m.Remove(key) {
 			n++
 		}
 	}
@@ -410,8 +408,9 @@ func (db *DB) Remove(keys ...string) (n int) {
 }
 
 // Len
-func (db *DB) Len() uint64 {
-	return db.m.Stat().Len + uint64(db.cm.Count())
+func (db *DB) Len() int {
+	stat := db.m.Stat()
+	return stat.Conflict + stat.Len + db.cm.Count()
 }
 
 // GC triggers the garbage collection to evict expired kv datas.
@@ -710,13 +709,13 @@ func (db *DB) BitSet(key string, val bool, offsets ...uint32) (int, error) {
 }
 
 // BitFlip
-func (db *DB) BitFlip(key string, offset uint32) error {
+func (db *DB) BitFlip(key string, start, end uint32) error {
 	bm, err := db.fetchBitMap(key)
 	if err != nil {
 		return err
 	}
-	db.encode(newCodec(OpBitFlip).Str(key).Uint32(offset))
-	bm.Flip(uint64(offset))
+	db.encode(newCodec(OpBitFlip).Str(key).Uint32(start).Uint32(end))
+	bm.Flip(uint64(start), uint64(end))
 
 	return nil
 }

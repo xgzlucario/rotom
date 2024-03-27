@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/bytedance/sonic"
-	"github.com/dolthub/swiss"
+	"github.com/cockroachdb/swiss"
 )
 
 // Map
@@ -14,7 +14,7 @@ type Map[K comparable, V any] struct {
 
 // NewMap
 func NewMap[K comparable, V any]() Map[K, V] {
-	return Map[K, V]{swiss.NewMap[K, V](32)}
+	return Map[K, V]{swiss.New[K, V](32)}
 }
 
 type entry[K comparable, V any] struct {
@@ -25,13 +25,13 @@ type entry[K comparable, V any] struct {
 // MarshalJSON
 func (m *Map[K, V]) MarshalJSON() ([]byte, error) {
 	e := entry[K, V]{
-		K: make([]K, 0, m.Count()),
-		V: make([]V, 0, m.Count()),
+		K: make([]K, 0, m.Len()),
+		V: make([]V, 0, m.Len()),
 	}
-	m.Iter(func(k K, v V) bool {
+	m.All(func(k K, v V) bool {
 		e.K = append(e.K, k)
 		e.V = append(e.V, v)
-		return false
+		return true
 	})
 
 	return sonic.Marshal(e)
@@ -79,18 +79,18 @@ func (m *SyncMap) Set(key string, value []byte) {
 // Delete
 func (m *SyncMap) Delete(key string) bool {
 	m.Lock()
-	ok := m.m.Delete(key)
+	m.m.Delete(key)
 	m.Unlock()
-	return ok
+	return true
 }
 
 // Keys
 func (m *SyncMap) Keys() (keys []string) {
 	m.RLock()
-	keys = make([]string, 0, m.m.Count())
-	m.m.Iter(func(k string, _ []byte) bool {
+	keys = make([]string, 0, m.m.Len())
+	m.m.All(func(k string, _ []byte) bool {
 		keys = append(keys, k)
-		return false
+		return true
 	})
 	m.RUnlock()
 	return
@@ -99,7 +99,7 @@ func (m *SyncMap) Keys() (keys []string) {
 // Len
 func (m *SyncMap) Len() (n int) {
 	m.RLock()
-	n = m.m.Count()
+	n = m.m.Len()
 	m.RUnlock()
 	return
 }
