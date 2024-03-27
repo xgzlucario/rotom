@@ -14,9 +14,9 @@ require (
 	github.com/rosedblabs/wal v1.3.6
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.8.4
-	github.com/xgzlucario/GigaCache v0.0.0-20240322084843-fb66291fa5ea
+	github.com/xgzlucario/GigaCache v0.0.0-20240325102640-77618656847b
 	github.com/zyedidia/generic v1.2.2-0.20230819223407-98022f93823f
-	golang.org/x/exp v0.0.0-20240318143956-a85f2c67cd81
+	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8
 )
 
 require (

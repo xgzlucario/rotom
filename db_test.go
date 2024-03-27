@@ -41,13 +41,12 @@ func TestDB(t *testing.T) {
 		db.SetEx("expired-"+key, val, time.Second)
 		db.SetTx("invalid-"+key, val, -1)
 	}
-
-	// gc
-	db.GC()
 	time.Sleep(time.Second * 2)
 
 	// Test get.
 	var ts int64
+	now := time.Now().UnixNano()
+
 	for i := 0; i < 10000; i++ {
 		key := strconv.Itoa(i)
 		// set
@@ -58,7 +57,7 @@ func TestDB(t *testing.T) {
 		val, ts, err = db.Get("ttl-" + key)
 		assert.Nil(err)
 		assert.Equal(val, []byte(key))
-		assert.True(ts > time.Now().UnixNano())
+		assert.True(ts > now)
 		// expired
 		val, ts, err = db.Get("expired-" + key)
 		assert.Equal(val, nilBytes)
@@ -79,6 +78,16 @@ func TestDB(t *testing.T) {
 	})
 	assert.Equal(count, 40000)
 	assert.Equal(int(db.Len()), 60000)
+
+	// GC
+	db.GC()
+	count = 0
+	db.Scan(func(key string, val []byte, ts int64) bool {
+		count++
+		return true
+	})
+	assert.Equal(count, 40000)
+	assert.Equal(int(db.Len()), 40000)
 
 	// Error
 	val, _, err := db.Get("map")

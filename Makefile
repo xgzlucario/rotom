@@ -28,4 +28,4 @@ run-bench:
 
 clean:
 	rm -f coverage.txt
-	rm -r tmp-*
+	rm -rf tmp-*

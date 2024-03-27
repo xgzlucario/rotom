@@ -400,15 +400,17 @@ func (db *DB) SetTx(key string, val []byte, ts int64) {
 func (db *DB) Remove(keys ...string) (n int) {
 	db.encode(newCodec(OpRemove).StrSlice(keys))
 	for _, key := range keys {
-		db.m.Remove(key)
-		n++
+		if db.m.Remove(key) {
+			n++
+		}
 	}
 	return
 }
 
 // Len
 func (db *DB) Len() int {
-	return db.m.Stat().Len + db.cm.Count()
+	stat := db.m.Stat()
+	return stat.Conflict + stat.Len + db.cm.Count()
 }
 
 // GC triggers the garbage collection to evict expired kv datas.
