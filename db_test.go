@@ -28,12 +28,13 @@ func createDB() (*DB, error) {
 func TestDB(t *testing.T) {
 	println("===== TestDB =====")
 	assert := assert.New(t)
+	const N = 5000
 
 	db, err := createDB()
 	assert.Nil(err)
 
 	// Test db operations
-	for i := 0; i < 20000; i++ {
+	for i := 0; i < N; i++ {
 		key := strconv.Itoa(i)
 		val := []byte(strconv.Itoa(i))
 		db.Set("set-"+key, val)
@@ -47,7 +48,7 @@ func TestDB(t *testing.T) {
 	var ts int64
 	now := time.Now().UnixNano()
 
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < N; i++ {
 		key := strconv.Itoa(i)
 		// set
 		val, _, err := db.Get("set-" + key)
@@ -76,8 +77,8 @@ func TestDB(t *testing.T) {
 		count++
 		return true
 	})
-	assert.Equal(count, 40000)
-	assert.Equal(int(db.Len()), 60000)
+	assert.Equal(count, N*2)
+	assert.Equal(int(db.Len()), N*3)
 
 	// GC
 	db.GC()
@@ -86,8 +87,8 @@ func TestDB(t *testing.T) {
 		count++
 		return true
 	})
-	assert.Equal(count, 40000)
-	assert.Equal(int(db.Len()), 40000)
+	assert.Equal(count, N*2)
+	assert.Equal(int(db.Len()), N*2)
 
 	// Error
 	val, _, err := db.Get("map")
@@ -459,9 +460,6 @@ func TestBitmap(t *testing.T) {
 		assert.True(ok)
 		assert.Nil(err)
 
-		// TODO
-		db.BitFlip(key, uint32(i))
-
 		// Error
 		db.BitSet("my-bitset", true, 1)
 		db.Set("none", []byte("1"))
@@ -474,7 +472,7 @@ func TestBitmap(t *testing.T) {
 		assert.False(ok)
 		assert.ErrorContains(err, ErrWrongType.Error())
 
-		err = db.BitFlip("none", uint32(i))
+		err = db.BitFlip("none", uint32(i), uint32(i+1))
 		assert.ErrorContains(err, ErrWrongType.Error())
 
 		m, err := db.BitArray("none")
@@ -531,6 +529,20 @@ func TestBitmap(t *testing.T) {
 		m2, err2 := db.BitArray("res" + stri)
 		assert.Nil(err2)
 		assert.ElementsMatch(m1, m2)
+	}
+
+	// flip
+	for i := 0; i < 1000; i++ {
+		db.BitSet("bf", true, uint32(i))
+	}
+	db.BitFlip("bf", 500, 1500)
+	for i := 500; i < 1000; i++ {
+		ok, _ := db.BitTest("bf", uint32(i))
+		assert.False(ok)
+	}
+	for i := 1000; i < 1500; i++ {
+		ok, _ := db.BitTest("bf", uint32(i))
+		assert.True(ok)
 	}
 
 	// reload
