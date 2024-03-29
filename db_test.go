@@ -20,7 +20,7 @@ func createDB() (*DB, error) {
 	options := DefaultOptions
 	options.ShardCount = 4
 	options.DirPath = fmt.Sprintf("tmp-%x", time.Now().UnixNano())
-	options.ShrinkCronExpr = "0/3 * 0/1 * * ?" // every 3 seconds
+	options.ShrinkCronExpr = ""
 	return Open(options)
 }
 
@@ -684,6 +684,9 @@ func TestInvalidCodec(t *testing.T) {
 	})
 	assert.Panics(func() {
 		reader.Byte()
+	})
+	assert.Panics(func() {
+		reader.RawBytes()
 	})
 }
 
