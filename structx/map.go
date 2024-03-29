@@ -1,10 +1,11 @@
 package structx
 
 import (
-	"sync"
+	"unsafe"
 
 	"github.com/bytedance/sonic"
 	"github.com/cockroachdb/swiss"
+	cache "github.com/xgzlucario/GigaCache"
 )
 
 // Map
@@ -50,70 +51,94 @@ func (m *Map[K, V]) UnmarshalJSON(src []byte) error {
 	return nil
 }
 
+func syncMapOptions() cache.Options {
+	options := cache.DefaultOptions
+	options.ShardCount = 32
+	options.IndexSize = 32
+	options.BufferSize = 1024
+	options.DisableEvict = true
+	return options
+}
+
 // SyncMap
 type SyncMap struct {
-	m Map[string, []byte]
-	sync.RWMutex
+	m *cache.GigaCache
 }
 
 // NewSyncMap
-func NewSyncMap() *SyncMap {
-	return &SyncMap{m: NewMap[string, []byte]()}
+func NewSyncMap() (s *SyncMap) {
+	return &SyncMap{m: cache.New(syncMapOptions())}
 }
 
 // Get
-func (m *SyncMap) Get(key string) (v []byte, ok bool) {
-	m.RLock()
-	v, ok = m.m.Get(key)
-	m.RUnlock()
-	return
+func (m *SyncMap) Get(key string) ([]byte, bool) {
+	val, _, ok := m.m.Get(key)
+	return val, ok
 }
 
 // Set
-func (m *SyncMap) Set(key string, value []byte) {
-	m.Lock()
-	m.m.Put(key, value)
-	m.Unlock()
+func (m *SyncMap) Set(key string, val []byte) {
+	m.m.Set(key, val)
 }
 
-// Delete
-func (m *SyncMap) Delete(key string) bool {
-	m.Lock()
-	m.m.Delete(key)
-	m.Unlock()
-	return true
+// Remove
+func (m *SyncMap) Remove(key string) bool {
+	return m.m.Remove(key)
 }
 
 // Keys
 func (m *SyncMap) Keys() (keys []string) {
-	m.RLock()
-	keys = make([]string, 0, m.m.Len())
-	m.m.All(func(k string, _ []byte) bool {
-		keys = append(keys, k)
+	keys = make([]string, 0, m.m.Stat().Len)
+	m.m.Scan(func(key, val []byte, _ int64) (next bool) {
+		keys = append(keys, string(key))
 		return true
 	})
-	m.RUnlock()
 	return
 }
 
 // Len
 func (m *SyncMap) Len() (n int) {
-	m.RLock()
-	n = m.m.Len()
-	m.RUnlock()
-	return
+	return m.m.Stat().Len
 }
 
 // MarshalJSON
 func (m *SyncMap) MarshalJSON() ([]byte, error) {
-	m.RLock()
-	defer m.RUnlock()
-	return m.m.MarshalJSON()
+	n := m.m.Stat().Len
+	entry := entry[string, string]{
+		K: make([]string, 0, n),
+		V: make([]string, 0, n),
+	}
+	m.m.Scan(func(key, val []byte, _ int64) (next bool) {
+		entry.K = append(entry.K, b2s(key))
+		entry.V = append(entry.V, b2s(val))
+		return true
+	})
+	return sonic.Marshal(entry)
 }
 
 // UnmarshalJSON
 func (m *SyncMap) UnmarshalJSON(src []byte) error {
-	m.Lock()
-	defer m.Unlock()
-	return m.m.UnmarshalJSON(src)
+	m.m = cache.New(syncMapOptions())
+
+	var entry entry[string, string]
+	if err := sonic.Unmarshal(src, &entry); err != nil {
+		return err
+	}
+
+	for i, k := range entry.K {
+		m.m.Set(k, s2b(&entry.V[i]))
+	}
+	return nil
+}
+
+func s2b(str *string) []byte {
+	strHeader := (*[2]uintptr)(unsafe.Pointer(str))
+	byteSliceHeader := [3]uintptr{
+		strHeader[0], strHeader[1], strHeader[1],
+	}
+	return *(*[]byte)(unsafe.Pointer(&byteSliceHeader))
+}
+
+func b2s(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }

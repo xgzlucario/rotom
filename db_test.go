@@ -26,10 +26,8 @@ func createDB() (*DB, error) {
 }
 
 func TestDB(t *testing.T) {
-	println("===== TestDB =====")
 	assert := assert.New(t)
 	const N = 5000
-
 	db, err := createDB()
 	assert.Nil(err)
 
@@ -113,9 +111,7 @@ func TestDB(t *testing.T) {
 }
 
 func TestHmap(t *testing.T) {
-	println("===== TestHmap =====")
 	assert := assert.New(t)
-
 	db, err := createDB()
 	assert.Nil(err)
 	defer db.Close()
@@ -213,9 +209,7 @@ func TestHmap(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	println("===== TestList =====")
 	assert := assert.New(t)
-
 	db, err := createDB()
 	assert.Nil(err)
 
@@ -316,9 +310,7 @@ func TestList(t *testing.T) {
 }
 
 func TestSet(t *testing.T) {
-	println("===== TestSet =====")
 	assert := assert.New(t)
-
 	db, err := createDB()
 	assert.Nil(err)
 
@@ -435,9 +427,7 @@ func TestSet(t *testing.T) {
 }
 
 func TestBitmap(t *testing.T) {
-	println("===== TestBitmap =====")
 	assert := assert.New(t)
-
 	db, err := createDB()
 	assert.Nil(err)
 
@@ -558,9 +548,7 @@ func TestBitmap(t *testing.T) {
 }
 
 func TestZSet(t *testing.T) {
-	println("===== TestZSet =====")
 	assert := assert.New(t)
-
 	db, err := createDB()
 	assert.Nil(err)
 
@@ -677,7 +665,6 @@ func TestZSet(t *testing.T) {
 }
 
 func TestInvalidCodec(t *testing.T) {
-	println("===== TestInvalidCodec =====")
 	assert := assert.New(t)
 
 	// read args.
@@ -698,7 +685,6 @@ func TestInvalidCodec(t *testing.T) {
 }
 
 func TestRace(t *testing.T) {
-	println("===== TestRace =====")
 	assert := assert.New(t)
 
 	// open invalid options.
@@ -727,7 +713,6 @@ func TestRace(t *testing.T) {
 }
 
 func TestUnmarshalError(t *testing.T) {
-	println("===== TestUnmarshalError =====")
 	assert := assert.New(t)
 
 	for _, types := range []int64{TypeMap, TypeList, TypeSet, TypeZSet, TypeBitmap} {
@@ -743,7 +728,6 @@ func TestUnmarshalError(t *testing.T) {
 }
 
 func TestShrink(t *testing.T) {
-	println("===== TestShrink =====")
 	assert := assert.New(t)
 
 	db, err := createDB()

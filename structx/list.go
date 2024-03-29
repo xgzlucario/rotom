@@ -12,20 +12,20 @@ const (
 )
 
 // List implements a doubly-linked list.
-type List[V any] struct {
+type List struct {
 	mu sync.RWMutex
-	ls *ulist.UList[V]
+	ls *ulist.UList[string]
 }
 
 // NewList
-func NewList[V any]() *List[V] {
-	return &List[V]{
-		ls: ulist.New[V](defaultEntryBlockSize),
+func NewList() *List {
+	return &List{
+		ls: ulist.New[string](defaultEntryBlockSize),
 	}
 }
 
 // LPush
-func (l *List[V]) LPush(items ...V) {
+func (l *List) LPush(items ...string) {
 	l.mu.Lock()
 	for i := len(items) - 1; i >= 0; i-- {
 		l.ls.PushFront(items[i])
@@ -34,7 +34,7 @@ func (l *List[V]) LPush(items ...V) {
 }
 
 // RPush
-func (l *List[V]) RPush(items ...V) {
+func (l *List) RPush(items ...string) {
 	l.mu.Lock()
 	for _, item := range items {
 		l.ls.PushBack(item)
@@ -43,7 +43,7 @@ func (l *List[V]) RPush(items ...V) {
 }
 
 // Index
-func (l *List[V]) Index(i int) (v V, ok bool) {
+func (l *List) Index(i int) (v string, ok bool) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
@@ -57,7 +57,7 @@ func (l *List[V]) Index(i int) (v V, ok bool) {
 }
 
 // LPop
-func (l *List[V]) LPop() (v V, ok bool) {
+func (l *List) LPop() (v string, ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -71,7 +71,7 @@ func (l *List[V]) LPop() (v V, ok bool) {
 }
 
 // RPop
-func (l *List[V]) RPop() (v V, ok bool) {
+func (l *List) RPop() (v string, ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -85,7 +85,7 @@ func (l *List[V]) RPop() (v V, ok bool) {
 }
 
 // Size
-func (l *List[V]) Size() int {
+func (l *List) Size() int {
 	l.mu.RLock()
 	n := l.ls.Size()
 	l.mu.RUnlock()
@@ -93,11 +93,11 @@ func (l *List[V]) Size() int {
 }
 
 // Keys
-func (l *List[V]) Keys() []V {
+func (l *List) Keys() []string {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	arr := make([]V, 0, l.ls.Size())
+	arr := make([]string, 0, l.ls.Size())
 	for n := l.ls.Begin(); n.IsValid(); n.Next() {
 		arr = append(arr, n.Get())
 	}
@@ -105,21 +105,21 @@ func (l *List[V]) Keys() []V {
 }
 
 // MarshalJSON
-func (l *List[V]) MarshalJSON() ([]byte, error) {
+func (l *List) MarshalJSON() ([]byte, error) {
 	return sonic.Marshal(l.Keys())
 }
 
 // UnmarshalJSON
-func (l *List[V]) UnmarshalJSON(src []byte) error {
+func (l *List) UnmarshalJSON(src []byte) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	var items []V
+	var items []string
 	if err := sonic.Unmarshal(src, &items); err != nil {
 		return err
 	}
 
-	l = NewList[V]()
+	l = NewList()
 	for _, item := range items {
 		l.ls.PushBack(item)
 	}

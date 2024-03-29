@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gofrs/flock"
@@ -74,14 +73,14 @@ var cmdTable = []Cmd{
 
 		switch tp {
 		case TypeList:
-			ls := structx.NewList[string]()
+			ls := structx.NewList()
 			if err := ls.UnmarshalJSON(val); err != nil {
 				return err
 			}
 			db.cm.Set(key, ls)
 
 		case TypeSet:
-			s := structx.NewSet[string]()
+			s := structx.NewSet()
 			if err := s.UnmarshalJSON(val); err != nil {
 				return err
 			}
@@ -232,24 +231,23 @@ const (
 type (
 	String = []byte
 	Map    = *structx.SyncMap
-	Set    = *structx.Set[string]
-	List   = *structx.List[string]
+	Set    = *structx.Set
+	List   = *structx.List
 	ZSet   = *structx.ZSet[string, float64]
 	BitMap = *structx.Bitmap
 )
 
 // DB represents a rotom database.
 type DB struct {
-	mu        sync.Mutex
-	options   *Options
-	fileLock  *flock.Flock
-	wal       *wal.WAL
-	loading   bool // is loading finished from wal.
-	closed    bool
-	shrinking uint32
-	m         *cache.GigaCache                // data for bytes.
-	cm        cmap.ConcurrentMap[string, any] // data for built-in types.
-	cron      *cron.Cron                      // cron scheduler for auto merge task.
+	mu       sync.Mutex
+	options  *Options
+	fileLock *flock.Flock
+	wal      *wal.WAL
+	loading  bool // is loading finished from wal.
+	closed   bool
+	m        *cache.GigaCache                // data for bytes.
+	cm       cmap.ConcurrentMap[string, any] // data for built-in types.
+	cron     *cron.Cron                      // cron scheduler for auto merge task.
 }
 
 // Open create a new db instance by options.
@@ -469,7 +467,7 @@ func (db *DB) HRemove(key string, fields ...string) (n int, err error) {
 	}
 	db.encode(newCodec(OpHRemove).Str(key).StrSlice(fields))
 	for _, k := range fields {
-		if m.Delete(k) {
+		if m.Remove(k) {
 			n++
 		}
 	}
@@ -892,13 +890,9 @@ func (db *DB) loadFromWal() error {
 
 // Shrink rewrite db file.
 func (db *DB) Shrink() error {
-	// cas
-	if !atomic.CompareAndSwapUint32(&db.shrinking, 0, 1) {
+	if !db.mu.TryLock() {
 		return ErrShrinkRunning
 	}
-	defer atomic.StoreUint32(&db.shrinking, 0)
-
-	db.mu.Lock()
 	defer db.mu.Unlock()
 
 	// create new segment file.
@@ -974,13 +968,13 @@ func (db *DB) fetchMap(key string, setnx ...bool) (m Map, err error) {
 
 func (db *DB) fetchSet(key string, setnx ...bool) (s Set, err error) {
 	return fetch(db, key, func() Set {
-		return structx.NewSet[string]()
+		return structx.NewSet()
 	}, setnx...)
 }
 
 func (db *DB) fetchList(key string, setnx ...bool) (m List, err error) {
 	return fetch(db, key, func() List {
-		return structx.NewList[string]()
+		return structx.NewList()
 	}, setnx...)
 }
 
