@@ -2,12 +2,11 @@ package rotom
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/xgzlucario/rotom/codeman"
 )
@@ -208,6 +207,10 @@ func TestHmap(t *testing.T) {
 	}
 }
 
+func randString() string {
+	return fmt.Sprintf("%08x", rand.Uint32())
+}
+
 func TestList(t *testing.T) {
 	assert := assert.New(t)
 	db, err := createDB()
@@ -215,7 +218,7 @@ func TestList(t *testing.T) {
 
 	for i := 0; i < 10000; i++ {
 		key := "list" + strconv.Itoa(i/100)
-		val := gofakeit.Animal()
+		val := randString()
 
 		if i%2 == 0 {
 			assert.Nil(db.LRPush(key, val))
@@ -293,7 +296,7 @@ func TestList(t *testing.T) {
 		assert.Equal(err, ErrIndexOutOfRange)
 
 		for i := 0; i < 100; i++ {
-			db.LRPush("list", gofakeit.Animal())
+			db.LRPush("list", randString())
 		}
 	}
 
@@ -352,8 +355,8 @@ func TestSet(t *testing.T) {
 		// Add random data
 		for i := 0; i < 20; i++ {
 			stri := strconv.Itoa(i)
-			db.SAdd("a"+stri, gofakeit.Animal())
-			db.SAdd("b"+stri, gofakeit.Animal())
+			db.SAdd("a"+stri, randString())
+			db.SAdd("b"+stri, randString())
 		}
 		stri := strconv.Itoa(i)
 
