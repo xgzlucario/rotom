@@ -693,8 +693,7 @@ func TestInvalidCodec(t *testing.T) {
 func TestRace(t *testing.T) {
 	assert := assert.New(t)
 
-	// open invalid options.
-	{
+	t.Run("checkOptions", func(t *testing.T) {
 		options := DefaultOptions
 		options.DirPath = ""
 		_, err := Open(options)
@@ -704,18 +703,34 @@ func TestRace(t *testing.T) {
 		options.ShardCount = 0
 		_, err = Open(options)
 		assert.NotNil(err)
-	}
+	})
 
-	// dirpath race.
-	options := DefaultOptions
-	options.DirPath = "tmp-race"
-	db, err := Open(options)
-	assert.Nil(err)
-	assert.NotNil(db)
+	t.Run("db-race", func(t *testing.T) {
+		options := DefaultOptions
+		options.DirPath = "tmp-race"
+		db, err := Open(options)
+		assert.Nil(err)
+		assert.NotNil(db)
 
-	// open another db.
-	_, err = Open(options)
-	assert.Equal(err, ErrDatabaseIsUsing)
+		// open another db.
+		_, err = Open(options)
+		assert.Equal(err, ErrDatabaseIsUsing)
+	})
+
+	t.Run("open-wal", func(t *testing.T) {
+		options := DefaultOptions
+		options.DirPath = "README.md"
+		_, err := Open(options)
+		assert.NotNil(err)
+	})
+
+	t.Run("wait-fr-shrink", func(t *testing.T) {
+		options := DefaultOptions
+		options.ShrinkCronExpr = "0/1 * * * * ?" // every second
+		db, _ := Open(options)
+		time.Sleep(time.Second)
+		db.Close()
+	})
 }
 
 func TestUnmarshalError(t *testing.T) {
