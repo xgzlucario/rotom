@@ -2,12 +2,11 @@ package rotom
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/brianvoe/gofakeit/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/xgzlucario/rotom/codeman"
 )
@@ -21,15 +20,13 @@ func createDB() (*DB, error) {
 	options := DefaultOptions
 	options.ShardCount = 4
 	options.DirPath = fmt.Sprintf("tmp-%x", time.Now().UnixNano())
-	options.ShrinkCronExpr = "0/3 * 0/1 * * ?" // every 3 seconds
+	options.ShrinkCronExpr = ""
 	return Open(options)
 }
 
 func TestDB(t *testing.T) {
-	println("===== TestDB =====")
 	assert := assert.New(t)
 	const N = 5000
-
 	db, err := createDB()
 	assert.Nil(err)
 
@@ -113,9 +110,7 @@ func TestDB(t *testing.T) {
 }
 
 func TestHmap(t *testing.T) {
-	println("===== TestHmap =====")
 	assert := assert.New(t)
-
 	db, err := createDB()
 	assert.Nil(err)
 	defer db.Close()
@@ -212,16 +207,18 @@ func TestHmap(t *testing.T) {
 	}
 }
 
-func TestList(t *testing.T) {
-	println("===== TestList =====")
-	assert := assert.New(t)
+func randString() string {
+	return fmt.Sprintf("%08x", rand.Uint32())
+}
 
+func TestList(t *testing.T) {
+	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
 
 	for i := 0; i < 10000; i++ {
 		key := "list" + strconv.Itoa(i/100)
-		val := gofakeit.Animal()
+		val := randString()
 
 		if i%2 == 0 {
 			assert.Nil(db.LRPush(key, val))
@@ -299,7 +296,7 @@ func TestList(t *testing.T) {
 		assert.Equal(err, ErrIndexOutOfRange)
 
 		for i := 0; i < 100; i++ {
-			db.LRPush("list", gofakeit.Animal())
+			db.LRPush("list", randString())
 		}
 	}
 
@@ -316,9 +313,7 @@ func TestList(t *testing.T) {
 }
 
 func TestSet(t *testing.T) {
-	println("===== TestSet =====")
 	assert := assert.New(t)
-
 	db, err := createDB()
 	assert.Nil(err)
 
@@ -360,8 +355,8 @@ func TestSet(t *testing.T) {
 		// Add random data
 		for i := 0; i < 20; i++ {
 			stri := strconv.Itoa(i)
-			db.SAdd("a"+stri, gofakeit.Animal())
-			db.SAdd("b"+stri, gofakeit.Animal())
+			db.SAdd("a"+stri, randString())
+			db.SAdd("b"+stri, randString())
 		}
 		stri := strconv.Itoa(i)
 
@@ -435,9 +430,7 @@ func TestSet(t *testing.T) {
 }
 
 func TestBitmap(t *testing.T) {
-	println("===== TestBitmap =====")
 	assert := assert.New(t)
-
 	db, err := createDB()
 	assert.Nil(err)
 
@@ -558,9 +551,7 @@ func TestBitmap(t *testing.T) {
 }
 
 func TestZSet(t *testing.T) {
-	println("===== TestZSet =====")
 	assert := assert.New(t)
-
 	db, err := createDB()
 	assert.Nil(err)
 
@@ -677,7 +668,6 @@ func TestZSet(t *testing.T) {
 }
 
 func TestInvalidCodec(t *testing.T) {
-	println("===== TestInvalidCodec =====")
 	assert := assert.New(t)
 
 	// read args.
@@ -695,14 +685,15 @@ func TestInvalidCodec(t *testing.T) {
 	assert.Panics(func() {
 		reader.Byte()
 	})
+	assert.Panics(func() {
+		reader.RawBytes()
+	})
 }
 
 func TestRace(t *testing.T) {
-	println("===== TestRace =====")
 	assert := assert.New(t)
 
-	// open invalid options.
-	{
+	t.Run("checkOptions", func(t *testing.T) {
 		options := DefaultOptions
 		options.DirPath = ""
 		_, err := Open(options)
@@ -712,22 +703,37 @@ func TestRace(t *testing.T) {
 		options.ShardCount = 0
 		_, err = Open(options)
 		assert.NotNil(err)
-	}
+	})
 
-	// dirpath race.
-	options := DefaultOptions
-	options.DirPath = "tmp-race"
-	db, err := Open(options)
-	assert.Nil(err)
-	assert.NotNil(db)
+	t.Run("db-race", func(t *testing.T) {
+		options := DefaultOptions
+		options.DirPath = "tmp-race"
+		db, err := Open(options)
+		assert.Nil(err)
+		assert.NotNil(db)
 
-	// open another db.
-	_, err = Open(options)
-	assert.Equal(err, ErrDatabaseIsUsing)
+		// open another db.
+		_, err = Open(options)
+		assert.Equal(err, ErrDatabaseIsUsing)
+	})
+
+	t.Run("open-wal", func(t *testing.T) {
+		options := DefaultOptions
+		options.DirPath = "README.md"
+		_, err := Open(options)
+		assert.NotNil(err)
+	})
+
+	t.Run("wait-fr-shrink", func(t *testing.T) {
+		options := DefaultOptions
+		options.ShrinkCronExpr = "0/1 * * * * ?" // every second
+		db, _ := Open(options)
+		time.Sleep(time.Second)
+		db.Close()
+	})
 }
 
 func TestUnmarshalError(t *testing.T) {
-	println("===== TestUnmarshalError =====")
 	assert := assert.New(t)
 
 	for _, types := range []int64{TypeMap, TypeList, TypeSet, TypeZSet, TypeBitmap} {
@@ -743,7 +749,6 @@ func TestUnmarshalError(t *testing.T) {
 }
 
 func TestShrink(t *testing.T) {
-	println("===== TestShrink =====")
 	assert := assert.New(t)
 
 	db, err := createDB()

@@ -5,31 +5,31 @@ import (
 )
 
 // Set
-type Set[T comparable] struct {
-	mapset.Set[T]
+type Set struct {
+	mapset.Set[string]
 }
 
 // NewSet
-func NewSet[T comparable]() *Set[T] {
-	return &Set[T]{mapset.NewSet[T]()}
+func NewSet() *Set {
+	return &Set{mapset.NewSet[string]()}
 }
 
 // Clone
-func (s *Set[T]) Clone() *Set[T] {
-	return &Set[T]{s.Set.Clone()}
+func (s *Set) Clone() *Set {
+	return &Set{s.Set.Clone()}
 }
 
 // Union
-func (s *Set[T]) Union(other *Set[T]) {
+func (s *Set) Union(other *Set) {
 	s.Set = s.Set.Union(other.Set)
 }
 
 // Intersect
-func (s *Set[T]) Intersect(other *Set[T]) {
+func (s *Set) Intersect(other *Set) {
 	s.Set = s.Set.Intersect(other.Set)
 }
 
 // Difference
-func (s *Set[T]) Difference(other *Set[T]) {
+func (s *Set) Difference(other *Set) {
 	s.Set = s.Set.SymmetricDifference(other.Set)
 }

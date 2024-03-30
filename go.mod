@@ -4,7 +4,6 @@ go 1.21
 
 require (
 	github.com/RoaringBitmap/roaring v1.9.1
-	github.com/brianvoe/gofakeit/v6 v6.24.0
 	github.com/bytedance/sonic v1.11.3
 	github.com/cockroachdb/swiss v0.0.0-20240303172742-c161743eb608
 	github.com/deckarep/golang-set/v2 v2.6.0
@@ -14,7 +13,7 @@ require (
 	github.com/rosedblabs/wal v1.3.6
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.8.4
-	github.com/xgzlucario/GigaCache v0.0.0-20240325102640-77618656847b
+	github.com/xgzlucario/GigaCache v0.0.0-20240330133804-4fb63804aa28
 	github.com/zyedidia/generic v1.2.2-0.20230819223407-98022f93823f
 	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8
 )

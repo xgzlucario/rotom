@@ -10,7 +10,7 @@ run-gc:
 	GODEBUG=gctrace=1 go run main.go
 
 test-cover:
-	go test -race \
+	go test -race -v \
 	-coverpkg=./... \
 	-coverprofile=coverage.txt -covermode=atomic
 	go tool cover -html=coverage.txt -o coverage.html
