@@ -2,18 +2,20 @@ package structx
 
 import (
 	"encoding/binary"
+	"slices"
 	"sync"
 
 	"github.com/bytedance/sonic"
 )
 
 const (
-	eachBlkMaxSize = 4 * 1024
+	eachBlkMaxSize = 1024
 )
 
 type listBlk struct {
-	data       []byte
-	n          int
+	data []byte
+	n    int
+	// TODO maybe use slice store pointer of blk.
 	prev, next *listBlk
 }
 
@@ -24,11 +26,11 @@ func newBlk() *listBlk {
 }
 
 func (b *listBlk) lpush(item string) (full bool) {
-	nb := make([]byte, 0, cap(b.data))
-	nb = binary.AppendUvarint(nb, uint64(len(item)))
-	nb = append(nb, item...)
-	nb = append(nb, b.data...)
-	b.data = nb
+	alloc := append(
+		binary.AppendUvarint(nil, uint64(len(item))),
+		item...,
+	)
+	b.data = slices.Insert(b.data, 0, alloc...)
 	b.n++
 	return len(b.data) >= eachBlkMaxSize
 }
@@ -42,14 +44,14 @@ func (b *listBlk) rpush(item string) (full bool) {
 
 func (b *listBlk) iter(start, end int, f func(string) (stop bool)) {
 	var index int
-	for i := 0; index < len(b.data) && i < end; i++ {
+	for i := 0; index < len(b.data) && i <= end; i++ {
 		// klen
 		klen, n := binary.Uvarint(b.data[index:])
 		index += n
 
 		if i >= start {
 			// key
-			key := b.data[index+index+int(klen)]
+			key := b.data[index : index+int(klen)]
 			if f(string(key)) {
 				return
 			}
@@ -103,10 +105,18 @@ func (l *List) Index(i int) (v string, ok bool) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	for cur := l.head; i > cur.n; cur = cur.next {
+	var cur *listBlk
+	for cur = l.head; cur != nil && i >= cur.n; cur = cur.next {
 		i -= cur.n
 	}
-
+	if cur == nil {
+		return
+	}
+	cur.iter(i, i, func(s string) (stop bool) {
+		v = s
+		ok = true
+		return true
+	})
 	return
 }
 
@@ -115,12 +125,6 @@ func (l *List) LPop() (v string, ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// n := l.ls.Begin()
-	// if n.IsValid() {
-	// 	v = n.Get()
-	// 	l.ls.Remove(n)
-	// 	return v, true
-	// }
 	return
 }
 
@@ -129,12 +133,6 @@ func (l *List) RPop() (v string, ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	// n := l.ls.End()
-	// if n.IsValid() {
-	// 	v = n.Get()
-	// 	l.ls.Remove(n)
-	// 	return v, true
-	// }
 	return
 }
 
