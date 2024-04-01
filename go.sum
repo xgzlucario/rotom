@@ -66,8 +66,6 @@ github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6Kllzaw
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/xgzlucario/GigaCache v0.0.0-20240330133804-4fb63804aa28 h1:+KCjnQHuI3mgobmbrBA1kRUqg+cZuG/RielCtnCUsvY=
 github.com/xgzlucario/GigaCache v0.0.0-20240330133804-4fb63804aa28/go.mod h1:dSj1jMxZhjhMIui4c0YIKtVlueATj8rHEfbresGn5iU=
-github.com/zyedidia/generic v1.2.2-0.20230819223407-98022f93823f h1:r3wBquYQZ6jhwGnWWdc4jCydI7xxoNWZMGxzmii2jHE=
-github.com/zyedidia/generic v1.2.2-0.20230819223407-98022f93823f/go.mod h1:ly2RBz4mnz1yeuVbQA/VFwGjK3mnHGRj1JuoG336Bis=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
 go.uber.org/multierr v1.11.0/go.mod h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=
 golang.org/x/arch v0.0.0-20210923205945-b76863e36670/go.mod h1:5om86z9Hs0C8fWVUuoMHwpExlXzs5Tkyp9hOrfG7pp8=

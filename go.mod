@@ -14,7 +14,6 @@ require (
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.8.4
 	github.com/xgzlucario/GigaCache v0.0.0-20240330133804-4fb63804aa28
-	github.com/zyedidia/generic v1.2.2-0.20230819223407-98022f93823f
 	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8
 )
 
