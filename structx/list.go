@@ -217,7 +217,7 @@ func (l *List) Marshal() []byte {
 	return encoder.EncodeAll(buf, cbuf)
 }
 
-// Unmarshal
+// Unmarshal requires an initialized List.
 func (l *List) Unmarshal(src []byte) error {
 	data, err := decoder.DecodeAll(src, nil)
 	if err != nil {
@@ -226,7 +226,6 @@ func (l *List) Unmarshal(src []byte) error {
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l = NewList()
 
 	var index int
 	for index < len(data) {

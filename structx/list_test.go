@@ -104,49 +104,76 @@ func TestList(t *testing.T) {
 			assert.True(ok)
 		}
 	})
+}
 
-	t.Run("hybird", func(t *testing.T) {
-		ls := NewList()
-		vls := make([]string, 0, N)
+func FuzzList(f *testing.F) {
+	ls := NewList()
+	vls := make([]string, 0, 4096)
 
-		for i := 0; i < N; i++ {
-			switch rand.IntN(7) {
-			// RPush
-			case 0, 1:
-				k := strconv.Itoa(int(rand.Uint32()))
-				ls.RPush(k)
-				vls = append(vls, k)
+	f.Fuzz(func(t *testing.T, key string) {
+		assert := assert.New(t)
 
-			// LPush
-			case 2, 3:
-				k := strconv.Itoa(int(rand.Uint32()))
-				ls.LPush(k)
-				vls = append([]string{k}, vls...)
+		switch rand.IntN(12) {
+		// RPush
+		case 0, 1, 2:
+			k := strconv.Itoa(rand.Int())
+			ls.RPush(k)
+			vls = append(vls, k)
 
-			// LPop
-			case 4:
-				if len(vls) > 0 {
-					val, ok := ls.LPop()
-					valVls := vls[0]
-					vls = vls[1:]
-					assert.Equal(val, valVls)
-					assert.True(ok)
-				}
+		// LPush
+		case 3, 4, 5:
+			k := strconv.Itoa(rand.Int())
+			ls.LPush(k)
+			vls = append([]string{k}, vls...)
 
-			// RPop
-			case 5:
-				if len(vls) > 0 {
-					val, ok := ls.RPop()
-					valVls := vls[len(vls)-1]
-					vls = vls[:len(vls)-1]
-					assert.Equal(val, valVls)
-					assert.True(ok)
-				}
+		// LPop
+		case 6, 7:
+			val, ok := ls.LPop()
+			if len(vls) > 0 {
+				valVls := vls[0]
+				vls = vls[1:]
+				assert.Equal(val, valVls)
+				assert.True(ok)
+			} else {
+				assert.Equal(val, "")
+				assert.False(ok)
+			}
 
-			// Len
-			case 6:
-				assert.Equal(len(vls), ls.Size())
-				assert.Equal(vls, ls.Keys())
+		// RPop
+		case 8, 9:
+			val, ok := ls.RPop()
+			if len(vls) > 0 {
+				valVls := vls[len(vls)-1]
+				vls = vls[:len(vls)-1]
+				assert.Equal(val, valVls)
+				assert.True(ok)
+			} else {
+				assert.Equal(val, "")
+				assert.False(ok)
+			}
+
+		// Index
+		case 10:
+			if len(vls) > 0 {
+				index := rand.IntN(len(vls))
+				val, ok := ls.Index(index)
+				vlsVal := vls[index]
+				assert.Equal(val, vlsVal)
+				assert.True(ok)
+			}
+
+		// Marshal
+		case 11:
+			data := ls.Marshal()
+			nls := NewList()
+			err := nls.Unmarshal(data)
+			assert.Nil(err)
+
+			assert.Equal(len(vls), nls.Size())
+			if len(vls) == 0 {
+				assert.Equal(vls, []string{})
+			} else {
+				assert.Equal(vls, nls.Keys())
 			}
 		}
 	})
