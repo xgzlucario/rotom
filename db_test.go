@@ -71,7 +71,7 @@ func TestDB(t *testing.T) {
 
 	// Scan
 	var count int
-	db.Scan(func(key string, val []byte, ts int64) bool {
+	db.Scan(func(key, val []byte, ts int64) bool {
 		count++
 		return true
 	})
@@ -81,7 +81,7 @@ func TestDB(t *testing.T) {
 	// GC
 	db.GC()
 	count = 0
-	db.Scan(func(key string, val []byte, ts int64) bool {
+	db.Scan(func(key, val []byte, ts int64) bool {
 		count++
 		return true
 	})
@@ -108,6 +108,40 @@ func TestDB(t *testing.T) {
 	// Load Success
 	_, err = Open(db.GetOptions())
 	assert.Nil(err)
+
+	t.Run("setTTL", func(t *testing.T) {
+		db, err := createDB()
+		assert.Nil(err)
+
+		db.HSet("hmap", "k", []byte("v"))
+		n := db.Remove("hmap")
+		assert.Equal(n, 1)
+
+		assert.False(db.SetTTL("h", -1))
+
+		ts := time.Now().Add(time.Minute).UnixNano()
+		for i := 0; i < 100; i++ {
+			k := fmt.Sprintf("%08d", i)
+			db.SetTx(k, []byte(k), ts)
+		}
+		// set ttl
+		for i := 0; i < 100; i++ {
+			k := fmt.Sprintf("%08d", i)
+			assert.True(db.SetTTL(k, 0))
+		}
+
+		db.Close()
+		db, _ = Open(db.GetOptions())
+
+		// check ttl
+		for i := 0; i < 100; i++ {
+			k := fmt.Sprintf("%08d", i)
+			v, ts, err := db.Get(k)
+			assert.Equal(string(v), k)
+			assert.Equal(int64(0), ts)
+			assert.Nil(err)
+		}
+	})
 }
 
 func TestHmap(t *testing.T) {

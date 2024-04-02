@@ -36,6 +36,7 @@ type Operation byte
 
 const (
 	OpSetTx Operation = iota
+	OpSetTTL
 	OpRemove
 	// map
 	OpHSet
@@ -113,6 +114,11 @@ var cmdTable = []Cmd{
 				db.SetTx(key, val, ts)
 			}
 		}
+		return nil
+	}},
+	{OpSetTTL, func(db *DB, reader *codeman.Reader) error {
+		// key, ts
+		db.SetTTL(reader.Str(), reader.Int64())
 		return nil
 	}},
 	{OpRemove, func(db *DB, reader *codeman.Reader) error {
@@ -385,7 +391,7 @@ func (db *DB) SetEx(key string, val []byte, ttl time.Duration) {
 	db.SetTx(key, val, cache.GetNanoSec()+int64(ttl))
 }
 
-// SetTx store key-value pair with deadlindb.
+// SetTx store key-value pair with deadline.
 func (db *DB) SetTx(key string, val []byte, ts int64) {
 	if ts < 0 {
 		return
@@ -394,11 +400,23 @@ func (db *DB) SetTx(key string, val []byte, ts int64) {
 	db.m.SetTx(key, val, ts)
 }
 
+// SetTTL set expired time of key-value.
+func (db *DB) SetTTL(key string, ts int64) bool {
+	if ts < 0 {
+		return false
+	}
+	db.encode(newCodec(OpSetTTL).Str(key).Int(ts))
+	return db.m.SetTTL(key, ts)
+}
+
 // Remove
 func (db *DB) Remove(keys ...string) (n int) {
 	db.encode(newCodec(OpRemove).StrSlice(keys))
 	for _, key := range keys {
 		if db.m.Remove(key) {
+			n++
+		} else if db.cm.Has(key) {
+			db.cm.Remove(key)
 			n++
 		}
 	}
@@ -407,8 +425,7 @@ func (db *DB) Remove(keys ...string) (n int) {
 
 // Len
 func (db *DB) Len() int {
-	stat := db.m.Stat()
-	return stat.Conflict + stat.Len + db.cm.Count()
+	return db.m.Stat().Len + db.cm.Count()
 }
 
 // GC triggers the garbage collection to evict expired kv datas.
@@ -419,9 +436,9 @@ func (db *DB) GC() {
 }
 
 // Scan
-func (db *DB) Scan(f func(string, []byte, int64) bool) {
+func (db *DB) Scan(f func([]byte, []byte, int64) bool) {
 	db.m.Scan(func(key, value []byte, ttl int64) bool {
-		return f(string(key), value, ttl)
+		return f(key, value, ttl)
 	})
 }
 
@@ -455,7 +472,6 @@ func (db *DB) HSet(key, field string, val []byte) error {
 	}
 	db.encode(newCodec(OpHSet).Str(key).Str(field).Bytes(val))
 	m.Set(field, val)
-
 	return nil
 }
 
