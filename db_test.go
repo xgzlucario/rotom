@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/xgzlucario/rotom/codeman"
+	"github.com/xgzlucario/rotom/structx"
 )
 
 var (
@@ -215,9 +216,10 @@ func TestList(t *testing.T) {
 	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
+	structx.SetEachNodeMaxSize(512)
 
-	for i := 0; i < 10000; i++ {
-		key := "list" + strconv.Itoa(i/100)
+	for i := 0; i < 5000; i++ {
+		key := "list" + strconv.Itoa(i/1000)
 		val := randString()
 
 		if i%2 == 0 {
@@ -231,7 +233,7 @@ func TestList(t *testing.T) {
 			assert.Equal(res, val)
 		}
 
-		if i > 8000 {
+		if i > 4000 {
 			if i%2 == 0 {
 				res, err := db.LRPop(key)
 				assert.Nil(err)
@@ -310,6 +312,34 @@ func TestList(t *testing.T) {
 	db.Close()
 	_, err = Open(db.GetOptions())
 	assert.Nil(err)
+
+	t.Run("lpop", func(t *testing.T) {
+		db, err := createDB()
+		assert.Nil(err)
+
+		for i := 0; i < 1000; i++ {
+			db.LRPush("ls", strconv.Itoa(i))
+		}
+		for i := 0; i < 1000; i++ {
+			v, err := db.LLPop("ls")
+			assert.Equal(v, strconv.Itoa(i))
+			assert.Nil(err)
+		}
+	})
+
+	t.Run("rpop", func(t *testing.T) {
+		db, err := createDB()
+		assert.Nil(err)
+
+		for i := 0; i < 1000; i++ {
+			db.LLPush("ls", strconv.Itoa(i))
+		}
+		for i := 0; i < 1000; i++ {
+			v, err := db.LRPop("ls")
+			assert.Equal(v, strconv.Itoa(i))
+			assert.Nil(err)
+		}
+	})
 }
 
 func TestSet(t *testing.T) {
@@ -761,8 +791,8 @@ func TestShrink(t *testing.T) {
 
 	go func() {
 		time.Sleep(time.Millisecond)
-		err = db.Shrink()
-		assert.Equal(err, ErrShrinkRunning)
+		err1 := db.Shrink()
+		assert.Equal(err1, ErrShrinkRunning)
 	}()
 
 	err = db.Shrink()

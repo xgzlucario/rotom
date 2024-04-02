@@ -74,7 +74,7 @@ var cmdTable = []Cmd{
 		switch tp {
 		case TypeList:
 			ls := structx.NewList()
-			if err := ls.UnmarshalJSON(val); err != nil {
+			if err := ls.Unmarshal(val); err != nil {
 				return err
 			}
 			db.cm.Set(key, ls)
@@ -923,7 +923,7 @@ func (db *DB) Shrink() error {
 			data, err = item.MarshalBinary()
 		case List:
 			types = TypeList
-			data, err = item.MarshalJSON()
+			data = item.Marshal()
 		case Set:
 			types = TypeSet
 			data, err = item.MarshalJSON()

@@ -5,54 +5,69 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/bytedance/sonic"
+	"github.com/klauspost/compress/zstd"
 )
 
-const (
-	eachBlkMaxSize = 1024
+var (
+	eachNodeMaxSize = 4 * 1024
+
+	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderCRC(true))
+	decoder, _ = zstd.NewReader(nil)
 )
 
-type listBlk struct {
-	data []byte
-	n    int
-	// TODO maybe use slice store pointer of blk.
-	prev, next *listBlk
+// List is a double linked ziplist.
+type List struct {
+	mu         sync.RWMutex
+	head, tail *lnode
 }
 
-func newBlk() *listBlk {
-	return &listBlk{
-		data: make([]byte, 0, eachBlkMaxSize),
-	}
+type lnode struct {
+	data       []byte
+	n          int
+	prev, next *lnode
 }
 
-func (b *listBlk) lpush(item string) (full bool) {
+func SetEachNodeMaxSize(s int) {
+	eachNodeMaxSize = s
+}
+
+// NewList
+func NewList() *List {
+	blk := newNode()
+	return &List{head: blk, tail: blk}
+}
+
+func newNode() *lnode {
+	return &lnode{data: make([]byte, 0, eachNodeMaxSize)}
+}
+
+func (b *lnode) lpush(key string) (full bool) {
 	alloc := append(
-		binary.AppendUvarint(nil, uint64(len(item))),
-		item...,
+		binary.AppendUvarint(nil, uint64(len(key))),
+		key...,
 	)
 	b.data = slices.Insert(b.data, 0, alloc...)
 	b.n++
-	return len(b.data) >= eachBlkMaxSize
+	return len(b.data) >= eachNodeMaxSize
 }
 
-func (b *listBlk) rpush(item string) (full bool) {
-	b.data = binary.AppendUvarint(b.data, uint64(len(item)))
-	b.data = append(b.data, item...)
+func (b *lnode) rpush(key string) (full bool) {
+	b.data = binary.AppendUvarint(b.data, uint64(len(key)))
+	b.data = append(b.data, key...)
 	b.n++
-	return len(b.data) >= eachBlkMaxSize
+	return len(b.data) >= eachNodeMaxSize
 }
 
-func (b *listBlk) iter(start, end int, f func(string) (stop bool)) {
+func (b *lnode) iter(start int, f func(start, end int, key string) (stop bool)) {
 	var index int
-	for i := 0; index < len(b.data) && i <= end; i++ {
+	for i := 0; index < len(b.data); i++ {
 		// klen
 		klen, n := binary.Uvarint(b.data[index:])
 		index += n
-
 		if i >= start {
 			// key
 			key := b.data[index : index+int(klen)]
-			if f(string(key)) {
+			if f(index-n, index+int(klen), string(key)) {
 				return
 			}
 		}
@@ -60,42 +75,38 @@ func (b *listBlk) iter(start, end int, f func(string) (stop bool)) {
 	}
 }
 
-// List is a double linked bytes list.
-type List struct {
-	mu         sync.RWMutex
-	head, tail *listBlk
-}
-
-// NewList
-func NewList() *List {
-	blk := newBlk()
-	return &List{head: blk, tail: blk}
+func (l *List) lpush(key string) {
+	if l.head.lpush(key) {
+		node := newNode()
+		node.next = l.head
+		l.head.prev = node
+		l.head = node
+	}
 }
 
 // LPush
-func (l *List) LPush(items ...string) {
+func (l *List) LPush(keys ...string) {
 	l.mu.Lock()
-	for i := len(items) - 1; i >= 0; i-- {
-		if l.head.lpush(items[i]) {
-			node := newBlk()
-			node.next = l.head
-			l.head.prev = node
-			l.head = node
-		}
+	for _, k := range keys {
+		l.lpush(k)
 	}
 	l.mu.Unlock()
 }
 
+func (l *List) rpush(key string) {
+	if l.tail.rpush(key) {
+		node := newNode()
+		l.tail.next = node
+		node.prev = l.tail
+		l.tail = node
+	}
+}
+
 // RPush
-func (l *List) RPush(items ...string) {
+func (l *List) RPush(keys ...string) {
 	l.mu.Lock()
-	for _, item := range items {
-		if l.tail.rpush(item) {
-			node := newBlk()
-			l.tail.next = node
-			node.prev = l.tail
-			l.tail = node
-		}
+	for _, k := range keys {
+		l.rpush(k)
 	}
 	l.mu.Unlock()
 }
@@ -105,14 +116,14 @@ func (l *List) Index(i int) (v string, ok bool) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	var cur *listBlk
+	var cur *lnode
 	for cur = l.head; cur != nil && i >= cur.n; cur = cur.next {
 		i -= cur.n
 	}
 	if cur == nil {
 		return
 	}
-	cur.iter(i, i, func(s string) (stop bool) {
+	cur.iter(i, func(_, _ int, s string) (stop bool) {
 		v = s
 		ok = true
 		return true
@@ -121,56 +132,111 @@ func (l *List) Index(i int) (v string, ok bool) {
 }
 
 // LPop
-func (l *List) LPop() (v string, ok bool) {
+func (l *List) LPop() (key string, ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	return
+	// remove empty head node
+	for l.head.n == 0 {
+		if l.head.next == nil {
+			return
+		}
+		l.head = l.head.next
+		l.head.prev = nil
+	}
+
+	cur := l.head
+	cur.iter(0, func(_, end int, s string) (stop bool) {
+		key = s
+		cur.data = cur.data[end:]
+		cur.n--
+		return true
+	})
+	return key, true
 }
 
 // RPop
-func (l *List) RPop() (v string, ok bool) {
+func (l *List) RPop() (key string, ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	return
+	// remove empty tail node
+	for l.tail.n == 0 {
+		if l.tail.prev == nil {
+			return "", false
+		}
+		l.tail = l.tail.prev
+		l.tail.next = nil
+	}
+
+	cur := l.tail
+	cur.iter(cur.n-1, func(start, _ int, s string) (stop bool) {
+		key = s
+		cur.data = cur.data[:start]
+		cur.n--
+		return true
+	})
+	return key, true
 }
 
 // Size
-func (l *List) Size() int {
+func (l *List) Size() (n int) {
 	l.mu.RLock()
-	n := l.head.n
+	for cur := l.head; cur != nil; cur = cur.next {
+		n += cur.n
+	}
 	l.mu.RUnlock()
-	return n
+	return
 }
 
 // Keys
-func (l *List) Keys() []string {
+func (l *List) Keys() (keys []string) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	return nil
+	for cur := l.head; cur != nil; cur = cur.next {
+		cur.iter(0, func(start, end int, key string) (stop bool) {
+			keys = append(keys, key)
+			return false
+		})
+	}
+	return
 }
 
-// MarshalJSON
-func (l *List) MarshalJSON() ([]byte, error) {
-	return sonic.Marshal(l.Keys())
+// Marshal
+func (l *List) Marshal() []byte {
+	buf := make([]byte, 0, 1024)
+	l.mu.RLock()
+	for cur := l.head; cur != nil; cur = cur.next {
+		buf = append(buf, cur.data...)
+	}
+	l.mu.RUnlock()
+
+	// compress
+	cbuf := make([]byte, 0, len(buf)/2)
+	return encoder.EncodeAll(buf, cbuf)
 }
 
-// UnmarshalJSON
-func (l *List) UnmarshalJSON(src []byte) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	var items []string
-	if err := sonic.Unmarshal(src, &items); err != nil {
+// Unmarshal
+func (l *List) Unmarshal(src []byte) error {
+	data, err := decoder.DecodeAll(src, nil)
+	if err != nil {
 		return err
 	}
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l = NewList()
-	for _, item := range items {
-		l.head.rpush(item)
-	}
 
+	var index int
+	for index < len(data) {
+		// klen
+		klen, n := binary.Uvarint(data[index:])
+		index += n
+		// key
+		key := data[index : index+int(klen)]
+		l.rpush(string(key))
+		index += int(klen)
+	}
 	return nil
 }
