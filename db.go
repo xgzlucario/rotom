@@ -25,9 +25,6 @@ const (
 	mergeTypeOr
 	mergeTypeXOr
 
-	listDirectionLeft  = 'L'
-	listDirectionRight = 'R'
-
 	fileLockName = "FLOCK"
 )
 
@@ -46,8 +43,10 @@ const (
 	OpSRemove
 	OpSMerge // union, inter, diff
 	// list
-	OpLPush // lpush, rpush
-	OpLPop  // lpop, rpop
+	OpLPush
+	OpRPush
+	OpLPop
+	OpRPop
 	// bitmap
 	OpBitSet
 	OpBitFlip
@@ -160,27 +159,22 @@ var cmdTable = []Cmd{
 		}
 	}},
 	{OpLPush, func(db *DB, reader *codeman.Reader) error {
-		// direct, key, items
-		direct := reader.Byte()
-		key := reader.Str()
-		items := reader.StrSlice()
-
-		if direct == listDirectionLeft {
-			return db.LLPush(key, items...)
-		}
-		return db.LRPush(key, items...)
+		// key, items
+		return db.LPush(reader.Str(), reader.StrSlice()...)
 	}},
-	{OpLPop, func(db *DB, reader *codeman.Reader) (err error) {
-		// direct, key
-		direct := reader.Byte()
-		key := reader.Str()
-
-		if direct == listDirectionLeft {
-			_, err = db.LLPop(key)
-		} else {
-			_, err = db.LRPop(key)
-		}
-		return
+	{OpRPush, func(db *DB, reader *codeman.Reader) error {
+		// key, items
+		return db.RPush(reader.Str(), reader.StrSlice()...)
+	}},
+	{OpLPop, func(db *DB, reader *codeman.Reader) error {
+		// key
+		_, err := db.LPop(reader.Str())
+		return err
+	}},
+	{OpRPop, func(db *DB, reader *codeman.Reader) error {
+		// key
+		_, err := db.RPop(reader.Str())
+		return err
 	}},
 	{OpBitSet, func(db *DB, reader *codeman.Reader) error {
 		// key, val, offsets
@@ -610,25 +604,25 @@ func (db *DB) SDiff(dst string, src ...string) error {
 	return nil
 }
 
-// LLPush
-func (db *DB) LLPush(key string, items ...string) error {
+// LPush
+func (db *DB) LPush(key string, items ...string) error {
 	ls, err := db.fetchList(key, true)
 	if err != nil {
 		return err
 	}
-	db.encode(newCodec(OpLPush).Byte(listDirectionLeft).Str(key).StrSlice(items))
+	db.encode(newCodec(OpLPush).Str(key).StrSlice(items))
 	ls.LPush(items...)
 
 	return nil
 }
 
-// LRPush
-func (db *DB) LRPush(key string, items ...string) error {
+// RPush
+func (db *DB) RPush(key string, items ...string) error {
 	ls, err := db.fetchList(key, true)
 	if err != nil {
 		return err
 	}
-	db.encode(newCodec(OpLPush).Byte(listDirectionRight).Str(key).StrSlice(items))
+	db.encode(newCodec(OpRPush).Str(key).StrSlice(items))
 	ls.RPush(items...)
 
 	return nil
@@ -647,8 +641,8 @@ func (db *DB) LIndex(key string, i int) (string, error) {
 	return res, nil
 }
 
-// LLPop
-func (db *DB) LLPop(key string) (string, error) {
+// LPop
+func (db *DB) LPop(key string) (string, error) {
 	ls, err := db.fetchList(key)
 	if err != nil {
 		return "", err
@@ -657,13 +651,13 @@ func (db *DB) LLPop(key string) (string, error) {
 	if !ok {
 		return "", ErrEmptyList
 	}
-	db.encode(newCodec(OpLPop).Byte(listDirectionLeft).Str(key))
+	db.encode(newCodec(OpLPop).Str(key))
 
 	return res, nil
 }
 
-// LRPop
-func (db *DB) LRPop(key string) (string, error) {
+// RPop
+func (db *DB) RPop(key string) (string, error) {
 	ls, err := db.fetchList(key)
 	if err != nil {
 		return "", err
@@ -672,7 +666,7 @@ func (db *DB) LRPop(key string) (string, error) {
 	if !ok {
 		return "", ErrEmptyList
 	}
-	db.encode(newCodec(OpLPop).Byte(listDirectionRight).Str(key))
+	db.encode(newCodec(OpRPop).Str(key))
 
 	return res, nil
 }
