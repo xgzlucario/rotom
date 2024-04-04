@@ -104,6 +104,19 @@ func TestList(t *testing.T) {
 			assert.True(ok)
 		}
 	})
+
+	t.Run("range", func(t *testing.T) {
+		ls := NewList()
+		ls.Range(1, 2, func(s string) (stop bool) {
+			panic("should not call")
+		})
+		for i := 0; i < N; i++ {
+			ls.RPush(fmt.Sprintf("%08d", i))
+		}
+		ls.Range(-1, -1, func(s string) (stop bool) {
+			panic("should not call")
+		})
+	})
 }
 
 func FuzzList(f *testing.F) {
@@ -113,7 +126,7 @@ func FuzzList(f *testing.F) {
 	f.Fuzz(func(t *testing.T, key string) {
 		assert := assert.New(t)
 
-		switch rand.IntN(12) {
+		switch rand.IntN(13) {
 		// RPush
 		case 0, 1, 2:
 			k := strconv.Itoa(rand.Int())
@@ -162,8 +175,22 @@ func FuzzList(f *testing.F) {
 				assert.True(ok)
 			}
 
-		// Marshal
+		// Range
 		case 11:
+			if len(vls) > 2 {
+				start := rand.IntN(len(vls) / 2)
+				end := len(vls)/2 + rand.IntN(len(vls)/2)
+
+				keys := make([]string, 0, end-start)
+				ls.Range(start, end, func(s string) (stop bool) {
+					keys = append(keys, s)
+					return false
+				})
+				assert.Equal(keys, vls[start:end], fmt.Sprintf("start: %v, end: %v", start, end))
+			}
+
+		// Marshal
+		case 12:
 			data := ls.Marshal()
 			nls := NewList()
 			err := nls.Unmarshal(data)

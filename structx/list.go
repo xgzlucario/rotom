@@ -2,10 +2,12 @@ package structx
 
 import (
 	"encoding/binary"
+	"math"
 	"slices"
 	"sync"
 
 	"github.com/klauspost/compress/zstd"
+	cache "github.com/xgzlucario/GigaCache"
 )
 
 var (
@@ -13,9 +15,18 @@ var (
 
 	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderCRC(true))
 	decoder, _ = zstd.NewReader(nil)
+
+	nodePool = cache.NewBufferPool()
 )
 
 // List is a double linked ziplist.
+/*
+    +--- HEAD                               TAIL ---+
+    |                                               |
+    o------+-----+------+-----+-----+               o------+-----+------+-----+-----+
+  	| klen | key | klen | key | ... | <--> ... <--> | klen | key | klen | key | ... |
+    +------+-----+------+-----+-----+               +------+-----+------+-----+-----+
+*/
 type List struct {
 	mu         sync.RWMutex
 	head, tail *lnode
@@ -38,7 +49,7 @@ func NewList() *List {
 }
 
 func newNode() *lnode {
-	return &lnode{data: make([]byte, 0, eachNodeMaxSize)}
+	return &lnode{data: nodePool.Get(eachNodeMaxSize)[:0]}
 }
 
 func (b *lnode) lpush(key string) (full bool) {
@@ -60,7 +71,7 @@ func (b *lnode) rpush(key string) (full bool) {
 
 func (b *lnode) iter(start int, f func(start, end int, key string) (stop bool)) {
 	var index int
-	for i := 0; index < len(b.data); i++ {
+	for i := 0; i < b.n; i++ {
 		// klen
 		klen, n := binary.Uvarint(b.data[index:])
 		index += n
@@ -112,19 +123,9 @@ func (l *List) RPush(keys ...string) {
 }
 
 // Index
-func (l *List) Index(i int) (v string, ok bool) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	var cur *lnode
-	for cur = l.head; cur != nil && i >= cur.n; cur = cur.next {
-		i -= cur.n
-	}
-	if cur == nil {
-		return
-	}
-	cur.iter(i, func(_, _ int, s string) (stop bool) {
-		v = s
+func (l *List) Index(i int) (val string, ok bool) {
+	l.Range(i, i+1, func(key string) (stop bool) {
+		val = key
 		ok = true
 		return true
 	})
@@ -141,6 +142,7 @@ func (l *List) LPop() (key string, ok bool) {
 		if l.head.next == nil {
 			return
 		}
+		nodePool.Put(l.head.data)
 		l.head = l.head.next
 		l.head.prev = nil
 	}
@@ -163,8 +165,9 @@ func (l *List) RPop() (key string, ok bool) {
 	// remove empty tail node
 	for l.tail.n == 0 {
 		if l.tail.prev == nil {
-			return "", false
+			return
 		}
+		nodePool.Put(l.tail.data)
 		l.tail = l.tail.prev
 		l.tail.next = nil
 	}
@@ -189,23 +192,60 @@ func (l *List) Size() (n int) {
 	return
 }
 
+// iter
+func (l *List) iter(start, end int, f func(string) bool) {
+	// param check
+	count := end - start
+	if end == -1 {
+		count = math.MaxInt
+	}
+	if start < 0 || count < 0 {
+		return
+	}
+
+	cur := l.head
+	// skip nodes
+	for start > cur.n {
+		start -= cur.n
+		cur = cur.next
+		if cur == nil {
+			return
+		}
+	}
+
+	var stop bool
+	for !stop && count > 0 && cur != nil {
+		cur.iter(start, func(_, _ int, key string) bool {
+			stop = f(key)
+			count--
+			return stop || count == 0
+		})
+		cur = cur.next
+		start = 0
+	}
+}
+
+// Range
+func (l *List) Range(start, end int, f func(string) (stop bool)) {
+	l.mu.RLock()
+	l.iter(start, end, func(key string) (stop bool) {
+		return f(key)
+	})
+	l.mu.RUnlock()
+}
+
 // Keys
 func (l *List) Keys() (keys []string) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	for cur := l.head; cur != nil; cur = cur.next {
-		cur.iter(0, func(start, end int, key string) (stop bool) {
-			keys = append(keys, key)
-			return false
-		})
-	}
+	l.Range(0, -1, func(key string) (stop bool) {
+		keys = append(keys, key)
+		return false
+	})
 	return
 }
 
 // Marshal
 func (l *List) Marshal() []byte {
-	buf := make([]byte, 0, 1024)
+	buf := nodePool.Get(eachNodeMaxSize)[:0]
 	l.mu.RLock()
 	for cur := l.head; cur != nil; cur = cur.next {
 		buf = append(buf, cur.data...)
@@ -213,8 +253,10 @@ func (l *List) Marshal() []byte {
 	l.mu.RUnlock()
 
 	// compress
-	cbuf := make([]byte, 0, len(buf)/2)
-	return encoder.EncodeAll(buf, cbuf)
+	cbuf := nodePool.Get(len(buf) / 2)[:0]
+	cbuf = encoder.EncodeAll(buf, cbuf)
+	nodePool.Put(buf)
+	return cbuf
 }
 
 // Unmarshal requires an initialized List.
