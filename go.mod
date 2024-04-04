@@ -8,13 +8,13 @@ require (
 	github.com/cockroachdb/swiss v0.0.0-20240303172742-c161743eb608
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/gofrs/flock v0.8.1
+	github.com/klauspost/compress v1.17.7
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rosedblabs/wal v1.3.6
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.8.4
 	github.com/xgzlucario/GigaCache v0.0.0-20240330133804-4fb63804aa28
-	github.com/zyedidia/generic v1.2.2-0.20230819223407-98022f93823f
 	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8
 )
 

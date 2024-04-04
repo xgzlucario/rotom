@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/xgzlucario/rotom/codeman"
+	"github.com/xgzlucario/rotom/structx"
 )
 
 var (
@@ -70,7 +71,7 @@ func TestDB(t *testing.T) {
 
 	// Scan
 	var count int
-	db.Scan(func(key string, val []byte, ts int64) bool {
+	db.Scan(func(key, val []byte, ts int64) bool {
 		count++
 		return true
 	})
@@ -80,7 +81,7 @@ func TestDB(t *testing.T) {
 	// GC
 	db.GC()
 	count = 0
-	db.Scan(func(key string, val []byte, ts int64) bool {
+	db.Scan(func(key, val []byte, ts int64) bool {
 		count++
 		return true
 	})
@@ -107,6 +108,40 @@ func TestDB(t *testing.T) {
 	// Load Success
 	_, err = Open(db.GetOptions())
 	assert.Nil(err)
+
+	t.Run("setTTL", func(t *testing.T) {
+		db, err := createDB()
+		assert.Nil(err)
+
+		db.HSet("hmap", "k", []byte("v"))
+		n := db.Remove("hmap")
+		assert.Equal(n, 1)
+
+		assert.False(db.SetTTL("h", -1))
+
+		ts := time.Now().Add(time.Minute).UnixNano()
+		for i := 0; i < 100; i++ {
+			k := fmt.Sprintf("%08d", i)
+			db.SetTx(k, []byte(k), ts)
+		}
+		// set ttl
+		for i := 0; i < 100; i++ {
+			k := fmt.Sprintf("%08d", i)
+			assert.True(db.SetTTL(k, 0))
+		}
+
+		db.Close()
+		db, _ = Open(db.GetOptions())
+
+		// check ttl
+		for i := 0; i < 100; i++ {
+			k := fmt.Sprintf("%08d", i)
+			v, ts, err := db.Get(k)
+			assert.Equal(string(v), k)
+			assert.Equal(int64(0), ts)
+			assert.Nil(err)
+		}
+	})
 }
 
 func TestHmap(t *testing.T) {
@@ -215,29 +250,29 @@ func TestList(t *testing.T) {
 	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
+	structx.SetEachNodeMaxSize(512)
 
-	for i := 0; i < 10000; i++ {
-		key := "list" + strconv.Itoa(i/100)
+	for i := 0; i < 5000; i++ {
+		key := "list" + strconv.Itoa(i/1000)
 		val := randString()
 
 		if i%2 == 0 {
-			assert.Nil(db.LRPush(key, val))
-
+			assert.Nil(db.RPush(key, val))
 		} else {
-			assert.Nil(db.LLPush(key, val))
+			assert.Nil(db.LPush(key, val))
 			// check
 			res, err := db.LIndex(key, 0)
 			assert.Nil(err)
 			assert.Equal(res, val)
 		}
 
-		if i > 8000 {
+		if i > 4000 {
 			if i%2 == 0 {
-				res, err := db.LRPop(key)
+				res, err := db.RPop(key)
 				assert.Nil(err)
 				assert.Equal(res, val)
 			} else {
-				res, err := db.LLPop(key)
+				res, err := db.LPop(key)
 				assert.Nil(err)
 				assert.Equal(res, val)
 			}
@@ -253,20 +288,20 @@ func TestList(t *testing.T) {
 	// Error
 	db.HSet("map", "key", []byte("value"))
 
-	err = db.LLPush("map", "1")
+	err = db.LPush("map", "1")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	err = db.LRPush("map", "1")
+	err = db.RPush("map", "1")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	_, err = db.LKeys("map")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	res, err := db.LLPop("map")
+	res, err := db.LPop("map")
 	assert.Equal(res, "")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	res, err = db.LRPop("map")
+	res, err = db.RPop("map")
 	assert.Equal(res, "")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
@@ -280,14 +315,14 @@ func TestList(t *testing.T) {
 
 	// empty list
 	{
-		db.LRPush("list", "1")
-		db.LRPop("list")
+		db.RPush("list", "1")
+		db.RPop("list")
 
-		res, err = db.LLPop("list")
+		res, err = db.LPop("list")
 		assert.Equal(res, "")
 		assert.Equal(err, ErrEmptyList)
 
-		res, err = db.LRPop("list")
+		res, err = db.RPop("list")
 		assert.Equal(res, "")
 		assert.Equal(err, ErrEmptyList)
 
@@ -296,7 +331,7 @@ func TestList(t *testing.T) {
 		assert.Equal(err, ErrIndexOutOfRange)
 
 		for i := 0; i < 100; i++ {
-			db.LRPush("list", randString())
+			db.RPush("list", randString())
 		}
 	}
 
@@ -310,6 +345,34 @@ func TestList(t *testing.T) {
 	db.Close()
 	_, err = Open(db.GetOptions())
 	assert.Nil(err)
+
+	t.Run("lpop", func(t *testing.T) {
+		db, err := createDB()
+		assert.Nil(err)
+
+		for i := 0; i < 1000; i++ {
+			db.RPush("ls", strconv.Itoa(i))
+		}
+		for i := 0; i < 1000; i++ {
+			v, err := db.LPop("ls")
+			assert.Equal(v, strconv.Itoa(i))
+			assert.Nil(err)
+		}
+	})
+
+	t.Run("rpop", func(t *testing.T) {
+		db, err := createDB()
+		assert.Nil(err)
+
+		for i := 0; i < 1000; i++ {
+			db.LPush("ls", strconv.Itoa(i))
+		}
+		for i := 0; i < 1000; i++ {
+			v, err := db.RPop("ls")
+			assert.Equal(v, strconv.Itoa(i))
+			assert.Nil(err)
+		}
+	})
 }
 
 func TestSet(t *testing.T) {
@@ -761,8 +824,8 @@ func TestShrink(t *testing.T) {
 
 	go func() {
 		time.Sleep(time.Millisecond)
-		err = db.Shrink()
-		assert.Equal(err, ErrShrinkRunning)
+		err1 := db.Shrink()
+		assert.Equal(err1, ErrShrinkRunning)
 	}()
 
 	err = db.Shrink()

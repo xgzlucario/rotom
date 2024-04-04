@@ -147,7 +147,7 @@ func benchHSet() {
 }
 
 func benchLRPush() {
-	fmt.Println("========== LRPush ==========")
+	fmt.Println("========== RPush ==========")
 	fmt.Println("size: 100*10000 enties")
 	fmt.Println("desc: value 10 bytes")
 
@@ -158,7 +158,7 @@ func benchLRPush() {
 	for i := 0; i < N; i++ {
 		t1 := time.Now()
 		k := fmt.Sprintf("%010d", i)
-		db.LRPush("mylist", k)
+		db.RPush("mylist", k)
 		quant.Add(float64(time.Since(t1)))
 	}
 
