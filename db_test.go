@@ -1,6 +1,7 @@
 package rotom
 
 import (
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"strconv"
@@ -256,22 +257,37 @@ func TestList(t *testing.T) {
 		key := "list" + strconv.Itoa(i/1000)
 		val := randString()
 
-		if i%2 == 0 {
+		switch i % 3 {
+		case 0:
 			assert.Nil(db.RPush(key, val))
-		} else {
+		case 1:
 			assert.Nil(db.LPush(key, val))
 			// check
 			res, err := db.LIndex(key, 0)
 			assert.Nil(err)
 			assert.Equal(res, val)
+		case 2:
+			newKey := fmt.Sprintf("reset%d", i)
+			ok, _ := db.LSet(key, 0, newKey)
+			// check
+			res, err := db.LIndex(key, 0)
+			if errors.Is(err, ErrIndexOutOfRange) {
+				assert.Equal(res, "")
+				assert.False(ok)
+			} else {
+				assert.Nil(err)
+				assert.Equal(res, newKey)
+				assert.True(ok)
+			}
 		}
 
 		if i > 4000 {
-			if i%2 == 0 {
+			switch i % 3 {
+			case 0:
 				res, err := db.RPop(key)
 				assert.Nil(err)
 				assert.Equal(res, val)
-			} else {
+			case 1:
 				res, err := db.LPop(key)
 				assert.Nil(err)
 				assert.Equal(res, val)
@@ -292,6 +308,9 @@ func TestList(t *testing.T) {
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	err = db.RPush("map", "1")
+	assert.ErrorContains(err, ErrWrongType.Error())
+
+	_, err = db.LSet("map", 1, "newKey")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	_, err = db.LKeys("map")

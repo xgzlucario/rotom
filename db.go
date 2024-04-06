@@ -47,6 +47,7 @@ const (
 	OpRPush
 	OpLPop
 	OpRPop
+	OpLSet
 	// bitmap
 	OpBitSet
 	OpBitFlip
@@ -174,6 +175,11 @@ var cmdTable = []Cmd{
 	{OpRPop, func(db *DB, reader *codeman.Reader) error {
 		// key
 		_, err := db.RPop(reader.Str())
+		return err
+	}},
+	{OpLSet, func(db *DB, reader *codeman.Reader) error {
+		// key, index, item
+		_, err := db.LSet(reader.Str(), int(reader.Int64()), reader.Str())
 		return err
 	}},
 	{OpBitSet, func(db *DB, reader *codeman.Reader) error {
@@ -678,6 +684,16 @@ func (db *DB) LLen(key string) (int, error) {
 		return 0, err
 	}
 	return ls.Size(), nil
+}
+
+// LSet
+func (db *DB) LSet(key string, index int, item string) (bool, error) {
+	ls, err := db.fetchList(key)
+	if err != nil {
+		return false, err
+	}
+	db.encode(newCodec(OpLSet).Str(key).Int(int64(index)).Str(item))
+	return ls.Set(index, item), nil
 }
 
 // LKeys

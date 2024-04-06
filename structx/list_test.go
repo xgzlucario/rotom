@@ -25,6 +25,10 @@ func TestList(t *testing.T) {
 			assert.Equal(fmt.Sprintf("%08d", i), v)
 			assert.True(ok)
 		}
+		// check each node length
+		for cur := ls.head; cur != nil; cur = cur.next {
+			assert.LessOrEqual(len(cur.data), eachNodeMaxSize)
+		}
 	})
 
 	t.Run("lpush", func(t *testing.T) {
@@ -37,6 +41,10 @@ func TestList(t *testing.T) {
 			v, ok := ls.Index(N - 1 - i)
 			assert.Equal(fmt.Sprintf("%08d", i), v)
 			assert.True(ok)
+		}
+		// check each node length
+		for cur := ls.head; cur != nil; cur = cur.next {
+			assert.LessOrEqual(len(cur.data), eachNodeMaxSize)
 		}
 	})
 
@@ -87,6 +95,22 @@ func TestList(t *testing.T) {
 		}
 	})
 
+	t.Run("set", func(t *testing.T) {
+		ls := NewList()
+		vls := make([]string, 0)
+		for i := 0; i < N; i++ {
+			k := fmt.Sprintf("%08d", i)
+			ls.RPush(k)
+			vls = append(vls, k)
+		}
+		for i := 0; i < N; i++ {
+			newK := fmt.Sprintf("kk%08x", i)
+			ls.Set(i, newK)
+			vls[i] = newK
+		}
+		assert.Equal(ls.Keys(), vls)
+	})
+
 	t.Run("marshal", func(t *testing.T) {
 		ls := NewList()
 		for i := 0; i < N; i++ {
@@ -126,7 +150,7 @@ func FuzzList(f *testing.F) {
 	f.Fuzz(func(t *testing.T, key string) {
 		assert := assert.New(t)
 
-		switch rand.IntN(13) {
+		switch rand.IntN(14) {
 		// RPush
 		case 0, 1, 2:
 			k := strconv.Itoa(rand.Int())
@@ -165,8 +189,18 @@ func FuzzList(f *testing.F) {
 				assert.False(ok)
 			}
 
-		// Index
+		// Set
 		case 10:
+			if len(vls) > 0 {
+				index := rand.IntN(len(vls))
+				randKey := fmt.Sprintf("%d", rand.Uint32())
+				ok := ls.Set(index, randKey)
+				assert.True(ok)
+				vls[index] = randKey
+			}
+
+		// Index
+		case 11:
 			if len(vls) > 0 {
 				index := rand.IntN(len(vls))
 				val, ok := ls.Index(index)
@@ -176,7 +210,7 @@ func FuzzList(f *testing.F) {
 			}
 
 		// Range
-		case 11:
+		case 12:
 			if len(vls) > 2 {
 				start := rand.IntN(len(vls) / 2)
 				end := len(vls)/2 + rand.IntN(len(vls)/2)
@@ -190,7 +224,7 @@ func FuzzList(f *testing.F) {
 			}
 
 		// Marshal
-		case 12:
+		case 13:
 			data := ls.Marshal()
 			nls := NewList()
 			err := nls.Unmarshal(data)
