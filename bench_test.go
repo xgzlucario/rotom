@@ -7,6 +7,24 @@ import (
 	"github.com/xgzlucario/rotom/structx"
 )
 
+func getSlice(n int) []string {
+	ls := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		k := fmt.Sprintf("%08x", i)
+		ls = append(ls, k)
+	}
+	return ls
+}
+
+func getList(n int) *structx.List {
+	ls := structx.NewList()
+	for i := 0; i < n; i++ {
+		k := fmt.Sprintf("%08x", i)
+		ls.RPush(k)
+	}
+	return ls
+}
+
 func BenchmarkSlice(b *testing.B) {
 	b.Run("lpush", func(b *testing.B) {
 		ls := make([]string, 0, 1024)
@@ -23,15 +41,20 @@ func BenchmarkSlice(b *testing.B) {
 		}
 	})
 	b.Run("set", func(b *testing.B) {
-		ls := make([]string, 0, 1024)
-		for i := 0; i < 10000; i++ {
-			k := fmt.Sprintf("%08x", i)
-			ls = append(ls, k)
-		}
+		ls := getSlice(10000)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			k := fmt.Sprintf("%08x", i)
 			ls[i%10000] = k
+		}
+	})
+	b.Run("iter", func(b *testing.B) {
+		ls := getSlice(10000)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, k := range ls {
+				_ = k
+			}
 		}
 	})
 }
@@ -52,25 +75,20 @@ func BenchmarkList(b *testing.B) {
 		}
 	})
 	b.Run("set", func(b *testing.B) {
-		ls := structx.NewList()
-		for i := 0; i < 10000; i++ {
-			k := fmt.Sprintf("%08x", i)
-			ls.LPush(k)
-		}
+		ls := getList(10000)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			k := fmt.Sprintf("%08x", i)
 			ls.Set(i%10000, k)
 		}
 	})
+	b.Run("iter", func(b *testing.B) {
+		ls := getList(10000)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ls.Range(0, -1, func(s string) (stop bool) {
+				return false
+			})
+		}
+	})
 }
-
-/*
-goarch: amd64
-pkg: github.com/xgzlucario/rotom
-cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
-BenchmarkList/lpush-20         	 9250104	       129.6 ns/op	      49 B/op	       4 allocs/op
-BenchmarkList/rpush-20         	13763072	        75.28 ns/op	      25 B/op	       2 allocs/op
-BenchmarkList/set-20           	 1561099	       764.9 ns/op	      48 B/op	       3 allocs/op
-PASS
-*/

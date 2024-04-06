@@ -150,7 +150,7 @@ func FuzzList(f *testing.F) {
 	f.Fuzz(func(t *testing.T, key string) {
 		assert := assert.New(t)
 
-		switch rand.IntN(14) {
+		switch rand.IntN(15) {
 		// RPush
 		case 0, 1, 2:
 			k := strconv.Itoa(rand.Int())
@@ -209,8 +209,18 @@ func FuzzList(f *testing.F) {
 				assert.True(ok)
 			}
 
-		// Range
+		// Delete
 		case 12:
+			if len(vls) > 0 {
+				index := rand.IntN(len(vls))
+				val, ok := ls.Delete(index)
+				assert.Equal(val, vls[index])
+				assert.True(ok)
+				vls = append(vls[:index], vls[index+1:]...)
+			}
+
+		// Range
+		case 13:
 			if len(vls) > 2 {
 				start := rand.IntN(len(vls) / 2)
 				end := len(vls)/2 + rand.IntN(len(vls)/2)
@@ -224,7 +234,7 @@ func FuzzList(f *testing.F) {
 			}
 
 		// Marshal
-		case 13:
+		case 14:
 			data := ls.Marshal()
 			nls := NewList()
 			err := nls.Unmarshal(data)
