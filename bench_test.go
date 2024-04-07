@@ -39,6 +39,7 @@ func BenchmarkSlice(b *testing.B) {
 			k := fmt.Sprintf("%08x", i)
 			ls = append(ls, k)
 		}
+		_ = len(ls)
 	})
 	b.Run("set", func(b *testing.B) {
 		ls := getSlice(10000)
