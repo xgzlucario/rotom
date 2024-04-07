@@ -6,11 +6,11 @@
 
 ## 📃介绍
 
-这里是 Rotom，一个使用 Golang 编写的嵌入式高性能 Key-Value 内存数据库，内置多种数据类型，支持持久化存储以及数据恢复。
+这里是 rotom，一个使用 Go 编写的嵌入式高性能 key-value 内存数据库，内置多种数据类型，支持持久化存储以及数据恢复。
 
 目前实现的特性：
 
-1. 内置数据类型 String，Map，Set，List，ZSet，BitMap
+1. 内置数据类型 `string`，`map`，`set`，`list`，`zset`，`bitmap`
 2. 每个键值对独立的、秒级的过期时间支持
 3. 底层 hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)，可以管理 GB 级别的数据量，比 `stdmap` 节省约 50% 的内存，性能更强，GC开销更小
 4. 内置编解码库，比 protobuf 性能更好
@@ -119,7 +119,7 @@ qps: 7240728.26
 90th: 261 ns
 99th: 501 ns
 
-========== LRPush ==========
+========== RPush ==========
 size: 100*10000 enties
 desc: value 10 bytes
 cost: 1.033844185s

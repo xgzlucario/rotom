@@ -15,7 +15,7 @@ require (
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.8.4
 	github.com/xgzlucario/GigaCache v0.0.0-20240330133804-4fb63804aa28
-	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8
+	golang.org/x/exp v0.0.0-20240404231335-c0f41cb1a7a0
 )
 
 require (
@@ -32,6 +32,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.7.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
+	golang.org/x/sys v0.19.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

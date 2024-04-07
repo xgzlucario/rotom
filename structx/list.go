@@ -16,16 +16,17 @@ var (
 	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderCRC(true))
 	decoder, _ = zstd.NewReader(nil)
 
-	nodePool = cache.NewBufferPool()
+	bpool = cache.NewBufferPool()
 )
 
-// List is a double linked ziplist.
+// List is double linked ziplist.
 /*
-    +--- HEAD                               TAIL ---+
-    |                                               |
-    o------+-----+------+-----+-----+               o------+-----+------+-----+-----+
-  	| klen | key | klen | key | ... | <--> ... <--> | klen | key | klen | key | ... |
-    +------+-----+------+-----+-----+               +------+-----+------+-----+-----+
+	+--- HEAD                               TAIL ---+
+	|                                               |
+	o------+-----+------+-----+-----+               o------+-----+------+-----+-----+
+	| klen | key | klen | key | ... | <--> ... <--> | klen | key | klen | key | ... |
+	+------+-----+------+-----+-----+               +------+-----+------+-----+-----+
+	|<---         lnode         --->|               |<---         lnode         --->|
 */
 type List struct {
 	mu         sync.RWMutex
@@ -49,27 +50,29 @@ func NewList() *List {
 }
 
 func newNode() *lnode {
-	return &lnode{data: nodePool.Get(eachNodeMaxSize)[:0]}
+	return &lnode{data: bpool.Get(eachNodeMaxSize)[:0]}
 }
 
-func (b *lnode) lpush(key string) (full bool) {
-	alloc := append(
-		binary.AppendUvarint(nil, uint64(len(key))),
+func (b *lnode) lpush(key string) {
+	alloc := bpool.Get(len(key) + 5)[:0]
+	alloc = append(
+		binary.AppendUvarint(alloc, uint64(len(key))),
 		key...,
 	)
 	b.data = slices.Insert(b.data, 0, alloc...)
 	b.n++
-	return len(b.data) >= eachNodeMaxSize
+	bpool.Put(alloc)
 }
 
-func (b *lnode) rpush(key string) (full bool) {
-	b.data = binary.AppendUvarint(b.data, uint64(len(key)))
-	b.data = append(b.data, key...)
+func (b *lnode) rpush(key string) {
+	b.data = append(
+		binary.AppendUvarint(b.data, uint64(len(key))),
+		key...,
+	)
 	b.n++
-	return len(b.data) >= eachNodeMaxSize
 }
 
-func (b *lnode) iter(start int, f func(start, end int, key string) (stop bool)) {
+func (b *lnode) iter(start int, f iterator) {
 	var index int
 	for i := 0; i < b.n; i++ {
 		// klen
@@ -78,7 +81,7 @@ func (b *lnode) iter(start int, f func(start, end int, key string) (stop bool)) 
 		if i >= start {
 			// key
 			key := b.data[index : index+int(klen)]
-			if f(index-n, index+int(klen), string(key)) {
+			if f(b, index-n, index+int(klen), key) {
 				return
 			}
 		}
@@ -87,12 +90,13 @@ func (b *lnode) iter(start int, f func(start, end int, key string) (stop bool)) 
 }
 
 func (l *List) lpush(key string) {
-	if l.head.lpush(key) {
+	if len(l.head.data)+len(key) >= eachNodeMaxSize {
 		node := newNode()
 		node.next = l.head
 		l.head.prev = node
 		l.head = node
 	}
+	l.head.lpush(key)
 }
 
 // LPush
@@ -105,12 +109,13 @@ func (l *List) LPush(keys ...string) {
 }
 
 func (l *List) rpush(key string) {
-	if l.tail.rpush(key) {
+	if len(l.tail.data)+len(key) >= eachNodeMaxSize {
 		node := newNode()
 		l.tail.next = node
 		node.prev = l.tail
 		l.tail = node
 	}
+	l.tail.rpush(key)
 }
 
 // RPush
@@ -124,7 +129,7 @@ func (l *List) RPush(keys ...string) {
 
 // Index
 func (l *List) Index(i int) (val string, ok bool) {
-	l.Range(i, i+1, func(key string) (stop bool) {
+	l.Range(i, i+1, func(key string) bool {
 		val = key
 		ok = true
 		return true
@@ -142,14 +147,13 @@ func (l *List) LPop() (key string, ok bool) {
 		if l.head.next == nil {
 			return
 		}
-		nodePool.Put(l.head.data)
+		bpool.Put(l.head.data)
 		l.head = l.head.next
 		l.head.prev = nil
 	}
 
-	cur := l.head
-	cur.iter(0, func(_, end int, s string) (stop bool) {
-		key = s
+	l.head.iter(0, func(cur *lnode, _, end int, bkey []byte) bool {
+		key = string(bkey)
 		cur.data = cur.data[end:]
 		cur.n--
 		return true
@@ -167,19 +171,50 @@ func (l *List) RPop() (key string, ok bool) {
 		if l.tail.prev == nil {
 			return
 		}
-		nodePool.Put(l.tail.data)
+		bpool.Put(l.tail.data)
 		l.tail = l.tail.prev
 		l.tail.next = nil
 	}
 
-	cur := l.tail
-	cur.iter(cur.n-1, func(start, _ int, s string) (stop bool) {
-		key = s
+	l.tail.iter(l.tail.n-1, func(cur *lnode, start, _ int, bkey []byte) bool {
+		key = string(bkey)
 		cur.data = cur.data[:start]
 		cur.n--
 		return true
 	})
 	return key, true
+}
+
+// Delete
+func (l *List) Delete(index int) (key string, ok bool) {
+	l.mu.Lock()
+	l.iter(index, index+1, func(node *lnode, dataStart, dataEnd int, bkey []byte) bool {
+		key = string(bkey)
+		node.data = slices.Delete(node.data, dataStart, dataEnd)
+		node.n--
+		ok = true
+		return true
+	})
+	l.mu.Unlock()
+	return
+}
+
+// Set
+func (l *List) Set(index int, key string) (ok bool) {
+	l.mu.Lock()
+	l.iter(index, index+1, func(node *lnode, dataStart, dataEnd int, _ []byte) bool {
+		alloc := bpool.Get(len(key) + 5)[:0]
+		alloc = append(
+			binary.AppendUvarint(alloc, uint64(len(key))),
+			key...,
+		)
+		node.data = slices.Replace(node.data, dataStart, dataEnd, alloc...)
+		bpool.Put(alloc)
+		ok = true
+		return true
+	})
+	l.mu.Unlock()
+	return
 }
 
 // Size
@@ -192,8 +227,11 @@ func (l *List) Size() (n int) {
 	return
 }
 
+// iterator iter each keys in list by dataStart, dataEnd, and raw key.
+type iterator func(node *lnode, dataStart, dataEnd int, key []byte) (stop bool)
+
 // iter
-func (l *List) iter(start, end int, f func(string) bool) {
+func (l *List) iter(start, end int, f iterator) {
 	// param check
 	count := end - start
 	if end == -1 {
@@ -215,8 +253,8 @@ func (l *List) iter(start, end int, f func(string) bool) {
 
 	var stop bool
 	for !stop && count > 0 && cur != nil {
-		cur.iter(start, func(_, _ int, key string) bool {
-			stop = f(key)
+		cur.iter(start, func(node *lnode, dataStart, dataEnd int, key []byte) bool {
+			stop = f(node, dataStart, dataEnd, key)
 			count--
 			return stop || count == 0
 		})
@@ -228,15 +266,15 @@ func (l *List) iter(start, end int, f func(string) bool) {
 // Range
 func (l *List) Range(start, end int, f func(string) (stop bool)) {
 	l.mu.RLock()
-	l.iter(start, end, func(key string) (stop bool) {
-		return f(key)
+	l.iter(start, end, func(_ *lnode, _, _ int, bkey []byte) bool {
+		return f(string(bkey))
 	})
 	l.mu.RUnlock()
 }
 
 // Keys
 func (l *List) Keys() (keys []string) {
-	l.Range(0, -1, func(key string) (stop bool) {
+	l.Range(0, -1, func(key string) bool {
 		keys = append(keys, key)
 		return false
 	})
@@ -245,7 +283,7 @@ func (l *List) Keys() (keys []string) {
 
 // Marshal
 func (l *List) Marshal() []byte {
-	buf := nodePool.Get(eachNodeMaxSize)[:0]
+	buf := bpool.Get(eachNodeMaxSize)[:0]
 	l.mu.RLock()
 	for cur := l.head; cur != nil; cur = cur.next {
 		buf = append(buf, cur.data...)
@@ -253,9 +291,9 @@ func (l *List) Marshal() []byte {
 	l.mu.RUnlock()
 
 	// compress
-	cbuf := nodePool.Get(len(buf) / 2)[:0]
+	cbuf := bpool.Get(len(buf) / 3)[:0]
 	cbuf = encoder.EncodeAll(buf, cbuf)
-	nodePool.Put(buf)
+	bpool.Put(buf)
 	return cbuf
 }
 
