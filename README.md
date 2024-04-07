@@ -6,11 +6,11 @@ English | [中文](README_ZN.md) | [doc](https://www.yuque.com/1ucario/devdoc/nt
 
 ## 📃Introduction
 
-Welcome to Rotom, an embedded high-performance Key-Value in-memory database written in Go, has many built-in data types, Support for persistence and data recovery.
+Welcome to rotom, an embedded high-performance key-value in-memory database written in Go, has many built-in data types, support for persistence and data recovery.
 
 Currently features:
 
-1. Built-in data types String, Map, Set, List, ZSet, and BitMap.
+1. Built-in data types `string`, `map`, `set`, `list`, `zset`, and `bitmap`.
 2. Second level ttl supported for each key-value pair.
 3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), which is managing GB-level data, saving 50% memory compared to `stdmap`, with better performance and reduced GC overhead.
 4. Internal encoding/decoding lib that more effective than `protobuf`.
@@ -20,7 +20,7 @@ If you want to know more technical details, check out [doc](https://www.yuque.co
 
 ## 🚚Usage
 
-Before using, please install Rotom into your project first:
+Before using, please install `rotom` into your project first:
 ```bash
 go get github.com/xgzlucario/rotom
 ```
@@ -117,7 +117,7 @@ qps: 7240728.26
 90th: 261 ns
 99th: 501 ns
 
-========== LRPush ==========
+========== RPush ==========
 size: 100*10000 enties
 desc: value 10 bytes
 cost: 1.033844185s
