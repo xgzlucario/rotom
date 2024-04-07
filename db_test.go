@@ -208,7 +208,7 @@ func TestHmap(t *testing.T) {
 	check()
 
 	// Error
-	db.Set("fake", []byte("123"))
+	db.LPush("fake", "123")
 
 	err = db.HSet("fake", "a", []byte("b"))
 	assert.ErrorContains(err, ErrWrongType.Error())
@@ -226,11 +226,6 @@ func TestHmap(t *testing.T) {
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	db.HSet("map", "m1", []byte("m2"))
-	{
-		res, _, err := db.Get("map")
-		assert.Nil(res)
-		assert.Equal(err, ErrTypeAssert)
-	}
 	{
 		res, err := db.HGet("fake", "none")
 		assert.Nil(res)
@@ -537,7 +532,7 @@ func TestBitmap(t *testing.T) {
 
 		// Error
 		db.BitSet("my-bitset", true, 1)
-		db.Set("none", []byte("1"))
+		db.LPush("none", "123")
 
 		n, err = db.BitSet("none", true, uint32(i))
 		assert.Equal(n, 0)
@@ -853,6 +848,35 @@ func TestShrink(t *testing.T) {
 	// wrong shrink cron expr.
 	options := DefaultOptions
 	options.ShrinkCronExpr = "error"
+	_, err = Open(options)
+	assert.NotNil(err)
+}
+
+func TestIncr(t *testing.T) {
+	assert := assert.New(t)
+
+	db, err := createDB()
+	assert.Nil(err)
+
+	n, err := db.Incr("key", 1)
+	assert.Equal(n, int64(1))
+	assert.Nil(err)
+
+	n, err = db.Incr("key", 2)
+	assert.Equal(n, int64(3))
+	assert.Nil(err)
+
+	// Error
+	db.Set("ss", []byte("abcde"))
+	n, err = db.Incr("ss", 1)
+	assert.Equal(n, int64(0))
+	assert.NotNil(err)
+
+	// Shrink
+	err = db.Shrink()
+	assert.Nil(err)
+
+	options := DefaultOptions
 	_, err = Open(options)
 	assert.NotNil(err)
 }

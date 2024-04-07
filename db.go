@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -28,7 +29,7 @@ const (
 	fileLockName = "FLOCK"
 )
 
-// Operations.
+// Operation needs redo.
 type Operation byte
 
 const (
@@ -369,11 +370,6 @@ func newCodec(op Operation) *codeman.Codec {
 
 // Get
 func (db *DB) Get(key string) ([]byte, int64, error) {
-	// check
-	if db.cm.Has(key) {
-		return nil, 0, ErrTypeAssert
-	}
-	// get
 	val, ts, ok := db.m.Get(key)
 	if !ok {
 		return nil, 0, ErrKeyNotFound
@@ -407,6 +403,22 @@ func (db *DB) SetTTL(key string, ts int64) bool {
 	}
 	db.encode(newCodec(OpSetTTL).Str(key).Int(ts))
 	return db.m.SetTTL(key, ts)
+}
+
+// Incr increase number to key.
+func (db *DB) Incr(key string, incr int64) (n int64, err error) {
+	val, ts, ok := db.m.Get(key)
+	if ok {
+		n, err = strconv.ParseInt(b2s(val), 10, 64)
+		if err != nil {
+			return
+		}
+	}
+	n += incr
+	valNew := strconv.FormatInt(n, 10)
+	db.m.SetTx(key, s2b(&valNew), ts)
+	db.encode(newCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Str(valNew))
+	return
 }
 
 // Remove
@@ -1017,10 +1029,6 @@ func (db *DB) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 }
 
 func fetch[T any](db *DB, key string, new func() T, setnx ...bool) (v T, err error) {
-	if _, _, ok := db.m.Get(key); ok {
-		return v, ErrWrongType
-	}
-
 	item, ok := db.cm.Get(key)
 	if ok {
 		v, ok := item.(T)

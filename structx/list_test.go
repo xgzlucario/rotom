@@ -137,6 +137,9 @@ func TestList(t *testing.T) {
 		for i := 0; i < N; i++ {
 			ls.RPush(fmt.Sprintf("%08d", i))
 		}
+		ls.Range(1, 1, func(s string) (stop bool) {
+			panic("should not call")
+		})
 		ls.Range(-1, -1, func(s string) (stop bool) {
 			panic("should not call")
 		})
