@@ -75,6 +75,20 @@ func BenchmarkList(b *testing.B) {
 			ls.RPush(k)
 		}
 	})
+	b.Run("lpop", func(b *testing.B) {
+		ls := getList(b.N)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ls.LPop()
+		}
+	})
+	b.Run("rpop", func(b *testing.B) {
+		ls := getList(b.N)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ls.RPop()
+		}
+	})
 	b.Run("set", func(b *testing.B) {
 		ls := getList(10000)
 		b.ResetTimer()

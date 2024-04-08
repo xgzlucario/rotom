@@ -11,9 +11,12 @@ import (
 )
 
 var (
-	eachNodeMaxSize = 4 * 1024
+	eachNodeMaxSize = 8 * 1024
 
-	encoder, _ = zstd.NewWriter(nil, zstd.WithEncoderCRC(true))
+	encoder, _ = zstd.NewWriter(nil,
+		zstd.WithEncoderLevel(zstd.SpeedFastest),
+		zstd.WithEncoderCRC(true),
+	)
 	decoder, _ = zstd.NewReader(nil)
 
 	bpool = cache.NewBufferPool()
@@ -34,8 +37,8 @@ type List struct {
 }
 
 type lnode struct {
-	data       []byte
 	n          int
+	data       []byte
 	prev, next *lnode
 }
 
@@ -45,8 +48,8 @@ func SetEachNodeMaxSize(s int) {
 
 // NewList
 func NewList() *List {
-	blk := newNode()
-	return &List{head: blk, tail: blk}
+	n := newNode()
+	return &List{head: n, tail: n}
 }
 
 func newNode() *lnode {
@@ -54,14 +57,14 @@ func newNode() *lnode {
 }
 
 func (b *lnode) lpush(key string) {
-	alloc := bpool.Get(len(key) + 5)[:0]
-	alloc = append(
-		binary.AppendUvarint(alloc, uint64(len(key))),
+	alloc := append(
+		binary.AppendUvarint(bpool.Get(eachNodeMaxSize)[:0], uint64(len(key))),
 		key...,
 	)
-	b.data = slices.Insert(b.data, 0, alloc...)
+	alloc = append(alloc, b.data...)
 	b.n++
-	bpool.Put(alloc)
+	bpool.Put(b.data)
+	b.data = alloc
 }
 
 func (b *lnode) rpush(key string) {
@@ -147,15 +150,18 @@ func (l *List) LPop() (key string, ok bool) {
 		if l.head.next == nil {
 			return
 		}
+		if cap(l.head.data) != eachNodeMaxSize {
+			panic("bytes cap not equal")
+		}
 		bpool.Put(l.head.data)
 		l.head = l.head.next
 		l.head.prev = nil
 	}
 
-	l.head.iter(0, func(cur *lnode, _, end int, bkey []byte) bool {
+	l.head.iter(0, func(node *lnode, _, end int, bkey []byte) bool {
 		key = string(bkey)
-		cur.data = cur.data[end:]
-		cur.n--
+		node.data = append(node.data[:0], node.data[end:]...)
+		node.n--
 		return true
 	})
 	return key, true
@@ -171,15 +177,18 @@ func (l *List) RPop() (key string, ok bool) {
 		if l.tail.prev == nil {
 			return
 		}
+		if cap(l.tail.data) != eachNodeMaxSize {
+			panic("bytes cap not equal")
+		}
 		bpool.Put(l.tail.data)
 		l.tail = l.tail.prev
 		l.tail.next = nil
 	}
 
-	l.tail.iter(l.tail.n-1, func(cur *lnode, start, _ int, bkey []byte) bool {
+	l.tail.iter(l.tail.n-1, func(node *lnode, start, _ int, bkey []byte) bool {
 		key = string(bkey)
-		cur.data = cur.data[:start]
-		cur.n--
+		node.data = node.data[:start]
+		node.n--
 		return true
 	})
 	return key, true
