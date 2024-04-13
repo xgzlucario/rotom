@@ -76,7 +76,7 @@ var cmdTable = []Cmd{
 		switch tp {
 		case TypeList:
 			ls := structx.NewList()
-			if err := ls.Unmarshal(val); err != nil {
+			if err := ls.UnmarshalJSON(val); err != nil {
 				return err
 			}
 			db.cm.Set(key, ls)
@@ -708,13 +708,16 @@ func (db *DB) LSet(key string, index int, item string) (bool, error) {
 	return ls.Set(index, item), nil
 }
 
-// LKeys
-func (db *DB) LKeys(key string) ([]string, error) {
+// LRange
+func (db *DB) LRange(key string, start, end int, f func(string) (stop bool)) error {
 	ls, err := db.fetchList(key)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return ls.Keys(), nil
+	ls.Range(start, end, func(data []byte) bool {
+		return f(string(data))
+	})
+	return nil
 }
 
 // BitTest
@@ -961,7 +964,7 @@ func (db *DB) Shrink() error {
 			data, err = item.MarshalBinary()
 		case List:
 			types = TypeList
-			data = item.Marshal()
+			data, err = item.MarshalJSON()
 		case Set:
 			types = TypeSet
 			data, err = item.MarshalJSON()

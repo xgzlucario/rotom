@@ -101,7 +101,7 @@ func BenchmarkList(b *testing.B) {
 		ls := getList(10000)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ls.Range(0, -1, func(s string) (stop bool) {
+			ls.Range(0, -1, func(s []byte) (stop bool) {
 				return false
 			})
 		}
