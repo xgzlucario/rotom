@@ -2,6 +2,7 @@ package structx
 
 import "github.com/xgzlucario/quicklist"
 
+// List based on quicklist.
 type List struct {
 	*quicklist.QuickList
 }

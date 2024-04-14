@@ -3,7 +3,7 @@ module github.com/xgzlucario/rotom
 go 1.22
 
 require (
-	github.com/RoaringBitmap/roaring v1.9.1
+	github.com/RoaringBitmap/roaring v1.9.2
 	github.com/bytedance/sonic v1.11.3
 	github.com/cockroachdb/swiss v0.0.0-20240303172742-c161743eb608
 	github.com/deckarep/golang-set/v2 v2.6.0
@@ -14,8 +14,8 @@ require (
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.9.0
 	github.com/xgzlucario/GigaCache v0.0.0-20240330133804-4fb63804aa28
-	github.com/xgzlucario/quicklist v0.0.0-20240413133659-d4037e977ee5
-	golang.org/x/exp v0.0.0-20240404231335-c0f41cb1a7a0
+	github.com/xgzlucario/quicklist v0.0.0-20240414092514-b625c75b0c41
+	golang.org/x/exp v0.0.0-20240409090435-93d18d7e34b8
 )
 
 require (

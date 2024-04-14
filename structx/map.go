@@ -54,7 +54,7 @@ func (m *Map[K, V]) UnmarshalJSON(src []byte) error {
 func syncMapOptions() cache.Options {
 	options := cache.DefaultOptions
 	options.ShardCount = 32
-	options.IndexSize = 32
+	options.IndexSize = 8
 	options.BufferSize = 1024
 	options.DisableEvict = true
 	return options
