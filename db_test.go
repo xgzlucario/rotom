@@ -246,7 +246,7 @@ func TestList(t *testing.T) {
 	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
-	structx.SetEachNodeMaxSize(512)
+	structx.SetZiplistMaxSize(512)
 
 	for i := 0; i < 5000; i++ {
 		key := "list" + strconv.Itoa(i/1000)
@@ -291,9 +291,13 @@ func TestList(t *testing.T) {
 
 		num, err := db.LLen(key)
 		assert.Nil(err)
-		keys, err := db.LKeys(key)
+		var count int
+		err = db.LRange(key, 0, -1, func(s string) (stop bool) {
+			count++
+			return false
+		})
 		assert.Nil(err)
-		assert.Equal(len(keys), num)
+		assert.Equal(count, num)
 	}
 
 	// Error
@@ -308,7 +312,9 @@ func TestList(t *testing.T) {
 	_, err = db.LSet("map", 1, "newKey")
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	_, err = db.LKeys("map")
+	err = db.LRange("map", 0, -1, func(s string) (stop bool) {
+		return false
+	})
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	res, err := db.LPop("map")
