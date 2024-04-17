@@ -37,7 +37,5 @@ var (
 
 	ErrEmptyList = errors.New("list is empty")
 
-	ErrDatabaseIsUsing = errors.New("database is using")
-
 	ErrShrinkRunning = errors.New("shrink is running")
 )

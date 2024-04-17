@@ -8,15 +8,15 @@ import (
 type SyncPolicy byte
 
 const (
-	EverySecond SyncPolicy = iota
-	Sync
+	EverySec SyncPolicy = iota
+	Always
 )
 
 var (
 	DefaultOptions = Options{
 		DirPath:          "rotom",
 		ShardCount:       1024,
-		SyncPolicy:       EverySecond,
+		SyncPolicy:       EverySec,
 		ShrinkCronExpr:   "0 0 0/1 * * ?", // every hour.
 		RunSkipLoadError: true,
 	}

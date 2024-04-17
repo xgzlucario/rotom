@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
 	cmap "github.com/orcaman/concurrent-map/v2"
 	"github.com/robfig/cron/v3"
 	"github.com/rosedblabs/wal"
@@ -25,8 +24,6 @@ const (
 	mergeTypeAnd byte = iota + 1
 	mergeTypeOr
 	mergeTypeXOr
-
-	fileLockName = "FLOCK"
 )
 
 // Operation needs redo.
@@ -246,15 +243,14 @@ type (
 
 // DB represents a rotom database.
 type DB struct {
-	mu       sync.Mutex
-	options  *Options
-	fileLock *flock.Flock
-	wal      *wal.WAL
-	loading  bool // is loading finished from wal.
-	closed   bool
-	m        *cache.GigaCache                // data for bytes.
-	cm       cmap.ConcurrentMap[string, any] // data for built-in types.
-	cron     *cron.Cron                      // cron scheduler for auto merge task.
+	mu      sync.Mutex
+	options *Options
+	wal     *wal.WAL
+	loading bool // is loading finished from wal.
+	closed  bool
+	m       *cache.GigaCache                // data for bytes.
+	cm      cmap.ConcurrentMap[string, any] // data for built-in types.
+	cron    *cron.Cron                      // cron scheduler for auto merge task.
 }
 
 // Open create a new db instance by options.
@@ -266,32 +262,21 @@ func Open(options Options) (*DB, error) {
 	// create wal.
 	walOptions := wal.DefaultOptions
 	walOptions.DirPath = options.DirPath
-	walOptions.Sync = (options.SyncPolicy == Sync)
+	walOptions.Sync = (options.SyncPolicy == Always)
 	wal, err := wal.Open(walOptions)
 	if err != nil {
 		return nil, err
-	}
-
-	// create file lock, prevent multiple processes from using the same db directory.
-	fileLock := flock.New(filepath.Join(options.DirPath, fileLockName))
-	hold, err := fileLock.TryLock()
-	if err != nil {
-		return nil, err
-	}
-	if !hold {
-		return nil, ErrDatabaseIsUsing
 	}
 
 	// init db instance.
 	cacheOptions := cache.DefaultOptions
 	cacheOptions.ShardCount = options.ShardCount
 	db := &DB{
-		options:  &options,
-		loading:  true,
-		fileLock: fileLock,
-		wal:      wal,
-		m:        cache.New(cacheOptions),
-		cm:       cmap.New[any](),
+		options: &options,
+		loading: true,
+		wal:     wal,
+		m:       cache.New(cacheOptions),
+		cm:      cmap.New[any](),
 	}
 
 	// load db from wal.
@@ -302,7 +287,7 @@ func Open(options Options) (*DB, error) {
 
 	// start backend cron job.
 	db.cron = cron.New(cron.WithSeconds())
-	if db.options.SyncPolicy == EverySecond {
+	if db.options.SyncPolicy == EverySec {
 		if _, err = db.cron.AddFunc("* * * * * ?", func() {
 			db.Sync()
 		}); err != nil {
@@ -330,13 +315,7 @@ func (db *DB) Close() error {
 	if db.closed {
 		return ErrDatabaseClosed
 	}
-
 	if err := db.wal.Close(); err != nil {
-		return err
-	}
-
-	// release file lock.
-	if err := db.fileLock.Unlock(); err != nil {
 		return err
 	}
 

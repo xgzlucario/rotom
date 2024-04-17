@@ -788,18 +788,6 @@ func TestRace(t *testing.T) {
 		assert.NotNil(err)
 	})
 
-	t.Run("db-race", func(t *testing.T) {
-		options := DefaultOptions
-		options.DirPath = "tmp-race"
-		db, err := Open(options)
-		assert.Nil(err)
-		assert.NotNil(db)
-
-		// open another db.
-		_, err = Open(options)
-		assert.Equal(err, ErrDatabaseIsUsing)
-	})
-
 	t.Run("open-wal", func(t *testing.T) {
 		options := DefaultOptions
 		options.DirPath = "README.md"
@@ -881,8 +869,4 @@ func TestIncr(t *testing.T) {
 	// Shrink
 	err = db.Shrink()
 	assert.Nil(err)
-
-	options := DefaultOptions
-	_, err = Open(options)
-	assert.NotNil(err)
 }

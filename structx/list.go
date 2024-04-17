@@ -12,5 +12,5 @@ func NewList() *List {
 }
 
 func SetZiplistMaxSize(n int) {
-	quicklist.SetEachNodeMaxSize(n)
+	quicklist.SetMaxListPackSize(n)
 }
