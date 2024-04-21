@@ -30,7 +30,8 @@ const (
 type Operation byte
 
 const (
-	OpSetTx Operation = iota
+	OpSetTx     Operation = iota // for string
+	OpSetObject                  // for data structure
 	OpSetTTL
 	OpRemove
 	// map
@@ -64,16 +65,26 @@ type Cmd struct {
 // cmdTable defines how each command recover database from redo log(wal log).
 var cmdTable = []Cmd{
 	{OpSetTx, func(db *DB, reader *codeman.Reader) error {
-		// type, key, ts, val
-		tp := reader.Int64()
+		// key, ts, val
 		key := reader.Str()
 		ts := reader.Int64()
+		val := reader.RawBytes()
+		// check ttl.
+		if ts > cache.GetNanoSec() || ts == noTTL {
+			db.SetTx(key, val, ts)
+		}
+		return nil
+	}},
+	{OpSetObject, func(db *DB, reader *codeman.Reader) error {
+		// type, key, val
+		tp := reader.Int64()
+		key := reader.Str()
 		val := reader.RawBytes()
 
 		switch tp {
 		case TypeList:
 			ls := structx.NewList()
-			if err := ls.UnmarshalJSON(val); err != nil {
+			if err := ls.UnmarshalBinary(val); err != nil {
 				return err
 			}
 			db.cm.Set(key, ls)
@@ -105,12 +116,6 @@ var cmdTable = []Cmd{
 				return err
 			}
 			db.cm.Set(key, m)
-
-		default:
-			// default String, check ttl.
-			if ts > cache.GetNanoSec() || ts == noTTL {
-				db.SetTx(key, val, ts)
-			}
 		}
 		return nil
 	}},
@@ -371,7 +376,7 @@ func (db *DB) SetTx(key string, val []byte, ts int64) {
 	if ts < 0 {
 		return
 	}
-	db.encode(newCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Bytes(val))
+	db.encode(newCodec(OpSetTx).Str(key).Int(ts).Bytes(val))
 	db.m.SetTx(key, val, ts)
 }
 
@@ -396,7 +401,7 @@ func (db *DB) Incr(key string, incr int64) (n int64, err error) {
 	n += incr
 	valNew := strconv.FormatInt(n, 10)
 	db.m.SetTx(key, s2b(&valNew), ts)
-	db.encode(newCodec(OpSetTx).Int(TypeString).Str(key).Int(ts).Str(valNew))
+	db.encode(newCodec(OpSetTx).Str(key).Int(ts).Str(valNew))
 	return
 }
 
@@ -920,9 +925,9 @@ func (db *DB) Shrink() error {
 		return err
 	}
 
-	// marshal bytes.
+	// marshal string datas.
 	db.m.Scan(func(key, value []byte, ts int64) bool {
-		cd := newCodec(OpSetTx).Int(TypeString).Bytes(key).Int(ts).Bytes(value)
+		cd := newCodec(OpSetTx).Bytes(key).Int(ts).Bytes(value)
 		db.wal.Write(cd.Content())
 		cd.Recycle()
 		return false
@@ -943,7 +948,7 @@ func (db *DB) Shrink() error {
 			data, err = item.MarshalBinary()
 		case List:
 			types = TypeList
-			data, err = item.MarshalJSON()
+			data, err = item.MarshalBinary()
 		case Set:
 			types = TypeSet
 			data, err = item.MarshalJSON()
@@ -951,11 +956,10 @@ func (db *DB) Shrink() error {
 			types = TypeZSet
 			data, err = item.MarshalJSON()
 		}
-
 		if err != nil {
 			return err
 		}
-		cd := newCodec(OpSetTx).Int(types).Str(t.Key).Int(0).Bytes(data)
+		cd := newCodec(OpSetObject).Int(types).Str(t.Key).Bytes(data)
 		db.wal.Write(cd.Content())
 		cd.Recycle()
 	}

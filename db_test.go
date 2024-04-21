@@ -812,7 +812,7 @@ func TestUnmarshalError(t *testing.T) {
 		assert.Nil(err)
 
 		// unmarshal error.
-		db.encode(newCodec(OpSetTx).Int(types).Str("key").Int(0).Bytes([]byte("error")))
+		db.encode(newCodec(OpSetObject).Int(types).Str("key").Bytes([]byte("error")))
 		db.Close()
 		_, err = Open(db.GetOptions())
 		assert.NotNil(err)
