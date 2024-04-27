@@ -4,58 +4,37 @@ import (
 	"unsafe"
 
 	"github.com/bytedance/sonic"
-	"github.com/cockroachdb/swiss"
 	cache "github.com/xgzlucario/GigaCache"
 )
 
-// Map
-type Map[K comparable, V any] struct {
-	*swiss.Map[K, V]
+type MapAPI interface {
+	Set(string, []byte)
+	Get(string) ([]byte, bool)
+	Remove(string) bool
+	Len() int
+	MarshalJSON() ([]byte, error)
+	UnmarshalJSON([]byte) error
+	Keys() []string
+	GetType() Type
 }
 
-// NewMap
-func NewMap[K comparable, V any]() Map[K, V] {
-	return Map[K, V]{swiss.New[K, V](32)}
-}
+type Type byte
+
+const (
+	TypeZipmap Type = iota + 1
+	TypeGigaCache
+)
 
 type entry[K comparable, V any] struct {
 	K []K
 	V []V
 }
 
-// MarshalJSON
-func (m *Map[K, V]) MarshalJSON() ([]byte, error) {
-	e := entry[K, V]{
-		K: make([]K, 0, m.Len()),
-		V: make([]V, 0, m.Len()),
-	}
-	m.All(func(k K, v V) bool {
-		e.K = append(e.K, k)
-		e.V = append(e.V, v)
-		return true
-	})
-
-	return sonic.Marshal(e)
-}
-
-// UnmarshalJSON
-func (m *Map[K, V]) UnmarshalJSON(src []byte) error {
-	var e entry[K, V]
-	if err := sonic.Unmarshal(src, &e); err != nil {
-		return err
-	}
-
-	for i, k := range e.K {
-		m.Put(k, e.V[i])
-	}
-	return nil
-}
-
 func syncMapOptions() cache.Options {
 	options := cache.DefaultOptions
 	options.ShardCount = 32
 	options.IndexSize = 8
-	options.BufferSize = 1024
+	options.BufferSize = 512
 	options.DisableEvict = true
 	return options
 }
@@ -99,6 +78,10 @@ func (m *SyncMap) Keys() (keys []string) {
 // Len
 func (m *SyncMap) Len() (n int) {
 	return m.m.Stat().Len
+}
+
+func (m *SyncMap) GetType() Type {
+	return TypeGigaCache
 }
 
 // MarshalJSON

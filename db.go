@@ -111,7 +111,7 @@ var cmdTable = []Cmd{
 			db.cm.Set(key, m)
 
 		case TypeZSet:
-			m := structx.NewZSet[string, float64]()
+			m := structx.NewZSet()
 			if err := m.UnmarshalJSON(val); err != nil {
 				return err
 			}
@@ -238,11 +238,10 @@ const (
 
 // Type aliases for built-in types.
 type (
-	String = []byte
-	Map    = *structx.SyncMap
+	Map    = structx.MapAPI
 	Set    = *structx.Set
 	List   = *structx.List
-	ZSet   = *structx.ZSet[string, float64]
+	ZSet   = *structx.ZSet
 	BitMap = *structx.Bitmap
 )
 
@@ -1010,7 +1009,7 @@ func (db *DB) fetchBitMap(key string, setnx ...bool) (bm BitMap, err error) {
 
 func (db *DB) fetchZSet(key string, setnx ...bool) (z ZSet, err error) {
 	return fetch(db, key, func() ZSet {
-		return structx.NewZSet[string, float64]()
+		return structx.NewZSet()
 	}, setnx...)
 }
 

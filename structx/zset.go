@@ -3,49 +3,48 @@ package structx
 import (
 	"sync"
 
+	"github.com/bytedance/sonic"
 	rbtree "github.com/sakeven/RbTree"
-	"golang.org/x/exp/constraints"
 )
 
-type Ordered constraints.Ordered
-
 // ZSet
-type ZSet[K, S Ordered] struct {
+type ZSet struct {
 	sync.RWMutex
-	m    Map[K, S]
-	tree *rbtree.Tree[S, K]
+	m    map[string]float64
+	tree *rbtree.Tree[float64, string]
 }
 
 // NewZSet
-func NewZSet[K, S Ordered]() *ZSet[K, S] {
-	return &ZSet[K, S]{
-		m:    NewMap[K, S](),
-		tree: rbtree.NewTree[S, K](),
+func NewZSet() *ZSet {
+	return &ZSet{
+		m:    map[string]float64{},
+		tree: rbtree.NewTree[float64, string](),
 	}
 }
 
 // Get
-func (z *ZSet[K, S]) Get(key K) (S, bool) {
+func (z *ZSet) Get(key string) (float64, bool) {
 	z.RLock()
 	defer z.RUnlock()
-	return z.m.Get(key)
+	s, ok := z.m[key]
+	return s, ok
 }
 
 // Set upsert value by key.
-func (z *ZSet[K, S]) Set(key K, score S) {
+func (z *ZSet) Set(key string, score float64) {
 	z.Lock()
 	z.set(key, score)
 	z.Unlock()
 }
 
-func (z *ZSet[K, S]) set(key K, score S) {
+func (z *ZSet) set(key string, score float64) {
 	z.deleteNode(score, key)
-	z.m.Put(key, score)
+	z.m[key] = score
 	z.tree.Insert(score, key)
 }
 
 // deleteNode
-func (z *ZSet[K, S]) deleteNode(score S, key K) bool {
+func (z *ZSet) deleteNode(score float64, key string) bool {
 	for it := z.tree.FindIt(score); it != nil; it = it.Next() {
 		if it.Value == key {
 			z.tree.Delete(it.Key)
@@ -59,25 +58,25 @@ func (z *ZSet[K, S]) deleteNode(score S, key K) bool {
 }
 
 // Incr
-func (z *ZSet[K, S]) Incr(key K, incr S) S {
+func (z *ZSet) Incr(key string, incr float64) float64 {
 	z.Lock()
-	score, ok := z.m.Get(key)
+	score, ok := z.m[key]
 	if ok {
 		z.deleteNode(score, key)
 	}
 	score += incr
-	z.m.Put(key, score)
+	z.m[key] = score
 	z.tree.Insert(score, key)
 	z.Unlock()
 	return score
 }
 
 // Delete
-func (z *ZSet[K, S]) Delete(key K) (s S, ok bool) {
+func (z *ZSet) Delete(key string) (s float64, ok bool) {
 	z.Lock()
-	score, ok := z.m.Get(key)
+	score, ok := z.m[key]
 	if ok {
-		z.m.Delete(key)
+		delete(z.m, key)
 		z.deleteNode(score, key)
 	}
 	z.Unlock()
@@ -85,14 +84,14 @@ func (z *ZSet[K, S]) Delete(key K) (s S, ok bool) {
 }
 
 // Len
-func (z *ZSet[K, S]) Len() int {
+func (z *ZSet) Len() int {
 	z.RLock()
 	defer z.RUnlock()
-	return z.m.Len()
+	return len(z.m)
 }
 
 // Iter iterate all elements by scores.
-func (z *ZSet[K, S]) Iter(f func(k K, s S) bool) {
+func (z *ZSet) Iter(f func(k string, s float64) bool) {
 	z.RLock()
 	defer z.RUnlock()
 
@@ -104,20 +103,20 @@ func (z *ZSet[K, S]) Iter(f func(k K, s S) bool) {
 }
 
 // MarshalJSON
-func (z *ZSet[K, S]) MarshalJSON() ([]byte, error) {
-	return z.m.MarshalJSON()
+func (z *ZSet) MarshalJSON() ([]byte, error) {
+	return sonic.Marshal(z.m)
 }
 
 // UnmarshalJSON
-func (z *ZSet[K, S]) UnmarshalJSON(src []byte) error {
-	if err := z.m.UnmarshalJSON(src); err != nil {
+func (z *ZSet) UnmarshalJSON(src []byte) error {
+	var m map[string]float64
+
+	if err := sonic.Unmarshal(src, &m); err != nil {
 		return err
 	}
-
-	z.m.All(func(k K, s S) bool {
+	for k, s := range m {
 		z.tree.Insert(s, k)
-		return true
-	})
+	}
 
 	return nil
 }

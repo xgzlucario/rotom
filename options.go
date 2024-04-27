@@ -31,8 +31,6 @@ type Options struct {
 	ShardCount uint32
 
 	// SyncPolicy is whether to synchronize writes to disk.
-	// Setting `Sync` is required for durability of a single write operation, but also results in slower writes.
-	// Setting `EverySecond` is much faster, but less durable as it relies on the OS to flush the writes to disk.
 	SyncPolicy SyncPolicy
 
 	// ShrinkCronExpr sauto shrink will be triggered when cron expr is satisfied.
