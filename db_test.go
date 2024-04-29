@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/xgzlucario/rotom/codeman"
-	"github.com/xgzlucario/rotom/structx"
 )
 
 var (
@@ -245,7 +244,6 @@ func TestList(t *testing.T) {
 	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
-	structx.SetZiplistMaxSize(512)
 
 	for i := 0; i < 5000; i++ {
 		key := "list" + strconv.Itoa(i/1000)
@@ -837,9 +835,7 @@ func TestShrink(t *testing.T) {
 
 func TestIncr(t *testing.T) {
 	assert := assert.New(t)
-
-	db, err := createDB()
-	assert.Nil(err)
+	db, _ := createDB()
 
 	n, err := db.Incr("key", 1)
 	assert.Equal(n, int64(1))
@@ -858,4 +854,42 @@ func TestIncr(t *testing.T) {
 	// Shrink
 	err = db.Shrink()
 	assert.Nil(err)
+}
+
+func TestBatchSet(t *testing.T) {
+	assert := assert.New(t)
+	db, _ := createDB()
+
+	batch := make([]*Batch, 0)
+	for i := 0; i < 1000; i++ {
+		k := fmt.Sprintf("%08d", i)
+		v := fmt.Sprintf("v-%08d", i)
+		batch = append(batch, &Batch{
+			Key: k,
+			Val: []byte(v),
+		})
+	}
+	db.BatchSet(batch...)
+
+	// get
+	for i := 0; i < 1000; i++ {
+		k := fmt.Sprintf("%08d", i)
+		val, ts, err := db.Get(k)
+		assert.Equal(string(val), fmt.Sprintf("v-%08d", i))
+		assert.Equal(ts, int64(0))
+		assert.Nil(err)
+	}
+
+	db.Shrink()
+	db.Close()
+
+	// reopen
+	db2, _ := Open(db.GetOptions())
+	for i := 0; i < 1000; i++ {
+		k := fmt.Sprintf("%08d", i)
+		val, ts, err := db2.Get(k)
+		assert.Equal(string(val), fmt.Sprintf("v-%08d", i))
+		assert.Equal(ts, int64(0))
+		assert.Nil(err)
+	}
 }

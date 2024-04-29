@@ -15,15 +15,7 @@ type MapAPI interface {
 	MarshalJSON() ([]byte, error)
 	UnmarshalJSON([]byte) error
 	Keys() []string
-	GetType() Type
 }
-
-type Type byte
-
-const (
-	TypeZipmap Type = iota + 1
-	TypeGigaCache
-)
 
 type entry[K comparable, V any] struct {
 	K []K
@@ -80,20 +72,16 @@ func (m *SyncMap) Len() (n int) {
 	return m.m.Stat().Len
 }
 
-func (m *SyncMap) GetType() Type {
-	return TypeGigaCache
-}
-
 // MarshalJSON
 func (m *SyncMap) MarshalJSON() ([]byte, error) {
 	n := m.m.Stat().Len
-	entry := entry[string, string]{
+	entry := entry[string, []byte]{
 		K: make([]string, 0, n),
-		V: make([]string, 0, n),
+		V: make([][]byte, 0, n),
 	}
 	m.m.Scan(func(key, val []byte, _ int64) (next bool) {
 		entry.K = append(entry.K, b2s(key))
-		entry.V = append(entry.V, b2s(val))
+		entry.V = append(entry.V, val)
 		return true
 	})
 	return sonic.Marshal(entry)
@@ -103,23 +91,15 @@ func (m *SyncMap) MarshalJSON() ([]byte, error) {
 func (m *SyncMap) UnmarshalJSON(src []byte) error {
 	m.m = cache.New(syncMapOptions())
 
-	var entry entry[string, string]
+	var entry entry[string, []byte]
 	if err := sonic.Unmarshal(src, &entry); err != nil {
 		return err
 	}
 
 	for i, k := range entry.K {
-		m.m.Set(k, s2b(&entry.V[i]))
+		m.m.Set(k, entry.V[i])
 	}
 	return nil
-}
-
-func s2b(str *string) []byte {
-	strHeader := (*[2]uintptr)(unsafe.Pointer(str))
-	byteSliceHeader := [3]uintptr{
-		strHeader[0], strHeader[1], strHeader[1],
-	}
-	return *(*[]byte)(unsafe.Pointer(&byteSliceHeader))
 }
 
 func b2s(b []byte) string {

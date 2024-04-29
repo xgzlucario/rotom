@@ -54,8 +54,8 @@ github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6Kllzaw
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/xgzlucario/GigaCache v0.0.0-20240426182053-056e47d54001 h1:WfekAg4NyVcQfiNdBHslRbI+taIllBvTLL6CL5yD75Q=
 github.com/xgzlucario/GigaCache v0.0.0-20240426182053-056e47d54001/go.mod h1:sPwGPAuvd9WdiONTmusXGNocqcY5L/J7+st1upAMlX8=
-github.com/xgzlucario/quicklist v0.0.0-20240427144055-1c6bb6d71614 h1:p9uBhIof/qvdx1rUGT2OJpiuTA+9g5NWqOPqJZZ9Q+4=
-github.com/xgzlucario/quicklist v0.0.0-20240427144055-1c6bb6d71614/go.mod h1:1ZgyZNk91XIllYdOPpwP+9L2RCw6QGSy6alTYF+Z0iU=
+github.com/xgzlucario/quicklist v0.0.0-20240428064242-d453ca4cbed3 h1:82nERuq61AXhOexK6sfhE1jPHrP1Zr6NpXNXdYBhoZQ=
+github.com/xgzlucario/quicklist v0.0.0-20240428064242-d453ca4cbed3/go.mod h1:1ZgyZNk91XIllYdOPpwP+9L2RCw6QGSy6alTYF+Z0iU=
 golang.org/x/arch v0.0.0-20210923205945-b76863e36670/go.mod h1:5om86z9Hs0C8fWVUuoMHwpExlXzs5Tkyp9hOrfG7pp8=
 golang.org/x/arch v0.7.0 h1:pskyeJh/3AmoQ8CPE95vxHLqp1G1GfGNXTmcl9NEKTc=
 golang.org/x/arch v0.7.0/go.mod h1:FEVrYAQjsQXMVJ1nsMoVVXPZg6p2JE2mx8psSWTDQys=

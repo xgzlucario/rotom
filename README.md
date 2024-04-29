@@ -90,14 +90,14 @@ qps: 892467.60
 90th: 1107 ns
 99th: 1724 ns
 
-========== SetEx ==========
+========== BatchSet ==========
 size: 100*10000 enties
-desc: key 10 bytes, value 10 bytes, ttl 1min
-cost: 1.125406833s
-qps: 888551.77
-50th: 986 ns
-90th: 1092 ns
-99th: 2110 ns
+desc: key 10 bytes, value 10 bytes, 100 key-values a batch
+cost: 379.674869ms
+qps: 2633737.76
+50th: 20317 ns
+90th: 33609 ns
+99th: 104627 ns
 
 ========== Get ==========
 size: 100*10000 enties

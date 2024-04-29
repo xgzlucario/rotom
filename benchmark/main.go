@@ -75,20 +75,28 @@ func benchSet() {
 	fmt.Println()
 }
 
-func benchSetEx() {
-	fmt.Println("========== SetEx ==========")
+func benchBatchSet() {
+	fmt.Println("========== BatchSet ==========")
 	fmt.Println("size: 100*10000 enties")
-	fmt.Println("desc: key 10 bytes, value 10 bytes, ttl 1min")
+	fmt.Println("desc: key 10 bytes, value 10 bytes, 100 key-values a batch")
 
 	quant := NewQuantile(N)
 	db := createDB()
 	start := time.Now()
 
+	batches := make([]*rotom.Batch, 0, 100)
 	for i := 0; i < N; i++ {
-		t1 := time.Now()
 		k := fmt.Sprintf("%010d", i)
-		db.SetEx(k, []byte(k), time.Minute)
-		quant.Add(float64(time.Since(t1)))
+		batches = append(batches, &rotom.Batch{
+			Key: k,
+			Val: []byte(k),
+		})
+		if len(batches) == 100 {
+			t1 := time.Now()
+			db.BatchSet(batches...)
+			quant.Add(float64(time.Since(t1)))
+			batches = batches[:0]
+		}
 	}
 
 	fmt.Println("cost:", time.Since(start))
@@ -281,7 +289,7 @@ func benchGet8parallel() {
 
 func main() {
 	benchSet()
-	benchSetEx()
+	benchBatchSet()
 	benchGet()
 	benchGet8parallel()
 	benchLRPush()

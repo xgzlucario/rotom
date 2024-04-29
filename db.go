@@ -61,7 +61,7 @@ type Cmd struct {
 	hook func(*DB, *codeman.Reader) error
 }
 
-// cmdTable defines how each command recover database from redo log(wal log).
+// cmdTable defines how each command recover database from redo log.
 var cmdTable = []Cmd{
 	{OpSetTx, func(db *DB, reader *codeman.Reader) error {
 		// key, ts, val
@@ -333,6 +333,25 @@ func (db *DB) Get(key string) ([]byte, int64, error) {
 	return val, ts, nil
 }
 
+type Batch struct {
+	Key       string
+	Val       []byte
+	Timestamp int64
+}
+
+// BatchSet
+func (db *DB) BatchSet(batchs ...*Batch) {
+	codec := codeman.NewCodec()
+	for _, b := range batchs {
+		if b.Timestamp < 0 {
+			continue
+		}
+		codec = codec.Byte(byte(OpSetTx)).Str(b.Key).Int(b.Timestamp).Bytes(b.Val)
+		db.m.SetTx(b.Key, b.Val, b.Timestamp)
+	}
+	db.encode(codec)
+}
+
 // Set store key-value pair.
 func (db *DB) Set(key string, val []byte) {
 	db.SetTx(key, val, noTTL)
@@ -345,11 +364,7 @@ func (db *DB) SetEx(key string, val []byte, ttl time.Duration) {
 
 // SetTx store key-value pair with deadline.
 func (db *DB) SetTx(key string, val []byte, ts int64) {
-	if ts < 0 {
-		return
-	}
-	db.encode(newCodec(OpSetTx).Str(key).Int(ts).Bytes(val))
-	db.m.SetTx(key, val, ts)
+	db.BatchSet(&Batch{key, val, ts})
 }
 
 // SetTTL set expired time of key-value.
@@ -405,8 +420,8 @@ func (db *DB) GC() {
 
 // Scan
 func (db *DB) Scan(f func([]byte, []byte, int64) bool) {
-	db.m.Scan(func(key, value []byte, ttl int64) bool {
-		return f(key, value, ttl)
+	db.m.Scan(func(key, val []byte, ttl int64) bool {
+		return f(key, val, ttl)
 	})
 }
 

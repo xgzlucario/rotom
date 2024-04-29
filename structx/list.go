@@ -10,7 +10,3 @@ type List struct {
 func NewList() *List {
 	return &List{quicklist.New()}
 }
-
-func SetZiplistMaxSize(n int) {
-	quicklist.SetMaxListPackSize(n)
-}
