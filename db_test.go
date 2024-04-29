@@ -22,7 +22,6 @@ func createDB() (*DB, error) {
 	options := DefaultOptions
 	options.ShardCount = 4
 	options.DirPath = fmt.Sprintf("tmp-%x", time.Now().UnixNano())
-	options.ShrinkCronExpr = ""
 	return Open(options)
 }
 
@@ -794,14 +793,6 @@ func TestRace(t *testing.T) {
 		_, err := Open(options)
 		assert.NotNil(err)
 	})
-
-	t.Run("wait-fr-shrink", func(t *testing.T) {
-		options := DefaultOptions
-		options.ShrinkCronExpr = "0/1 * * * * ?" // every second
-		db, _ := Open(options)
-		time.Sleep(time.Second)
-		db.Close()
-	})
 }
 
 func TestUnmarshalError(t *testing.T) {
@@ -821,29 +812,27 @@ func TestUnmarshalError(t *testing.T) {
 
 func TestShrink(t *testing.T) {
 	assert := assert.New(t)
+	db, _ := createDB()
 
-	db, err := createDB()
-	assert.Nil(err)
-
-	// shrink
 	for i := 0; i < 10000; i++ {
-		db.Set("key"+strconv.Itoa(i), []byte("value"))
+		db.Set(fmt.Sprintf("%06d", i), []byte(fmt.Sprintf("v-%06d", i)))
 	}
 
-	go func() {
-		time.Sleep(time.Millisecond)
-		err1 := db.Shrink()
-		assert.Equal(err1, ErrShrinkRunning)
-	}()
-
-	err = db.Shrink()
+	// shrink
+	err := db.Shrink()
 	assert.Nil(err)
 
-	// wrong shrink cron expr.
-	options := DefaultOptions
-	options.ShrinkCronExpr = "error"
-	_, err = Open(options)
-	assert.NotNil(err)
+	db.Close()
+
+	// reopen
+	db2, _ := Open(db.GetOptions())
+	for i := 0; i < 10000; i++ {
+		key := fmt.Sprintf("%06d", i)
+		val, ts, err := db2.Get(key)
+		assert.Equal(val, []byte(fmt.Sprintf("v-%06d", i)))
+		assert.Equal(ts, int64(0))
+		assert.Nil(err)
+	}
 }
 
 func TestIncr(t *testing.T) {

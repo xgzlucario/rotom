@@ -11,7 +11,6 @@ import (
 	"time"
 
 	cmap "github.com/orcaman/concurrent-map/v2"
-	"github.com/robfig/cron/v3"
 	"github.com/rosedblabs/wal"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/codeman"
@@ -252,9 +251,8 @@ type DB struct {
 	wal     *wal.WAL
 	loading bool // is loading finished from wal.
 	closed  bool
-	m       *cache.GigaCache                // data for bytes.
+	m       *cache.GigaCache                // data for strings.
 	cm      cmap.ConcurrentMap[string, any] // data for built-in types.
-	cron    *cron.Cron                      // cron scheduler for auto merge task.
 }
 
 // Open create a new db instance by options.
@@ -266,7 +264,6 @@ func Open(options Options) (*DB, error) {
 	// create wal.
 	walOptions := wal.DefaultOptions
 	walOptions.DirPath = options.DirPath
-	walOptions.Sync = (options.SyncPolicy == Always)
 	wal, err := wal.Open(walOptions)
 	if err != nil {
 		return nil, err
@@ -289,25 +286,6 @@ func Open(options Options) (*DB, error) {
 	}
 	db.loading = false
 
-	// start backend cron job.
-	db.cron = cron.New(cron.WithSeconds())
-	if db.options.SyncPolicy == EverySec {
-		if _, err = db.cron.AddFunc("* * * * * ?", func() {
-			db.Sync()
-		}); err != nil {
-			panic(err)
-		}
-	}
-	if len(options.ShrinkCronExpr) > 0 {
-		if _, err = db.cron.AddFunc(options.ShrinkCronExpr, func() {
-			db.Shrink()
-		}); err != nil {
-			return nil, err
-		}
-	}
-
-	db.cron.Start()
-
 	return db, nil
 }
 
@@ -319,14 +297,9 @@ func (db *DB) Close() error {
 	if db.closed {
 		return ErrDatabaseClosed
 	}
-	if err := db.wal.Close(); err != nil {
-		return err
-	}
-
-	db.cron.Stop()
 	db.closed = true
 
-	return nil
+	return db.wal.Close()
 }
 
 // GetOptions
@@ -912,25 +885,39 @@ func (db *DB) loadFromWal() error {
 	return nil
 }
 
-// Shrink rewrite db file.
+// Shrink uses `RDB` to create database snapshots to disk.
 func (db *DB) Shrink() error {
-	if !db.mu.TryLock() {
-		return ErrShrinkRunning
-	}
+	db.mu.Lock()
 	defer db.mu.Unlock()
 
 	// create new segment file.
+	segmentId := db.wal.ActiveSegmentID()
 	if err := db.wal.OpenNewActiveSegment(); err != nil {
 		return err
 	}
 
+	var pendWriteSize int
+	// writeAll write all wal pending data to disk.
+	writeAll := func() {
+		db.wal.WriteAll()
+		pendWriteSize = 0
+	}
+	// write write to wal buffer pending.
+	write := func(b []byte) {
+		db.wal.PendingWrites(b)
+		pendWriteSize += len(b)
+		if pendWriteSize >= wal.MB {
+			writeAll()
+		}
+	}
+
 	// marshal string datas.
-	db.m.Scan(func(key, value []byte, ts int64) bool {
-		cd := newCodec(OpSetTx).Bytes(key).Int(ts).Bytes(value)
-		db.wal.Write(cd.Content())
-		cd.Recycle()
-		return false
+	db.m.Scan(func(key, val []byte, ts int64) bool {
+		cd := newCodec(OpSetTx).Bytes(key).Int(ts).Bytes(val)
+		write(cd.Content())
+		return true
 	})
+	writeAll()
 
 	// marshal built-in types.
 	var types Type
@@ -959,24 +946,23 @@ func (db *DB) Shrink() error {
 			return err
 		}
 		cd := newCodec(OpSetObject).Int(types).Str(t.Key).Bytes(data)
-		db.wal.Write(cd.Content())
-		cd.Recycle()
+		write(cd.Content())
 	}
+	writeAll()
 
-	// sync
 	if err := db.wal.Sync(); err != nil {
 		return err
 	}
 
 	// remove all old segment files.
-	return db.removeOldSegments(db.wal.ActiveSegmentID())
+	return db.removeOldSegments(segmentId)
 }
 
-func (db *DB) removeOldSegments(maxSegmentID uint32) error {
-	maxSegmentName := fmt.Sprintf("%09d", maxSegmentID)
+func (db *DB) removeOldSegments(maxSegmentId uint32) error {
+	segmentName := fmt.Sprintf("%09d.SEG", maxSegmentId)
 
 	return filepath.WalkDir(db.options.DirPath, func(path string, file os.DirEntry, err error) error {
-		if file.Name() < maxSegmentName {
+		if file.Name() <= segmentName {
 			return os.Remove(path)
 		}
 		return err

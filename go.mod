@@ -7,7 +7,6 @@ require (
 	github.com/bytedance/sonic v1.11.6
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
-	github.com/robfig/cron/v3 v3.0.1
 	github.com/rosedblabs/wal v1.3.6
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.9.0
