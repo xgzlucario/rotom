@@ -2,7 +2,6 @@ package codeman
 
 import (
 	"encoding/binary"
-	"math"
 
 	cache "github.com/xgzlucario/GigaCache"
 	"golang.org/x/exp/constraints"
@@ -64,11 +63,6 @@ func (s *Codec) Uint32(v uint32) *Codec {
 
 func (s *Codec) Int(v int64) *Codec {
 	s.b = formatVarint(s.b, v)
-	return s
-}
-
-func (s *Codec) Float(f float64) *Codec {
-	s.b = formatVarint(s.b, math.Float64bits(f))
 	return s
 }
 

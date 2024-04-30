@@ -210,11 +210,11 @@ var cmdTable = []Cmd{
 	}},
 	{OpZAdd, func(db *DB, reader *codeman.Reader) error {
 		// key, field, score
-		return db.ZAdd(reader.Str(), reader.Str(), reader.Float64())
+		return db.ZAdd(reader.Str(), reader.Str(), reader.Int64())
 	}},
 	{OpZIncr, func(db *DB, reader *codeman.Reader) error {
 		// key, field, score
-		_, err := db.ZIncr(reader.Str(), reader.Str(), reader.Float64())
+		_, err := db.ZIncr(reader.Str(), reader.Str(), reader.Int64())
 		return err
 	}},
 	{OpZRemove, func(db *DB, reader *codeman.Reader) error {
@@ -812,7 +812,7 @@ func (db *DB) BitCount(key string) (uint64, error) {
 }
 
 // ZGet
-func (db *DB) ZGet(zset, key string) (float64, error) {
+func (db *DB) ZGet(zset, key string) (int64, error) {
 	zs, err := db.fetchZSet(zset)
 	if err != nil {
 		return 0, err
@@ -834,36 +834,36 @@ func (db *DB) ZCard(zset string) (int, error) {
 }
 
 // ZIter
-func (db *DB) ZIter(zset string, f func(string, float64) bool) error {
+func (db *DB) ZIter(zset string, f func(string, int64) bool) error {
 	zs, err := db.fetchZSet(zset)
 	if err != nil {
 		return err
 	}
-	zs.Iter(func(k string, s float64) bool {
+	zs.Iter(func(k string, s int64) bool {
 		return f(k, s)
 	})
 	return nil
 }
 
 // ZAdd
-func (db *DB) ZAdd(zset, key string, score float64) error {
+func (db *DB) ZAdd(zset, key string, score int64) error {
 	zs, err := db.fetchZSet(zset, true)
 	if err != nil {
 		return err
 	}
-	db.encode(newCodec(OpZAdd).Str(zset).Str(key).Float(score))
+	db.encode(newCodec(OpZAdd).Str(zset).Str(key).Int(score))
 	zs.Set(key, score)
 
 	return nil
 }
 
 // ZIncr
-func (db *DB) ZIncr(zset, key string, incr float64) (float64, error) {
+func (db *DB) ZIncr(zset, key string, incr int64) (int64, error) {
 	zs, err := db.fetchZSet(zset, true)
 	if err != nil {
 		return 0, err
 	}
-	db.encode(newCodec(OpZIncr).Str(zset).Str(key).Float(incr))
+	db.encode(newCodec(OpZIncr).Str(zset).Str(key).Int(incr))
 
 	return zs.Incr(key, incr), nil
 }

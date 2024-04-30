@@ -228,7 +228,7 @@ func benchBitSet() {
 func benchZSet() {
 	fmt.Println("========== ZSet ==========")
 	fmt.Println("size: 100*10000 enties")
-	fmt.Println("desc: field 10 bytes, incr float64")
+	fmt.Println("desc: field 10 bytes, incr int64")
 
 	quant := NewQuantile(N)
 	db := createDB()
@@ -237,7 +237,7 @@ func benchZSet() {
 	for i := 0; i < N; i++ {
 		t1 := time.Now()
 		k := fmt.Sprintf("%010d", i)
-		db.ZIncr("myzset", k, float64(i))
+		db.ZIncr("myzset", k, int64(i))
 		quant.Add(float64(time.Since(t1)))
 	}
 

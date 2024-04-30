@@ -93,11 +93,11 @@ qps: 892467.60
 ========== BatchSet ==========
 size: 100*10000 enties
 desc: key 10 bytes, value 10 bytes, 100 key-values a batch
-cost: 379.674869ms
-qps: 2633737.76
-50th: 20317 ns
-90th: 33609 ns
-99th: 104627 ns
+cost: 377.933308ms
+qps: 2645850.27
+50th: 20691 ns
+90th: 32950 ns
+99th: 95645 ns
 
 ========== Get ==========
 size: 100*10000 enties
@@ -155,11 +155,11 @@ qps: 1091477.02
 
 ========== ZSet ==========
 size: 100*10000 enties
-desc: field 10 bytes, incr float64
-cost: 1.321257444s
-qps: 756843.75
-50th: 1121 ns
-90th: 1248 ns
-99th: 2025 ns
+desc: field 10 bytes, incr int64
+cost: 1.209290877s
+qps: 826918.57
+50th: 1038 ns
+90th: 1192 ns
+99th: 2257 ns
 ```
 

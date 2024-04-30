@@ -2,7 +2,6 @@ package codeman
 
 import (
 	"encoding/binary"
-	"math"
 )
 
 type Reader struct {
@@ -85,9 +84,4 @@ func (s *Reader) Bool() bool {
 func (s *Reader) Byte() byte {
 	r := s.readVarint()
 	return byte(r)
-}
-
-func (s *Reader) Float64() float64 {
-	r := s.readVarint()
-	return math.Float64frombits(r)
 }

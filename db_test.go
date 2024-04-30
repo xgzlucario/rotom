@@ -639,7 +639,7 @@ func TestZSet(t *testing.T) {
 
 	// ZAdd
 	for i := 0; i < 1000; i++ {
-		err := db.ZAdd("zset", genKey(i), float64(i))
+		err := db.ZAdd("zset", genKey(i), int64(i))
 		assert.Nil(err)
 
 		// card
@@ -659,19 +659,19 @@ func TestZSet(t *testing.T) {
 			// zget
 			score, err := db.ZGet("zset", genKey(i))
 			assert.Nil(err)
-			assert.Equal(score, float64(i))
+			assert.Equal(score, int64(i))
 		}
 
 		// not exist
 		for i := 1000; i < 2000; i++ {
 			score, err := db.ZGet("zset", genKey(i))
 			assert.Equal(err, ErrKeyNotFound)
-			assert.Equal(score, float64(0))
+			assert.Equal(score, int64(0))
 		}
 
 		// iter
 		count := 0
-		err = db.ZIter("zset", func(key string, score float64) bool {
+		err = db.ZIter("zset", func(key string, score int64) bool {
 			count++
 			return count >= 1000
 		})
@@ -692,12 +692,12 @@ func TestZSet(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		num, err := db.ZIncr("zset", genKey(i), 3)
 		assert.Nil(err)
-		assert.Equal(num, float64(i+3))
+		assert.Equal(num, int64(i+3))
 	}
 	for i := 3000; i < 4000; i++ {
 		num, err := db.ZIncr("zset", genKey(i), 3)
 		assert.Nil(err)
-		assert.Equal(num, float64(3))
+		assert.Equal(num, int64(3))
 	}
 
 	// ZRemove
@@ -726,10 +726,10 @@ func TestZSet(t *testing.T) {
 	db.SAdd("set", "1")
 
 	n, err := db.ZGet("set", "1")
-	assert.Equal(n, float64(0))
+	assert.Equal(n, int64(0))
 	assert.ErrorContains(err, ErrWrongType.Error())
 
-	err = db.ZIter("set", func(key string, score float64) bool {
+	err = db.ZIter("set", func(key string, score int64) bool {
 		return false
 	})
 	assert.ErrorContains(err, ErrWrongType.Error())

@@ -4,47 +4,44 @@ import (
 	"sync"
 
 	"github.com/bytedance/sonic"
+	"github.com/cockroachdb/swiss"
 	rbtree "github.com/sakeven/RbTree"
 )
 
 // ZSet
 type ZSet struct {
 	sync.RWMutex
-	m    map[string]float64
-	tree *rbtree.Tree[float64, string]
+	m    *swiss.Map[string, int64]
+	tree *rbtree.Tree[int64, string]
 }
 
 // NewZSet
 func NewZSet() *ZSet {
 	return &ZSet{
-		m:    map[string]float64{},
-		tree: rbtree.NewTree[float64, string](),
+		m:    swiss.New[string, int64](8),
+		tree: rbtree.NewTree[int64, string](),
 	}
 }
 
 // Get
-func (z *ZSet) Get(key string) (float64, bool) {
+func (z *ZSet) Get(key string) (score int64, ok bool) {
 	z.RLock()
-	defer z.RUnlock()
-	s, ok := z.m[key]
-	return s, ok
+	score, ok = z.m.Get(key)
+	z.RUnlock()
+	return
 }
 
 // Set upsert value by key.
-func (z *ZSet) Set(key string, score float64) {
+func (z *ZSet) Set(key string, score int64) {
 	z.Lock()
-	z.set(key, score)
+	z.deleteNode(score, key)
+	z.m.Put(key, score)
+	z.tree.Insert(score, key)
 	z.Unlock()
 }
 
-func (z *ZSet) set(key string, score float64) {
-	z.deleteNode(score, key)
-	z.m[key] = score
-	z.tree.Insert(score, key)
-}
-
 // deleteNode
-func (z *ZSet) deleteNode(score float64, key string) bool {
+func (z *ZSet) deleteNode(score int64, key string) bool {
 	for it := z.tree.FindIt(score); it != nil; it = it.Next() {
 		if it.Value == key {
 			z.tree.Delete(it.Key)
@@ -58,25 +55,25 @@ func (z *ZSet) deleteNode(score float64, key string) bool {
 }
 
 // Incr
-func (z *ZSet) Incr(key string, incr float64) float64 {
+func (z *ZSet) Incr(key string, incr int64) int64 {
 	z.Lock()
-	score, ok := z.m[key]
+	score, ok := z.m.Get(key)
 	if ok {
 		z.deleteNode(score, key)
 	}
 	score += incr
-	z.m[key] = score
+	z.m.Put(key, score)
 	z.tree.Insert(score, key)
 	z.Unlock()
 	return score
 }
 
 // Delete
-func (z *ZSet) Delete(key string) (s float64, ok bool) {
+func (z *ZSet) Delete(key string) (s int64, ok bool) {
 	z.Lock()
-	score, ok := z.m[key]
+	score, ok := z.m.Get(key)
 	if ok {
-		delete(z.m, key)
+		z.m.Delete(key)
 		z.deleteNode(score, key)
 	}
 	z.Unlock()
@@ -87,11 +84,11 @@ func (z *ZSet) Delete(key string) (s float64, ok bool) {
 func (z *ZSet) Len() int {
 	z.RLock()
 	defer z.RUnlock()
-	return len(z.m)
+	return z.m.Len()
 }
 
 // Iter iterate all elements by scores.
-func (z *ZSet) Iter(f func(k string, s float64) bool) {
+func (z *ZSet) Iter(f func(k string, s int64) bool) {
 	z.RLock()
 	defer z.RUnlock()
 
@@ -102,20 +99,35 @@ func (z *ZSet) Iter(f func(k string, s float64) bool) {
 	}
 }
 
+type zentry struct {
+	K []string
+	S []int64
+}
+
 // MarshalJSON
 func (z *ZSet) MarshalJSON() ([]byte, error) {
-	return sonic.Marshal(z.m)
+	data := zentry{
+		K: make([]string, 0, z.m.Len()),
+		S: make([]int64, 0, z.m.Len()),
+	}
+	z.m.All(func(key string, value int64) bool {
+		data.K = append(data.K, key)
+		data.S = append(data.S, value)
+		return true
+	})
+	return sonic.Marshal(data)
 }
 
 // UnmarshalJSON
 func (z *ZSet) UnmarshalJSON(src []byte) error {
-	var m map[string]float64
-
-	if err := sonic.Unmarshal(src, &m); err != nil {
+	var data zentry
+	if err := sonic.Unmarshal(src, &data); err != nil {
 		return err
 	}
-	for k, s := range m {
+	for i, k := range data.K {
+		s := data.S[i]
 		z.tree.Insert(s, k)
+		z.m.Put(k, s)
 	}
 
 	return nil
