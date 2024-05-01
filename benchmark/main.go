@@ -154,6 +154,36 @@ func benchHSet() {
 	fmt.Println()
 }
 
+func benchBatchHSet() {
+	fmt.Println("========== BatchHSet ==========")
+	fmt.Println("size: 100*10000 enties")
+	fmt.Println("desc: field 10 bytes, value 10 bytes, 100 key-values a batch")
+
+	quant := NewQuantile(N)
+	db := createDB()
+	start := time.Now()
+
+	batches := make([]*rotom.Batch, 0, 100)
+	for i := 0; i < N; i++ {
+		k := fmt.Sprintf("%010d", i)
+		batches = append(batches, &rotom.Batch{
+			Key: k,
+			Val: []byte(k),
+		})
+		if len(batches) == 100 {
+			t1 := time.Now()
+			db.BatchHSet("mymap", batches...)
+			quant.Add(float64(time.Since(t1)))
+			batches = batches[:0]
+		}
+	}
+
+	fmt.Println("cost:", time.Since(start))
+	fmt.Printf("qps: %.2f\n", float64(N)/time.Since(start).Seconds())
+	quant.Print()
+	fmt.Println()
+}
+
 func benchLRPush() {
 	fmt.Println("========== RPush ==========")
 	fmt.Println("size: 100*10000 enties")
@@ -294,6 +324,7 @@ func main() {
 	benchGet8parallel()
 	benchLRPush()
 	benchHSet()
+	benchBatchHSet()
 	benchHGet()
 	benchBitSet()
 	benchZSet()

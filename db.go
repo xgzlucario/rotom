@@ -39,7 +39,7 @@ const (
 	// set
 	OpSAdd
 	OpSRemove
-	OpSMerge // union, inter, diff
+	OpSMerge
 	// list
 	OpLPush
 	OpRPush
@@ -49,7 +49,7 @@ const (
 	// bitmap
 	OpBitSet
 	OpBitFlip
-	OpBitMerge // or, and, xor
+	OpBitMerge
 	// zset
 	OpZAdd
 	OpZIncr
@@ -96,7 +96,7 @@ var cmdTable = []Cmd{
 			db.cm.Set(key, s)
 
 		case TypeMap:
-			m := structx.NewSyncMap()
+			m := structx.NewMap()
 			if err := m.UnmarshalJSON(val); err != nil {
 				return err
 			}
@@ -129,8 +129,8 @@ var cmdTable = []Cmd{
 		return nil
 	}},
 	{OpHSet, func(db *DB, reader *codeman.Reader) error {
-		// key, field, val
-		return db.HSet(reader.Str(), reader.Str(), reader.RawBytes())
+		// key, field, val, ts
+		return db.HSetTx(reader.Str(), reader.Str(), reader.RawBytes(), reader.Int64())
 	}},
 	{OpHRemove, func(db *DB, reader *codeman.Reader) error {
 		// key, fields
@@ -237,7 +237,7 @@ const (
 
 // Type aliases for built-in types.
 type (
-	Map    = structx.MapAPI
+	Map    = *structx.Map
 	Set    = *structx.Set
 	List   = *structx.List
 	ZSet   = *structx.ZSet
@@ -333,25 +333,6 @@ func (db *DB) Get(key string) ([]byte, int64, error) {
 	return val, ts, nil
 }
 
-type Batch struct {
-	Key       string
-	Val       []byte
-	Timestamp int64
-}
-
-// BatchSet
-func (db *DB) BatchSet(batchs ...*Batch) {
-	codec := codeman.NewCodec()
-	for _, b := range batchs {
-		if b.Timestamp < 0 {
-			continue
-		}
-		codec = codec.Byte(byte(OpSetTx)).Str(b.Key).Int(b.Timestamp).Bytes(b.Val)
-		db.m.SetTx(b.Key, b.Val, b.Timestamp)
-	}
-	db.encode(codec)
-}
-
 // Set store key-value pair.
 func (db *DB) Set(key string, val []byte) {
 	db.SetTx(key, val, noTTL)
@@ -431,7 +412,7 @@ func (db *DB) HGet(key, field string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, ok := m.Get(field)
+	res, _, ok := m.Get(field)
 	if !ok {
 		return nil, ErrFieldNotFound
 	}
@@ -449,13 +430,12 @@ func (db *DB) HLen(key string) (int, error) {
 
 // HSet
 func (db *DB) HSet(key, field string, val []byte) error {
-	m, err := db.fetchMap(key, true)
-	if err != nil {
-		return err
-	}
-	db.encode(newCodec(OpHSet).Str(key).Str(field).Bytes(val))
-	m.Set(field, val)
-	return nil
+	return db.BatchHSet(key, &Batch{Key: field, Val: val})
+}
+
+// HSetTx
+func (db *DB) HSetTx(key, field string, val []byte, ts int64) error {
+	return db.BatchHSet(key, &Batch{Key: field, Val: val, Timestamp: ts})
 }
 
 // HRemove
@@ -986,7 +966,7 @@ func (db *DB) removeOldSegments(maxSegmentId uint32) error {
 
 func (db *DB) fetchMap(key string, setnx ...bool) (m Map, err error) {
 	return fetch(db, key, func() Map {
-		return structx.NewSyncMap()
+		return structx.NewMap()
 	}, setnx...)
 }
 

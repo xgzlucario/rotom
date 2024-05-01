@@ -135,6 +135,15 @@ qps: 845337.51
 90th: 1117 ns
 99th: 1850 ns
 
+========== BatchHSet ==========
+size: 100*10000 enties
+desc: field 10 bytes, value 10 bytes, 100 key-values a batch
+cost: 365.036647ms
+qps: 2739329.61
+50th: 16900 ns
+90th: 41312 ns
+99th: 89803 ns
+
 ========== HGet ==========
 size: 100*10000 enties
 desc: field 10 bytes, value 10 bytes
