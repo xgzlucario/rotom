@@ -34,7 +34,7 @@ const (
 	OpSetTTL
 	OpRemove
 	// map
-	OpHSet
+	OpHSetTx
 	OpHRemove
 	// set
 	OpSAdd
@@ -51,7 +51,7 @@ const (
 	OpBitFlip
 	OpBitMerge
 	// zset
-	OpZAdd
+	OpZSet
 	OpZIncr
 	OpZRemove
 )
@@ -128,9 +128,15 @@ var cmdTable = []Cmd{
 		db.Remove(reader.StrSlice()...)
 		return nil
 	}},
-	{OpHSet, func(db *DB, reader *codeman.Reader) error {
-		// key, field, val, ts
-		return db.HSetTx(reader.Str(), reader.Str(), reader.RawBytes(), reader.Int64())
+	{OpHSetTx, func(db *DB, reader *codeman.Reader) (err error) {
+		// key, count
+		key := reader.Str()
+		count := reader.Int64()
+		for i := int64(0); i < count; i++ {
+			// field, val, ts
+			err = db.HSetTx(key, reader.Str(), reader.RawBytes(), reader.Int64())
+		}
+		return
 	}},
 	{OpHRemove, func(db *DB, reader *codeman.Reader) error {
 		// key, fields
@@ -208,9 +214,15 @@ var cmdTable = []Cmd{
 			return db.BitXor(key, items...)
 		}
 	}},
-	{OpZAdd, func(db *DB, reader *codeman.Reader) error {
-		// key, field, score
-		return db.ZAdd(reader.Str(), reader.Str(), reader.Int64())
+	{OpZSet, func(db *DB, reader *codeman.Reader) (err error) {
+		// key, count
+		key := reader.Str()
+		count := reader.Int64()
+		for i := int64(0); i < count; i++ {
+			// field, score
+			err = db.ZAdd(key, reader.Str(), reader.Int64())
+		}
+		return
 	}},
 	{OpZIncr, func(db *DB, reader *codeman.Reader) error {
 		// key, field, score
@@ -791,6 +803,11 @@ func (db *DB) BitCount(key string) (uint64, error) {
 	return bm.Len(), err
 }
 
+// ZAdd
+func (db *DB) ZAdd(zset, key string, score int64) error {
+	return db.BatchZSet(zset, &ZSBatch{Key: key, Score: score})
+}
+
 // ZGet
 func (db *DB) ZGet(zset, key string) (int64, error) {
 	zs, err := db.fetchZSet(zset)
@@ -822,18 +839,6 @@ func (db *DB) ZIter(zset string, f func(string, int64) bool) error {
 	zs.Iter(func(k string, s int64) bool {
 		return f(k, s)
 	})
-	return nil
-}
-
-// ZAdd
-func (db *DB) ZAdd(zset, key string, score int64) error {
-	zs, err := db.fetchZSet(zset, true)
-	if err != nil {
-		return err
-	}
-	db.encode(newCodec(OpZAdd).Str(zset).Str(key).Int(score))
-	zs.Set(key, score)
-
 	return nil
 }
 

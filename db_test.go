@@ -37,7 +37,6 @@ func TestDB(t *testing.T) {
 		db.Set("set-"+key, val)
 		db.SetEx("ttl-"+key, val, time.Minute)
 		db.SetEx("expired-"+key, val, time.Second)
-		db.SetTx("invalid-"+key, val, -1)
 	}
 	time.Sleep(time.Second * 2)
 
@@ -109,8 +108,7 @@ func TestDB(t *testing.T) {
 	assert.Nil(err)
 
 	t.Run("setTTL", func(t *testing.T) {
-		db, err := createDB()
-		assert.Nil(err)
+		db, _ := createDB()
 
 		db.HSet("hmap", "k", []byte("v"))
 		n := db.Remove("hmap")
@@ -140,6 +138,14 @@ func TestDB(t *testing.T) {
 			assert.Equal(int64(0), ts)
 			assert.Nil(err)
 		}
+	})
+
+	t.Run("error", func(t *testing.T) {
+		db, _ := createDB()
+
+		assert.Panics(func() {
+			db.SetTx("k", []byte("a"), -1)
+		})
 	})
 }
 
@@ -635,17 +641,20 @@ func TestZSet(t *testing.T) {
 	db, err := createDB()
 	assert.Nil(err)
 
-	genKey := func(i int) string { return fmt.Sprintf("key-%06d", i) }
+	genKey := func(i int) string {
+		return fmt.Sprintf("k-%06x", i)
+	}
 
 	// ZAdd
 	for i := 0; i < 1000; i++ {
 		err := db.ZAdd("zset", genKey(i), int64(i))
 		assert.Nil(err)
-
+	}
+	{
 		// card
 		n, err := db.ZCard("zset")
 		assert.Nil(err)
-		assert.Equal(n, i+1)
+		assert.Equal(n, 1000)
 	}
 
 	check := func() {

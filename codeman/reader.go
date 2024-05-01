@@ -28,13 +28,21 @@ func (s *Reader) read() []byte {
 	return res
 }
 
-func (s *Reader) readVarint() uint64 {
+func (s *Reader) readUvarint() uint64 {
 	num, i := binary.Uvarint(s.b)
 	if i == 0 {
 		panic("codeman/bug: reader is done")
 	}
 	s.b = s.b[i:]
+	return num
+}
 
+func (s *Reader) readVarint() int64 {
+	num, i := binary.Varint(s.b)
+	if i == 0 {
+		panic("codeman/bug: reader is done")
+	}
+	s.b = s.b[i:]
 	return num
 }
 
@@ -51,7 +59,7 @@ func (s *Reader) Str() string {
 }
 
 func (s *Reader) StrSlice() []string {
-	data := make([]string, s.readVarint())
+	data := make([]string, s.readUvarint())
 	for i := range data {
 		data[i] = s.Str()
 	}
@@ -59,7 +67,7 @@ func (s *Reader) StrSlice() []string {
 }
 
 func (s *Reader) Uint32Slice() []uint32 {
-	data := make([]uint32, s.readVarint())
+	data := make([]uint32, s.readUvarint())
 	for i := range data {
 		data[i] = s.Uint32()
 	}
@@ -67,21 +75,17 @@ func (s *Reader) Uint32Slice() []uint32 {
 }
 
 func (s *Reader) Uint32() uint32 {
-	r := s.readVarint()
-	return uint32(r)
+	return uint32(s.readUvarint())
 }
 
 func (s *Reader) Int64() int64 {
-	r := s.readVarint()
-	return int64(r)
+	return int64(s.readVarint())
 }
 
 func (s *Reader) Bool() bool {
-	r := s.readVarint()
-	return r == _true
+	return s.readUvarint() == _true
 }
 
 func (s *Reader) Byte() byte {
-	r := s.readVarint()
-	return byte(r)
+	return byte(s.readUvarint())
 }

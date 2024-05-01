@@ -5,7 +5,6 @@ go 1.22
 require (
 	github.com/RoaringBitmap/roaring v1.9.3
 	github.com/bytedance/sonic v1.11.6
-	github.com/cockroachdb/swiss v0.0.0-20240303172742-c161743eb608
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/rosedblabs/wal v1.3.6

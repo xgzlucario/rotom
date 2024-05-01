@@ -2,6 +2,7 @@ package codeman
 
 import (
 	"encoding/binary"
+	"unsafe"
 
 	cache "github.com/xgzlucario/GigaCache"
 	"golang.org/x/exp/constraints"
@@ -57,12 +58,12 @@ func (s *Codec) Bool(v bool) *Codec {
 }
 
 func (s *Codec) Uint32(v uint32) *Codec {
-	s.b = formatVarint(s.b, v)
+	s.b = binary.AppendUvarint(s.b, uint64(v))
 	return s
 }
 
 func (s *Codec) Int(v int64) *Codec {
-	s.b = formatVarint(s.b, v)
+	s.b = binary.AppendVarint(s.b, v)
 	return s
 }
 
@@ -76,22 +77,14 @@ func (s *Codec) Uint32Slice(v []uint32) *Codec {
 	return s
 }
 
-// format uses variable-length encoding of incoming bytes.
 func (s *Codec) format(v []byte) *Codec {
-	s.b = formatVarint(s.b, len(v))
-	s.b = append(s.b, v...)
-	return s
+	return s.formatString(b2s(v))
 }
 
-// formatString uses variable-length encoding of incoming string.
 func (s *Codec) formatString(v string) *Codec {
-	s.b = formatVarint(s.b, len(v))
+	s.b = binary.AppendUvarint(s.b, uint64(len(v)))
 	s.b = append(s.b, v...)
 	return s
-}
-
-func formatVarint[T Integer](buf []byte, n T) []byte {
-	return binary.AppendUvarint(buf, uint64(n))
 }
 
 func formatStrSlice(s []string) []byte {
@@ -111,4 +104,8 @@ func formatNumberSlice[T Integer](s []T) []byte {
 		data = binary.AppendUvarint(data, uint64(v))
 	}
 	return data
+}
+
+func b2s(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }
