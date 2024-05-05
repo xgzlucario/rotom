@@ -10,7 +10,7 @@ require (
 	github.com/rosedblabs/wal v1.3.6
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.9.0
-	github.com/xgzlucario/GigaCache v0.0.0-20240426182053-056e47d54001
+	github.com/xgzlucario/GigaCache v0.0.0-20240504114334-a0b0c3267b83
 	github.com/xgzlucario/quicklist v0.0.0-20240428064242-d453ca4cbed3
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
 )
@@ -28,7 +28,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	golang.org/x/arch v0.7.0 // indirect
-	golang.org/x/sys v0.19.0 // indirect
+	golang.org/x/arch v0.8.0 // indirect
+	golang.org/x/sys v0.20.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

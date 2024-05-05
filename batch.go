@@ -32,8 +32,8 @@ func checkts(batches []*Batch) {
 // BatchSet
 func (db *DB) BatchSet(batches ...*Batch) {
 	checkts(batches)
-
 	codec := codeman.NewCodec()
+
 	for _, b := range batches {
 		codec = codec.Byte(byte(OpSetTx)).Str(b.Key).Int(b.Timestamp).Bytes(b.Val)
 		db.m.SetTx(b.Key, b.Val, b.Timestamp)
@@ -49,8 +49,8 @@ func (db *DB) BatchHSet(key string, batches ...*Batch) error {
 	if err != nil {
 		return err
 	}
-
 	codec := newCodec(OpHSetTx).Str(key).Int(int64(len(batches)))
+
 	for _, b := range batches {
 		codec = codec.Str(b.Key).Bytes(b.Val).Int(b.Timestamp)
 		m.Set(b.Key, b.Val, b.Timestamp)
@@ -66,8 +66,8 @@ func (db *DB) BatchZSet(key string, batches ...*ZSBatch) error {
 	if err != nil {
 		return err
 	}
-
 	codec := newCodec(OpZSet).Str(key).Int(int64(len(batches)))
+
 	for _, b := range batches {
 		codec = codec.Str(b.Key).Int(b.Score)
 		m.Set(b.Key, b.Score)

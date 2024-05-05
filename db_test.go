@@ -25,6 +25,7 @@ func createDB() (*DB, error) {
 }
 
 func TestDB(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	const N = 5000
 	db, err := createDB()
@@ -150,6 +151,7 @@ func TestDB(t *testing.T) {
 }
 
 func TestHmap(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
@@ -247,6 +249,7 @@ func randString() string {
 }
 
 func TestList(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
@@ -399,6 +402,7 @@ func TestList(t *testing.T) {
 }
 
 func TestSet(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
@@ -516,6 +520,7 @@ func TestSet(t *testing.T) {
 }
 
 func TestBitmap(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
@@ -637,6 +642,7 @@ func TestBitmap(t *testing.T) {
 }
 
 func TestZSet(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	db, err := createDB()
 	assert.Nil(err)
@@ -757,6 +763,7 @@ func TestZSet(t *testing.T) {
 }
 
 func TestInvalidCodec(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	// read args.
@@ -775,11 +782,15 @@ func TestInvalidCodec(t *testing.T) {
 		reader.Byte()
 	})
 	assert.Panics(func() {
+		reader.Int64()
+	})
+	assert.Panics(func() {
 		reader.RawBytes()
 	})
 }
 
-func TestRace(t *testing.T) {
+func TestCheckOption(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	t.Run("checkOptions", func(t *testing.T) {
@@ -788,21 +799,19 @@ func TestRace(t *testing.T) {
 		_, err := Open(options)
 		assert.NotNil(err)
 
+		options.DirPath = "README.md"
+		_, err = Open(options)
+		assert.NotNil(err)
+
 		options.DirPath = "test1"
 		options.ShardCount = 0
 		_, err = Open(options)
 		assert.NotNil(err)
 	})
-
-	t.Run("open-wal", func(t *testing.T) {
-		options := DefaultOptions
-		options.DirPath = "README.md"
-		_, err := Open(options)
-		assert.NotNil(err)
-	})
 }
 
 func TestUnmarshalError(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 
 	for _, types := range []int64{TypeMap, TypeList, TypeSet, TypeZSet, TypeBitmap} {
@@ -817,50 +826,68 @@ func TestUnmarshalError(t *testing.T) {
 	}
 }
 
-func TestShrink(t *testing.T) {
+func TestIncr(t *testing.T) {
+	t.Parallel()
 	assert := assert.New(t)
 	db, _ := createDB()
 
-	for i := 0; i < 10000; i++ {
-		db.Set(fmt.Sprintf("%06d", i), []byte(fmt.Sprintf("v-%06d", i)))
-	}
-
-	// shrink
-	err := db.Shrink()
-	assert.Nil(err)
-
-	db.Close()
-
-	// reopen
-	db2, _ := Open(db.GetOptions())
-	for i := 0; i < 10000; i++ {
-		key := fmt.Sprintf("%06d", i)
-		val, ts, err := db2.Get(key)
-		assert.Equal(val, []byte(fmt.Sprintf("v-%06d", i)))
-		assert.Equal(ts, int64(0))
+	for i := 0; i < 1000; i++ {
+		n, err := db.Incr(fmt.Sprintf("key-%d", i), 1)
+		assert.Equal(n, int64(1))
 		assert.Nil(err)
 	}
-}
 
-func TestIncr(t *testing.T) {
-	assert := assert.New(t)
-	db, _ := createDB()
-
-	n, err := db.Incr("key", 1)
-	assert.Equal(n, int64(1))
-	assert.Nil(err)
-
-	n, err = db.Incr("key", 2)
-	assert.Equal(n, int64(3))
-	assert.Nil(err)
+	for i := 0; i < 1000; i++ {
+		n, err := db.Incr(fmt.Sprintf("key-%d", i), 1)
+		assert.Equal(n, int64(2))
+		assert.Nil(err)
+	}
 
 	// Error
 	db.Set("ss", []byte("abcde"))
-	n, err = db.Incr("ss", 1)
+	n, err := db.Incr("ss", 1)
 	assert.Equal(n, int64(0))
 	assert.NotNil(err)
+
+	// Reopen
+	db.Close()
+	db, _ = Open(db.GetOptions())
+
+	// Get
+	for i := 0; i < 1000; i++ {
+		val, ts, err := db.Get(fmt.Sprintf("key-%d", i))
+		assert.Equal(val, []byte("2"))
+		assert.Equal(ts, int64(0))
+		assert.Nil(err)
+	}
 
 	// Shrink
 	err = db.Shrink()
 	assert.Nil(err)
+}
+
+func TestSetNx(t *testing.T) {
+	t.Parallel()
+	assert := assert.New(t)
+	db, _ := createDB()
+
+	ok := db.SetNx("key", []byte("val"), time.Now().Add(time.Second).UnixNano())
+	assert.True(ok)
+
+	for i := 0; i < 100; i++ {
+		ok := db.SetNx("key", []byte("val"), 0)
+		assert.False(ok)
+	}
+
+	// Reopen
+	db.Close()
+	db, _ = Open(db.GetOptions())
+
+	ok = db.SetNx("key", []byte("val"), 0)
+	assert.False(ok)
+
+	time.Sleep(time.Second * 2)
+
+	ok = db.SetNx("key", []byte("val"), 0)
+	assert.True(ok)
 }

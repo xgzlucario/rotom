@@ -360,6 +360,16 @@ func (db *DB) SetTx(key string, val []byte, ts int64) {
 	db.BatchSet(&Batch{key, val, ts})
 }
 
+// SetNx stoe key-value if not exist.
+func (db *DB) SetNx(key string, val []byte, ts int64) bool {
+	_, _, ok := db.m.Get(key)
+	if ok {
+		return false
+	}
+	db.SetTx(key, val, ts)
+	return true
+}
+
 // SetTTL set expired time of key-value.
 func (db *DB) SetTTL(key string, ts int64) bool {
 	if ts < 0 {
@@ -406,9 +416,7 @@ func (db *DB) Len() int {
 
 // GC triggers the garbage collection to evict expired kv datas.
 func (db *DB) GC() {
-	db.mu.Lock()
 	db.m.Migrate()
-	db.mu.Unlock()
 }
 
 // Scan
