@@ -9,38 +9,27 @@ import (
 	"github.com/panjf2000/gnet/v2"
 )
 
-var aof *Aof
-
-type RotomServer struct {
-	gnet.BuiltinEventEngine
-	eng  gnet.Engine
-	addr string
-}
-
-func (es *RotomServer) OnBoot(eng gnet.Engine) gnet.Action {
-	es.eng = eng
-	log.Println("echo server is listening on", es.addr)
+func (s *Server) OnBoot(eng gnet.Engine) gnet.Action {
+	s.engine = eng
 	return gnet.None
 }
 
-func (es *RotomServer) OnTraffic(c gnet.Conn) gnet.Action {
+func (es *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	handleConnection(c)
 	return gnet.None
 }
 
 func main() {
-	var err error
-	aof, err = NewAof("database.aof")
+	config, err := LoadConfig("config.json")
 	if err != nil {
-		fmt.Println("Failed to initialize AOF:", err)
-		return
+		log.Printf("config error: %v\n", err)
 	}
-	defer aof.Close()
-
-	port := 9006
-
-	server := &RotomServer{addr: fmt.Sprintf("tcp://:%d", port)}
-	log.Fatal(gnet.Run(server, server.addr))
+	err = initServer(config)
+	if err != nil {
+		log.Printf("init server error: %v\n", err)
+	}
+	log.Println("rotom server is up.")
+	server.Run()
 }
 
 func handleConnection(conn gnet.Conn) {
@@ -56,33 +45,42 @@ func handleConnection(conn gnet.Conn) {
 			continue
 		}
 
-		command := bytes.ToUpper(value.array[0].bulk)
+		command := bytes.ToLower(value.array[0].bulk)
 		args := value.array[1:]
 
 		processCommand(conn, command, args)
 	}
 }
 
-func processCommand(conn gnet.Conn, command []byte, args []Value) {
+func processCommand(conn gnet.Conn, cmdStr []byte, args []Value) {
 	writer := NewWriter(conn)
 
-	handler, ok := Handlers[b2s(command)]
-	if !ok {
-		log.Printf("Invalid command: %s\n", command)
+	cmd := lookupCommand(b2s(cmdStr))
+	if cmd == nil {
+		log.Printf("Invalid command: %s\n", cmdStr)
 		writer.Write(Value{typ: TypeString, str: nil})
 		return
 	}
 
-	// Handle special commands like "SET" or "HSET" that modify the database.
-	if b2s(command) == "SET" || b2s(command) == "HSET" {
-		// Manually constructing the array slice to include command and args.
-		values := make([]Value, len(args)+1)
-		values[0] = Value{typ: TypeBulk, bulk: command}
-		copy(values[1:], args)
-		aof.Write(Value{typ: TypeArray, array: values})
+	// check command args
+	if len(args) < 2 {
+		result := Value{
+			typ: TypeError,
+			str: []byte(fmt.Sprintf("ERR wrong number of arguments for '%s' command", cmd.name)),
+		}
+		writer.Write(result)
+		return
 	}
 
-	result := handler(args)
+	if b2s(cmdStr) == "set" || b2s(cmdStr) == "hset" {
+		// Manually constructing the array slice to include command and args.
+		values := make([]Value, len(args)+1)
+		values[0] = Value{typ: TypeBulk, bulk: cmdStr}
+		copy(values[1:], args)
+		server.db.aof.Write(Value{typ: TypeArray, array: values})
+	}
+
+	result := cmd.handler(args)
 	writer.Write(result)
 }
 

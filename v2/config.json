@@ -1,0 +1,4 @@
+{
+    "port": 6767,
+    "appendOnlyFileName": "db.aof"
+}

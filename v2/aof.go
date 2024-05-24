@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bufio"
+	"bytes"
 	"io"
 	"os"
 	"sync"
@@ -11,7 +11,7 @@ import (
 // Aof manages an append-only file system for storing data.
 type Aof struct {
 	file *os.File
-	rd   *bufio.Reader
+	buf  *bytes.Buffer
 	mu   sync.Mutex
 }
 
@@ -23,13 +23,16 @@ func NewAof(path string) (*Aof, error) {
 
 	aof := &Aof{
 		file: f,
-		rd:   bufio.NewReader(f),
+		buf:  bytes.NewBuffer(make([]byte, 0, 1024)),
 	}
 
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		for range ticker.C {
 			aof.mu.Lock()
+			// flush buffer to disk
+			aof.file.Write(aof.buf.Bytes())
+			aof.buf.Reset()
 			aof.file.Sync()
 			aof.mu.Unlock()
 		}
@@ -47,7 +50,7 @@ func (aof *Aof) Close() error {
 func (aof *Aof) Write(value Value) error {
 	aof.mu.Lock()
 	defer aof.mu.Unlock()
-	_, err := aof.file.Write(value.Marshal())
+	_, err := aof.buf.Write(value.Marshal())
 	return err
 }
 
@@ -72,7 +75,6 @@ func (aof *Aof) Read(fn func(value Value)) error {
 			}
 			return err
 		}
-
 		fn(value)
 	}
 
