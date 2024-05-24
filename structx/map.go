@@ -1,6 +1,7 @@
 package structx
 
 import (
+	"slices"
 	"unsafe"
 
 	"github.com/bytedance/sonic"
@@ -31,8 +32,8 @@ func (m *Map) Get(key string) ([]byte, int64, bool) {
 }
 
 // Set
-func (m *Map) Set(key string, val []byte, ts int64) {
-	m.m.SetTx(key, val, ts)
+func (m *Map) Set(key string, val []byte) {
+	m.m.Set(key, val)
 }
 
 // Remove
@@ -40,14 +41,13 @@ func (m *Map) Remove(key string) bool {
 	return m.m.Remove(key)
 }
 
-// Keys
-func (m *Map) Keys() (keys []string) {
-	keys = make([]string, 0, m.m.Stat().Len)
+// Scan
+func (m *Map) Scan(fn func(key, value []byte)) {
 	m.m.Scan(func(key, val []byte, _ int64) (next bool) {
-		keys = append(keys, string(key))
+		// return copy
+		fn(slices.Clone(key), slices.Clone(val))
 		return true
 	})
-	return
 }
 
 // Len

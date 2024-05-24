@@ -473,15 +473,6 @@ func (db *DB) HRemove(key string, fields ...string) (n int, err error) {
 	return
 }
 
-// HKeys
-func (db *DB) HKeys(key string) ([]string, error) {
-	m, err := db.fetchMap(key)
-	if err != nil {
-		return nil, err
-	}
-	return m.Keys(), nil
-}
-
 // SAdd
 func (db *DB) SAdd(key string, items ...string) (int, error) {
 	s, err := db.fetchSet(key, true)

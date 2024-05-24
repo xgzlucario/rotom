@@ -7,6 +7,7 @@ require (
 	github.com/bytedance/sonic v1.11.6
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
+	github.com/panjf2000/gnet/v2 v2.5.2
 	github.com/rosedblabs/wal v1.3.6
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.9.0
@@ -25,7 +26,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
-	github.com/panjf2000/gnet/v2 v2.5.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect

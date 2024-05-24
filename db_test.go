@@ -167,15 +167,6 @@ func TestHmap(t *testing.T) {
 			res, err := db.HGet(mapkey, key)
 			assert.Nil(err)
 			assert.Equal(res, val)
-
-			// HLen
-			num, err := db.HLen(mapkey)
-			assert.Nil(err)
-
-			// HKeys
-			keys, err := db.HKeys(mapkey)
-			assert.Nil(err)
-			assert.Equal(len(keys), num)
 		}
 	}
 
@@ -221,10 +212,6 @@ func TestHmap(t *testing.T) {
 
 	res, err := db.HLen("fake")
 	assert.Equal(res, 0)
-	assert.ErrorContains(err, ErrWrongType.Error())
-
-	m, err := db.HKeys("fake")
-	assert.Equal(m, nilStrings)
 	assert.ErrorContains(err, ErrWrongType.Error())
 
 	n, err := db.HRemove("fake", "foo")

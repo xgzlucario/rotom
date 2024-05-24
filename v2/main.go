@@ -4,17 +4,18 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"net"
 	"unsafe"
 
 	"github.com/panjf2000/gnet/v2"
 )
 
-func (s *Server) OnBoot(eng gnet.Engine) gnet.Action {
-	s.engine = eng
+func (s *Server) OnBoot(engine gnet.Engine) gnet.Action {
+	s.engine = engine
 	return gnet.None
 }
 
-func (es *Server) OnTraffic(c gnet.Conn) gnet.Action {
+func (s *Server) OnTraffic(c gnet.Conn) gnet.Action {
 	handleConnection(c)
 	return gnet.None
 }
@@ -22,17 +23,17 @@ func (es *Server) OnTraffic(c gnet.Conn) gnet.Action {
 func main() {
 	config, err := LoadConfig("config.json")
 	if err != nil {
-		log.Printf("config error: %v\n", err)
+		log.Printf("load config error: %v\n", err)
 	}
-	err = initServer(config)
-	if err != nil {
+	if err = initDB(config); err != nil {
+		log.Printf("init db error: %v\n", err)
+	}
+	if err = RunServer(config); err != nil {
 		log.Printf("init server error: %v\n", err)
 	}
-	log.Println("rotom server is up.")
-	server.Run()
 }
 
-func handleConnection(conn gnet.Conn) {
+func handleConnection(conn net.Conn) {
 	resp := NewResp(conn)
 	for {
 		value, err := resp.Read()
@@ -52,7 +53,7 @@ func handleConnection(conn gnet.Conn) {
 	}
 }
 
-func processCommand(conn gnet.Conn, cmdStr []byte, args []Value) {
+func processCommand(conn net.Conn, cmdStr []byte, args []Value) {
 	writer := NewWriter(conn)
 
 	cmd := lookupCommand(b2s(cmdStr))
@@ -63,7 +64,7 @@ func processCommand(conn gnet.Conn, cmdStr []byte, args []Value) {
 	}
 
 	// check command args
-	if len(args) < 2 {
+	if len(args) < cmd.arity {
 		result := Value{
 			typ: TypeError,
 			str: []byte(fmt.Sprintf("ERR wrong number of arguments for '%s' command", cmd.name)),
@@ -72,12 +73,12 @@ func processCommand(conn gnet.Conn, cmdStr []byte, args []Value) {
 		return
 	}
 
-	if b2s(cmdStr) == "set" || b2s(cmdStr) == "hset" {
-		// Manually constructing the array slice to include command and args.
+	if b2s(cmdStr) == "set" || b2s(cmdStr) == "hset" || b2s(cmdStr) == "hdel" {
+		// manually constructing the array slice to include command and args
 		values := make([]Value, len(args)+1)
 		values[0] = Value{typ: TypeBulk, bulk: cmdStr}
 		copy(values[1:], args)
-		server.db.aof.Write(Value{typ: TypeArray, array: values})
+		db.aof.Write(Value{typ: TypeArray, array: values})
 	}
 
 	result := cmd.handler(args)

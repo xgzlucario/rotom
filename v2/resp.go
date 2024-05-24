@@ -28,11 +28,11 @@ const (
 
 // Value represents the different types of RESP (Redis Serialization Protocol) values.
 type Value struct {
-	typ ValueType // Type of value ('string', 'error', 'integer', 'bulk', 'array')
-	str []byte    // Used for string and error types
-	// num   int       // Used for integer type
-	bulk  []byte  // Used for bulk strings
-	array []Value // Used for arrays of nested values
+	typ   ValueType // Type of value ('string', 'error', 'integer', 'bulk', 'array')
+	str   []byte    // Used for string and error types
+	num   int64     // Used for integer type
+	bulk  []byte    // Used for bulk strings
+	array []Value   // Used for arrays of nested values
 }
 
 // Resp is a parser for RESP encoded data.
@@ -150,6 +150,8 @@ func (v Value) Marshal() []byte {
 		return v.marshalBulk()
 	case TypeString:
 		return v.marshalString()
+	case TypeInteger:
+		return v.marshalInteger()
 	case TypeNull:
 		return v.marshallNull()
 	case TypeError:
@@ -157,6 +159,11 @@ func (v Value) Marshal() []byte {
 	default:
 		return []byte("unknown type")
 	}
+}
+
+func (v Value) marshalInteger() []byte {
+	str := strconv.FormatInt(v.num, 10)
+	return append([]byte{INTEGER}, append([]byte(str), '\r', '\n')...)
 }
 
 // marshalString marshals a string value into RESP format.

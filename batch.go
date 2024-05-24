@@ -53,7 +53,7 @@ func (db *DB) BatchHSet(key string, batches ...*Batch) error {
 
 	for _, b := range batches {
 		codec = codec.Str(b.Key).Bytes(b.Val).Int(b.Timestamp)
-		m.Set(b.Key, b.Val, b.Timestamp)
+		m.Set(b.Key, b.Val)
 	}
 	db.encode(codec)
 
