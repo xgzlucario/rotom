@@ -6,8 +6,8 @@ import (
 )
 
 type Config struct {
-	Port               int    `json:"port"`
-	AppendOnlyFileName string `json:"appendOnlyFileName"`
+	Port           int    `json:"port"`
+	AppendFileName string `json:"appendfilename"`
 }
 
 func LoadConfig(path string) (config *Config, err error) {

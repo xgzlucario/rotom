@@ -31,8 +31,7 @@ func NewAof(path string) (*Aof, error) {
 		for range ticker.C {
 			aof.mu.Lock()
 			// flush buffer to disk
-			aof.file.Write(aof.buf.Bytes())
-			aof.buf.Reset()
+			aof.buf.WriteTo(aof.file)
 			aof.file.Sync()
 			aof.mu.Unlock()
 		}

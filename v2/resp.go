@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"strconv"
@@ -26,6 +27,10 @@ const (
 	TypeArray
 )
 
+var (
+	CRLF = []byte("\r\n")
+)
+
 // Value represents the different types of RESP (Redis Serialization Protocol) values.
 type Value struct {
 	typ   ValueType // Type of value ('string', 'error', 'integer', 'bulk', 'array')
@@ -45,10 +50,6 @@ func NewResp(rd io.Reader) *Resp {
 	return &Resp{reader: bufio.NewReader(rd)}
 }
 
-func ErrValue(desc string) Value {
-	return Value{typ: TypeError, str: []byte(desc)}
-}
-
 // readLine reads a line ending with CRLF from the reader.
 func (r *Resp) readLine() (line []byte, n int, err error) {
 	for {
@@ -58,7 +59,7 @@ func (r *Resp) readLine() (line []byte, n int, err error) {
 		}
 		n += 1
 		line = append(line, b)
-		if len(line) >= 2 && line[len(line)-2] == '\r' && line[len(line)-1] == '\n' {
+		if len(line) >= 2 && bytes.HasSuffix(line, CRLF) {
 			break
 		}
 	}
@@ -91,8 +92,7 @@ func (r *Resp) Read() (Value, error) {
 	case BULK:
 		return r.readBulk()
 	default:
-		fmt.Printf("Unknown type: %v", string(_type))
-		return Value{}, fmt.Errorf("unknown value type %v", _type)
+		return Value{}, fmt.Errorf("unknown value type %s", string(_type))
 	}
 }
 
@@ -194,21 +194,4 @@ func (v Value) marshallError() []byte {
 // marshallNull marshals a null value into RESP bulk string format.
 func (v Value) marshallNull() []byte {
 	return []byte("$-1\r\n")
-}
-
-// Writer wraps an io.Writer to write RESP formatted data.
-type Writer struct {
-	writer io.Writer
-}
-
-// NewWriter creates a new Writer object.
-func NewWriter(w io.Writer) *Writer {
-	return &Writer{writer: w}
-}
-
-// Write sends a marshaled Value to the underlying writer.
-func (w *Writer) Write(v Value) error {
-	bytes := v.Marshal()
-	_, err := w.writer.Write(bytes)
-	return err
 }

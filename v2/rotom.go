@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
+	"net"
+	"strconv"
 
 	"github.com/panjf2000/gnet/v2"
 	cache "github.com/xgzlucario/GigaCache"
@@ -29,31 +32,38 @@ type (
 	BitMap = *structx.Bitmap
 )
 
-type DB struct {
+type RotomDB struct {
 	strs   *cache.GigaCache
 	extras map[string]any
 	aof    *Aof
 }
 
-type Server struct {
+type RotomServer struct {
 	gnet.BuiltinEventEngine
-	engine gnet.Engine
-	config *Config
+	engine  gnet.Engine
+	clients map[int]*RotomClient
+	config  *Config
 }
 
-type CommandHandler func([]Value) Value
+type RotomClient struct {
+	fd       int
+	conn     net.Conn
+	replyBuf *bytes.Buffer
+	rawargs  []Value // store origin args from client
+	args     []Value // store args except bulk cmdStr
+}
 
-type Command struct {
+type RotomCommand struct {
 	name    string
-	handler CommandHandler
+	handler func(*RotomClient)
 	arity   int
 }
 
 // global varibles
 var (
-	db       DB
-	server   Server
-	cmdTable []Command = []Command{
+	db       RotomDB
+	server   RotomServer
+	cmdTable []RotomCommand = []RotomCommand{
 		{"ping", pingCommand, 0},
 		{"set", setCommand, 2},
 		{"get", getCommand, 1},
@@ -61,11 +71,12 @@ var (
 		{"hget", hgetCommand, 2},
 		{"hdel", hdelCommand, 2},
 		{"hgetall", hgetallCommand, 1},
+		{"expire", expireCommand, 2},
 		// TODO
 	}
 )
 
-func lookupCommand(cmdStr string) *Command {
+func lookupCommand(cmdStr string) *RotomCommand {
 	for _, c := range cmdTable {
 		if c.name == cmdStr {
 			return &c
@@ -77,7 +88,7 @@ func lookupCommand(cmdStr string) *Command {
 func initDB(config *Config) (err error) {
 	db.strs = cache.New(cache.DefaultOptions)
 	db.extras = make(map[string]any)
-	db.aof, err = NewAof(config.AppendOnlyFileName)
+	db.aof, err = NewAof(config.AppendFileName)
 	if err != nil {
 		log.Printf("failed to initialize aof file: %v\n", err)
 		return
@@ -85,11 +96,57 @@ func initDB(config *Config) (err error) {
 	return nil
 }
 
-func RunServer(config *Config) (err error) {
+func Run(config *Config) error {
 	server.config = config
-	defer db.aof.Close()
+	server.clients = make(map[int]*RotomClient)
 
 	servePath := fmt.Sprintf("tcp://:%d", config.Port)
 	log.Printf("rotom server is binding on %s\n", servePath)
 	return gnet.Run(&server, servePath)
+}
+
+func (c *RotomClient) addReplyStr(s string) {
+	c.replyBuf.WriteByte(STRING)
+	c.replyBuf.WriteString(s)
+	c.replyBuf.Write(CRLF)
+}
+
+func (c *RotomClient) addReplyBulk(b []byte) {
+	c.replyBuf.WriteByte(BULK)
+	c.replyBuf.WriteString(strconv.Itoa(len(b)))
+	c.replyBuf.Write(CRLF)
+	c.replyBuf.Write(b)
+	c.replyBuf.Write(CRLF)
+}
+
+func (c *RotomClient) addReplyArrayBulk(b [][]byte) {
+	c.replyBuf.WriteByte(BULK)
+	c.replyBuf.WriteString(strconv.Itoa(len(b)))
+	c.replyBuf.Write(CRLF)
+	for _, val := range b {
+		c.addReplyBulk(val)
+	}
+}
+
+func (c *RotomClient) addReplyInteger(n int64) {
+	c.replyBuf.WriteByte(INTEGER)
+	c.replyBuf.WriteString(strconv.FormatInt(n, 10))
+	c.replyBuf.Write(CRLF)
+}
+
+func (c *RotomClient) addReplyError(err error) {
+	c.replyBuf.WriteByte(ERROR)
+	c.replyBuf.WriteString(err.Error())
+	c.replyBuf.Write(CRLF)
+}
+
+func (c *RotomClient) addReplyNull() {
+	c.write([]byte("$-1\r\n"))
+}
+
+func (c *RotomClient) write(b []byte) {
+	_, err := c.conn.Write(b)
+	if err != nil {
+		log.Printf("Client write buffer error: %v\n", err)
+	}
 }
