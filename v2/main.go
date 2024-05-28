@@ -65,20 +65,25 @@ func handleConnection(conn gnet.Conn) {
 }
 
 func (c *RotomClient) processCommand(cmdStr []byte, args []Value) {
-	cmd := lookupCommand(b2s(cmdStr))
+	c.curCmd = b2s(cmdStr)
+	cmd := lookupCommand(c.curCmd)
 	if cmd == nil {
 		log.Printf("Invalid command: %s\n", cmdStr)
 		c.addReplyNull()
 		goto WRITE
 	}
 
-	c.rawargs = append([]Value{{typ: TypeBulk, bulk: cmdStr}}, args...)
-	c.args = c.rawargs[1:]
-
 	// check command args
 	if len(args) < cmd.arity {
-		c.addReplyWrongNumberArgs()
+		c.addReplyWrongNumberArgs(cmd.name)
 		goto WRITE
+	}
+	c.args = args
+
+	// if aof needed
+	if cmd.aofNeed {
+		args := append([]Value{{typ: TypeBulk, bulk: cmdStr}}, args...)
+		db.aof.Write(Value{typ: TypeArray, array: args})
 	}
 
 	cmd.handler(c)

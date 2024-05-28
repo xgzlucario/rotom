@@ -31,14 +31,13 @@ func setCommand(c *RotomClient) {
 			if len(c.args) > i+3 {
 				seconds, _ = strconv.Atoi(b2s(c.args[i+3].bulk))
 			} else {
-				c.addReplyWrongNumberArgs()
+				c.addReplyWrongNumberArgs(c.curCmd)
 				return
 			}
 		}
 	}
 
 	db.strs.SetEx(b2s(key), value, time.Second*time.Duration(seconds))
-	db.aof.Write(Value{typ: TypeArray, array: c.rawargs})
 	c.addReplyStr("OK")
 }
 
@@ -64,7 +63,6 @@ func expireCommand(c *RotomClient) {
 	seconds := c.args[1].num
 
 	db.strs.SetTTL(b2s(key), seconds*1e9)
-	db.aof.Write(Value{typ: TypeArray, array: c.rawargs})
 	c.addReplyStr("OK")
 }
 
@@ -79,7 +77,6 @@ func hsetCommand(c *RotomClient) {
 		return
 	}
 	m.Set(key, value)
-	db.aof.Write(Value{typ: TypeArray, array: c.rawargs})
 	c.addReplyStr("OK")
 }
 
@@ -115,7 +112,6 @@ func hdelCommand(c *RotomClient) {
 			success++
 		}
 	}
-	db.aof.Write(Value{typ: TypeArray, array: c.rawargs})
 	c.addReplyInteger(success)
 }
 

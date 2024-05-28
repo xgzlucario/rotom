@@ -49,14 +49,15 @@ type RotomClient struct {
 	fd       int
 	conn     net.Conn
 	replyBuf *bytes.Buffer
-	rawargs  []Value // store origin args from client
-	args     []Value // store args except bulk cmdStr
+	curCmd   string
+	args     []Value
 }
 
 type RotomCommand struct {
 	name    string
 	handler func(*RotomClient)
 	arity   int
+	aofNeed bool
 }
 
 // global varibles
@@ -64,14 +65,14 @@ var (
 	db       RotomDB
 	server   RotomServer
 	cmdTable []RotomCommand = []RotomCommand{
-		{"ping", pingCommand, 0},
-		{"set", setCommand, 2},
-		{"get", getCommand, 1},
-		{"hset", hsetCommand, 3},
-		{"hget", hgetCommand, 2},
-		{"hdel", hdelCommand, 2},
-		{"hgetall", hgetallCommand, 1},
-		{"expire", expireCommand, 2},
+		{"ping", pingCommand, 0, false},
+		{"set", setCommand, 2, true},
+		{"get", getCommand, 1, false},
+		{"hset", hsetCommand, 3, true},
+		{"hget", hgetCommand, 2, false},
+		{"hdel", hdelCommand, 2, true},
+		{"hgetall", hgetallCommand, 1, false},
+		{"expire", expireCommand, 2, true},
 		// TODO
 	}
 )
@@ -145,6 +146,6 @@ func (c *RotomClient) addReplyNull() {
 	c.replyBuf.Write(CRLF)
 }
 
-func (c *RotomClient) addReplyWrongNumberArgs() {
-	c.addReplyError(fmt.Errorf("ERR wrong number of arguments for '%s' command", c.rawargs[0].bulk))
+func (c *RotomClient) addReplyWrongNumberArgs(cmd string) {
+	c.addReplyError(fmt.Errorf("ERR wrong number of arguments for '%s' command", cmd))
 }
