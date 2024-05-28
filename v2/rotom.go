@@ -141,12 +141,10 @@ func (c *RotomClient) addReplyError(err error) {
 }
 
 func (c *RotomClient) addReplyNull() {
-	c.write([]byte("$-1\r\n"))
+	c.replyBuf.WriteString("$-1")
+	c.replyBuf.Write(CRLF)
 }
 
-func (c *RotomClient) write(b []byte) {
-	_, err := c.conn.Write(b)
-	if err != nil {
-		log.Printf("Client write buffer error: %v\n", err)
-	}
+func (c *RotomClient) addReplyWrongNumberArgs() {
+	c.addReplyError(fmt.Errorf("ERR wrong number of arguments for '%s' command", c.rawargs[0].bulk))
 }

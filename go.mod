@@ -4,16 +4,16 @@ go 1.22
 
 require (
 	github.com/RoaringBitmap/roaring v1.9.3
-	github.com/bytedance/sonic v1.11.6
+	github.com/bytedance/sonic v1.11.7
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
 	github.com/panjf2000/gnet/v2 v2.5.2
 	github.com/rosedblabs/wal v1.3.6
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.9.0
-	github.com/xgzlucario/GigaCache v0.0.0-20240504114334-a0b0c3267b83
+	github.com/xgzlucario/GigaCache v0.0.0-20240517172600-7593182547fc
 	github.com/xgzlucario/quicklist v0.0.0-20240428064242-d453ca4cbed3
-	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f
+	golang.org/x/exp v0.0.0-20240525044651-4c93da0ed11d
 )
 
 require (

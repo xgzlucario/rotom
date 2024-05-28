@@ -411,7 +411,7 @@ func (db *DB) Remove(keys ...string) (n int) {
 
 // Len
 func (db *DB) Len() int {
-	return db.m.Stat().Len + db.cm.Count()
+	return db.m.GetStats().Len + db.cm.Count()
 }
 
 // GC triggers the garbage collection to evict expired kv datas.

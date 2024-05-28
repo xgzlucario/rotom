@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"log"
 	"unsafe"
 
@@ -73,14 +72,14 @@ func (c *RotomClient) processCommand(cmdStr []byte, args []Value) {
 		goto WRITE
 	}
 
-	// check command args
-	if len(args) < cmd.arity {
-		c.addReplyError(fmt.Errorf("ERR wrong number of arguments for '%s' command", cmd.name))
-		goto WRITE
-	}
-
 	c.rawargs = append([]Value{{typ: TypeBulk, bulk: cmdStr}}, args...)
 	c.args = c.rawargs[1:]
+
+	// check command args
+	if len(args) < cmd.arity {
+		c.addReplyWrongNumberArgs()
+		goto WRITE
+	}
 
 	cmd.handler(c)
 

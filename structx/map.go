@@ -52,7 +52,7 @@ func (m *Map) Scan(fn func(key, value []byte)) {
 
 // Len
 func (m *Map) Len() (n int) {
-	return m.m.Stat().Len
+	return m.m.GetStats().Len
 }
 
 type mentry struct {
@@ -63,7 +63,7 @@ type mentry struct {
 
 // MarshalJSON
 func (m *Map) MarshalJSON() ([]byte, error) {
-	n := m.m.Stat().Len
+	n := m.m.GetStats().Len
 	entry := mentry{
 		K: make([]string, 0, n),
 		V: make([][]byte, 0, n),

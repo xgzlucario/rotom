@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"unsafe"
 
-	cache "github.com/xgzlucario/GigaCache"
 	"golang.org/x/exp/constraints"
 )
 
@@ -12,8 +11,6 @@ const (
 	_true  = 1
 	_false = 0
 )
-
-var codecPool = cache.NewBufferPool()
 
 // Codec is the primary type for encoding data into a specific format.
 type Codec struct {
@@ -24,11 +21,10 @@ type Integer constraints.Integer
 
 // NewCodec
 func NewCodec() *Codec {
-	return &Codec{b: codecPool.Get(32)[:0]}
+	return &Codec{b: make([]byte, 0, 16)}
 }
 
 func (s *Codec) Recycle() {
-	codecPool.Put(s.b)
 }
 
 func (s *Codec) Content() []byte {

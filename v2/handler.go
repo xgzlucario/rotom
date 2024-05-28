@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -18,8 +20,24 @@ func pingCommand(c *RotomClient) {
 func setCommand(c *RotomClient) {
 	key := c.args[0].bulk
 	value := c.args[1].bulk
+	var seconds int
 
-	db.strs.Set(b2s(key), value)
+	for i, arg := range c.args[2:] {
+		switch b2s(arg.bulk) {
+		case "NX":
+			// TODO
+
+		case "EX":
+			if len(c.args) > i+3 {
+				seconds, _ = strconv.Atoi(b2s(c.args[i+3].bulk))
+			} else {
+				c.addReplyWrongNumberArgs()
+				return
+			}
+		}
+	}
+
+	db.strs.SetEx(b2s(key), value, time.Second*time.Duration(seconds))
 	db.aof.Write(Value{typ: TypeArray, array: c.rawargs})
 	c.addReplyStr("OK")
 }
