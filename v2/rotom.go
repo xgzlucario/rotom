@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"net"
 	"strconv"
 
 	"github.com/panjf2000/gnet/v2"
@@ -47,7 +46,6 @@ type RotomServer struct {
 
 type RotomClient struct {
 	fd       int
-	conn     net.Conn
 	replyBuf *bytes.Buffer
 	curCmd   string
 	args     []Value
@@ -56,7 +54,7 @@ type RotomClient struct {
 type RotomCommand struct {
 	name    string
 	handler func(*RotomClient)
-	arity   int
+	arity   int // arity represents the minimal number of arguments that command accepts.
 	aofNeed bool
 }
 
@@ -72,7 +70,6 @@ var (
 		{"hget", hgetCommand, 2, false},
 		{"hdel", hdelCommand, 2, true},
 		{"hgetall", hgetallCommand, 1, false},
-		{"expire", expireCommand, 2, true},
 		// TODO
 	}
 )
@@ -89,20 +86,39 @@ func lookupCommand(cmdStr string) *RotomCommand {
 func initDB(config *Config) (err error) {
 	db.strs = cache.New(cache.DefaultOptions)
 	db.extras = make(map[string]any)
+
 	db.aof, err = NewAof(config.AppendFileName)
 	if err != nil {
 		log.Printf("failed to initialize aof file: %v\n", err)
 		return
 	}
+
+	// Create client0 to process command from aof file.
+	client0 := &RotomClient{
+		fd:       0,
+		replyBuf: bytes.NewBuffer(nil),
+	}
+
+	log.Printf("start loading aof file...")
+
+	// Load the initial data into memory by processing each stored command.
+	db.aof.Read(func(value Value) {
+		command := value.array[0].bulk
+		args := value.array[1:]
+
+		client0.processCommand(command, args)
+		client0.replyBuf.Reset()
+	})
+
 	return nil
 }
 
 func Run(config *Config) error {
 	server.config = config
 	server.clients = make(map[int]*RotomClient)
-
 	servePath := fmt.Sprintf("tcp://:%d", config.Port)
 	log.Printf("rotom server is binding on %s\n", servePath)
+
 	return gnet.Run(&server, servePath)
 }
 
@@ -146,6 +162,6 @@ func (c *RotomClient) addReplyNull() {
 	c.replyBuf.Write(CRLF)
 }
 
-func (c *RotomClient) addReplyWrongNumberArgs(cmd string) {
-	c.addReplyError(fmt.Errorf("ERR wrong number of arguments for '%s' command", cmd))
+func (c *RotomClient) addReplyWrongArgs() {
+	c.addReplyError(fmt.Errorf("ERR wrong number of arguments for '%s' command", c.curCmd))
 }

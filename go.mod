@@ -13,7 +13,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/xgzlucario/GigaCache v0.0.0-20240517172600-7593182547fc
 	github.com/xgzlucario/quicklist v0.0.0-20240428064242-d453ca4cbed3
-	golang.org/x/exp v0.0.0-20240525044651-4c93da0ed11d
+	golang.org/x/exp v0.0.0-20240529005216-23cca8864a10
 )
 
 require (

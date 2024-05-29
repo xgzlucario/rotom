@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
 )
 
@@ -20,24 +21,23 @@ func pingCommand(c *RotomClient) {
 func setCommand(c *RotomClient) {
 	key := c.args[0].bulk
 	value := c.args[1].bulk
-	var seconds int
+	var ttl int64
 
 	for i, arg := range c.args[2:] {
 		switch b2s(arg.bulk) {
 		case "NX":
-			// TODO
-
+		case "PX":
 		case "EX":
 			if len(c.args) > i+3 {
-				seconds, _ = strconv.Atoi(b2s(c.args[i+3].bulk))
+				seconds, _ := strconv.Atoi(b2s(c.args[i+3].bulk))
+				ttl = cache.GetNanoSec() + int64(seconds)*int64(time.Second)
 			} else {
-				c.addReplyWrongNumberArgs(c.curCmd)
+				c.addReplyWrongArgs()
 				return
 			}
 		}
 	}
-
-	db.strs.SetEx(b2s(key), value, time.Second*time.Duration(seconds))
+	db.strs.SetTx(b2s(key), value, ttl)
 	c.addReplyStr("OK")
 }
 
@@ -56,14 +56,6 @@ func getCommand(c *RotomClient) {
 		return
 	}
 	c.addReplyNull()
-}
-
-func expireCommand(c *RotomClient) {
-	key := c.args[0].bulk
-	seconds := c.args[1].num
-
-	db.strs.SetTTL(b2s(key), seconds*1e9)
-	c.addReplyStr("OK")
 }
 
 func hsetCommand(c *RotomClient) {
@@ -135,21 +127,21 @@ func fetchMap(key string, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return structx.NewMap() }, setnx...)
 }
 
-func fetchSet(key string, setnx ...bool) (Set, error) {
-	return fetch(key, func() Set { return structx.NewSet() }, setnx...)
-}
+// func fetchSet(key string, setnx ...bool) (Set, error) {
+// 	return fetch(key, func() Set { return structx.NewSet() }, setnx...)
+// }
 
-func fetchList(key string, setnx ...bool) (List, error) {
-	return fetch(key, func() List { return structx.NewList() }, setnx...)
-}
+// func fetchList(key string, setnx ...bool) (List, error) {
+// 	return fetch(key, func() List { return structx.NewList() }, setnx...)
+// }
 
-func fetchBitMap(key string, setnx ...bool) (BitMap, error) {
-	return fetch(key, func() BitMap { return structx.NewBitmap() }, setnx...)
-}
+// func fetchBitMap(key string, setnx ...bool) (BitMap, error) {
+// 	return fetch(key, func() BitMap { return structx.NewBitmap() }, setnx...)
+// }
 
-func fetchZSet(key string, setnx ...bool) (ZSet, error) {
-	return fetch(key, func() ZSet { return structx.NewZSet() }, setnx...)
-}
+// func fetchZSet(key string, setnx ...bool) (ZSet, error) {
+// 	return fetch(key, func() ZSet { return structx.NewZSet() }, setnx...)
+// }
 
 func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
 	item, ok := db.extras[key]
