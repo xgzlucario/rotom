@@ -70,6 +70,9 @@ var (
 		{"hget", hgetCommand, 2, false},
 		{"hdel", hdelCommand, 2, true},
 		{"hgetall", hgetallCommand, 1, false},
+		{"lpush", lpushCommand, 2, true},
+		{"rpush", rpushCommand, 2, true},
+		{"lrange", lrangeCommand, 3, false},
 		// TODO
 	}
 )
@@ -145,9 +148,9 @@ func (c *RotomClient) addReplyArrayBulk(b [][]byte) {
 	}
 }
 
-func (c *RotomClient) addReplyInteger(n int64) {
+func (c *RotomClient) addReplyInteger(n int) {
 	c.replyBuf.WriteByte(INTEGER)
-	c.replyBuf.WriteString(strconv.FormatInt(n, 10))
+	c.replyBuf.WriteString(strconv.Itoa(n))
 	c.replyBuf.Write(CRLF)
 }
 
@@ -164,4 +167,10 @@ func (c *RotomClient) addReplyNull() {
 
 func (c *RotomClient) addReplyWrongArgs() {
 	c.addReplyError(fmt.Errorf("ERR wrong number of arguments for '%s' command", c.curCmd))
+}
+
+func (c *RotomClient) reset() {
+	c.curCmd = ""
+	c.replyBuf.Reset()
+	c.args = c.args[:0]
 }

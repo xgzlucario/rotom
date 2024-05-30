@@ -63,7 +63,7 @@ func handleConnection(conn gnet.Conn) {
 		if err = conn.AsyncWrite(client.replyBuf.Bytes(), nil); err != nil {
 			log.Printf("async write reply error: %v", err)
 		}
-		client.replyBuf.Reset()
+		client.reset()
 	}
 }
 

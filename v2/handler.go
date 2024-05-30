@@ -98,7 +98,7 @@ func hdelCommand(c *RotomClient) {
 		c.addReplyError(err)
 		return
 	}
-	var success int64
+	var success int
 	for _, v := range keys {
 		if m.Remove(b2s(v.bulk)) {
 			success++
@@ -123,6 +123,50 @@ func hgetallCommand(c *RotomClient) {
 	c.addReplyArrayBulk(res)
 }
 
+func lpushCommand(c *RotomClient) {
+	pushCommand(c, true)
+}
+
+func rpushCommand(c *RotomClient) {
+	pushCommand(c, false)
+}
+
+func pushCommand(c *RotomClient, isLeft bool) {
+	key := c.args[0].bulk
+
+	ls, err := fetchList(b2s(key), true)
+	if err != nil {
+		c.addReplyError(err)
+		return
+	}
+	for _, arg := range c.args[1:] {
+		if isLeft {
+			ls.LPush(b2s(arg.bulk))
+		} else {
+			ls.RPush(b2s(arg.bulk))
+		}
+	}
+	c.addReplyInteger(ls.Size())
+}
+
+func lrangeCommand(c *RotomClient) {
+	key := c.args[0].bulk
+	start := c.args[1].num
+	end := c.args[2].num
+
+	ls, err := fetchList(b2s(key), false)
+	if err != nil {
+		c.addReplyError(err)
+		return
+	}
+	var items [][]byte
+	ls.Range(int(start), int(end), func(data []byte) bool {
+		items = append(items, data)
+		return false
+	})
+	c.addReplyArrayBulk(items)
+}
+
 func fetchMap(key string, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return structx.NewMap() }, setnx...)
 }
@@ -131,9 +175,9 @@ func fetchMap(key string, setnx ...bool) (Map, error) {
 // 	return fetch(key, func() Set { return structx.NewSet() }, setnx...)
 // }
 
-// func fetchList(key string, setnx ...bool) (List, error) {
-// 	return fetch(key, func() List { return structx.NewList() }, setnx...)
-// }
+func fetchList(key string, setnx ...bool) (List, error) {
+	return fetch(key, func() List { return structx.NewList() }, setnx...)
+}
 
 // func fetchBitMap(key string, setnx ...bool) (BitMap, error) {
 // 	return fetch(key, func() BitMap { return structx.NewBitmap() }, setnx...)
