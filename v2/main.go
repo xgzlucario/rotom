@@ -84,7 +84,7 @@ func (c *RotomClient) processCommand(cmdStr []byte, args []Value) {
 	c.args = args
 
 	// Write aof file if needed.
-	if cmd.aofNeed && c.fd > 0 {
+	if server.config.AppendOnly && cmd.aofNeed && c.fd > 0 {
 		args := append([]Value{{typ: TypeBulk, bulk: cmdStr}}, args...)
 		db.aof.Write(Value{typ: TypeArray, array: args})
 	}

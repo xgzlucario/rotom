@@ -149,24 +149,6 @@ func pushCommand(c *RotomClient, isLeft bool) {
 	c.addReplyInteger(ls.Size())
 }
 
-func lrangeCommand(c *RotomClient) {
-	key := c.args[0].bulk
-	start := c.args[1].num
-	end := c.args[2].num
-
-	ls, err := fetchList(b2s(key), false)
-	if err != nil {
-		c.addReplyError(err)
-		return
-	}
-	var items [][]byte
-	ls.Range(int(start), int(end), func(data []byte) bool {
-		items = append(items, data)
-		return false
-	})
-	c.addReplyArrayBulk(items)
-}
-
 func fetchMap(key string, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return structx.NewMap() }, setnx...)
 }

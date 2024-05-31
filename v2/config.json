@@ -1,4 +1,5 @@
 {
     "port": 6767,
-    "appendfilename": "db.aof"
+    "appendonly": true,
+    "appendfilename": "appendonly.aof"
 }

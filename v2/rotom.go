@@ -72,7 +72,6 @@ var (
 		{"hgetall", hgetallCommand, 1, false},
 		{"lpush", lpushCommand, 2, true},
 		{"rpush", rpushCommand, 2, true},
-		{"lrange", lrangeCommand, 3, false},
 		// TODO
 	}
 )
@@ -90,28 +89,30 @@ func initDB(config *Config) (err error) {
 	db.strs = cache.New(cache.DefaultOptions)
 	db.extras = make(map[string]any)
 
-	db.aof, err = NewAof(config.AppendFileName)
-	if err != nil {
-		log.Printf("failed to initialize aof file: %v\n", err)
-		return
+	if config.AppendOnly {
+		db.aof, err = NewAof(config.AppendFileName)
+		if err != nil {
+			log.Printf("failed to initialize aof file: %v\n", err)
+			return
+		}
+
+		// Create client0 to process command from aof file.
+		client0 := &RotomClient{
+			fd:       0,
+			replyBuf: bytes.NewBuffer(nil),
+		}
+
+		log.Printf("start loading aof file...")
+
+		// Load the initial data into memory by processing each stored command.
+		db.aof.Read(func(value Value) {
+			command := value.array[0].bulk
+			args := value.array[1:]
+
+			client0.processCommand(command, args)
+			client0.replyBuf.Reset()
+		})
 	}
-
-	// Create client0 to process command from aof file.
-	client0 := &RotomClient{
-		fd:       0,
-		replyBuf: bytes.NewBuffer(nil),
-	}
-
-	log.Printf("start loading aof file...")
-
-	// Load the initial data into memory by processing each stored command.
-	db.aof.Read(func(value Value) {
-		command := value.array[0].bulk
-		args := value.array[1:]
-
-		client0.processCommand(command, args)
-		client0.replyBuf.Reset()
-	})
 
 	return nil
 }

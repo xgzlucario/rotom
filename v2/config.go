@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	Port           int    `json:"port"`
+	AppendOnly     bool   `json:"appendonly"`
 	AppendFileName string `json:"appendfilename"`
 }
 
