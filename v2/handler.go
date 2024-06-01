@@ -14,89 +14,82 @@ var (
 	ErrWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 )
 
-func pingCommand(c *RotomClient) {
-	c.addReplyStr("PONG")
+func pingCommand(_ []Value) Value {
+	return Value{typ: STRING, str: "PONG"}
 }
 
-func setCommand(c *RotomClient) {
-	key := c.args[0].bulk
-	value := c.args[1].bulk
+func setCommand(args []Value) Value {
+	key := args[0].bulk
+	value := args[1].bulk
 	var ttl int64
 
-	for i, arg := range c.args[2:] {
+	for i, arg := range args[2:] {
 		switch b2s(arg.bulk) {
 		case "NX":
 		case "PX":
 		case "EX":
-			if len(c.args) > i+3 {
-				seconds, _ := strconv.Atoi(b2s(c.args[i+3].bulk))
+			if len(args) > i+3 {
+				seconds, _ := strconv.Atoi(b2s(args[i+3].bulk))
 				ttl = cache.GetNanoSec() + int64(seconds)*int64(time.Second)
 			} else {
-				c.addReplyWrongArgs()
-				return
+				return NewErrValue(ErrWrongArgs("set"))
 			}
 		}
 	}
 	db.strs.SetTx(b2s(key), value, ttl)
-	c.addReplyStr("OK")
+	return ValueOK
 }
 
-func getCommand(c *RotomClient) {
-	key := c.args[0].bulk
+func getCommand(args []Value) Value {
+	key := args[0].bulk
 
 	value, _, ok := db.strs.Get(b2s(key))
 	if ok {
-		c.addReplyBulk(value)
-		return
+		return NewBulkValue(value)
 	}
 	// check extra maps
 	_, ok = db.extras[b2s(key)]
 	if ok {
-		c.addReplyError(ErrWrongType)
-		return
+		return NewErrValue(ErrWrongType)
 	}
-	c.addReplyNull()
+	return ValueNull
 }
 
-func hsetCommand(c *RotomClient) {
-	hash := b2s(c.args[0].bulk)
-	key := b2s(c.args[1].bulk)
-	value := c.args[2].bulk
+func hsetCommand(args []Value) Value {
+	hash := b2s(args[0].bulk)
+	key := b2s(args[1].bulk)
+	value := args[2].bulk
 
 	m, err := fetchMap(hash, true)
 	if err != nil {
-		c.addReplyError(err)
-		return
+		return NewErrValue(err)
 	}
 	m.Set(key, value)
-	c.addReplyStr("OK")
+	return ValueOK
 }
 
-func hgetCommand(c *RotomClient) {
-	hash := c.args[0].bulk
-	key := c.args[1].bulk
+func hgetCommand(args []Value) Value {
+	hash := args[0].bulk
+	key := args[1].bulk
 
 	m, err := fetchMap(b2s(hash))
 	if err != nil {
-		c.addReplyError(err)
-		return
+		return NewErrValue(ErrWrongType)
 	}
 	value, _, ok := m.Get(b2s(key))
 	if !ok {
-		c.addReplyNull()
-		return
+		return ValueNull
 	}
-	c.addReplyBulk(value)
+	return NewBulkValue(value)
 }
 
-func hdelCommand(c *RotomClient) {
-	hash := c.args[0].bulk
-	keys := c.args[1:]
+func hdelCommand(args []Value) Value {
+	hash := args[0].bulk
+	keys := args[1:]
 
 	m, err := fetchMap(b2s(hash))
 	if err != nil {
-		c.addReplyError(err)
-		return
+		return NewErrValue(err)
 	}
 	var success int
 	for _, v := range keys {
@@ -104,49 +97,23 @@ func hdelCommand(c *RotomClient) {
 			success++
 		}
 	}
-	c.addReplyInteger(success)
+	return NewIntegerValue(success)
 }
 
-func hgetallCommand(c *RotomClient) {
-	hash := c.args[0].bulk
+func hgetallCommand(args []Value) Value {
+	hash := args[0].bulk
 
 	m, err := fetchMap(b2s(hash))
 	if err != nil {
-		c.addReplyError(err)
-		return
+		return NewErrValue(err)
 	}
-	var res [][]byte
+
+	res := Value{typ: ARRAY}
 	m.Scan(func(key, value []byte) {
-		res = append(res, key)
-		res = append(res, value)
+		res.array = append(res.array, Value{typ: BULK, bulk: key})
+		res.array = append(res.array, Value{typ: BULK, bulk: value})
 	})
-	c.addReplyArrayBulk(res)
-}
-
-func lpushCommand(c *RotomClient) {
-	pushCommand(c, true)
-}
-
-func rpushCommand(c *RotomClient) {
-	pushCommand(c, false)
-}
-
-func pushCommand(c *RotomClient, isLeft bool) {
-	key := c.args[0].bulk
-
-	ls, err := fetchList(b2s(key), true)
-	if err != nil {
-		c.addReplyError(err)
-		return
-	}
-	for _, arg := range c.args[1:] {
-		if isLeft {
-			ls.LPush(b2s(arg.bulk))
-		} else {
-			ls.RPush(b2s(arg.bulk))
-		}
-	}
-	c.addReplyInteger(ls.Size())
+	return res
 }
 
 func fetchMap(key string, setnx ...bool) (Map, error) {
@@ -157,9 +124,9 @@ func fetchMap(key string, setnx ...bool) (Map, error) {
 // 	return fetch(key, func() Set { return structx.NewSet() }, setnx...)
 // }
 
-func fetchList(key string, setnx ...bool) (List, error) {
-	return fetch(key, func() List { return structx.NewList() }, setnx...)
-}
+// func fetchList(key string, setnx ...bool) (List, error) {
+// 	return fetch(key, func() List { return structx.NewList() }, setnx...)
+// }
 
 // func fetchBitMap(key string, setnx ...bool) (BitMap, error) {
 // 	return fetch(key, func() BitMap { return structx.NewBitmap() }, setnx...)

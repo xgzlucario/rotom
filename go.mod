@@ -7,13 +7,13 @@ require (
 	github.com/bytedance/sonic v1.11.8
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/orcaman/concurrent-map/v2 v2.0.1
-	github.com/panjf2000/gnet/v2 v2.5.2
 	github.com/rosedblabs/wal v1.3.6
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
 	github.com/stretchr/testify v1.9.0
-	github.com/xgzlucario/GigaCache v0.0.0-20240517172600-7593182547fc
+	github.com/xgzlucario/GigaCache v0.0.0-20240531152919-576765cef731
 	github.com/xgzlucario/quicklist v0.0.0-20240530174658-6f1a884f579b
-	golang.org/x/exp v0.0.0-20240530194437-404ba88c7ed0
+	golang.org/x/exp v0.0.0-20240531132922-fd00a4e0eefc
+	golang.org/x/sys v0.20.0
 )
 
 require (
@@ -29,12 +29,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	go.uber.org/atomic v1.7.0 // indirect
-	go.uber.org/multierr v1.6.0 // indirect
-	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect
-	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.20.0 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -4,22 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"strconv"
+	"net"
+	"os"
 
-	"github.com/panjf2000/gnet/v2"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
-)
-
-// DataType is the data type for Rotom.
-type DataType byte
-
-const (
-	TypeMap DataType = iota + 1
-	TypeSet
-	TypeList
-	TypeZSet
-	TypeBitmap
 )
 
 // Type aliases for built-in types.
@@ -31,38 +20,27 @@ type (
 	BitMap = *structx.Bitmap
 )
 
-type RotomDB struct {
+type DB struct {
 	strs   *cache.GigaCache
 	extras map[string]any
 	aof    *Aof
 }
 
-type RotomServer struct {
-	gnet.BuiltinEventEngine
-	engine  gnet.Engine
-	clients map[int]*RotomClient
-	config  *Config
-}
+type Server struct{}
 
-type RotomClient struct {
-	fd       int
-	replyBuf *bytes.Buffer
-	curCmd   string
-	args     []Value
-}
-
-type RotomCommand struct {
+type Command struct {
 	name    string
-	handler func(*RotomClient)
+	handler func([]Value) Value
 	arity   int // arity represents the minimal number of arguments that command accepts.
 	aofNeed bool
 }
 
 // global varibles
 var (
-	db       RotomDB
-	server   RotomServer
-	cmdTable []RotomCommand = []RotomCommand{
+	config   *Config
+	db       DB
+	server   Server
+	cmdTable []Command = []Command{
 		{"ping", pingCommand, 0, false},
 		{"set", setCommand, 2, true},
 		{"get", getCommand, 1, false},
@@ -70,23 +48,37 @@ var (
 		{"hget", hgetCommand, 2, false},
 		{"hdel", hdelCommand, 2, true},
 		{"hgetall", hgetallCommand, 1, false},
-		{"lpush", lpushCommand, 2, true},
-		{"rpush", rpushCommand, 2, true},
 		// TODO
 	}
 )
 
-func lookupCommand(cmdStr string) *RotomCommand {
+func lookupCommand(command string) (*Command, error) {
 	for _, c := range cmdTable {
-		if c.name == cmdStr {
-			return &c
+		if c.name == command {
+			return &c, nil
 		}
 	}
-	return nil
+	return nil, fmt.Errorf("invalid command: %s", command)
 }
 
-func initDB(config *Config) (err error) {
-	db.strs = cache.New(cache.DefaultOptions)
+func (cmd *Command) writeAofFile(aof *Aof, args []Value) {
+	if cmd.aofNeed {
+		aof.Write(Value{typ: ARRAY, array: args})
+	}
+}
+
+func (cmd *Command) processCommand(args []Value) Value {
+	// Check command args.
+	if len(args) < cmd.arity {
+		return NewErrValue(ErrWrongArgs(cmd.name))
+	}
+	return cmd.handler(args)
+}
+
+func InitDB() (err error) {
+	options := cache.DefaultOptions
+	options.ConcurrencySafe = false
+	db.strs = cache.New(options)
 	db.extras = make(map[string]any)
 
 	if config.AppendOnly {
@@ -96,82 +88,76 @@ func initDB(config *Config) (err error) {
 			return
 		}
 
-		// Create client0 to process command from aof file.
-		client0 := &RotomClient{
-			fd:       0,
-			replyBuf: bytes.NewBuffer(nil),
-		}
-
 		log.Printf("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
 		db.aof.Read(func(value Value) {
-			command := value.array[0].bulk
+			command := bytes.ToLower(value.array[0].bulk)
 			args := value.array[1:]
 
-			client0.processCommand(command, args)
-			client0.replyBuf.Reset()
+			cmd, err := lookupCommand(b2s(command))
+			if err == nil {
+				cmd.processCommand(args)
+			}
 		})
 	}
 
 	return nil
 }
 
-func Run(config *Config) error {
-	server.config = config
-	server.clients = make(map[int]*RotomClient)
-	servePath := fmt.Sprintf("tcp://:%d", config.Port)
-	log.Printf("rotom server is binding on %s\n", servePath)
+func (s *Server) Run() {
+	epoller, err := MkEpoll()
+	if err != nil {
+		panic(err)
+	}
 
-	return gnet.Run(&server, servePath)
-}
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", config.Port))
+	if err != nil {
+		fmt.Println("Error creating listener:", err)
+		os.Exit(1)
+	}
+	defer listener.Close()
 
-func (c *RotomClient) addReplyStr(s string) {
-	c.replyBuf.WriteByte(STRING)
-	c.replyBuf.WriteString(s)
-	c.replyBuf.Write(CRLF)
-}
+	// epoll waiter
+	go func() {
+		var buf = make([]byte, 512)
+		for {
+			connections, err := epoller.Wait()
+			if err != nil {
+				log.Printf("failed to epoll wait %v", err)
+				continue
+			}
 
-func (c *RotomClient) addReplyBulk(b []byte) {
-	c.replyBuf.WriteByte(BULK)
-	c.replyBuf.WriteString(strconv.Itoa(len(b)))
-	c.replyBuf.Write(CRLF)
-	c.replyBuf.Write(b)
-	c.replyBuf.Write(CRLF)
-}
+			for _, conn := range connections {
+				if conn == nil {
+					break
+				}
 
-func (c *RotomClient) addReplyArrayBulk(b [][]byte) {
-	c.replyBuf.WriteByte(BULK)
-	c.replyBuf.WriteString(strconv.Itoa(len(b)))
-	c.replyBuf.Write(CRLF)
-	for _, val := range b {
-		c.addReplyBulk(val)
+				if n, err := conn.Read(buf); err != nil {
+					if err := epoller.Remove(conn); err != nil {
+						log.Printf("failed to remove %v", err)
+					}
+					conn.Close()
+
+				} else {
+					handleConnection(buf[:n], conn)
+				}
+			}
+		}
+	}()
+
+	log.Println("rotom server is ready to accept.")
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection:", err)
+			continue
+		}
+		epoller.Add(conn)
 	}
 }
 
-func (c *RotomClient) addReplyInteger(n int) {
-	c.replyBuf.WriteByte(INTEGER)
-	c.replyBuf.WriteString(strconv.Itoa(n))
-	c.replyBuf.Write(CRLF)
-}
-
-func (c *RotomClient) addReplyError(err error) {
-	c.replyBuf.WriteByte(ERROR)
-	c.replyBuf.WriteString(err.Error())
-	c.replyBuf.Write(CRLF)
-}
-
-func (c *RotomClient) addReplyNull() {
-	c.replyBuf.WriteString("$-1")
-	c.replyBuf.Write(CRLF)
-}
-
-func (c *RotomClient) addReplyWrongArgs() {
-	c.addReplyError(fmt.Errorf("ERR wrong number of arguments for '%s' command", c.curCmd))
-}
-
-func (c *RotomClient) reset() {
-	c.curCmd = ""
-	c.replyBuf.Reset()
-	c.args = c.args[:0]
+func ErrWrongArgs(cmd string) error {
+	return fmt.Errorf("ERR wrong number of arguments for '%s' command", cmd)
 }

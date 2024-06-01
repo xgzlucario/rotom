@@ -3,91 +3,76 @@ package main
 import (
 	"bytes"
 	"log"
-
-	"github.com/panjf2000/gnet/v2"
+	"net"
+	"syscall"
 )
 
-func (s *RotomServer) OnBoot(engine gnet.Engine) gnet.Action {
-	s.engine = engine
-	return gnet.None
-}
-
-func (s *RotomServer) OnTraffic(c gnet.Conn) gnet.Action {
-	handleConnection(c)
-	return gnet.None
-}
-
 func main() {
-	config, err := LoadConfig("config.json")
+	var err error
+	config, err = LoadConfig("config.json")
 	if err != nil {
-		log.Printf("load config error: %v\n", err)
+		log.Panicf("load config error: %v\n", err)
 	}
-	if err = initDB(config); err != nil {
-		log.Printf("init db error: %v\n", err)
+	if err = InitDB(); err != nil {
+		log.Panicf("init db error: %v\n", err)
 	}
-	if err = Run(config); err != nil {
-		log.Printf("init server error: %v\n", err)
-	}
+	setLimit()
+	server.Run()
 }
 
-func handleConnection(conn gnet.Conn) {
-	fd := conn.Fd()
-	client, ok := server.clients[fd]
-	if !ok {
-		client = &RotomClient{
-			fd:       fd,
-			replyBuf: bytes.NewBuffer(make([]byte, 0, 16)),
-		}
-		server.clients[fd] = client
-
-		log.Printf("connected to new client:%d", fd)
-	}
-
-	resp := NewResp(conn)
+func handleConnection(buf []byte, conn net.Conn) {
+	resp := NewResp(bytes.NewReader(buf))
 	for {
 		value, err := resp.Read()
 		if err != nil {
 			return
 		}
 
-		if value.typ != TypeArray || len(value.array) == 0 {
+		if value.typ != ARRAY || len(value.array) == 0 {
 			log.Println("invalid request, expected non-empty array")
 			continue
 		}
 
-		command := bytes.ToLower(value.array[0].bulk)
+		value.array[0].bulk = bytes.ToLower(value.array[0].bulk)
+		command := value.array[0].bulk
 		args := value.array[1:]
 
-		client.processCommand(command, args)
+		var res Value
 
-		if err = conn.AsyncWrite(client.replyBuf.Bytes(), nil); err != nil {
-			log.Printf("async write reply error: %v", err)
+		// Lookup for command.
+		cmd, err := lookupCommand(b2s(command))
+		if err != nil {
+			log.Printf("%v", err)
+			res = NewErrValue(err)
+
+		} else {
+			// Write aof file if needed.
+			if config.AppendOnly {
+				cmd.writeAofFile(db.aof, value.array)
+			}
+
+			// Process command.
+			res = cmd.processCommand(args)
 		}
-		client.reset()
+
+		// Async write result.
+		go func() {
+			if _, err = conn.Write(res.Marshal()); err != nil {
+				log.Printf("write reply error: %v", err)
+			}
+		}()
 	}
 }
 
-func (c *RotomClient) processCommand(cmdStr []byte, args []Value) {
-	c.curCmd = b2s(cmdStr)
-	cmd := lookupCommand(c.curCmd)
-	if cmd == nil {
-		log.Printf("invalid command: %s\n", cmdStr)
-		c.addReplyNull()
-		return
+func setLimit() {
+	var rLimit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+		panic(err)
+	}
+	rLimit.Cur = rLimit.Max
+	if err := syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit); err != nil {
+		panic(err)
 	}
 
-	// Check command args.
-	if len(args) < cmd.arity {
-		c.addReplyWrongArgs()
-		return
-	}
-	c.args = args
-
-	// Write aof file if needed.
-	if server.config.AppendOnly && cmd.aofNeed && c.fd > 0 {
-		args := append([]Value{{typ: TypeBulk, bulk: cmdStr}}, args...)
-		db.aof.Write(Value{typ: TypeArray, array: args})
-	}
-
-	cmd.handler(c)
+	log.Printf("set cur limit: %d", rLimit.Cur)
 }

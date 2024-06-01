@@ -14,30 +14,24 @@ const (
 	INTEGER = ':'
 	BULK    = '$'
 	ARRAY   = '*'
-)
-
-type ValueType byte
-
-const (
-	TypeNull ValueType = iota
-	TypeString
-	TypeError
-	TypeInteger
-	TypeBulk
-	TypeArray
+	NULL    = 255
 )
 
 var (
 	CRLF = []byte("\r\n")
+
+	ValueOK = Value{typ: STRING, str: "OK"}
+
+	ValueNull = Value{typ: NULL}
 )
 
 // Value represents the different types of RESP (Redis Serialization Protocol) values.
 type Value struct {
-	typ   ValueType // Type of value ('string', 'error', 'integer', 'bulk', 'array')
-	str   []byte    // Used for string and error types
-	num   int64     // Used for integer type
-	bulk  []byte    // Used for bulk strings
-	array []Value   // Used for arrays of nested values
+	typ   byte    // Type of value ('string', 'error', 'integer', 'bulk', 'array', 'null')
+	str   string  // Used for string and error types
+	num   int64   // Used for integer type
+	bulk  []byte  // Used for bulk strings
+	array []Value // Used for arrays of nested values
 }
 
 // Resp is a parser for RESP encoded data.
@@ -48,6 +42,22 @@ type Resp struct {
 // NewResp creates a new Resp object with a buffered reader.
 func NewResp(rd io.Reader) *Resp {
 	return &Resp{reader: bufio.NewReader(rd)}
+}
+
+func NewErrValue(err error) Value {
+	return Value{typ: ERROR, str: err.Error()}
+}
+
+func NewBulkValue(bulk []byte) Value {
+	return Value{typ: BULK, bulk: bulk}
+}
+
+func NewIntegerValue(n int) Value {
+	return Value{typ: INTEGER, num: int64(n)}
+}
+
+func NewArrayValue(value []Value) Value {
+	return Value{typ: ARRAY, array: value}
 }
 
 // readLine reads a line ending with CRLF from the reader.
@@ -98,7 +108,7 @@ func (r *Resp) Read() (Value, error) {
 
 // readArray reads an array prefixed with '*' from the stream.
 func (r *Resp) readArray() (Value, error) {
-	v := Value{typ: TypeArray}
+	v := Value{typ: ARRAY}
 
 	len, _, err := r.readInteger()
 	if err != nil {
@@ -119,7 +129,7 @@ func (r *Resp) readArray() (Value, error) {
 
 // readBulk reads a bulk string prefixed with '$' from the stream.
 func (r *Resp) readBulk() (Value, error) {
-	v := Value{typ: TypeBulk}
+	v := Value{typ: BULK}
 
 	len, _, err := r.readInteger()
 	if err != nil {
@@ -127,7 +137,7 @@ func (r *Resp) readBulk() (Value, error) {
 	}
 
 	if len == -1 { // RESP Bulk strings can be null, indicated by "$-1"
-		return Value{typ: TypeNull}, nil
+		return Value{typ: NULL}, nil
 	}
 
 	bulk := make([]byte, len)
@@ -144,17 +154,17 @@ func (r *Resp) readBulk() (Value, error) {
 // Marshal converts a Value object into its corresponding RESP bytes.
 func (v Value) Marshal() []byte {
 	switch v.typ {
-	case TypeArray:
+	case ARRAY:
 		return v.marshalArray()
-	case TypeBulk:
+	case BULK:
 		return v.marshalBulk()
-	case TypeString:
+	case STRING:
 		return v.marshalString()
-	case TypeInteger:
+	case INTEGER:
 		return v.marshalInteger()
-	case TypeNull:
+	case NULL:
 		return v.marshallNull()
-	case TypeError:
+	case ERROR:
 		return v.marshallError()
 	default:
 		return []byte("unknown type")
@@ -188,7 +198,7 @@ func (v Value) marshalArray() []byte {
 
 // marshallError marshals an error message into RESP format.
 func (v Value) marshallError() []byte {
-	return append([]byte{ERROR}, append(v.str, '\r', '\n')...)
+	return append([]byte{ERROR}, append([]byte(v.str), '\r', '\n')...)
 }
 
 // marshallNull marshals a null value into RESP bulk string format.
