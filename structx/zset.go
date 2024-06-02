@@ -1,7 +1,6 @@
 package structx
 
 import (
-	"github.com/bytedance/sonic"
 	rbtree "github.com/sakeven/RbTree"
 )
 
@@ -84,24 +83,4 @@ func (z *ZSet) Iter(f func(k string, s int64) bool) {
 			return
 		}
 	}
-}
-
-// MarshalJSON
-func (z *ZSet) MarshalJSON() ([]byte, error) {
-	return sonic.Marshal(z.m)
-}
-
-// UnmarshalJSON
-func (z *ZSet) UnmarshalJSON(src []byte) error {
-	var m map[string]int64
-
-	if err := sonic.Unmarshal(src, &m); err != nil {
-		return err
-	}
-	for k, s := range m {
-		z.tree.Insert(s, k)
-	}
-	z.m = m
-
-	return nil
 }

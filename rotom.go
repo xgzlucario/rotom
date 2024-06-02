@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"runtime"
+	"strings"
 
 	"github.com/sourcegraph/conc/pool"
 	cache "github.com/xgzlucario/GigaCache"
@@ -56,6 +58,7 @@ var (
 )
 
 func lookupCommand(command string) (*Command, error) {
+	command = strings.ToLower(command)
 	for _, c := range cmdTable {
 		if c.name == command {
 			return &c, nil
@@ -71,15 +74,16 @@ func (cmd *Command) writeAofFile(aof *Aof, args []Value) {
 }
 
 func (cmd *Command) processCommand(args []Value) Value {
-	// Check command args.
+	// Check command arguments.
 	if len(args) < cmd.arity {
-		return NewErrValue(ErrWrongArgs(cmd.name))
+		return newErrValue(ErrWrongArgs(cmd.name))
 	}
 	return cmd.handler(args)
 }
 
 func InitDB() (err error) {
 	options := cache.DefaultOptions
+	// DB map use single-thread mode.
 	options.ConcurrencySafe = false
 	db.strs = cache.New(options)
 	db.extras = make(map[string]any)
@@ -95,7 +99,7 @@ func InitDB() (err error) {
 
 		// Load the initial data into memory by processing each stored command.
 		db.aof.Read(func(value Value) {
-			command := bytes.ToLower(value.array[0].bulk)
+			command := value.array[0].bulk
 			args := value.array[1:]
 
 			cmd, err := lookupCommand(b2s(command))
@@ -126,7 +130,7 @@ func (s *Server) RunServe() {
 	s.epoller = epoller
 
 	// Start goroutine workerpool.
-	s.workerpool = pool.New().WithMaxGoroutines(100 * 10000)
+	s.workerpool = pool.New().WithMaxGoroutines(runtime.NumCPU())
 
 	go func() {
 		var buf = make([]byte, 512)
@@ -141,7 +145,6 @@ func (s *Server) RunServe() {
 				if conn == nil {
 					break
 				}
-
 				if n, err := conn.Read(buf); err != nil {
 					if err := epoller.Remove(conn); err != nil {
 						log.Printf("failed to remove %v", err)
@@ -185,16 +188,13 @@ func (s *Server) handleConnection(buf []byte, conn net.Conn) {
 			continue
 		}
 
-		value.array[0].bulk = bytes.ToLower(value.array[0].bulk)
 		command := value.array[0].bulk
-		args := value.array[1:]
-
 		var res Value
 
 		// Lookup for command.
 		cmd, err := lookupCommand(b2s(command))
 		if err != nil {
-			res = NewErrValue(err)
+			res = newErrValue(err)
 
 		} else {
 			// Write aof file if needed.
@@ -203,7 +203,7 @@ func (s *Server) handleConnection(buf []byte, conn net.Conn) {
 			}
 
 			// Process command.
-			res = cmd.processCommand(args)
+			res = cmd.processCommand(value.array[1:])
 		}
 
 		// Async write result.

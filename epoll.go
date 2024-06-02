@@ -8,13 +8,12 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/cockroachdb/swiss"
 	"golang.org/x/sys/unix"
 )
 
 type epoll struct {
 	fd          int
-	connections *swiss.Map[int, net.Conn]
+	connections map[int]net.Conn
 	lock        *sync.RWMutex
 }
 
@@ -26,7 +25,7 @@ func MkEpoll() (*epoll, error) {
 	return &epoll{
 		fd:          fd,
 		lock:        &sync.RWMutex{},
-		connections: swiss.New[int, net.Conn](100),
+		connections: make(map[int]net.Conn),
 	}, nil
 }
 
@@ -39,7 +38,7 @@ func (e *epoll) Add(conn net.Conn) error {
 	}
 
 	e.lock.Lock()
-	e.connections.Put(fd, conn)
+	e.connections[fd] = conn
 	e.lock.Unlock()
 
 	return nil
@@ -53,7 +52,7 @@ func (e *epoll) Remove(conn net.Conn) error {
 	}
 
 	e.lock.Lock()
-	e.connections.Delete(fd)
+	delete(e.connections, fd)
 	e.lock.Unlock()
 
 	return nil
@@ -61,7 +60,6 @@ func (e *epoll) Remove(conn net.Conn) error {
 
 func (e *epoll) Wait() ([]net.Conn, error) {
 	events := make([]unix.EpollEvent, 100)
-
 retry:
 	n, err := unix.EpollWait(e.fd, events, 0)
 	if err != nil {
@@ -78,10 +76,8 @@ retry:
 	e.lock.RLock()
 	defer e.lock.RUnlock()
 	for i := 0; i < n; i++ {
-		conn, ok := e.connections.Get(int(events[i].Fd))
-		if ok {
-			connections = append(connections, conn)
-		}
+		conn := e.connections[int(events[i].Fd)]
+		connections = append(connections, conn)
 	}
 
 	return connections, nil

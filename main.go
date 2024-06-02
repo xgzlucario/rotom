@@ -2,8 +2,14 @@ package main
 
 import (
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"syscall"
 )
+
+func debug() {
+	go http.ListenAndServe(":6060", nil)
+}
 
 func main() {
 	var err error
@@ -15,6 +21,7 @@ func main() {
 		log.Panicf("init db error: %v\n", err)
 	}
 	setLimit()
+	debug()
 	server.RunServe()
 }
 

@@ -14,7 +14,7 @@ const (
 	INTEGER = ':'
 	BULK    = '$'
 	ARRAY   = '*'
-	NULL    = 255
+	NULL    = 0xff
 )
 
 var (
@@ -44,19 +44,19 @@ func NewResp(rd io.Reader) *Resp {
 	return &Resp{reader: bufio.NewReader(rd)}
 }
 
-func NewErrValue(err error) Value {
+func newErrValue(err error) Value {
 	return Value{typ: ERROR, str: err.Error()}
 }
 
-func NewBulkValue(bulk []byte) Value {
+func newBulkValue(bulk []byte) Value {
 	return Value{typ: BULK, bulk: bulk}
 }
 
-func NewIntegerValue(n int) Value {
+func newIntegerValue(n int) Value {
 	return Value{typ: INTEGER, num: int64(n)}
 }
 
-func NewArrayValue(value []Value) Value {
+func newArrayValue(value []Value) Value {
 	return Value{typ: ARRAY, array: value}
 }
 

@@ -27,7 +27,7 @@ func setCommand(args []Value) Value {
 				seconds, _ := strconv.Atoi(b2s(args[i+3].bulk))
 				ttl = cache.GetNanoSec() + int64(seconds)*int64(time.Second)
 			} else {
-				return NewErrValue(ErrWrongArgs("set"))
+				return newErrValue(ErrWrongArgs("set"))
 			}
 		}
 	}
@@ -40,12 +40,12 @@ func getCommand(args []Value) Value {
 
 	value, _, ok := db.strs.Get(b2s(key))
 	if ok {
-		return NewBulkValue(value)
+		return newBulkValue(value)
 	}
 	// check extra maps
 	_, ok = db.extras[b2s(key)]
 	if ok {
-		return NewErrValue(ErrWrongType)
+		return newErrValue(ErrWrongType)
 	}
 	return ValueNull
 }
@@ -57,7 +57,7 @@ func hsetCommand(args []Value) Value {
 
 	m, err := fetchMap(hash, true)
 	if err != nil {
-		return NewErrValue(err)
+		return newErrValue(err)
 	}
 	m.Set(key, value)
 	return ValueOK
@@ -69,13 +69,13 @@ func hgetCommand(args []Value) Value {
 
 	m, err := fetchMap(b2s(hash))
 	if err != nil {
-		return NewErrValue(ErrWrongType)
+		return newErrValue(ErrWrongType)
 	}
 	value, _, ok := m.Get(b2s(key))
 	if !ok {
 		return ValueNull
 	}
-	return NewBulkValue(value)
+	return newBulkValue(value)
 }
 
 func hdelCommand(args []Value) Value {
@@ -84,7 +84,7 @@ func hdelCommand(args []Value) Value {
 
 	m, err := fetchMap(b2s(hash))
 	if err != nil {
-		return NewErrValue(err)
+		return newErrValue(err)
 	}
 	var success int
 	for _, v := range keys {
@@ -92,7 +92,7 @@ func hdelCommand(args []Value) Value {
 			success++
 		}
 	}
-	return NewIntegerValue(success)
+	return newIntegerValue(success)
 }
 
 func hgetallCommand(args []Value) Value {
@@ -100,15 +100,15 @@ func hgetallCommand(args []Value) Value {
 
 	m, err := fetchMap(b2s(hash))
 	if err != nil {
-		return NewErrValue(err)
+		return newErrValue(err)
 	}
 
-	res := Value{typ: ARRAY}
+	res := make([]Value, 0, 8)
 	m.Scan(func(key, value []byte) {
-		res.array = append(res.array, Value{typ: BULK, bulk: key})
-		res.array = append(res.array, Value{typ: BULK, bulk: value})
+		res = append(res, Value{typ: BULK, bulk: key})
+		res = append(res, Value{typ: BULK, bulk: value})
 	})
-	return res
+	return newArrayValue(res)
 }
 
 func fetchMap(key string, setnx ...bool) (Map, error) {
