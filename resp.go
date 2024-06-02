@@ -49,6 +49,9 @@ func newErrValue(err error) Value {
 }
 
 func newBulkValue(bulk []byte) Value {
+	if bulk == nil {
+		return Value{typ: NULL}
+	}
 	return Value{typ: BULK, bulk: bulk}
 }
 
@@ -101,6 +104,9 @@ func (r *Resp) Read() (Value, error) {
 		return r.readArray()
 	case BULK:
 		return r.readBulk()
+	case INTEGER:
+		len, _, err := r.readInteger()
+		return Value{typ: INTEGER, num: int64(len)}, err
 	default:
 		return Value{}, fmt.Errorf("unknown value type %s", string(_type))
 	}
