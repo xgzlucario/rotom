@@ -1,15 +1,12 @@
 package structx
 
 import (
-	"sync"
-
 	"github.com/bytedance/sonic"
 	rbtree "github.com/sakeven/RbTree"
 )
 
 // ZSet
 type ZSet struct {
-	sync.RWMutex
 	m    map[string]int64
 	tree *rbtree.Tree[int64, string]
 }
@@ -24,17 +21,13 @@ func NewZSet() *ZSet {
 
 // Get
 func (z *ZSet) Get(key string) (int64, bool) {
-	z.RLock()
-	defer z.RUnlock()
 	s, ok := z.m[key]
 	return s, ok
 }
 
 // Set upsert value by key.
 func (z *ZSet) Set(key string, score int64) {
-	z.Lock()
 	z.set(key, score)
-	z.Unlock()
 }
 
 func (z *ZSet) set(key string, score int64) {
@@ -59,7 +52,6 @@ func (z *ZSet) deleteNode(score int64, key string) bool {
 
 // Incr
 func (z *ZSet) Incr(key string, incr int64) int64 {
-	z.Lock()
 	score, ok := z.m[key]
 	if ok {
 		z.deleteNode(score, key)
@@ -67,34 +59,26 @@ func (z *ZSet) Incr(key string, incr int64) int64 {
 	score += incr
 	z.m[key] = score
 	z.tree.Insert(score, key)
-	z.Unlock()
 	return score
 }
 
 // Delete
 func (z *ZSet) Delete(key string) (s int64, ok bool) {
-	z.Lock()
 	score, ok := z.m[key]
 	if ok {
 		delete(z.m, key)
 		z.deleteNode(score, key)
 	}
-	z.Unlock()
 	return score, ok
 }
 
 // Len
 func (z *ZSet) Len() int {
-	z.RLock()
-	defer z.RUnlock()
 	return len(z.m)
 }
 
 // Iter iterate all elements by scores.
 func (z *ZSet) Iter(f func(k string, s int64) bool) {
-	z.RLock()
-	defer z.RUnlock()
-
 	for it := z.tree.Iterator(); it != nil; it = it.Next() {
 		if f(it.Value, it.Key) {
 			return

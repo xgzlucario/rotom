@@ -7,11 +7,11 @@ import (
 	"net"
 	"os"
 
+	"github.com/sourcegraph/conc/pool"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
 )
 
-// Type aliases for built-in types.
 type (
 	Map    = *structx.Map
 	Set    = *structx.Set
@@ -26,7 +26,10 @@ type DB struct {
 	aof    *Aof
 }
 
-type Server struct{}
+type Server struct {
+	epoller    *epoll
+	workerpool *pool.Pool
+}
 
 type Command struct {
 	name    string
@@ -105,12 +108,8 @@ func InitDB() (err error) {
 	return nil
 }
 
-func (s *Server) Run() {
-	epoller, err := MkEpoll()
-	if err != nil {
-		panic(err)
-	}
-
+func (s *Server) RunServe() {
+	// Start tcp listener.
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", config.Port))
 	if err != nil {
 		fmt.Println("Error creating listener:", err)
@@ -118,7 +117,17 @@ func (s *Server) Run() {
 	}
 	defer listener.Close()
 
-	// epoll waiter
+	// Start epoll waiter.
+	epoller, err := MkEpoll()
+	if err != nil {
+		fmt.Println("Error creating epoller:", err)
+		os.Exit(1)
+	}
+	s.epoller = epoller
+
+	// Start goroutine workerpool.
+	s.workerpool = pool.New().WithMaxGoroutines(100 * 10000)
+
 	go func() {
 		var buf = make([]byte, 512)
 		for {
@@ -140,7 +149,12 @@ func (s *Server) Run() {
 					conn.Close()
 
 				} else {
-					handleConnection(buf[:n], conn)
+					// bench test
+					// _ = n
+					// pool.Go(func() {
+					// 	conn.Write(ValueOK.Marshal())
+					// })
+					s.handleConnection(buf[:n], conn)
 				}
 			}
 		}
@@ -158,6 +172,45 @@ func (s *Server) Run() {
 	}
 }
 
-func ErrWrongArgs(cmd string) error {
-	return fmt.Errorf("ERR wrong number of arguments for '%s' command", cmd)
+func (s *Server) handleConnection(buf []byte, conn net.Conn) {
+	resp := NewResp(bytes.NewReader(buf))
+	for {
+		value, err := resp.Read()
+		if err != nil {
+			return
+		}
+
+		if value.typ != ARRAY || len(value.array) == 0 {
+			log.Println("invalid request, expected non-empty array")
+			continue
+		}
+
+		value.array[0].bulk = bytes.ToLower(value.array[0].bulk)
+		command := value.array[0].bulk
+		args := value.array[1:]
+
+		var res Value
+
+		// Lookup for command.
+		cmd, err := lookupCommand(b2s(command))
+		if err != nil {
+			res = NewErrValue(err)
+
+		} else {
+			// Write aof file if needed.
+			if config.AppendOnly {
+				cmd.writeAofFile(db.aof, value.array)
+			}
+
+			// Process command.
+			res = cmd.processCommand(args)
+		}
+
+		// Async write result.
+		s.workerpool.Go(func() {
+			if _, err = conn.Write(res.Marshal()); err != nil {
+				log.Printf("write reply error: %v", err)
+			}
+		})
+	}
 }

@@ -15,6 +15,7 @@ type Map struct {
 
 func defaultOptions() cache.Options {
 	options := cache.DefaultOptions
+	options.ConcurrencySafe = false
 	options.ShardCount = 4
 	options.IndexSize = 8
 	options.BufferSize = 32

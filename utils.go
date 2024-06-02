@@ -1,4 +1,4 @@
-package rotom
+package main
 
 import "unsafe"
 

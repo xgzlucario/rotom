@@ -8,12 +8,13 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/cockroachdb/swiss"
 	"golang.org/x/sys/unix"
 )
 
 type epoll struct {
 	fd          int
-	connections map[int]net.Conn
+	connections *swiss.Map[int, net.Conn]
 	lock        *sync.RWMutex
 }
 
@@ -25,7 +26,7 @@ func MkEpoll() (*epoll, error) {
 	return &epoll{
 		fd:          fd,
 		lock:        &sync.RWMutex{},
-		connections: make(map[int]net.Conn),
+		connections: swiss.New[int, net.Conn](100),
 	}, nil
 }
 
@@ -38,7 +39,7 @@ func (e *epoll) Add(conn net.Conn) error {
 	}
 
 	e.lock.Lock()
-	e.connections[fd] = conn
+	e.connections.Put(fd, conn)
 	e.lock.Unlock()
 
 	return nil
@@ -52,7 +53,7 @@ func (e *epoll) Remove(conn net.Conn) error {
 	}
 
 	e.lock.Lock()
-	delete(e.connections, fd)
+	e.connections.Delete(fd)
 	e.lock.Unlock()
 
 	return nil
@@ -60,6 +61,7 @@ func (e *epoll) Remove(conn net.Conn) error {
 
 func (e *epoll) Wait() ([]net.Conn, error) {
 	events := make([]unix.EpollEvent, 100)
+
 retry:
 	n, err := unix.EpollWait(e.fd, events, 0)
 	if err != nil {
@@ -76,21 +78,17 @@ retry:
 	e.lock.RLock()
 	defer e.lock.RUnlock()
 	for i := 0; i < n; i++ {
-		conn := e.connections[int(events[i].Fd)]
-		connections = append(connections, conn)
+		conn, ok := e.connections.Get(int(events[i].Fd))
+		if ok {
+			connections = append(connections, conn)
+		}
 	}
 
 	return connections, nil
 }
 
 func socketFD(conn net.Conn) int {
-	//tls := reflect.TypeOf(conn.UnderlyingConn()) == reflect.TypeOf(&tls.Conn{})
-	// Extract the file descriptor associated with the connection
-	//connVal := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn").Elem()
 	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
-	//if tls {
-	//	tcpConn = reflect.Indirect(tcpConn.Elem())
-	//}
 	fdVal := tcpConn.FieldByName("fd")
 	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
 

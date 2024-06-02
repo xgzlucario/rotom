@@ -1,17 +1,12 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
 
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
-)
-
-var (
-	ErrWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 )
 
 func pingCommand(_ []Value) Value {
