@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -31,7 +32,7 @@ type DB struct {
 type Server struct {
 	config     *Config
 	epoller    *epoll
-	workerpool *pool.Pool
+	workerPool *pool.Pool
 }
 
 type Command struct {
@@ -64,12 +65,6 @@ func lookupCommand(command string) (*Command, error) {
 		}
 	}
 	return nil, fmt.Errorf("invalid command: %s", command)
-}
-
-func (cmd *Command) writeAofFile(aof *Aof, args []Value) {
-	if cmd.aofNeed {
-		aof.Write(newArrayValue(args))
-	}
 }
 
 func (cmd *Command) processCommand(args []Value) Value {
@@ -128,11 +123,12 @@ func (server *Server) RunServe() {
 	}
 	server.epoller = epoller
 
-	// Start goroutine workerpool.
-	server.workerpool = pool.New().WithMaxGoroutines(runtime.NumCPU())
+	// Start goroutine workerPool.
+	server.workerPool = pool.New().WithMaxGoroutines(runtime.NumCPU())
 
 	go func() {
 		var buf = make([]byte, 512)
+
 		for {
 			connections, err := epoller.Wait()
 			if err != nil {
@@ -144,6 +140,7 @@ func (server *Server) RunServe() {
 				if conn == nil {
 					break
 				}
+
 				if n, err := conn.Read(buf); err != nil {
 					if err := epoller.Remove(conn); err != nil {
 						log.Println("failed to remove:", err)
@@ -151,11 +148,6 @@ func (server *Server) RunServe() {
 					conn.Close()
 
 				} else {
-					// bench test
-					// _ = n
-					// pool.Go(func() {
-					// 	conn.Write(ValueOK.Marshal())
-					// })
 					server.handleConnection(buf[:n], conn)
 				}
 			}
@@ -179,6 +171,9 @@ func (server *Server) handleConnection(buf []byte, conn net.Conn) {
 	for {
 		value, err := resp.Read()
 		if err != nil {
+			if err != io.EOF {
+				log.Println("read resp error:", err)
+			}
 			return
 		}
 
@@ -196,17 +191,17 @@ func (server *Server) handleConnection(buf []byte, conn net.Conn) {
 			res = newErrValue(err)
 
 		} else {
-			// Write aof file if needed.
-			if server.config.AppendOnly {
-				cmd.writeAofFile(db.aof, value.array)
-			}
-
 			// Process command.
 			res = cmd.processCommand(value.array[1:])
+
+			// Write aof file after proccess success.
+			if server.config.AppendOnly && cmd.aofNeed && res.typ != ERROR {
+				db.aof.Write(buf)
+			}
 		}
 
 		// Async write result.
-		server.workerpool.Go(func() {
+		server.workerPool.Go(func() {
 			if _, err = conn.Write(res.Marshal()); err != nil {
 				log.Println("write reply error:", err)
 			}

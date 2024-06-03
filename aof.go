@@ -46,10 +46,10 @@ func (aof *Aof) Close() error {
 	return aof.file.Close()
 }
 
-func (aof *Aof) Write(value Value) error {
+func (aof *Aof) Write(buf []byte) error {
 	aof.mu.Lock()
-	defer aof.mu.Unlock()
-	_, err := aof.buf.Write(value.Marshal())
+	_, err := aof.buf.Write(buf)
+	aof.mu.Unlock()
 	return err
 }
 

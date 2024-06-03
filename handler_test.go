@@ -13,10 +13,8 @@ import (
 func startup() {
 	config := &Config{Port: 20082}
 	if err := InitDB(config); err != nil {
-		log.Panicf("init db error: %v\n", err)
+		log.Panic("init db error:", err)
 	}
-	setLimit()
-	debug()
 	server.config = config
 	server.RunServe()
 }
@@ -28,13 +26,13 @@ func TestHandler(t *testing.T) {
 	assert := assert.New(t)
 
 	go startup()
-	time.Sleep(time.Second / 10)
+	time.Sleep(time.Second / 2)
 
 	// wait for client starup
 	rdb := redis.NewClient(&redis.Options{
 		Addr: ":20082",
 	})
-	time.Sleep(time.Second / 10)
+	time.Sleep(time.Second / 2)
 
 	t.Run("ping", func(t *testing.T) {
 		res, _ := rdb.Ping(ctx).Result()
