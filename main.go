@@ -13,15 +13,16 @@ func debug() {
 
 func main() {
 	var err error
-	config, err = LoadConfig("config.json")
+	config, err := LoadConfig("config.json")
 	if err != nil {
 		log.Panicf("load config error: %v\n", err)
 	}
-	if err = InitDB(); err != nil {
+	if err = InitDB(config); err != nil {
 		log.Panicf("init db error: %v\n", err)
 	}
 	setLimit()
 	debug()
+	server.config = config
 	server.RunServe()
 }
 
@@ -35,5 +36,5 @@ func setLimit() {
 		panic(err)
 	}
 
-	log.Printf("set cur socketFD limit: %d", rLimit.Cur)
+	log.Printf("set cur fd limit: %d", rLimit.Cur)
 }

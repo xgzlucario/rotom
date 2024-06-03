@@ -29,6 +29,7 @@ type DB struct {
 }
 
 type Server struct {
+	config     *Config
 	epoller    *epoll
 	workerpool *pool.Pool
 }
@@ -40,9 +41,7 @@ type Command struct {
 	aofNeed bool
 }
 
-// global varibles
 var (
-	config   *Config
 	db       DB
 	server   Server
 	cmdTable []Command = []Command{
@@ -69,7 +68,7 @@ func lookupCommand(command string) (*Command, error) {
 
 func (cmd *Command) writeAofFile(aof *Aof, args []Value) {
 	if cmd.aofNeed {
-		aof.Write(Value{typ: ARRAY, array: args})
+		aof.Write(newArrayValue(args))
 	}
 }
 
@@ -81,9 +80,9 @@ func (cmd *Command) processCommand(args []Value) Value {
 	return cmd.handler(args)
 }
 
-func InitDB() (err error) {
+// InitDB initializes database and redo appendonly files if nedded.
+func InitDB(config *Config) (err error) {
 	options := cache.DefaultOptions
-	// DB map use single-thread mode.
 	options.ConcurrencySafe = false
 	db.strs = cache.New(options)
 	db.extras = make(map[string]any)
@@ -91,7 +90,7 @@ func InitDB() (err error) {
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)
 		if err != nil {
-			log.Printf("failed to initialize aof file: %v\n", err)
+			log.Println("failed to initialize aof file:", err)
 			return
 		}
 
@@ -112,11 +111,11 @@ func InitDB() (err error) {
 	return nil
 }
 
-func (s *Server) RunServe() {
+func (server *Server) RunServe() {
 	// Start tcp listener.
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", config.Port))
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.config.Port))
 	if err != nil {
-		fmt.Println("Error creating listener:", err)
+		log.Println("Error creating listener:", err)
 		os.Exit(1)
 	}
 	defer listener.Close()
@@ -124,20 +123,20 @@ func (s *Server) RunServe() {
 	// Start epoll waiter.
 	epoller, err := MkEpoll()
 	if err != nil {
-		fmt.Println("Error creating epoller:", err)
+		log.Println("Error creating epoller:", err)
 		os.Exit(1)
 	}
-	s.epoller = epoller
+	server.epoller = epoller
 
 	// Start goroutine workerpool.
-	s.workerpool = pool.New().WithMaxGoroutines(runtime.NumCPU())
+	server.workerpool = pool.New().WithMaxGoroutines(runtime.NumCPU())
 
 	go func() {
 		var buf = make([]byte, 512)
 		for {
 			connections, err := epoller.Wait()
 			if err != nil {
-				log.Printf("failed to epoll wait %v", err)
+				log.Println("failed to epoll wait:", err)
 				continue
 			}
 
@@ -147,7 +146,7 @@ func (s *Server) RunServe() {
 				}
 				if n, err := conn.Read(buf); err != nil {
 					if err := epoller.Remove(conn); err != nil {
-						log.Printf("failed to remove %v", err)
+						log.Println("failed to remove:", err)
 					}
 					conn.Close()
 
@@ -157,7 +156,7 @@ func (s *Server) RunServe() {
 					// pool.Go(func() {
 					// 	conn.Write(ValueOK.Marshal())
 					// })
-					s.handleConnection(buf[:n], conn)
+					server.handleConnection(buf[:n], conn)
 				}
 			}
 		}
@@ -168,14 +167,14 @@ func (s *Server) RunServe() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println("Error accepting connection:", err)
+			log.Println("Error accepting connection:", err)
 			continue
 		}
 		epoller.Add(conn)
 	}
 }
 
-func (s *Server) handleConnection(buf []byte, conn net.Conn) {
+func (server *Server) handleConnection(buf []byte, conn net.Conn) {
 	resp := NewResp(bytes.NewReader(buf))
 	for {
 		value, err := resp.Read()
@@ -198,7 +197,7 @@ func (s *Server) handleConnection(buf []byte, conn net.Conn) {
 
 		} else {
 			// Write aof file if needed.
-			if config.AppendOnly {
+			if server.config.AppendOnly {
 				cmd.writeAofFile(db.aof, value.array)
 			}
 
@@ -207,9 +206,9 @@ func (s *Server) handleConnection(buf []byte, conn net.Conn) {
 		}
 
 		// Async write result.
-		s.workerpool.Go(func() {
+		server.workerpool.Go(func() {
 			if _, err = conn.Write(res.Marshal()); err != nil {
-				log.Printf("write reply error: %v", err)
+				log.Println("write reply error:", err)
 			}
 		})
 	}

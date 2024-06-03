@@ -108,7 +108,7 @@ func (r *Resp) Read() (Value, error) {
 		len, _, err := r.readInteger()
 		return Value{typ: INTEGER, num: int64(len)}, err
 	default:
-		return Value{}, fmt.Errorf("unknown value type %s", string(_type))
+		return Value{}, fmt.Errorf("%w: %c", ErrUnknownType, _type)
 	}
 }
 
@@ -173,7 +173,7 @@ func (v Value) Marshal() []byte {
 	case ERROR:
 		return v.marshallError()
 	default:
-		return []byte("unknown type")
+		return []byte(ErrUnknownType.Error())
 	}
 }
 
