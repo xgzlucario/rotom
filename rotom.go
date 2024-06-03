@@ -7,10 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
-	"runtime"
-	"strings"
 
-	"github.com/sourcegraph/conc/pool"
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -30,21 +27,34 @@ type DB struct {
 }
 
 type Server struct {
-	config     *Config
-	epoller    *epoll
-	workerPool *pool.Pool
+	config  *Config
+	epoller *epoll
 }
 
 type Command struct {
-	name    string
+	// name is command string name.
+	// it should consist of all lowercase letters.
+	name string
+
+	// handler is this command real database handler function.
 	handler func([]Value) Value
-	arity   int // arity represents the minimal number of arguments that command accepts.
-	aofNeed bool
+
+	// arity represents the minimal number of arguments that command accepts.
+	arity int
+
+	// persist indicates whether this command needs to be persisted.
+	// effective when `appendonly` is true.
+	persist bool
 }
 
 var (
-	db       DB
-	server   Server
+	// db is the main database object.
+	db DB
+
+	// server is the main server object.
+	server Server
+
+	// cmdTable is the list of all available commands.
 	cmdTable []Command = []Command{
 		{"ping", pingCommand, 0, false},
 		{"set", setCommand, 2, true},
@@ -53,14 +63,13 @@ var (
 		{"hget", hgetCommand, 2, false},
 		{"hdel", hdelCommand, 2, true},
 		{"hgetall", hgetallCommand, 1, false},
-		// TODO
 	}
 )
 
-func lookupCommand(command string) (*Command, error) {
-	command = strings.ToLower(command)
+func lookupCommand(command []byte) (*Command, error) {
+	cmdStr := b2s(ToLowerNoCopy(command))
 	for _, c := range cmdTable {
-		if c.name == command {
+		if c.name == cmdStr {
 			return &c, nil
 		}
 	}
@@ -68,7 +77,6 @@ func lookupCommand(command string) (*Command, error) {
 }
 
 func (cmd *Command) processCommand(args []Value) Value {
-	// Check command arguments.
 	if len(args) < cmd.arity {
 		return newErrValue(ErrWrongArgs(cmd.name))
 	}
@@ -96,7 +104,7 @@ func InitDB(config *Config) (err error) {
 			command := value.array[0].bulk
 			args := value.array[1:]
 
-			cmd, err := lookupCommand(b2s(command))
+			cmd, err := lookupCommand(command)
 			if err == nil {
 				cmd.processCommand(args)
 			}
@@ -122,9 +130,6 @@ func (server *Server) RunServe() {
 		os.Exit(1)
 	}
 	server.epoller = epoller
-
-	// Start goroutine workerPool.
-	server.workerPool = pool.New().WithMaxGoroutines(runtime.NumCPU())
 
 	go func() {
 		var buf = make([]byte, 512)
@@ -185,26 +190,20 @@ func (server *Server) handleConnection(buf []byte, conn net.Conn) {
 		command := value.array[0].bulk
 		var res Value
 
-		// Lookup for command.
-		cmd, err := lookupCommand(b2s(command))
+		cmd, err := lookupCommand(command)
 		if err != nil {
 			res = newErrValue(err)
 
 		} else {
-			// Process command.
 			res = cmd.processCommand(value.array[1:])
 
-			// Write aof file after proccess success.
-			if server.config.AppendOnly && cmd.aofNeed && res.typ != ERROR {
+			if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
 				db.aof.Write(buf)
 			}
 		}
 
-		// Async write result.
-		server.workerPool.Go(func() {
-			if _, err = conn.Write(res.Marshal()); err != nil {
-				log.Println("write reply error:", err)
-			}
-		})
+		if _, err = conn.Write(res.Marshal()); err != nil {
+			log.Println("write reply error:", err)
+		}
 	}
 }

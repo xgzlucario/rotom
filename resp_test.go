@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"errors"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -98,6 +101,15 @@ func TestValue(t *testing.T) {
 		value := Value{typ: 76}
 		data := value.Marshal()
 		assert.Equal(string(data), ErrUnknownType.Error())
+	})
+
+	t.Run("to-lower-nocopy", func(t *testing.T) {
+		for i := 0; i < 1000; i++ {
+			timeFormat := strconv.FormatInt(time.Now().UnixNano(), 36)
+			lower := strings.ToLower(timeFormat)
+			lower2 := ToLowerNoCopy([]byte(lower))
+			assert.Equal(lower, string(lower2))
+		}
 	})
 }
 
