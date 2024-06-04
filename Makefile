@@ -9,7 +9,7 @@ test-cover:
 	go tool cover -html=coverage.txt -o coverage.html
 
 pprof:
-	go tool pprof -http=:18081 "http://172.17.21.24:6060/debug/pprof/profile?seconds=30"
+	go tool pprof -http=:18081 "http://172.17.21.2:6060/debug/pprof/profile?seconds=30"
 
 heap:
 	go tool pprof http://localhost:6060/debug/pprof/heap

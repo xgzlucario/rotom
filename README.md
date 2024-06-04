@@ -120,3 +120,7 @@ $ redis-benchmark -t hset -p 6969
 100.00% <= 1.4 milliseconds
 100300.91 requests per second
 ```
+
+火焰图
+
+![img](graph.jpg)
