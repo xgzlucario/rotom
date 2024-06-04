@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"strconv"
 	"strings"
@@ -19,7 +18,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "+OK\r\n")
 
-		_, err := NewResp(bytes.NewReader(data)).Read()
+		_, err := NewResp(data).Read()
 		assert.NotNil(err)
 	})
 
@@ -28,7 +27,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "-err message\r\n")
 
-		_, err := NewResp(bytes.NewReader(data)).Read()
+		_, err := NewResp(data).Read()
 		assert.NotNil(err)
 	})
 
@@ -37,7 +36,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "$5\r\nhello\r\n")
 
-		value2, err := NewResp(bytes.NewReader(data)).Read()
+		value2, err := NewResp(data).Read()
 		assert.Nil(err)
 		assert.Equal(value, value2)
 
@@ -46,7 +45,7 @@ func TestValue(t *testing.T) {
 		data = value.Marshal()
 		assert.Equal(string(data), "$0\r\n\r\n")
 
-		value2, err = NewResp(bytes.NewReader(data)).Read()
+		value2, err = NewResp(data).Read()
 		assert.Nil(err)
 		assert.Equal(value, value2)
 
@@ -55,7 +54,7 @@ func TestValue(t *testing.T) {
 		data = value.Marshal()
 		assert.Equal(string(data), "$-1\r\n")
 
-		value2, err = NewResp(bytes.NewReader(data)).Read()
+		value2, err = NewResp(data).Read()
 		assert.Nil(err)
 		assert.Equal(value, value2)
 	})
@@ -65,7 +64,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), ":1\r\n")
 
-		value2, err := NewResp(bytes.NewReader(data)).Read()
+		value2, err := NewResp(data).Read()
 		assert.Nil(err)
 		assert.Equal(value, value2)
 	})
@@ -81,19 +80,19 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "*5\r\n:1\r\n:2\r\n:3\r\n$5\r\nhello\r\n$5\r\nworld\r\n")
 
-		value2, err := NewResp(bytes.NewReader(data)).Read()
+		value2, err := NewResp(data).Read()
 		assert.Nil(err)
 		assert.Equal(value, value2)
 	})
 
 	t.Run("error-value", func(t *testing.T) {
 		// read nil
-		_, err := NewResp(bytes.NewReader(nil)).Read()
+		_, err := NewResp(nil).Read()
 		assert.NotNil(err)
 
 		for _, prefix := range []byte{BULK, INTEGER, ARRAY} {
 			data := append([]byte{prefix}, "an error message"...)
-			_, err := NewResp(bytes.NewReader(data)).Read()
+			_, err := NewResp(data).Read()
 			assert.NotNil(err)
 		}
 

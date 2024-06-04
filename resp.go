@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -36,12 +35,12 @@ type Value struct {
 
 // Resp is a parser for RESP encoded data.
 type Resp struct {
-	reader *bufio.Reader
+	b []byte
 }
 
 // NewResp creates a new Resp object with a buffered reader.
-func NewResp(rd io.Reader) *Resp {
-	return &Resp{reader: bufio.NewReader(rd)}
+func NewResp(b []byte) *Resp {
+	return &Resp{b: b}
 }
 
 func newErrValue(err error) Value {
@@ -64,19 +63,13 @@ func newArrayValue(value []Value) Value {
 }
 
 // readLine reads a line ending with CRLF from the reader.
-func (r *Resp) readLine() (line []byte, n int, err error) {
-	for {
-		b, err := r.reader.ReadByte()
-		if err != nil {
-			return nil, 0, err
-		}
-		n += 1
-		line = append(line, b)
-		if len(line) >= 2 && bytes.HasSuffix(line, CRLF) {
-			break
-		}
+func (r *Resp) readLine() ([]byte, int, error) {
+	before, after, found := bytes.Cut(r.b, CRLF)
+	if found {
+		r.b = after
+		return before, len(before) + 2, nil
 	}
-	return line[:len(line)-2], n, nil // Trim the CRLF at the end
+	return nil, 0, ErrCRLFNotFound
 }
 
 // readInteger reads an integer value following the ':' prefix.
@@ -92,9 +85,18 @@ func (r *Resp) readInteger() (x int, n int, err error) {
 	return int(i64), n, nil
 }
 
+func (r *Resp) readByte() (byte, error) {
+	if len(r.b) == 0 {
+		return 0, io.EOF
+	}
+	b := r.b[0]
+	r.b = r.b[1:]
+	return b, nil
+}
+
 // Read parses the next RESP value from the stream.
 func (r *Resp) Read() (Value, error) {
-	_type, err := r.reader.ReadByte()
+	_type, err := r.readByte()
 	if err != nil {
 		return Value{}, err
 	}
@@ -146,12 +148,9 @@ func (r *Resp) readBulk() (Value, error) {
 		return Value{typ: NULL}, nil
 	}
 
-	bulk := make([]byte, len)
-	_, err = io.ReadFull(r.reader, bulk) // Use ReadFull to ensure we read exactly 'len' bytes
-	if err != nil {
-		return v, err
-	}
-	v.bulk = bulk
+	v.bulk = r.b[:len]
+	r.b = r.b[len:]
+
 	r.readLine() // Read the trailing CRLF
 
 	return v, nil

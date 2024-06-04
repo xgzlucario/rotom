@@ -9,6 +9,8 @@ var (
 	ErrWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
 
 	ErrUnknownType = errors.New("ERR unknown value type")
+
+	ErrCRLFNotFound = errors.New("ERR CRLF not found in line")
 )
 
 func ErrWrongArgs(cmd string) error {

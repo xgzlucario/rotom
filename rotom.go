@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -100,7 +99,7 @@ func InitDB(config *Config) (err error) {
 		log.Printf("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
-		db.aof.Read(func(value Value) {
+		err = db.aof.Read(func(value Value) {
 			command := value.array[0].bulk
 			args := value.array[1:]
 
@@ -109,6 +108,10 @@ func InitDB(config *Config) (err error) {
 				cmd.processCommand(args)
 			}
 		})
+		if err != nil {
+			log.Println("read appendonly file error:", err)
+			return
+		}
 	}
 
 	return nil
@@ -172,7 +175,7 @@ func (server *Server) RunServe() {
 }
 
 func (server *Server) handleConnection(buf []byte, conn net.Conn) {
-	resp := NewResp(bytes.NewReader(buf))
+	resp := NewResp(buf)
 	for {
 		value, err := resp.Read()
 		if err != nil {
