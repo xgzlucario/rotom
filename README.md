@@ -4,17 +4,17 @@
 
 ## 介绍
 
-你好，这里是 rotom，一个使用 Go 编写的 tiny Redis Server. 在 `v2` 版本中，废弃了之前版本的内嵌形式，后续将持续以 `net server` 的形式维护下去，一方面是为了在实践中学习 Linux 网络编程，另一方面也是为了兼容社区中大量成熟的 redis 相关工具来辅助开发。
+你好，这里是 rotom，一个使用 Go 编写的 tiny Redis Server。 在 `v2` 版本中，项目废弃了之前版本的内嵌形式，后续将以 `net server` 的形式维护下去，一方面是为了在实践中学习 Linux 网络编程，另一方面也是为了兼容社区中大量成熟的 redis 相关工具来辅助开发。
 
 实现特性：
 
 1. 基于 single epoll server 的网络 IO 框架
-2. 兼容 Redis RESP 通信协议，你可以使用 redis 客户端连接 rotom
+2. 兼容 Redis RESP 通信协议，你可以使用任何 redis 客户端连接 rotom
 3. DB hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)
 4. AOF 支持
 5. 目前仅支持部分命令如 `ping`, `set`, `get`, `hset`, `hget`
 
-目前的精力主要放在最有意思的框架设计上，短期内不打算兼容更多的 RESP 命令。
+目前的精力主要放在最有意思的框架设计上，短期内不会兼容更多的 RESP 命令。
 
 ## 使用
 
@@ -24,7 +24,7 @@
 git clone https://github.com/xgzlucario/rotom
 ```
 
-确保本地 golang 环境 `>= go1.22`，在项目目录下执行 `go run .` 启动服务，默认监听 `6969` 端口：
+确保本地 golang 环境 `>= 1.22`，在项目目录下执行 `go run .` 启动服务，默认监听 `6969` 端口：
 
 ```
 $ go run .
@@ -38,11 +38,7 @@ $ go run .
 
 ## 性能测试
 
-测试说明
-
-测试将在同一台机器上运行 rotom, 关闭 `appendonly`, 并使用官方 `redis-benchmark` 工具测试不同命令的耗时。
-
-测试环境
+测试将在同一台机器上运行 rotom，关闭 `appendonly`，并使用官方 `redis-benchmark` 工具测试不同命令的耗时。
 
 ```
 goos: linux
