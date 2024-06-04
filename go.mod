@@ -3,7 +3,7 @@ module github.com/xgzlucario/rotom
 go 1.22
 
 require (
-	github.com/RoaringBitmap/roaring v1.9.3
+	github.com/RoaringBitmap/roaring v1.9.4
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/redis/go-redis/v9 v9.5.2
 	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980

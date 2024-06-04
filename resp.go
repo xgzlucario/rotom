@@ -34,13 +34,15 @@ type Value struct {
 }
 
 // Resp is a parser for RESP encoded data.
+// It is a ZERO-COPY parser.
 type Resp struct {
 	b []byte
 }
 
 // NewResp creates a new Resp object with a buffered reader.
-func NewResp(b []byte) *Resp {
-	return &Resp{b: b}
+// DO NOT EDIT the `input` param because it will be referenced during read.
+func NewResp(input []byte) *Resp {
+	return &Resp{b: input}
 }
 
 func newErrValue(err error) Value {
@@ -95,57 +97,66 @@ func (r *Resp) readByte() (byte, error) {
 }
 
 // Read parses the next RESP value from the stream.
-func (r *Resp) Read() (Value, error) {
+func (r *Resp) Read(v *Value) error {
 	_type, err := r.readByte()
 	if err != nil {
-		return Value{}, err
+		return err
 	}
 
 	switch _type {
 	case ARRAY:
-		return r.readArray()
+		return r.readArray(v)
 	case BULK:
-		return r.readBulk()
+		return r.readBulk(v)
 	case INTEGER:
 		len, _, err := r.readInteger()
-		return Value{typ: INTEGER, num: int64(len)}, err
+		if err != nil {
+			return err
+		}
+		v.typ = INTEGER
+		v.num = int64(len)
+		return nil
 	default:
-		return Value{}, fmt.Errorf("%w: %c", ErrUnknownType, _type)
+		return fmt.Errorf("%w: %c", ErrUnknownType, _type)
 	}
 }
 
 // readArray reads an array prefixed with '*' from the stream.
-func (r *Resp) readArray() (Value, error) {
-	v := Value{typ: ARRAY}
-
-	len, _, err := r.readInteger()
+func (r *Resp) readArray(v *Value) error {
+	v.typ = ARRAY
+	length, _, err := r.readInteger()
 	if err != nil {
-		return v, err
+		return err
 	}
 
-	v.array = make([]Value, len)
-	for i := 0; i < len; i++ {
-		val, err := r.Read()
+	if len(v.array) < length {
+		v.array = make([]Value, length)
+	} else {
+		v.array = v.array[:length]
+	}
+
+	for i := range v.array {
+		err := r.Read(&v.array[i])
 		if err != nil {
-			return v, err
+			return err
 		}
-		v.array[i] = val
 	}
 
-	return v, nil
+	return nil
 }
 
 // readBulk reads a bulk string prefixed with '$' from the stream.
-func (r *Resp) readBulk() (Value, error) {
-	v := Value{typ: BULK}
+func (r *Resp) readBulk(v *Value) error {
+	v.typ = BULK
 
 	len, _, err := r.readInteger()
 	if err != nil {
-		return v, err
+		return err
 	}
 
 	if len == -1 { // RESP Bulk strings can be null, indicated by "$-1"
-		return Value{typ: NULL}, nil
+		v.typ = NULL
+		return nil
 	}
 
 	v.bulk = r.b[:len]
@@ -153,7 +164,7 @@ func (r *Resp) readBulk() (Value, error) {
 
 	r.readLine() // Read the trailing CRLF
 
-	return v, nil
+	return nil
 }
 
 // Marshal converts a Value object into its corresponding RESP bytes.

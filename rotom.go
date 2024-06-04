@@ -28,6 +28,7 @@ type DB struct {
 type Server struct {
 	config  *Config
 	epoller *epoll
+	args    Value // global reused arguments
 }
 
 type Command struct {
@@ -136,7 +137,6 @@ func (server *Server) RunServe() {
 
 	go func() {
 		var buf = make([]byte, 512)
-
 		for {
 			connections, err := epoller.Wait()
 			if err != nil {
@@ -177,7 +177,7 @@ func (server *Server) RunServe() {
 func (server *Server) handleConnection(buf []byte, conn net.Conn) {
 	resp := NewResp(buf)
 	for {
-		value, err := resp.Read()
+		err := resp.Read(&server.args)
 		if err != nil {
 			if err != io.EOF {
 				log.Println("read resp error:", err)
@@ -185,12 +185,13 @@ func (server *Server) handleConnection(buf []byte, conn net.Conn) {
 			return
 		}
 
-		if value.typ != ARRAY || len(value.array) == 0 {
+		if server.args.typ != ARRAY || len(server.args.array) == 0 {
 			log.Println("invalid request, expected non-empty array")
 			continue
 		}
 
-		command := value.array[0].bulk
+		command := server.args.array[0].bulk
+		args := server.args.array[1:]
 		var res Value
 
 		cmd, err := lookupCommand(command)
@@ -198,7 +199,7 @@ func (server *Server) handleConnection(buf []byte, conn net.Conn) {
 			res = newErrValue(err)
 
 		} else {
-			res = cmd.processCommand(value.array[1:])
+			res = cmd.processCommand(args)
 
 			if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
 				db.aof.Write(buf)

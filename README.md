@@ -8,13 +8,13 @@
 
 实现特性：
 
-1. 基于 single epoll server 的网络 IO 框架
-2. 兼容 Redis RESP 通信协议，你可以使用任何 redis 客户端连接 rotom
+1. 基于 single epoll server 的网络 IO 框架（[1m-go-tcp-server](https://github.com/smallnest/1m-go-tcp-server)）
+2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
 3. DB hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)
 4. AOF 支持
 5. 目前仅支持部分命令如 `ping`, `set`, `get`, `hset`, `hget`
 
-目前的精力主要放在最有意思的框架设计上，短期内不会兼容更多的 RESP 命令。
+目前的精力主要放在框架设计与优化上，短期内不会兼容更多的 commands。
 
 ## 使用
 

@@ -74,18 +74,19 @@ func (aof *Aof) Read(fn func(value Value)) error {
 	if err != nil {
 		return err
 	}
-	reader := NewResp(data)
 
 	// Iterate over the records in the file, applying the function to each.
+	reader := NewResp(data)
+	var input Value
 	for {
-		value, err := reader.Read()
+		err := reader.Read(&input)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			return err
 		}
-		fn(value)
+		fn(input)
 	}
 
 	return nil
