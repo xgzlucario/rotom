@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"time"
 
-	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
 )
 
@@ -16,34 +15,38 @@ func pingCommand(_ []Value) Value {
 func setCommand(args []Value) Value {
 	key := args[0].bulk
 	value := args[1].bulk
-	var ttl int64
+	exargs := args[2:]
+	var duration time.Duration
 
-	for i, arg := range args[2:] {
+	for i, arg := range exargs {
 		switch b2s(arg.bulk) {
-		case "NX":
-		case "PX":
-		case "EX":
-			if len(args) > i+3 {
-				seconds, _ := strconv.Atoi(b2s(args[i+3].bulk))
-				ttl = cache.GetNanoSec() + int64(seconds)*int64(time.Second)
+		case "NX", "nx":
+		case "PX", "px":
+		case "EX", "ex":
+			if len(exargs) > i+1 {
+				seconds, err := strconv.Atoi(b2s(exargs[i+1].bulk))
+				if err != nil {
+					return newErrValue(ErrParseInteger)
+				}
+				duration = time.Duration(seconds)
 			} else {
-				return newErrValue(ErrWrongArgs("set"))
+				return newErrValue(ErrWrongNumberArgs("set"))
 			}
 		}
 	}
-	db.strs.SetTx(b2s(key), value, ttl)
+	db.strs.SetEx(b2s(key), value, duration)
 	return ValueOK
 }
 
 func getCommand(args []Value) Value {
-	key := args[0].bulk
+	key := b2s(args[0].bulk)
 
-	value, _, ok := db.strs.Get(b2s(key))
+	value, _, ok := db.strs.Get(key)
 	if ok {
 		return newBulkValue(value)
 	}
 	// check extra maps
-	_, ok = db.extras[b2s(key)]
+	_, ok = db.extras[key]
 	if ok {
 		return newErrValue(ErrWrongType)
 	}
@@ -51,27 +54,39 @@ func getCommand(args []Value) Value {
 }
 
 func hsetCommand(args []Value) Value {
-	hash := b2s(args[0].bulk)
-	key := b2s(args[1].bulk)
-	value := args[2].bulk
+	hash := args[0].bulk
 
-	m, err := fetchMap(hash, true)
+	// check arguments number
+	exargs := args[1:]
+	if len(exargs) == 0 || len(exargs)%2 == 1 {
+		return newErrValue(ErrWrongNumberArgs("hset"))
+	}
+
+	hmap, err := fetchMap(hash, true)
 	if err != nil {
 		return newErrValue(err)
 	}
-	m.Set(key, value)
-	return ValueOK
+
+	var newFields int
+	for i := 0; i < len(exargs); i += 2 {
+		key := exargs[i].bulk
+		value := exargs[i+1].bulk
+		if hmap.Set(b2s(key), value) {
+			newFields++
+		}
+	}
+	return newIntegerValue(newFields)
 }
 
 func hgetCommand(args []Value) Value {
 	hash := args[0].bulk
 	key := args[1].bulk
 
-	m, err := fetchMap(b2s(hash))
+	hmap, err := fetchMap(hash)
 	if err != nil {
 		return newErrValue(ErrWrongType)
 	}
-	value, _, ok := m.Get(b2s(key))
+	value, _, ok := hmap.Get(b2s(key))
 	if !ok {
 		return ValueNull
 	}
@@ -82,13 +97,13 @@ func hdelCommand(args []Value) Value {
 	hash := args[0].bulk
 	keys := args[1:]
 
-	m, err := fetchMap(b2s(hash))
+	hmap, err := fetchMap(hash)
 	if err != nil {
 		return newErrValue(err)
 	}
 	var success int
 	for _, v := range keys {
-		if m.Remove(b2s(v.bulk)) {
+		if hmap.Remove(b2s(v.bulk)) {
 			success++
 		}
 	}
@@ -98,41 +113,25 @@ func hdelCommand(args []Value) Value {
 func hgetallCommand(args []Value) Value {
 	hash := args[0].bulk
 
-	m, err := fetchMap(b2s(hash))
+	hmap, err := fetchMap(hash)
 	if err != nil {
 		return newErrValue(err)
 	}
 
 	res := make([]Value, 0, 8)
-	m.Scan(func(key, value []byte) {
+	hmap.Scan(func(key, value []byte) {
 		res = append(res, Value{typ: BULK, bulk: key})
 		res = append(res, Value{typ: BULK, bulk: value})
 	})
 	return newArrayValue(res)
 }
 
-func fetchMap(key string, setnx ...bool) (Map, error) {
+func fetchMap(key []byte, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return structx.NewMap() }, setnx...)
 }
 
-// func fetchSet(key string, setnx ...bool) (Set, error) {
-// 	return fetch(key, func() Set { return structx.NewSet() }, setnx...)
-// }
-
-// func fetchList(key string, setnx ...bool) (List, error) {
-// 	return fetch(key, func() List { return structx.NewList() }, setnx...)
-// }
-
-// func fetchBitMap(key string, setnx ...bool) (BitMap, error) {
-// 	return fetch(key, func() BitMap { return structx.NewBitmap() }, setnx...)
-// }
-
-// func fetchZSet(key string, setnx ...bool) (ZSet, error) {
-// 	return fetch(key, func() ZSet { return structx.NewZSet() }, setnx...)
-// }
-
-func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
-	item, ok := db.extras[key]
+func fetch[T any](key []byte, new func() T, setnx ...bool) (v T, err error) {
+	item, ok := db.extras[b2s(key)]
 	if ok {
 		v, ok := item.(T)
 		if ok {
@@ -143,7 +142,8 @@ func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
 
 	v = new()
 	if len(setnx) > 0 && setnx[0] {
-		db.extras[key] = v
+		// here NEED to use copy of key
+		db.extras[string(key)] = v
 	}
 	return v, nil
 }

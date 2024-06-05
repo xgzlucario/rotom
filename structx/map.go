@@ -1,8 +1,6 @@
 package structx
 
 import (
-	"slices"
-
 	cache "github.com/xgzlucario/GigaCache"
 )
 
@@ -13,7 +11,9 @@ type Map struct {
 func defaultOptions() cache.Options {
 	options := cache.DefaultOptions
 	options.ConcurrencySafe = false
-	options.ShardCount = 4
+	// the hash keys is no need expire
+	options.DisableEvict = true
+	options.ShardCount = 1
 	options.IndexSize = 8
 	options.BufferSize = 32
 	return options
@@ -27,8 +27,8 @@ func (m *Map) Get(key string) ([]byte, int64, bool) {
 	return m.m.Get(key)
 }
 
-func (m *Map) Set(key string, val []byte) {
-	m.m.Set(key, val)
+func (m *Map) Set(key string, val []byte) (newField bool) {
+	return m.m.Set(key, val)
 }
 
 func (m *Map) Remove(key string) bool {
@@ -37,8 +37,7 @@ func (m *Map) Remove(key string) bool {
 
 func (m *Map) Scan(fn func(key, value []byte)) {
 	m.m.Scan(func(key, val []byte, _ int64) (next bool) {
-		// return copy
-		fn(slices.Clone(key), slices.Clone(val))
+		fn(key, val)
 		return true
 	})
 }

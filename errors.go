@@ -10,9 +10,11 @@ var (
 
 	ErrUnknownType = errors.New("ERR unknown value type")
 
+	ErrParseInteger = errors.New("ERR value is not an integer or out of range")
+
 	ErrCRLFNotFound = errors.New("ERR CRLF not found in line")
 )
 
-func ErrWrongArgs(cmd string) error {
+func ErrWrongNumberArgs(cmd string) error {
 	return fmt.Errorf("ERR wrong number of arguments for '%s' command", cmd)
 }

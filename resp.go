@@ -188,19 +188,31 @@ func (v Value) Marshal() []byte {
 }
 
 func (v Value) marshalInteger() []byte {
-	str := strconv.FormatInt(v.num, 10)
-	return append([]byte{INTEGER}, append([]byte(str), '\r', '\n')...)
+	w := bytes.NewBuffer(nil)
+	w.WriteByte(INTEGER)
+	w.WriteString(strconv.FormatInt(v.num, 10))
+	w.Write(CRLF)
+	return w.Bytes()
 }
 
 // marshalString marshals a string value into RESP format.
 func (v Value) marshalString() []byte {
-	return append([]byte{STRING}, append([]byte(v.str), '\r', '\n')...)
+	w := bytes.NewBuffer(nil)
+	w.WriteByte(STRING)
+	w.WriteString(v.str)
+	w.Write(CRLF)
+	return w.Bytes()
 }
 
 // marshalBulk marshals a bulk string into RESP format.
 func (v Value) marshalBulk() []byte {
-	bulkHeader := append([]byte{BULK}, append([]byte(strconv.Itoa(len(v.bulk))), '\r', '\n')...)
-	return append(bulkHeader, append(v.bulk, '\r', '\n')...)
+	w := bytes.NewBuffer(nil)
+	w.WriteByte(BULK)
+	w.WriteString(strconv.Itoa(len(v.bulk)))
+	w.Write(CRLF)
+	w.Write(v.bulk)
+	w.Write(CRLF)
+	return w.Bytes()
 }
 
 // marshalArray marshals an array of values into RESP format.
@@ -214,7 +226,11 @@ func (v Value) marshalArray() []byte {
 
 // marshallError marshals an error message into RESP format.
 func (v Value) marshallError() []byte {
-	return append([]byte{ERROR}, append([]byte(v.str), '\r', '\n')...)
+	w := bytes.NewBuffer(nil)
+	w.WriteByte(ERROR)
+	w.WriteString(v.str)
+	w.Write(CRLF)
+	return w.Bytes()
 }
 
 // marshallNull marshals a null value into RESP bulk string format.

@@ -78,7 +78,7 @@ func lookupCommand(command []byte) (*Command, error) {
 
 func (cmd *Command) processCommand(args []Value) Value {
 	if len(args) < cmd.arity {
-		return newErrValue(ErrWrongArgs(cmd.name))
+		return newErrValue(ErrWrongNumberArgs(cmd.name))
 	}
 	return cmd.handler(args)
 }
