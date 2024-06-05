@@ -4,7 +4,7 @@
 
 ## 介绍
 
-你好，这里是 rotom，一个使用 Go 编写的 tiny Redis Server。 在 `v2` 版本中，项目废弃了之前版本的内嵌形式，后续将以 `net server` 的形式维护下去，一方面是为了在实践中学习 Linux 网络编程，另一方面也是为了兼容社区中大量成熟的 redis 相关工具来辅助开发。
+这里是 rotom，一个使用 Go 编写的 tiny Redis Server。 在 `v2` 版本中，项目废弃了之前版本的内嵌形式，后续将以 `net server` 的形式维护下去，一方面是为了在实践中学习 Linux 网络编程，另一方面也是为了兼容社区中大量成熟的 redis 相关工具来辅助开发。
 
 实现特性：
 
@@ -18,6 +18,8 @@
 
 ## 使用
 
+**本机运行**
+
 首先克隆项目到本地：
 
 ```bash
@@ -28,12 +30,28 @@ git clone https://github.com/xgzlucario/rotom
 
 ```
 $ go run .
-2024/06/04 17:53:09 read config file: {
+2024/06/05 15:26:47 cmd arguments: config=config.json, debug=false
+2024/06/05 15:26:47 read config file: {
     "port": 6969,
     "appendonly": false,
     "appendfilename": "appendonly.aof"
 }
-2024/06/04 17:53:09 rotom server is ready to accept.
+2024/06/05 15:26:47 rotom server is ready to accept.
+```
+
+**容器运行**
+
+或者你也可以使用容器运行，首先运行 `make build-docker` 打包：
+
+```
+REPOSITORY       TAG           IMAGE ID       CREATED         SIZE
+rotom            latest        270888260e99   3 minutes ago   21.1MB
+```
+
+然后启动容器：
+
+```bash
+docker run --rm -p 6969:6969 --name rotom rotom:latest
 ```
 
 ## 性能测试

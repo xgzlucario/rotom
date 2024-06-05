@@ -55,6 +55,7 @@ func TestHandler(t *testing.T) {
 	})
 
 	t.Run("hset", func(t *testing.T) {
+		// hset
 		res, _ := rdb.HSet(ctx, "map", "k1", "v1").Result()
 		assert.Equal(res, int64(1))
 
@@ -67,11 +68,24 @@ func TestHandler(t *testing.T) {
 		res, _ = rdb.HSet(ctx, "map", map[string]any{"k4": "v4", "k5": "v5"}).Result()
 		assert.Equal(res, int64(0))
 
+		// hget
+		{
+			res, _ := rdb.HGet(ctx, "map", "k1").Result()
+			assert.Equal(res, "v1")
+
+			res, err := rdb.HGet(ctx, "map", "k99").Result()
+			assert.Equal(err, redis.Nil)
+			assert.Equal(res, "")
+		}
+
 		resm, _ := rdb.HGetAll(ctx, "map").Result()
 		assert.Equal(resm, map[string]string{"k1": "v1", "k2": "v2", "k3": "v3", "k4": "v4", "k5": "v5"})
 
 		// error
 		_, err := rdb.HSet(ctx, "map").Result()
+		assert.Equal(err.Error(), ErrWrongNumberArgs("hset").Error())
+
+		_, err = rdb.HSet(ctx, "map", "k1", "v1", "k2").Result()
 		assert.Equal(err.Error(), ErrWrongNumberArgs("hset").Error())
 	})
 }

@@ -55,10 +55,10 @@ func getCommand(args []Value) Value {
 
 func hsetCommand(args []Value) Value {
 	hash := args[0].bulk
+	args = args[1:]
 
 	// check arguments number
-	exargs := args[1:]
-	if len(exargs) == 0 || len(exargs)%2 == 1 {
+	if len(args)%2 == 1 {
 		return newErrValue(ErrWrongNumberArgs("hset"))
 	}
 
@@ -68,9 +68,9 @@ func hsetCommand(args []Value) Value {
 	}
 
 	var newFields int
-	for i := 0; i < len(exargs); i += 2 {
-		key := exargs[i].bulk
-		value := exargs[i+1].bulk
+	for i := 0; i < len(args); i += 2 {
+		key := args[i].bulk
+		value := args[i+1].bulk
 		if hmap.Set(b2s(key), value) {
 			newFields++
 		}
