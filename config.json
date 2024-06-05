@@ -1,5 +1,5 @@
 {
-    "port": 6767,
-    "appendonly": true,
+    "port": 6969,
+    "appendonly": false,
     "appendfilename": "appendonly.aof"
 }

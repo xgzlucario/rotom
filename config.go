@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"os"
 )
 
@@ -16,6 +17,7 @@ func LoadConfig(path string) (config *Config, err error) {
 	if err != nil {
 		return
 	}
+	log.Printf("read config file: %s", jsonStr)
 
 	config = &Config{}
 	if err = json.Unmarshal(jsonStr, config); err != nil {

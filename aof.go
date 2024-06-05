@@ -6,24 +6,33 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/tidwall/mmap"
+)
+
+const (
+	KB = 1024
+	MB = 1024 * KB
 )
 
 // Aof manages an append-only file system for storing data.
 type Aof struct {
-	file *os.File
-	buf  *bytes.Buffer
-	mu   sync.Mutex
+	filePath string
+	file     *os.File
+	buf      *bytes.Buffer
+	mu       sync.Mutex
 }
 
 func NewAof(path string) (*Aof, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
+	fd, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, err
 	}
 
 	aof := &Aof{
-		file: f,
-		buf:  bytes.NewBuffer(make([]byte, 0, 1024)),
+		file:     fd,
+		filePath: path,
+		buf:      bytes.NewBuffer(make([]byte, 0, MB)),
 	}
 
 	go func() {
@@ -46,10 +55,10 @@ func (aof *Aof) Close() error {
 	return aof.file.Close()
 }
 
-func (aof *Aof) Write(value Value) error {
+func (aof *Aof) Write(buf []byte) error {
 	aof.mu.Lock()
-	defer aof.mu.Unlock()
-	_, err := aof.buf.Write(value.Marshal())
+	_, err := aof.buf.Write(buf)
+	aof.mu.Unlock()
 	return err
 }
 
@@ -57,24 +66,27 @@ func (aof *Aof) Read(fn func(value Value)) error {
 	aof.mu.Lock()
 	defer aof.mu.Unlock()
 
-	// Ensure the file pointer is at the start.
-	_, err := aof.file.Seek(0, io.SeekStart)
+	// Read file data by mmap.
+	data, err := mmap.Open(aof.filePath, false)
+	if len(data) == 0 {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 
-	reader := NewResp(aof.file)
-
 	// Iterate over the records in the file, applying the function to each.
+	reader := NewResp(data)
+	var input Value
 	for {
-		value, err := reader.Read()
+		err := reader.Read(&input)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			return err
 		}
-		fn(value)
+		fn(input)
 	}
 
 	return nil

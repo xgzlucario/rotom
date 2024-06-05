@@ -2,173 +2,143 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/xgzlucario/rotom)](https://goreportcard.com/report/github.com/xgzlucario/rotom) [![Go Reference](https://pkg.go.dev/badge/github.com/xgzlucario/rotom.svg)](https://pkg.go.dev/github.com/xgzlucario/rotom) ![](https://img.shields.io/badge/go-1.22-orange.svg) ![](https://img.shields.io/github/languages/code-size/xgzlucario/rotom.svg) [![codecov](https://codecov.io/gh/xgzlucario/rotom/graph/badge.svg?token=2V0HJ4KO3E)](https://codecov.io/gh/xgzlucario/rotom) [![Test and coverage](https://github.com/xgzlucario/rotom/actions/workflows/rotom.yml/badge.svg)](https://github.com/xgzlucario/rotom/actions/workflows/rotom.yml)
 
-English | [中文](README_ZN.md) | [doc](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc)
+## 介绍
 
-## 📃Introduction
+这里是 rotom，一个使用 Go 编写的 tiny Redis Server。 在 `v2` 版本中，项目废弃了之前版本的内嵌形式，后续将以 `net server` 的形式维护下去，一方面是为了在实践中学习 Linux 网络编程，另一方面也是为了兼容社区中大量成熟的 redis 相关工具来辅助开发。
 
-Welcome to rotom, an embedded high-performance key-value in-memory database written in Go, has many built-in data types, support for persistence and data recovery.
+实现特性：
 
-Currently features:
+1. 基于 single epoll server 的网络 IO 框架（[1m-go-tcp-server](https://github.com/smallnest/1m-go-tcp-server)）
+2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
+3. DB hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)
+4. AOF 支持
+5. 目前仅支持部分命令如 `ping`, `set`, `get`, `hset`, `hget`
 
-1. Built-in data types `string`, `map`, `set`, `list`, `zset`, and `bitmap`.
-2. Second level ttl supported for each key-value pair.
-3. Based on [GigaCache](https://github.com/xgzlucario/GigaCache), which is managing GB-level data, saving 50% memory compared to `stdmap`, with better performance and reduced GC overhead.
-4. Internal encoding/decoding lib that more effective than `protobuf`.
-5. Persistent log support, and can recover database from logs.
+目前的精力主要放在框架设计与优化上，短期内不会兼容更多的 commands。
 
-If you want to know more technical details, check out [doc](https://www.yuque.com/1ucario/devdoc/ntyyeekkxu8apngd?singleDoc).
+## 使用
 
-## 🚚Usage
+**本机运行**
 
-Before using, please install `rotom` into your project first:
+首先克隆项目到本地：
+
 ```bash
-go get github.com/xgzlucario/rotom
+git clone https://github.com/xgzlucario/rotom
 ```
-And install the gofakeit library for generating some random data:
-```bash
-go get github.com/brianvoe/gofakeit/v6
+
+确保本地 golang 环境 `>= 1.22`，在项目目录下执行 `go run .` 启动服务，默认监听 `6969` 端口：
+
 ```
-Run the sample program:
-```go
-package main
-
-import (
-	"fmt"
-	"time"
-
-	"github.com/brianvoe/gofakeit/v6"
-	"github.com/xgzlucario/rotom"
-)
-
-func main() {
-	db, err := rotom.Open(rotom.DefaultOptions)
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
-	// Set
-	for i := 0; i < 10000; i++ {
-		phone := gofakeit.Phone()
-        user := []byte(gofakeit.Username())
-		// Set bytes
-		db.Set(phone, user)
-		// Or set with ttl
-		db.SetEx(phone, user, time.Minute)
-		// Or set with deadline
-		db.SetTx(phone, user, time.Now().Add(time.Minute).UnixNano())
-	}
-    
-	// Get
-	key := gofakeit.Phone()
-	user, ttl, ok := db.Get(key)
-	// ...
+$ go run .
+2024/06/05 15:26:47 cmd arguments: config=config.json, debug=false
+2024/06/05 15:26:47 read config file: {
+    "port": 6969,
+    "appendonly": false,
+    "appendfilename": "appendonly.aof"
 }
+2024/06/05 15:26:47 rotom server is ready to accept.
 ```
-## 🚀Performance
 
-Rotom has super multi-threading performance. The following is the bench test data.
+**容器运行**
 
-### Test Environment
+或者你也可以使用容器运行，首先运行 `make build-docker` 打包：
+
+```
+REPOSITORY       TAG           IMAGE ID       CREATED         SIZE
+rotom            latest        270888260e99   3 minutes ago   21.1MB
+```
+
+然后启动容器：
+
+```bash
+docker run --rm -p 6969:6969 --name rotom rotom:latest
+```
+
+## 性能测试
+
+测试将在同一台机器上运行 rotom，关闭 `appendonly`，并使用官方 `redis-benchmark` 工具测试不同命令的耗时。
 
 ```
 goos: linux
 goarch: amd64
-pkg: github.com/xgzlucario/GigaCache
-cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
+pkg: github.com/xgzlucario/rotom
+cpu: Intel(R) Core(TM) i7-8700 CPU @ 3.20GHz
 ```
 
-### Benchmark
+SET
 
 ```bash
-========== Set ==========
-size: 100*10000 enties
-desc: key 10 bytes, value 10 bytes
-cost: 1.120466957s
-qps: 892467.60
-50th: 990 ns
-90th: 1107 ns
-99th: 1724 ns
+$ redis-benchmark -t set -p 6969
+====== SET ======
+  100000 requests completed in 0.99 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+  multi-thread: no
 
-========== BatchSet ==========
-size: 100*10000 enties
-desc: key 10 bytes, value 10 bytes, 100 key-values a batch
-cost: 377.933308ms
-qps: 2645850.27
-50th: 20691 ns
-90th: 32950 ns
-99th: 95645 ns
-
-========== Get ==========
-size: 100*10000 enties
-desc: key 10 bytes, value 10 bytes
-cost: 255.023737ms
-qps: 3920845.99
-50th: 212 ns
-90th: 267 ns
-99th: 532 ns
-
-========== Get 8 parallel ==========
-size: 100*10000 enties
-desc: key 10 bytes, value 10 bytes
-cost: 138.089874ms
-qps: 7240728.26
-50th: 173 ns
-90th: 261 ns
-99th: 501 ns
-
-========== RPush ==========
-size: 100*10000 enties
-desc: value 10 bytes
-cost: 1.033844185s
-qps: 967248.36
-50th: 936 ns
-90th: 1011 ns
-99th: 1609 ns
-
-========== HSet ==========
-size: 100*10000 enties
-desc: field 10 bytes, value 10 bytes
-cost: 1.182939928s
-qps: 845337.51
-50th: 987 ns
-90th: 1117 ns
-99th: 1850 ns
-
-========== BatchHSet ==========
-size: 100*10000 enties
-desc: field 10 bytes, value 10 bytes, 100 key-values a batch
-cost: 365.036647ms
-qps: 2739329.61
-50th: 16900 ns
-90th: 41312 ns
-99th: 89803 ns
-
-========== HGet ==========
-size: 100*10000 enties
-desc: field 10 bytes, value 10 bytes
-cost: 292.57105ms
-qps: 3417634.25
-50th: 220 ns
-90th: 306 ns
-99th: 575 ns
-
-========== BitSet ==========
-size: 100*10000 enties
-desc: offset uint32
-cost: 916.172391ms
-qps: 1091477.02
-50th: 833 ns
-90th: 880 ns
-99th: 1219 ns
-
-========== ZSet ==========
-size: 100*10000 enties
-desc: field 10 bytes, incr int64
-cost: 1.209290877s
-qps: 826918.57
-50th: 1038 ns
-90th: 1192 ns
-99th: 2257 ns
+0.00% <= 0.1 milliseconds
+0.02% <= 0.2 milliseconds
+96.59% <= 0.3 milliseconds
+97.43% <= 0.4 milliseconds
+98.82% <= 0.5 milliseconds
+99.80% <= 0.6 milliseconds
+99.87% <= 0.7 milliseconds
+99.95% <= 0.8 milliseconds
+99.97% <= 0.9 milliseconds
+99.98% <= 1.0 milliseconds
+100.00% <= 1.1 milliseconds
+101214.58 requests per second
 ```
 
+GET
+
+```bash
+$ redis-benchmark -t get -p 6969
+====== GET ======
+  100000 requests completed in 0.99 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+  multi-thread: no
+
+0.00% <= 0.1 milliseconds
+0.02% <= 0.2 milliseconds
+97.46% <= 0.3 milliseconds
+98.53% <= 0.4 milliseconds
+99.61% <= 0.5 milliseconds
+99.79% <= 0.6 milliseconds
+99.88% <= 0.7 milliseconds
+99.95% <= 0.9 milliseconds
+99.98% <= 1.3 milliseconds
+100.00% <= 1.3 milliseconds
+101522.84 requests per second
+```
+
+HSET
+
+```bash
+$ redis-benchmark -t hset -p 6969
+====== HSET ======
+  100000 requests completed in 1.00 seconds
+  50 parallel clients
+  3 bytes payload
+  keep alive: 1
+  multi-thread: no
+
+0.00% <= 0.2 milliseconds
+97.90% <= 0.3 milliseconds
+98.54% <= 0.4 milliseconds
+99.20% <= 0.5 milliseconds
+99.63% <= 0.6 milliseconds
+99.72% <= 0.7 milliseconds
+99.88% <= 0.8 milliseconds
+99.93% <= 0.9 milliseconds
+99.95% <= 1.0 milliseconds
+99.97% <= 1.4 milliseconds
+100.00% <= 1.4 milliseconds
+100300.91 requests per second
+```
+
+火焰图
+
+![img](graph.jpg)
