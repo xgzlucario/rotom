@@ -1,9 +1,6 @@
 package main
 
 import (
-	"log"
-	"net"
-	"reflect"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -85,16 +82,16 @@ func (loop *AeLoop) AddFileEvent(fd int, mask FeType, proc FileProc, extra inter
 	ev |= fe2ep[mask]
 	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{Fd: int32(fd), Events: ev})
 	if err != nil {
-		log.Printf("epoll ctr err: %v\n", err)
+		logger.Error().Msgf("epoll ctl error: %v", err)
 		return
 	}
 	// ae ctl
-	var fe AeFileEvent
-	fe.fd = fd
-	fe.mask = mask
-	fe.proc = proc
-	fe.extra = extra
-	loop.FileEvents[getFeKey(fd, mask)] = &fe
+	loop.FileEvents[getFeKey(fd, mask)] = &AeFileEvent{
+		fd:    fd,
+		mask:  mask,
+		proc:  proc,
+		extra: extra,
+	}
 }
 
 func (loop *AeLoop) RemoveFileEvent(fd int, mask FeType) {
@@ -107,7 +104,7 @@ func (loop *AeLoop) RemoveFileEvent(fd int, mask FeType) {
 	}
 	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{Fd: int32(fd), Events: ev})
 	if err != nil {
-		log.Printf("epoll del err: %v\n", err)
+		logger.Error().Msgf("epoll del error: %v", err)
 	}
 	// ae ctl
 	loop.FileEvents[getFeKey(fd, mask)] = nil
@@ -183,7 +180,7 @@ func (loop *AeLoop) AeWait() (tes []*AeTimeEvent, fes []*AeFileEvent) {
 	var events [128]unix.EpollEvent
 	n, err := unix.EpollWait(loop.fileEventFd, events[:], int(timeout))
 	if err != nil {
-		log.Printf("epoll wait warnning: %v\n", err)
+		logger.Error().Msgf("epoll wait error: %v", err)
 	}
 	// collect file events
 	for i := 0; i < n; i++ {
@@ -221,25 +218,13 @@ func (loop *AeLoop) AeProcess(tes []*AeTimeEvent, fes []*AeFileEvent) {
 			te.when = GetMsTime() + te.interval
 		}
 	}
-	if len(fes) > 0 {
-		// log.Println("ae is processing file events")
-		for _, fe := range fes {
-			fe.proc(loop, fe.fd, fe.extra)
-		}
+	for _, fe := range fes {
+		fe.proc(loop, fe.fd, fe.extra)
 	}
 }
 
 func (loop *AeLoop) AeMain() {
 	for {
-		tes, fes := loop.AeWait()
-		loop.AeProcess(tes, fes)
+		loop.AeProcess(loop.AeWait())
 	}
-}
-
-func socketFD(conn net.Conn) int {
-	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
-	fdVal := tcpConn.FieldByName("fd")
-	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
-
-	return int(pfdVal.FieldByName("Sysfd").Int())
 }

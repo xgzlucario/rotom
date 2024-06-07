@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"net"
 
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
@@ -110,11 +108,11 @@ func InitDB(config *Config) (err error) {
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)
 		if err != nil {
-			log.Println("failed to initialize aof file:", err)
+			logger.Error().Msgf("failed to initialize aof file: %v", err)
 			return
 		}
 
-		log.Printf("start loading aof file...")
+		logger.Debug().Msg("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
 		err = db.aof.Read(func(value Value) {
@@ -127,7 +125,7 @@ func InitDB(config *Config) (err error) {
 			}
 		})
 		if err != nil {
-			log.Println("read appendonly file error:", err)
+			logger.Error().Msgf("read appendonly file error: %v", err)
 			return
 		}
 	}
@@ -135,56 +133,55 @@ func InitDB(config *Config) (err error) {
 	return nil
 }
 
-func (server *Server) handleConnection(buf []byte, conn net.Conn) {
-	// resp := NewResp(buf)
-	// for {
-	// 	err := resp.Read(&server.args)
-	// 	if err != nil {
-	// 		if err != io.EOF {
-	// 			log.Println("read resp error:", err)
-	// 		}
-	// 		return
-	// 	}
+// func (server *Server) handleConnection(buf []byte, conn net.Conn) {
+// resp := NewResp(buf)
+// for {
+// 	err := resp.Read(&server.args)
+// 	if err != nil {
+// 		if err != io.EOF {
+// 			log.Println("read resp error:", err)
+// 		}
+// 		return
+// 	}
 
-	// 	if server.args.typ != ARRAY || len(server.args.array) == 0 {
-	// 		log.Println("invalid request, expected non-empty array")
-	// 		continue
-	// 	}
+// 	if server.args.typ != ARRAY || len(server.args.array) == 0 {
+// 		log.Println("invalid request, expected non-empty array")
+// 		continue
+// 	}
 
-	// 	command := server.args.array[0].bulk
-	// 	args := server.args.array[1:]
-	// 	var res Value
+// 	command := server.args.array[0].bulk
+// 	args := server.args.array[1:]
+// 	var res Value
 
-	// 	cmd, err := lookupCommand(command)
-	// 	if err != nil {
-	// 		res = newErrValue(err)
+// 	cmd, err := lookupCommand(command)
+// 	if err != nil {
+// 		res = newErrValue(err)
 
-	// 	} else {
-	// 		res = cmd.processCommand(args)
+// 	} else {
+// 		res = cmd.processCommand(args)
 
-	// 		if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
-	// 			db.aof.Write(buf)
-	// 		}
-	// 	}
+// 		if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
+// 			db.aof.Write(buf)
+// 		}
+// 	}
 
-	// 	if _, err = conn.Write(res.Marshal()); err != nil {
-	// 		log.Println("write reply error:", err)
-	// 	}
-	// }
-}
+// 	if _, err = conn.Write(res.Marshal()); err != nil {
+// 		log.Println("write reply error:", err)
+// 	}
+// }
+// }
 
 // AcceptHandler is the main file event of aeloop.
 func AcceptHandler(loop *AeLoop, fd int, extra interface{}) {
 	cfd, err := Accept(fd)
 	if err != nil {
-		log.Printf("accept err: %v\n", err)
+		logger.Error().Msgf("accept err: %v", err)
 		return
 	}
 	client := CreateClient(cfd)
-	//TODO: check max clients limit
 	server.clients[cfd] = client
 	server.aeLoop.AddFileEvent(cfd, AE_READABLE, ReadQueryFromClient, client)
-	log.Printf("accept client, fd: %v\n", cfd)
+	logger.Debug().Msgf("accept client, fd: %d", cfd)
 }
 
 func CreateClient(fd int) *Client {
@@ -199,8 +196,8 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
 	_, err := Read(fd, client.queryBuf)
 	if err != nil {
-		log.Printf("client %v read err: %v\n", fd, err)
-		freeClient(client)
+		logger.Error().Msgf("client %v read err: %v", fd, err)
+		server.freeClient(client)
 		return
 	}
 
@@ -208,7 +205,7 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	ProcessQueryBuf(client)
 }
 
-func freeClient(client *Client) {
+func (server *Server) freeClient(client *Client) {
 	delete(server.clients, client.fd)
 	server.aeLoop.RemoveFileEvent(client.fd, AE_READABLE)
 	server.aeLoop.RemoveFileEvent(client.fd, AE_WRITABLE)
@@ -224,25 +221,33 @@ func ProcessQueryBuf(c *Client) {
 
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
+
+	// send all replies back
 	for _, reply := range client.reply {
 		_, err := Write(fd, reply.Marshal())
 		if err != nil {
-			log.Printf("send reply err: %v\n", err)
-			freeClient(client)
+			logger.Error().Msgf("send reply err: %v", err)
+			server.freeClient(client)
 			return
 		}
 	}
 	client.reply = client.reply[:0]
+
+	// remove file event
 	loop.RemoveFileEvent(fd, AE_WRITABLE)
 }
 
 func initServer(config *Config) (err error) {
 	server.port = config.Port
 	server.clients = make(map[int]*Client)
-
-	if server.aeLoop, err = AeLoopCreate(); err != nil {
-		return
+	server.aeLoop, err = AeLoopCreate()
+	if err != nil {
+		return err
 	}
 	server.fd, err = TcpServer(server.port)
-	return
+	if err != nil {
+		Close(server.fd)
+		return err
+	}
+	return nil
 }

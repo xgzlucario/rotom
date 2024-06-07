@@ -2,10 +2,20 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"time"
+
+	"github.com/rs/zerolog"
 )
+
+var logger = zerolog.
+	New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime}).
+	Level(zerolog.TraceLevel).
+	With().
+	Timestamp().
+	Logger()
 
 func runDebug() {
 	go http.ListenAndServe(":6060", nil)
@@ -19,23 +29,23 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "run with debug mode.")
 	flag.Parse()
 
-	log.Printf("cmd arguments: config=%s, debug=%v", path, debug)
+	logger.Debug().Str("config", path).Bool("debug", debug).Msg("read cmd arguments")
 
 	config, err := LoadConfig(path)
 	if err != nil {
-		log.Panicf("load config error: %v\n", err)
+		logger.Error().Msgf("load config error: %v", err)
 	}
 	if err = initServer(config); err != nil {
-		log.Panicf("init server error: %v\n", err)
+		logger.Error().Msgf("init server error: %v", err)
 	}
 	if err = InitDB(config); err != nil {
-		log.Panicf("init db error: %v\n", err)
+		logger.Error().Msgf("init db error: %v", err)
 	}
 	if debug {
 		runDebug()
 	}
 	server.aeLoop.AddFileEvent(server.fd, AE_READABLE, AcceptHandler, nil)
 	// server.aeLoop.AddTimeEvent(AE_NORMAL, 100, ServerCron, nil)
-	log.Println("rotom server is up.")
+	logger.Debug().Msg("rotom server is ready to accept.")
 	server.aeLoop.AeMain()
 }

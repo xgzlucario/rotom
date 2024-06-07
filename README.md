@@ -8,7 +8,7 @@
 
 实现特性：
 
-1. 基于 single epoll server 的网络 IO 框架（[1m-go-tcp-server](https://github.com/smallnest/1m-go-tcp-server)）
+1. 基于 unix 编程实现的基于 epoll 的无锁 AeLoop 事件循环机制（[参考godis](https://github.com/archeryue/godis)）
 2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
 3. DB hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)
 4. AOF 支持
