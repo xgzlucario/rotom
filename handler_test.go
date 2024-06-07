@@ -15,8 +15,11 @@ func startup() {
 	if err := InitDB(config); err != nil {
 		log.Panic("init db error:", err)
 	}
-	server.config = config
-	server.RunServe()
+	if err := initServer(config); err != nil {
+		log.Panicf("init server error: %v\n", err)
+	}
+	server.aeLoop.AddFileEvent(server.fd, AE_READABLE, AcceptHandler, nil)
+	server.aeLoop.AeMain()
 }
 
 var ctx = context.Background()

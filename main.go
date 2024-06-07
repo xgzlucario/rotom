@@ -25,12 +25,17 @@ func main() {
 	if err != nil {
 		log.Panicf("load config error: %v\n", err)
 	}
+	if err = initServer(config); err != nil {
+		log.Panicf("init server error: %v\n", err)
+	}
 	if err = InitDB(config); err != nil {
 		log.Panicf("init db error: %v\n", err)
 	}
 	if debug {
 		runDebug()
 	}
-	server.config = config
-	server.RunServe()
+	server.aeLoop.AddFileEvent(server.fd, AE_READABLE, AcceptHandler, nil)
+	// server.aeLoop.AddTimeEvent(AE_NORMAL, 100, ServerCron, nil)
+	log.Println("rotom server is up.")
+	server.aeLoop.AeMain()
 }

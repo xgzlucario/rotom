@@ -2,13 +2,23 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"os"
 
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
+)
+
+type CmdType = byte
+
+const (
+	COMMAND_UNKNOWN CmdType = iota
+	COMMAND_INLINE
+	COMMAND_BULK
+)
+
+const (
+	IO_BUF = 64 * KB
 )
 
 type (
@@ -25,10 +35,17 @@ type DB struct {
 	aof    *Aof
 }
 
+type Client struct {
+	fd       int
+	queryBuf []byte
+	reply    []Value
+}
+
 type Server struct {
-	config  *Config
-	epoller *epoll
-	args    Value // global reused arguments
+	fd      int
+	port    int
+	aeLoop  *AeLoop
+	clients map[int]*Client
 }
 
 type Command struct {
@@ -67,7 +84,7 @@ var (
 )
 
 func lookupCommand(command []byte) (*Command, error) {
-	cmdStr := b2s(ToLowerNoCopy(command))
+	cmdStr := string(command)
 	for _, c := range cmdTable {
 		if c.name == cmdStr {
 			return &c, nil
@@ -118,96 +135,114 @@ func InitDB(config *Config) (err error) {
 	return nil
 }
 
-func (server *Server) RunServe() {
-	// Start tcp listener.
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", server.config.Port))
-	if err != nil {
-		log.Println("Error creating listener:", err)
-		os.Exit(1)
-	}
-	defer listener.Close()
+func (server *Server) handleConnection(buf []byte, conn net.Conn) {
+	// resp := NewResp(buf)
+	// for {
+	// 	err := resp.Read(&server.args)
+	// 	if err != nil {
+	// 		if err != io.EOF {
+	// 			log.Println("read resp error:", err)
+	// 		}
+	// 		return
+	// 	}
 
-	// Start epoll waiter.
-	epoller, err := MkEpoll()
-	if err != nil {
-		log.Println("Error creating epoller:", err)
-		os.Exit(1)
-	}
-	server.epoller = epoller
+	// 	if server.args.typ != ARRAY || len(server.args.array) == 0 {
+	// 		log.Println("invalid request, expected non-empty array")
+	// 		continue
+	// 	}
 
-	go func() {
-		var buf = make([]byte, 512)
-		for {
-			connections, err := epoller.Wait()
-			if err != nil {
-				log.Println("failed to epoll wait:", err)
-				continue
-			}
+	// 	command := server.args.array[0].bulk
+	// 	args := server.args.array[1:]
+	// 	var res Value
 
-			for _, conn := range connections {
-				if conn == nil {
-					break
-				}
+	// 	cmd, err := lookupCommand(command)
+	// 	if err != nil {
+	// 		res = newErrValue(err)
 
-				if n, err := conn.Read(buf); err != nil {
-					if err := epoller.Remove(conn); err != nil {
-						log.Println("failed to remove:", err)
-					}
-					conn.Close()
+	// 	} else {
+	// 		res = cmd.processCommand(args)
 
-				} else {
-					server.handleConnection(buf[:n], conn)
-				}
-			}
-		}
-	}()
+	// 		if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
+	// 			db.aof.Write(buf)
+	// 		}
+	// 	}
 
-	log.Println("rotom server is ready to accept.")
-
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Println("Error accepting connection:", err)
-			continue
-		}
-		epoller.Add(conn)
-	}
+	// 	if _, err = conn.Write(res.Marshal()); err != nil {
+	// 		log.Println("write reply error:", err)
+	// 	}
+	// }
 }
 
-func (server *Server) handleConnection(buf []byte, conn net.Conn) {
-	resp := NewResp(buf)
-	for {
-		err := resp.Read(&server.args)
+// AcceptHandler is the main file event of aeloop.
+func AcceptHandler(loop *AeLoop, fd int, extra interface{}) {
+	cfd, err := Accept(fd)
+	if err != nil {
+		log.Printf("accept err: %v\n", err)
+		return
+	}
+	client := CreateClient(cfd)
+	//TODO: check max clients limit
+	server.clients[cfd] = client
+	server.aeLoop.AddFileEvent(cfd, AE_READABLE, ReadQueryFromClient, client)
+	log.Printf("accept client, fd: %v\n", cfd)
+}
+
+func CreateClient(fd int) *Client {
+	var client Client
+	client.fd = fd
+	client.reply = make([]Value, 0, 8)
+	client.queryBuf = make([]byte, KB)
+	return &client
+}
+
+func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
+	client := extra.(*Client)
+	_, err := Read(fd, client.queryBuf)
+	if err != nil {
+		log.Printf("client %v read err: %v\n", fd, err)
+		freeClient(client)
+		return
+	}
+
+	// TODO
+	ProcessQueryBuf(client)
+}
+
+func freeClient(client *Client) {
+	delete(server.clients, client.fd)
+	server.aeLoop.RemoveFileEvent(client.fd, AE_READABLE)
+	server.aeLoop.RemoveFileEvent(client.fd, AE_WRITABLE)
+	Close(client.fd)
+}
+
+func ProcessQueryBuf(c *Client) {
+	// ALWAYS return ok
+	c.reply = append(c.reply, ValueOK)
+	// ADD writable event
+	server.aeLoop.AddFileEvent(c.fd, AE_WRITABLE, SendReplyToClient, c)
+}
+
+func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
+	client := extra.(*Client)
+	for _, reply := range client.reply {
+		_, err := Write(fd, reply.Marshal())
 		if err != nil {
-			if err != io.EOF {
-				log.Println("read resp error:", err)
-			}
+			log.Printf("send reply err: %v\n", err)
+			freeClient(client)
 			return
 		}
-
-		if server.args.typ != ARRAY || len(server.args.array) == 0 {
-			log.Println("invalid request, expected non-empty array")
-			continue
-		}
-
-		command := server.args.array[0].bulk
-		args := server.args.array[1:]
-		var res Value
-
-		cmd, err := lookupCommand(command)
-		if err != nil {
-			res = newErrValue(err)
-
-		} else {
-			res = cmd.processCommand(args)
-
-			if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
-				db.aof.Write(buf)
-			}
-		}
-
-		if _, err = conn.Write(res.Marshal()); err != nil {
-			log.Println("write reply error:", err)
-		}
 	}
+	client.reply = client.reply[:0]
+	loop.RemoveFileEvent(fd, AE_WRITABLE)
+}
+
+func initServer(config *Config) (err error) {
+	server.port = config.Port
+	server.clients = make(map[int]*Client)
+
+	if server.aeLoop, err = AeLoopCreate(); err != nil {
+		return
+	}
+	server.fd, err = TcpServer(server.port)
+	return
 }
