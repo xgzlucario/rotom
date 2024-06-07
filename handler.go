@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strconv"
-	"time"
 
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -15,31 +13,12 @@ func pingCommand(_ []Value) Value {
 func setCommand(args []Value) Value {
 	key := args[0].bulk
 	value := args[1].bulk
-	exargs := args[2:]
-	var duration time.Duration
-
-	for i, arg := range exargs {
-		switch b2s(arg.bulk) {
-		case "NX", "nx":
-		case "PX", "px":
-		case "EX", "ex":
-			if len(exargs) > i+1 {
-				seconds, err := strconv.Atoi(b2s(exargs[i+1].bulk))
-				if err != nil {
-					return newErrValue(ErrParseInteger)
-				}
-				duration = time.Duration(seconds)
-			} else {
-				return newErrValue(ErrWrongNumberArgs("set"))
-			}
-		}
-	}
-	db.strs.SetEx(b2s(key), value, duration)
+	db.strs.Set(string(key), value)
 	return ValueOK
 }
 
 func getCommand(args []Value) Value {
-	key := b2s(args[0].bulk)
+	key := string(args[0].bulk)
 
 	value, _, ok := db.strs.Get(key)
 	if ok {
@@ -54,7 +33,7 @@ func getCommand(args []Value) Value {
 }
 
 func hsetCommand(args []Value) Value {
-	hash := args[0].bulk
+	hash := string(args[0].bulk)
 	args = args[1:]
 
 	// check arguments number
@@ -71,7 +50,7 @@ func hsetCommand(args []Value) Value {
 	for i := 0; i < len(args); i += 2 {
 		key := args[i].bulk
 		value := args[i+1].bulk
-		if hmap.Set(b2s(key), value) {
+		if hmap.Set(string(key), value) {
 			newFields++
 		}
 	}
@@ -79,14 +58,14 @@ func hsetCommand(args []Value) Value {
 }
 
 func hgetCommand(args []Value) Value {
-	hash := args[0].bulk
-	key := args[1].bulk
+	hash := string(args[0].bulk)
+	key := string(args[1].bulk)
 
 	hmap, err := fetchMap(hash)
 	if err != nil {
 		return newErrValue(ErrWrongType)
 	}
-	value, _, ok := hmap.Get(b2s(key))
+	value, _, ok := hmap.Get(key)
 	if !ok {
 		return ValueNull
 	}
@@ -94,7 +73,7 @@ func hgetCommand(args []Value) Value {
 }
 
 func hdelCommand(args []Value) Value {
-	hash := args[0].bulk
+	hash := string(args[0].bulk)
 	keys := args[1:]
 
 	hmap, err := fetchMap(hash)
@@ -103,7 +82,7 @@ func hdelCommand(args []Value) Value {
 	}
 	var success int
 	for _, v := range keys {
-		if hmap.Remove(b2s(v.bulk)) {
+		if hmap.Remove(string(v.bulk)) {
 			success++
 		}
 	}
@@ -111,7 +90,7 @@ func hdelCommand(args []Value) Value {
 }
 
 func hgetallCommand(args []Value) Value {
-	hash := args[0].bulk
+	hash := string(args[0].bulk)
 
 	hmap, err := fetchMap(hash)
 	if err != nil {
@@ -126,12 +105,12 @@ func hgetallCommand(args []Value) Value {
 	return newArrayValue(res)
 }
 
-func fetchMap(key []byte, setnx ...bool) (Map, error) {
+func fetchMap(key string, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return structx.NewMap() }, setnx...)
 }
 
-func fetch[T any](key []byte, new func() T, setnx ...bool) (v T, err error) {
-	item, ok := db.extras[b2s(key)]
+func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
+	item, ok := db.extras[key]
 	if ok {
 		v, ok := item.(T)
 		if ok {
@@ -142,8 +121,7 @@ func fetch[T any](key []byte, new func() T, setnx ...bool) (v T, err error) {
 
 	v = new()
 	if len(setnx) > 0 && setnx[0] {
-		// here NEED to use copy of key
-		db.extras[string(key)] = v
+		db.extras[key] = v
 	}
 	return v, nil
 }

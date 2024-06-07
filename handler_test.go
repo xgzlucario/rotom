@@ -49,11 +49,8 @@ func TestHandler(t *testing.T) {
 		res, _ = rdb.Get(ctx, "foo").Result()
 		assert.Equal(res, "bar")
 
-		// expire
-		rdb.Set(ctx, "foo", "bar1", time.Second).Result()
-		time.Sleep(time.Second * 2)
-
-		res, _ = rdb.Get(ctx, "foo").Result()
+		res, err := rdb.Get(ctx, "none").Result()
+		assert.Equal(err, redis.Nil)
 		assert.Equal(res, "")
 	})
 

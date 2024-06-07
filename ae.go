@@ -117,14 +117,15 @@ func GetMsTime() int64 {
 func (loop *AeLoop) AddTimeEvent(mask TeType, interval int64, proc TimeProc, extra interface{}) int {
 	id := loop.timeEventNextId
 	loop.timeEventNextId++
-	var te AeTimeEvent
-	te.id = id
-	te.mask = mask
-	te.interval = interval
-	te.when = GetMsTime() + interval
-	te.proc = proc
-	te.extra = extra
-	te.next = loop.TimeEvents
+	te := AeTimeEvent{
+		id:       id,
+		mask:     mask,
+		interval: interval,
+		when:     GetMsTime() + interval,
+		proc:     proc,
+		extra:    extra,
+		next:     loop.TimeEvents,
+	}
 	loop.TimeEvents = &te
 	return id
 }
@@ -183,15 +184,15 @@ func (loop *AeLoop) AeWait() (tes []*AeTimeEvent, fes []*AeFileEvent) {
 		logger.Error().Msgf("epoll wait error: %v", err)
 	}
 	// collect file events
-	for i := 0; i < n; i++ {
-		if events[i].Events&unix.EPOLLIN != 0 {
-			fe := loop.FileEvents[getFeKey(int(events[i].Fd), AE_READABLE)]
+	for _, ev := range events[:n] {
+		if ev.Events&unix.EPOLLIN != 0 {
+			fe := loop.FileEvents[getFeKey(int(ev.Fd), AE_READABLE)]
 			if fe != nil {
 				fes = append(fes, fe)
 			}
 		}
-		if events[i].Events&unix.EPOLLOUT != 0 {
-			fe := loop.FileEvents[getFeKey(int(events[i].Fd), AE_WRITABLE)]
+		if ev.Events&unix.EPOLLOUT != 0 {
+			fe := loop.FileEvents[getFeKey(int(ev.Fd), AE_WRITABLE)]
 			if fe != nil {
 				fes = append(fes, fe)
 			}

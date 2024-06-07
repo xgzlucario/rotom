@@ -1,18 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"container/list"
 	"fmt"
+	"strings"
 
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
-)
-
-type CmdType = byte
-
-const (
-	COMMAND_UNKNOWN CmdType = iota
-	COMMAND_INLINE
-	COMMAND_BULK
 )
 
 const (
@@ -35,13 +30,14 @@ type DB struct {
 
 type Client struct {
 	fd       int
+	queryLen int
 	queryBuf []byte
-	reply    []Value
+	reply    *list.List
 }
 
 type Server struct {
 	fd      int
-	port    int
+	config  *Config
 	aeLoop  *AeLoop
 	clients map[int]*Client
 }
@@ -81,14 +77,14 @@ var (
 	}
 )
 
-func lookupCommand(command []byte) (*Command, error) {
-	cmdStr := string(command)
+func lookupCommand(command string) *Command {
+	cmdStr := strings.ToLower(command)
 	for _, c := range cmdTable {
 		if c.name == cmdStr {
-			return &c, nil
+			return &c
 		}
 	}
-	return nil, fmt.Errorf("invalid command: %s", command)
+	return nil
 }
 
 func (cmd *Command) processCommand(args []Value) Value {
@@ -116,11 +112,11 @@ func InitDB(config *Config) (err error) {
 
 		// Load the initial data into memory by processing each stored command.
 		err = db.aof.Read(func(value Value) {
-			command := value.array[0].bulk
+			command := string(value.array[0].bulk)
 			args := value.array[1:]
 
-			cmd, err := lookupCommand(command)
-			if err == nil {
+			cmd := lookupCommand(command)
+			if cmd != nil {
 				cmd.processCommand(args)
 			}
 		})
@@ -133,121 +129,118 @@ func InitDB(config *Config) (err error) {
 	return nil
 }
 
-// func (server *Server) handleConnection(buf []byte, conn net.Conn) {
-// resp := NewResp(buf)
-// for {
-// 	err := resp.Read(&server.args)
-// 	if err != nil {
-// 		if err != io.EOF {
-// 			log.Println("read resp error:", err)
-// 		}
-// 		return
-// 	}
-
-// 	if server.args.typ != ARRAY || len(server.args.array) == 0 {
-// 		log.Println("invalid request, expected non-empty array")
-// 		continue
-// 	}
-
-// 	command := server.args.array[0].bulk
-// 	args := server.args.array[1:]
-// 	var res Value
-
-// 	cmd, err := lookupCommand(command)
-// 	if err != nil {
-// 		res = newErrValue(err)
-
-// 	} else {
-// 		res = cmd.processCommand(args)
-
-// 		if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
-// 			db.aof.Write(buf)
-// 		}
-// 	}
-
-// 	if _, err = conn.Write(res.Marshal()); err != nil {
-// 		log.Println("write reply error:", err)
-// 	}
-// }
-// }
-
 // AcceptHandler is the main file event of aeloop.
-func AcceptHandler(loop *AeLoop, fd int, extra interface{}) {
+func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	cfd, err := Accept(fd)
 	if err != nil {
 		logger.Error().Msgf("accept err: %v", err)
 		return
 	}
-	client := CreateClient(cfd)
+	// create client
+	client := &Client{
+		fd:       cfd,
+		reply:    list.New(),
+		queryBuf: make([]byte, KB),
+	}
 	server.clients[cfd] = client
-	server.aeLoop.AddFileEvent(cfd, AE_READABLE, ReadQueryFromClient, client)
+	loop.AddFileEvent(cfd, AE_READABLE, ReadQueryFromClient, client)
 	logger.Debug().Msgf("accept client, fd: %d", cfd)
-}
-
-func CreateClient(fd int) *Client {
-	var client Client
-	client.fd = fd
-	client.reply = make([]Value, 0, 8)
-	client.queryBuf = make([]byte, KB)
-	return &client
 }
 
 func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
-	_, err := Read(fd, client.queryBuf)
+	n, err := Read(fd, client.queryBuf[client.queryLen:])
 	if err != nil {
 		logger.Error().Msgf("client %v read err: %v", fd, err)
-		server.freeClient(client)
+		freeClient(client)
 		return
 	}
-
-	// TODO
-	ProcessQueryBuf(client)
+	if n > 0 {
+		client.queryLen += n
+		ProcessQueryBuf(client)
+	}
 }
 
-func (server *Server) freeClient(client *Client) {
+func resetClient(client *Client) {
+	client.queryLen = 0
+}
+
+func freeClient(client *Client) {
 	delete(server.clients, client.fd)
 	server.aeLoop.RemoveFileEvent(client.fd, AE_READABLE)
 	server.aeLoop.RemoveFileEvent(client.fd, AE_WRITABLE)
 	Close(client.fd)
 }
 
-func ProcessQueryBuf(c *Client) {
-	// ALWAYS return ok
-	c.reply = append(c.reply, ValueOK)
+func ProcessQueryBuf(client *Client) {
+	queryBuf := client.queryBuf[:client.queryLen]
+	resp := NewResp(bytes.NewReader(queryBuf))
+
+	value, err := resp.Read()
+	if err != nil {
+		logger.Error().Msgf("read resp error: %v", err)
+		return
+	}
+
+	command := value.array[0].bulk
+	args := value.array[1:]
+	var res Value
+
+	// look up for command
+	cmd := lookupCommand(string(command))
+	if cmd != nil {
+		res = cmd.processCommand(args)
+		if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
+			db.aof.Write(queryBuf)
+		}
+
+	} else {
+		res = newErrValue(fmt.Errorf("invalid command: %s", command))
+	}
+
+	client.reply.PushBack(res)
+	resetClient(client)
+
 	// ADD writable event
-	server.aeLoop.AddFileEvent(c.fd, AE_WRITABLE, SendReplyToClient, c)
+	server.aeLoop.AddFileEvent(client.fd, AE_WRITABLE, SendReplyToClient, client)
 }
 
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
 
 	// send all replies back
-	for _, reply := range client.reply {
-		_, err := Write(fd, reply.Marshal())
+	for client.reply.Len() > 0 {
+		elem := client.reply.Remove(client.reply.Front())
+		_, err := Write(fd, elem.(Value).Marshal())
 		if err != nil {
 			logger.Error().Msgf("send reply err: %v", err)
-			server.freeClient(client)
+			freeClient(client)
 			return
 		}
 	}
-	client.reply = client.reply[:0]
-
-	// remove file event
 	loop.RemoveFileEvent(fd, AE_WRITABLE)
 }
 
 func initServer(config *Config) (err error) {
-	server.port = config.Port
+	server.config = config
 	server.clients = make(map[int]*Client)
 	server.aeLoop, err = AeLoopCreate()
 	if err != nil {
 		return err
 	}
-	server.fd, err = TcpServer(server.port)
+	server.fd, err = TcpServer(config.Port)
 	if err != nil {
 		Close(server.fd)
 		return err
 	}
 	return nil
+}
+
+// ServerCronFlush flush aof file for every second.
+func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
+	err := db.aof.Flush()
+	logger.Debug().Msg("flush")
+	if err != nil {
+		logger.Error().Msgf("flush aof buffer error: %v", err)
+	}
 }

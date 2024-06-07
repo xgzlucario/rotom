@@ -44,8 +44,12 @@ func main() {
 	if debug {
 		runDebug()
 	}
+
+	// register main aeLoop event
 	server.aeLoop.AddFileEvent(server.fd, AE_READABLE, AcceptHandler, nil)
-	// server.aeLoop.AddTimeEvent(AE_NORMAL, 100, ServerCron, nil)
+	if server.config.AppendOnly {
+		server.aeLoop.AddTimeEvent(AE_NORMAL, 1000, ServerCronFlush, nil)
+	}
 	logger.Debug().Msg("rotom server is ready to accept.")
 	server.aeLoop.AeMain()
 }

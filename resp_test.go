@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"testing"
 
@@ -15,8 +16,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "+OK\r\n")
 
-		var value2 Value
-		err := NewResp(data).Read(&value2)
+		_, err := NewResp(bytes.NewReader(data)).Read()
 		assert.NotNil(err)
 	})
 
@@ -25,8 +25,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "-err message\r\n")
 
-		var value2 Value
-		err := NewResp(data).Read(&value2)
+		_, err := NewResp(bytes.NewReader(data)).Read()
 		assert.NotNil(err)
 	})
 
@@ -35,8 +34,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "$5\r\nhello\r\n")
 		{
-			var value2 Value
-			err := NewResp(data).Read(&value2)
+			value2, err := NewResp(bytes.NewReader(data)).Read()
 			assert.Nil(err)
 			assert.Equal(value, value2)
 		}
@@ -46,8 +44,7 @@ func TestValue(t *testing.T) {
 		data = value.Marshal()
 		assert.Equal(string(data), "$0\r\n\r\n")
 		{
-			var value2 Value
-			err := NewResp(data).Read(&value2)
+			value2, err := NewResp(bytes.NewReader(data)).Read()
 			assert.Nil(err)
 			assert.Equal(value, value2)
 		}
@@ -57,8 +54,7 @@ func TestValue(t *testing.T) {
 		data = value.Marshal()
 		assert.Equal(string(data), "$-1\r\n")
 		{
-			var value2 Value
-			err := NewResp(data).Read(&value2)
+			value2, err := NewResp(bytes.NewReader(data)).Read()
 			assert.Nil(err)
 			assert.Equal(value, value2)
 		}
@@ -69,8 +65,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), ":1\r\n")
 
-		var value2 Value
-		err := NewResp(data).Read(&value2)
+		value2, err := NewResp(bytes.NewReader(data)).Read()
 		assert.Nil(err)
 		assert.Equal(value, value2)
 	})
@@ -86,34 +81,26 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "*5\r\n:1\r\n:2\r\n:3\r\n$5\r\nhello\r\n$5\r\nworld\r\n")
 
-		var value2 Value
-		err := NewResp(data).Read(&value2)
+		value2, err := NewResp(bytes.NewReader(data)).Read()
 		assert.Nil(err)
 		assert.Equal(value, value2)
 	})
 
 	t.Run("error-value", func(t *testing.T) {
 		// read nil
-		var value Value
-		err := NewResp(nil).Read(&value)
+		_, err := NewResp(bytes.NewReader(nil)).Read()
 		assert.NotNil(err)
 
 		for _, prefix := range []byte{BULK, INTEGER, ARRAY} {
 			data := append([]byte{prefix}, "an error message"...)
-			err := NewResp(data).Read(&value)
+			_, err := NewResp(bytes.NewReader(data)).Read()
 			assert.NotNil(err)
 		}
 
 		// marshal error type
-		value = Value{typ: 76}
+		value := Value{typ: 76}
 		data := value.Marshal()
 		assert.Equal(string(data), ErrUnknownType.Error())
-	})
-
-	t.Run("panic", func(t *testing.T) {
-		assert.Panics(func() {
-			NewResp([]byte("$2\r\nOK\r\n")).Read(nil)
-		})
 	})
 }
 
