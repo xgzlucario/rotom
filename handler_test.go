@@ -42,7 +42,7 @@ func TestHandler(t *testing.T) {
 		assert.Equal(res, "PONG")
 	})
 
-	t.Run("set", func(t *testing.T) {
+	t.Run("key", func(t *testing.T) {
 		res, _ := rdb.Set(ctx, "foo", "bar", 0).Result()
 		assert.Equal(res, "OK")
 
@@ -54,7 +54,7 @@ func TestHandler(t *testing.T) {
 		assert.Equal(res, "")
 	})
 
-	t.Run("hset", func(t *testing.T) {
+	t.Run("hash", func(t *testing.T) {
 		// hset
 		res, _ := rdb.HSet(ctx, "map", "k1", "v1").Result()
 		assert.Equal(res, int64(1))
@@ -81,11 +81,31 @@ func TestHandler(t *testing.T) {
 		resm, _ := rdb.HGetAll(ctx, "map").Result()
 		assert.Equal(resm, map[string]string{"k1": "v1", "k2": "v2", "k3": "v3", "k4": "v4", "k5": "v5"})
 
+		// hdel
+		{
+			res, _ := rdb.HDel(ctx, "map", "k1", "k2", "k3", "k99").Result()
+			assert.Equal(res, int64(3))
+		}
+
 		// error
 		_, err := rdb.HSet(ctx, "map").Result()
 		assert.Equal(err.Error(), ErrWrongNumberArgs("hset").Error())
 
 		_, err = rdb.HSet(ctx, "map", "k1", "v1", "k2").Result()
 		assert.Equal(err.Error(), ErrWrongNumberArgs("hset").Error())
+	})
+
+	t.Run("list", func(t *testing.T) {
+		// lpush
+		n, _ := rdb.LPush(ctx, "list", "a", "b", "c").Result()
+		assert.Equal(n, int64(3))
+
+		// rpush
+		n, _ = rdb.RPush(ctx, "list", "d", "e", "f").Result()
+		assert.Equal(n, int64(6))
+
+		// lrange
+		res, _ := rdb.LRange(ctx, "list", 0, -1).Result()
+		assert.Equal(res, []string{"c", "b", "a", "d", "e", "f"})
 	})
 }

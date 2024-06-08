@@ -58,22 +58,8 @@ type Command struct {
 }
 
 var (
-	// db is the main database object.
-	db DB
-
-	// server is the main server object.
+	db     DB
 	server Server
-
-	// cmdTable is the list of all available commands.
-	cmdTable []*Command = []*Command{
-		{"ping", pingCommand, 0, false},
-		{"set", setCommand, 2, true},
-		{"get", getCommand, 1, false},
-		{"hset", hsetCommand, 3, true},
-		{"hget", hgetCommand, 2, false},
-		{"hdel", hdelCommand, 2, true},
-		{"hgetall", hgetallCommand, 1, false},
-	}
 )
 
 func lookupCommand(command string) *Command {

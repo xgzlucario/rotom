@@ -6,6 +6,22 @@ import (
 	"github.com/xgzlucario/rotom/structx"
 )
 
+var (
+	// cmdTable is the list of all available commands.
+	cmdTable []*Command = []*Command{
+		{"ping", pingCommand, 0, false},
+		{"set", setCommand, 2, true},
+		{"get", getCommand, 1, false},
+		{"hset", hsetCommand, 3, true},
+		{"hget", hgetCommand, 2, false},
+		{"hdel", hdelCommand, 2, true},
+		{"hgetall", hgetallCommand, 1, false},
+		{"rpush", rpushCommand, 2, true},
+		{"lpush", lpushCommand, 2, true},
+		{"lrange", lrangeCommand, 3, false},
+	}
+)
+
 func pingCommand(_ []Value) Value {
 	return Value{typ: STRING, raw: []byte("PONG")}
 }
@@ -105,8 +121,63 @@ func hgetallCommand(args []Value) Value {
 	return newArrayValue(res)
 }
 
+func pushInternal(args []Value, isDirectLeft bool) Value {
+	key := args[0].ToString()
+
+	ls, err := fetchList(key, true)
+	if err != nil {
+		return newErrValue(err)
+	}
+	if isDirectLeft {
+		for _, arg := range args[1:] {
+			ls.LPush(arg.ToString())
+		}
+	} else {
+		for _, arg := range args[1:] {
+			ls.RPush(arg.ToString())
+		}
+	}
+	return newIntegerValue(ls.Size())
+}
+
+func lpushCommand(args []Value) Value {
+	return pushInternal(args, true)
+}
+
+func rpushCommand(args []Value) Value {
+	return pushInternal(args, false)
+}
+
+func lrangeCommand(args []Value) Value {
+	key := args[0].ToString()
+	start, err := args[1].ToInt()
+	if err != nil {
+		return newErrValue(err)
+	}
+	end, err := args[2].ToInt()
+	if err != nil {
+		return newErrValue(err)
+	}
+
+	ls, err := fetchList(key)
+	if err != nil {
+		return newErrValue(err)
+	}
+
+	var res []Value
+	ls.Range(start, end, func(data []byte) (stop bool) {
+		res = append(res, newBulkValue(data))
+		return false
+	})
+	return newArrayValue(res)
+}
+
 func fetchMap(key string, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return structx.NewMap() }, setnx...)
+}
+
+func fetchList(key string, setnx ...bool) (List, error) {
+	return fetch(key, func() List { return structx.NewList() }, setnx...)
 }
 
 func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {

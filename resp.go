@@ -27,7 +27,7 @@ var (
 // Value represents the different types of RESP (Redis Serialization Protocol) values.
 type Value struct {
 	typ   byte    // Type of value ('string', 'error', 'integer', 'bulk', 'array', 'null')
-	raw   []byte  // Used for string, error, integer ad bulk strings
+	raw   []byte  // Used for string, error, integer and bulk strings
 	array []Value // Used for arrays of nested values
 }
 
@@ -161,9 +161,17 @@ func (r *Resp) readBulk() (Value, error) {
 	return value, nil
 }
 
-func (v Value) ToString() string { return string(v.raw) }
+func (v Value) ToString() string {
+	return string(v.raw)
+}
 
-func (v Value) ToBytes() []byte { return v.raw }
+func (v Value) ToInt() (int, error) {
+	return strconv.Atoi(string(v.raw))
+}
+
+func (v Value) ToBytes() []byte {
+	return v.raw
+}
 
 // Marshal converts a Value object into its corresponding RESP bytes.
 func (v Value) Marshal() []byte {
@@ -186,52 +194,53 @@ func (v Value) Marshal() []byte {
 }
 
 func (v Value) marshalInteger() []byte {
-	w := bytes.NewBuffer(nil)
-	w.WriteByte(INTEGER)
-	w.Write(v.raw)
-	w.Write(CRLF)
-	return w.Bytes()
+	buf := make([]byte, 0, 1+len(v.raw)+2)
+	buf = append(buf, INTEGER)
+	buf = append(buf, v.raw...)
+	buf = append(buf, CRLF...)
+	return buf
 }
 
 // marshalString marshals a string value into RESP format.
 func (v Value) marshalString() []byte {
-	w := bytes.NewBuffer(nil)
-	w.WriteByte(STRING)
-	w.Write(v.raw)
-	w.Write(CRLF)
-	return w.Bytes()
+	buf := make([]byte, 0, 1+len(v.raw)+2)
+	buf = append(buf, STRING)
+	buf = append(buf, v.raw...)
+	buf = append(buf, CRLF...)
+	return buf
 }
 
 // marshalBulk marshals a bulk string into RESP format.
 func (v Value) marshalBulk() []byte {
-	w := bytes.NewBuffer(nil)
-	w.WriteByte(BULK)
-	w.WriteString(strconv.Itoa(len(v.raw)))
-	w.Write(CRLF)
-	w.Write(v.raw)
-	w.Write(CRLF)
-	return w.Bytes()
+	format := strconv.Itoa(len(v.raw))
+	buf := make([]byte, 0, 1+len(format)+2+len(v.raw)+2)
+	buf = append(buf, BULK)
+	buf = append(buf, format...)
+	buf = append(buf, CRLF...)
+	buf = append(buf, v.raw...)
+	buf = append(buf, CRLF...)
+	return buf
 }
 
 // marshalArray marshals an array of values into RESP format.
 func (v Value) marshalArray() []byte {
-	w := bytes.NewBuffer(nil)
-	w.WriteByte(ARRAY)
-	w.WriteString(strconv.Itoa(len(v.array)))
-	w.Write(CRLF)
+	buf := make([]byte, 0, 16)
+	buf = append(buf, ARRAY)
+	buf = append(buf, strconv.Itoa(len(v.array))...)
+	buf = append(buf, CRLF...)
 	for _, val := range v.array {
-		w.Write(val.Marshal())
+		buf = append(buf, val.Marshal()...)
 	}
-	return w.Bytes()
+	return buf
 }
 
 // marshallError marshals an error message into RESP format.
 func (v Value) marshallError() []byte {
-	w := bytes.NewBuffer(nil)
-	w.WriteByte(ERROR)
-	w.Write(v.raw)
-	w.Write(CRLF)
-	return w.Bytes()
+	buf := make([]byte, 0, 1+len(v.raw)+2)
+	buf = append(buf, ERROR)
+	buf = append(buf, v.raw...)
+	buf = append(buf, CRLF...)
+	return buf
 }
 
 // marshallNull marshals a null value into RESP bulk string format.

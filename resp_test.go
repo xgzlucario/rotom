@@ -102,24 +102,3 @@ func TestValue(t *testing.T) {
 		assert.Equal(string(data), ErrUnknownType.Error())
 	})
 }
-
-func BenchmarkRESP(b *testing.B) {
-	b.Run("str-value", func(b *testing.B) {
-		value := ValueOK
-		for i := 0; i < b.N; i++ {
-			value.Marshal()
-		}
-	})
-	b.Run("bulk-value", func(b *testing.B) {
-		value := newBulkValue([]byte("hello"))
-		for i := 0; i < b.N; i++ {
-			value.Marshal()
-		}
-	})
-	b.Run("integer-value", func(b *testing.B) {
-		value := newIntegerValue(100)
-		for i := 0; i < b.N; i++ {
-			value.Marshal()
-		}
-	})
-}
