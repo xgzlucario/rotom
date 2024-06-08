@@ -1,12 +1,16 @@
 package main
 
 import (
-	"container/list"
 	"fmt"
 	"strings"
 
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
+)
+
+const (
+	DEFAULT_IO_BUF = 16 * KB
+	MAX_BULK       = 4 * KB
 )
 
 type (
@@ -27,7 +31,7 @@ type Client struct {
 	fd       int
 	queryLen int
 	queryBuf []byte
-	reply    *list.List
+	reply    []Value
 }
 
 type Server struct {
@@ -134,8 +138,8 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	// create client
 	client := &Client{
 		fd:       cfd,
-		reply:    list.New(),
-		queryBuf: make([]byte, KB),
+		reply:    make([]Value, 0, 8),
+		queryBuf: make([]byte, DEFAULT_IO_BUF),
 	}
 	server.clients[cfd] = client
 	loop.AddFileEvent(cfd, AE_READABLE, ReadQueryFromClient, client)
@@ -144,6 +148,10 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 
 func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
+	// grow query buffer
+	if len(client.queryBuf)-client.queryLen < MAX_BULK {
+		client.queryBuf = append(client.queryBuf, make([]byte, MAX_BULK)...)
+	}
 	n, err := Read(fd, client.queryBuf[client.queryLen:])
 	if n == 0 || err != nil {
 		logger.Error().Msgf("client %v read err: %v", fd, err)
@@ -190,10 +198,10 @@ func ProcessQueryBuf(client *Client) {
 		res = newErrValue(fmt.Errorf("invalid command: %s", command))
 	}
 
-	client.reply.PushBack(res)
+	client.reply = append(client.reply, res)
 	resetClient(client)
 
-	// ADD writable event
+	// add writable event
 	server.aeLoop.AddFileEvent(client.fd, AE_WRITABLE, SendReplyToClient, client)
 }
 
@@ -201,15 +209,15 @@ func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
 
 	// send all replies back
-	for client.reply.Len() > 0 {
-		elem := client.reply.Remove(client.reply.Front())
-		_, err := Write(fd, elem.(Value).Marshal())
+	for _, elem := range client.reply {
+		_, err := Write(fd, elem.Marshal())
 		if err != nil {
 			logger.Error().Msgf("send reply err: %v", err)
 			freeClient(client)
 			return
 		}
 	}
+	client.reply = client.reply[:0]
 	loop.RemoveFileEvent(fd, AE_WRITABLE)
 }
 

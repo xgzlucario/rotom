@@ -41,6 +41,9 @@ func (aof *Aof) Write(buf []byte) (int, error) {
 }
 
 func (aof *Aof) Flush() error {
+	if aof.buf.Len() == 0 {
+		return nil
+	}
 	aof.buf.WriteTo(aof.file)
 	return aof.file.Sync()
 }

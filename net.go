@@ -28,7 +28,7 @@ func TcpServer(port int) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	err = unix.SetsockoptInt(s, unix.SOL_SOCKET, unix.SO_REUSEPORT, port)
+	err = unix.SetsockoptInt(s, unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
 	if err != nil {
 		return -1, err
 	}

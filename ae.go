@@ -178,11 +178,19 @@ func (loop *AeLoop) AeWait() (tes []*AeTimeEvent, fes []*AeFileEvent) {
 	if timeout <= 0 {
 		timeout = 10 // at least wait 10ms
 	}
+
 	var events [128]unix.EpollEvent
+retry:
 	n, err := unix.EpollWait(loop.fileEventFd, events[:], int(timeout))
 	if err != nil {
+		// interrupted system call
+		if err == unix.EINTR {
+			goto retry
+		}
 		logger.Error().Msgf("epoll wait error: %v", err)
+		return
 	}
+
 	// collect file events
 	for _, ev := range events[:n] {
 		if ev.Events&unix.EPOLLIN != 0 {
@@ -198,6 +206,7 @@ func (loop *AeLoop) AeWait() (tes []*AeTimeEvent, fes []*AeFileEvent) {
 			}
 		}
 	}
+
 	// collect time events
 	now := GetMsTime()
 	p := loop.TimeEvents
