@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -20,7 +19,7 @@ const (
 var (
 	CRLF = []byte("\r\n")
 
-	ValueOK = Value{typ: STRING, str: "OK"}
+	ValueOK = Value{typ: STRING, raw: []byte("OK")}
 
 	ValueNull = Value{typ: NULL}
 )
@@ -28,35 +27,50 @@ var (
 // Value represents the different types of RESP (Redis Serialization Protocol) values.
 type Value struct {
 	typ   byte    // Type of value ('string', 'error', 'integer', 'bulk', 'array', 'null')
-	str   string  // Used for string and error types
-	num   int64   // Used for integer type
-	bulk  []byte  // Used for bulk strings
+	raw   []byte  // Used for string, error, integer ad bulk strings
 	array []Value // Used for arrays of nested values
 }
 
+// Resp is a parser for RESP encoded data.
+// It is a ZERO-COPY parser.
 type Resp struct {
-	reader *bufio.Reader
+	b []byte
 }
 
 // NewResp creates a new Resp object with a buffered reader.
-func NewResp(rd io.Reader) *Resp {
-	return &Resp{reader: bufio.NewReader(rd)}
+// DO NOT EDIT the `input` param because it will be referenced during read.
+func NewResp(input []byte) *Resp {
+	return &Resp{b: input}
+}
+
+func newErrValue(err error) Value {
+	return Value{typ: ERROR, raw: []byte(err.Error())}
+}
+
+func newBulkValue(bulk []byte) Value {
+	if bulk == nil {
+		return Value{typ: NULL}
+	}
+	return Value{typ: BULK, raw: bulk}
+}
+
+func newIntegerValue(n int) Value {
+	format := strconv.Itoa(n)
+	return Value{typ: INTEGER, raw: []byte(format)}
+}
+
+func newArrayValue(value []Value) Value {
+	return Value{typ: ARRAY, array: value}
 }
 
 // readLine reads a line ending with CRLF from the reader.
-func (r *Resp) readLine() (line []byte, n int, err error) {
-	for {
-		b, err := r.reader.ReadByte()
-		if err != nil {
-			return nil, 0, err
-		}
-		n += 1
-		line = append(line, b)
-		if len(line) >= 2 && line[len(line)-2] == '\r' && line[len(line)-1] == '\n' {
-			break
-		}
+func (r *Resp) readLine() ([]byte, int, error) {
+	before, after, found := bytes.Cut(r.b, CRLF)
+	if found {
+		r.b = after
+		return before, len(before) + 2, nil
 	}
-	return line[:len(line)-2], n, nil // Trim the CRLF at the end
+	return nil, 0, ErrCRLFNotFound
 }
 
 // readInteger reads an integer value following the ':' prefix.
@@ -72,9 +86,18 @@ func (r *Resp) readInteger() (x int, n int, err error) {
 	return int(i64), n, nil
 }
 
+func (r *Resp) readByte() (byte, error) {
+	if len(r.b) == 0 {
+		return 0, io.EOF
+	}
+	b := r.b[0]
+	r.b = r.b[1:]
+	return b, nil
+}
+
 // Read parses the next RESP value from the stream.
 func (r *Resp) Read() (Value, error) {
-	_type, err := r.reader.ReadByte()
+	_type, err := r.readByte()
 	if err != nil {
 		return Value{}, err
 	}
@@ -85,81 +108,62 @@ func (r *Resp) Read() (Value, error) {
 	case BULK:
 		return r.readBulk()
 	case INTEGER:
-		n, _, err := r.readInteger()
+		len, _, err := r.readInteger()
 		if err != nil {
 			return Value{}, err
 		} else {
-			return newIntegerValue(n), nil
+			return newIntegerValue(len), nil
 		}
 	default:
-		return Value{}, fmt.Errorf("unknown value type %v", _type)
+		return Value{}, fmt.Errorf("%w: %c", ErrUnknownType, _type)
 	}
 }
 
 // readArray reads an array prefixed with '*' from the stream.
 func (r *Resp) readArray() (Value, error) {
-	v := Value{typ: ARRAY}
+	value := Value{typ: ARRAY}
 
-	len, _, err := r.readInteger()
+	n, _, err := r.readInteger()
 	if err != nil {
-		return v, err
+		return Value{}, err
 	}
 
-	v.array = make([]Value, len)
-	for i := 0; i < len; i++ {
-		val, err := r.Read()
+	value.array = make([]Value, n)
+	for i := range value.array {
+		v, err := r.Read()
 		if err != nil {
-			return v, err
+			return Value{}, err
 		}
-		v.array[i] = val
+		value.array[i] = v
 	}
 
-	return v, nil
+	return value, nil
 }
 
 // readBulk reads a bulk string prefixed with '$' from the stream.
 func (r *Resp) readBulk() (Value, error) {
-	v := Value{typ: BULK}
+	value := Value{typ: BULK}
 
-	len, _, err := r.readInteger()
+	n, _, err := r.readInteger()
 	if err != nil {
-		return v, err
+		return Value{}, err
 	}
 
-	if len == -1 { // RESP Bulk strings can be null, indicated by "$-1"
-		return Value{typ: NULL}, nil
+	if n == -1 { // RESP Bulk strings can be null, indicated by "$-1"
+		return Value{typ: NULL}, err
 	}
 
-	bulk := make([]byte, len)
-	_, err = io.ReadFull(r.reader, bulk) // Use ReadFull to ensure we read exactly 'len' bytes
-	if err != nil {
-		return v, err
-	}
-	v.bulk = bulk
+	value.raw = r.b[:n]
+	r.b = r.b[n:]
 
 	r.readLine() // Read the trailing CRLF
 
-	return v, nil
+	return value, nil
 }
 
-func newErrValue(err error) Value {
-	return Value{typ: ERROR, str: err.Error()}
-}
+func (v Value) ToString() string { return string(v.raw) }
 
-func newBulkValue(bulk []byte) Value {
-	if bulk == nil {
-		return Value{typ: NULL}
-	}
-	return Value{typ: BULK, bulk: bulk}
-}
-
-func newIntegerValue(n int) Value {
-	return Value{typ: INTEGER, num: int64(n)}
-}
-
-func newArrayValue(value []Value) Value {
-	return Value{typ: ARRAY, array: value}
-}
+func (v Value) ToBytes() []byte { return v.raw }
 
 // Marshal converts a Value object into its corresponding RESP bytes.
 func (v Value) Marshal() []byte {
@@ -184,7 +188,7 @@ func (v Value) Marshal() []byte {
 func (v Value) marshalInteger() []byte {
 	w := bytes.NewBuffer(nil)
 	w.WriteByte(INTEGER)
-	w.WriteString(strconv.FormatInt(v.num, 10))
+	w.Write(v.raw)
 	w.Write(CRLF)
 	return w.Bytes()
 }
@@ -193,7 +197,7 @@ func (v Value) marshalInteger() []byte {
 func (v Value) marshalString() []byte {
 	w := bytes.NewBuffer(nil)
 	w.WriteByte(STRING)
-	w.WriteString(v.str)
+	w.Write(v.raw)
 	w.Write(CRLF)
 	return w.Bytes()
 }
@@ -202,9 +206,9 @@ func (v Value) marshalString() []byte {
 func (v Value) marshalBulk() []byte {
 	w := bytes.NewBuffer(nil)
 	w.WriteByte(BULK)
-	w.WriteString(strconv.Itoa(len(v.bulk)))
+	w.WriteString(strconv.Itoa(len(v.raw)))
 	w.Write(CRLF)
-	w.Write(v.bulk)
+	w.Write(v.raw)
 	w.Write(CRLF)
 	return w.Bytes()
 }
@@ -225,7 +229,7 @@ func (v Value) marshalArray() []byte {
 func (v Value) marshallError() []byte {
 	w := bytes.NewBuffer(nil)
 	w.WriteByte(ERROR)
-	w.WriteString(v.str)
+	w.Write(v.raw)
 	w.Write(CRLF)
 	return w.Bytes()
 }

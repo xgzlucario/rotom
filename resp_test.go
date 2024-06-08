@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"testing"
 
@@ -16,7 +15,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "+OK\r\n")
 
-		_, err := NewResp(bytes.NewReader(data)).Read()
+		_, err := NewResp(data).Read()
 		assert.NotNil(err)
 	})
 
@@ -25,7 +24,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "-err message\r\n")
 
-		_, err := NewResp(bytes.NewReader(data)).Read()
+		_, err := NewResp(data).Read()
 		assert.NotNil(err)
 	})
 
@@ -34,7 +33,7 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), "$5\r\nhello\r\n")
 		{
-			value2, err := NewResp(bytes.NewReader(data)).Read()
+			value2, err := NewResp(data).Read()
 			assert.Nil(err)
 			assert.Equal(value, value2)
 		}
@@ -44,7 +43,7 @@ func TestValue(t *testing.T) {
 		data = value.Marshal()
 		assert.Equal(string(data), "$0\r\n\r\n")
 		{
-			value2, err := NewResp(bytes.NewReader(data)).Read()
+			value2, err := NewResp(data).Read()
 			assert.Nil(err)
 			assert.Equal(value, value2)
 		}
@@ -54,7 +53,7 @@ func TestValue(t *testing.T) {
 		data = value.Marshal()
 		assert.Equal(string(data), "$-1\r\n")
 		{
-			value2, err := NewResp(bytes.NewReader(data)).Read()
+			value2, err := NewResp(data).Read()
 			assert.Nil(err)
 			assert.Equal(value, value2)
 		}
@@ -65,35 +64,35 @@ func TestValue(t *testing.T) {
 		data := value.Marshal()
 		assert.Equal(string(data), ":1\r\n")
 
-		value2, err := NewResp(bytes.NewReader(data)).Read()
+		value2, err := NewResp(data).Read()
 		assert.Nil(err)
 		assert.Equal(value, value2)
 	})
 
 	t.Run("array-value", func(t *testing.T) {
 		value := newArrayValue([]Value{
-			{typ: INTEGER, num: 1},
-			{typ: INTEGER, num: 2},
-			{typ: INTEGER, num: 3},
-			{typ: BULK, bulk: []byte("hello")},
-			{typ: BULK, bulk: []byte("world")},
+			newIntegerValue(1),
+			newIntegerValue(2),
+			newIntegerValue(3),
+			newBulkValue([]byte("hello")),
+			newBulkValue([]byte("world")),
 		})
 		data := value.Marshal()
 		assert.Equal(string(data), "*5\r\n:1\r\n:2\r\n:3\r\n$5\r\nhello\r\n$5\r\nworld\r\n")
 
-		value2, err := NewResp(bytes.NewReader(data)).Read()
+		value2, err := NewResp(data).Read()
 		assert.Nil(err)
 		assert.Equal(value, value2)
 	})
 
 	t.Run("error-value", func(t *testing.T) {
 		// read nil
-		_, err := NewResp(bytes.NewReader(nil)).Read()
+		_, err := NewResp(nil).Read()
 		assert.NotNil(err)
 
 		for _, prefix := range []byte{BULK, INTEGER, ARRAY} {
 			data := append([]byte{prefix}, "an error message"...)
-			_, err := NewResp(bytes.NewReader(data)).Read()
+			_, err := NewResp(data).Read()
 			assert.NotNil(err)
 		}
 

@@ -1,17 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"container/list"
 	"fmt"
 	"strings"
 
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
-)
-
-const (
-	IO_BUF = 64 * KB
 )
 
 type (
@@ -66,7 +61,7 @@ var (
 	server Server
 
 	// cmdTable is the list of all available commands.
-	cmdTable []Command = []Command{
+	cmdTable []*Command = []*Command{
 		{"ping", pingCommand, 0, false},
 		{"set", setCommand, 2, true},
 		{"get", getCommand, 1, false},
@@ -81,7 +76,7 @@ func lookupCommand(command string) *Command {
 	cmdStr := strings.ToLower(command)
 	for _, c := range cmdTable {
 		if c.name == cmdStr {
-			return &c
+			return c
 		}
 	}
 	return nil
@@ -112,7 +107,7 @@ func InitDB(config *Config) (err error) {
 
 		// Load the initial data into memory by processing each stored command.
 		err = db.aof.Read(func(value Value) {
-			command := string(value.array[0].bulk)
+			command := value.array[0].ToString()
 			args := value.array[1:]
 
 			cmd := lookupCommand(command)
@@ -150,15 +145,13 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
 	n, err := Read(fd, client.queryBuf[client.queryLen:])
-	if err != nil {
+	if n == 0 || err != nil {
 		logger.Error().Msgf("client %v read err: %v", fd, err)
 		freeClient(client)
 		return
 	}
-	if n > 0 {
-		client.queryLen += n
-		ProcessQueryBuf(client)
-	}
+	client.queryLen += n
+	ProcessQueryBuf(client)
 }
 
 func resetClient(client *Client) {
@@ -174,7 +167,7 @@ func freeClient(client *Client) {
 
 func ProcessQueryBuf(client *Client) {
 	queryBuf := client.queryBuf[:client.queryLen]
-	resp := NewResp(bytes.NewReader(queryBuf))
+	resp := NewResp(queryBuf)
 
 	value, err := resp.Read()
 	if err != nil {
@@ -182,18 +175,17 @@ func ProcessQueryBuf(client *Client) {
 		return
 	}
 
-	command := value.array[0].bulk
+	command := value.array[0].ToString()
 	args := value.array[1:]
 	var res Value
 
 	// look up for command
-	cmd := lookupCommand(string(command))
+	cmd := lookupCommand(command)
 	if cmd != nil {
 		res = cmd.processCommand(args)
 		if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
 			db.aof.Write(queryBuf)
 		}
-
 	} else {
 		res = newErrValue(fmt.Errorf("invalid command: %s", command))
 	}
@@ -239,7 +231,6 @@ func initServer(config *Config) (err error) {
 // ServerCronFlush flush aof file for every second.
 func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
 	err := db.aof.Flush()
-	logger.Debug().Msg("flush")
 	if err != nil {
 		logger.Error().Msgf("flush aof buffer error: %v", err)
 	}

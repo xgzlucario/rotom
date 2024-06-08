@@ -48,7 +48,7 @@ type AeLoop struct {
 	stop            bool
 }
 
-var fe2ep [3]uint32 = [3]uint32{0, unix.EPOLLIN, unix.EPOLLOUT}
+var fe2ep = [3]uint32{0, unix.EPOLLIN, unix.EPOLLOUT}
 
 func getFeKey(fd int, mask FeType) int {
 	if mask == AE_READABLE {

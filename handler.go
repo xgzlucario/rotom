@@ -7,18 +7,18 @@ import (
 )
 
 func pingCommand(_ []Value) Value {
-	return Value{typ: STRING, str: "PONG"}
+	return Value{typ: STRING, raw: []byte("PONG")}
 }
 
 func setCommand(args []Value) Value {
-	key := args[0].bulk
-	value := args[1].bulk
-	db.strs.Set(string(key), value)
+	key := args[0].ToString()
+	value := args[1].ToBytes()
+	db.strs.Set(key, value)
 	return ValueOK
 }
 
 func getCommand(args []Value) Value {
-	key := string(args[0].bulk)
+	key := args[0].ToString()
 
 	value, _, ok := db.strs.Get(key)
 	if ok {
@@ -33,7 +33,7 @@ func getCommand(args []Value) Value {
 }
 
 func hsetCommand(args []Value) Value {
-	hash := string(args[0].bulk)
+	hash := args[0].ToString()
 	args = args[1:]
 
 	// check arguments number
@@ -48,9 +48,9 @@ func hsetCommand(args []Value) Value {
 
 	var newFields int
 	for i := 0; i < len(args); i += 2 {
-		key := args[i].bulk
-		value := args[i+1].bulk
-		if hmap.Set(string(key), value) {
+		key := args[i].ToString()
+		value := args[i+1].ToBytes()
+		if hmap.Set(key, value) {
 			newFields++
 		}
 	}
@@ -58,8 +58,8 @@ func hsetCommand(args []Value) Value {
 }
 
 func hgetCommand(args []Value) Value {
-	hash := string(args[0].bulk)
-	key := string(args[1].bulk)
+	hash := args[0].ToString()
+	key := args[1].ToString()
 
 	hmap, err := fetchMap(hash)
 	if err != nil {
@@ -73,7 +73,7 @@ func hgetCommand(args []Value) Value {
 }
 
 func hdelCommand(args []Value) Value {
-	hash := string(args[0].bulk)
+	hash := args[0].ToString()
 	keys := args[1:]
 
 	hmap, err := fetchMap(hash)
@@ -82,7 +82,7 @@ func hdelCommand(args []Value) Value {
 	}
 	var success int
 	for _, v := range keys {
-		if hmap.Remove(string(v.bulk)) {
+		if hmap.Remove(v.ToString()) {
 			success++
 		}
 	}
@@ -90,7 +90,7 @@ func hdelCommand(args []Value) Value {
 }
 
 func hgetallCommand(args []Value) Value {
-	hash := string(args[0].bulk)
+	hash := args[0].ToString()
 
 	hmap, err := fetchMap(hash)
 	if err != nil {
@@ -99,8 +99,8 @@ func hgetallCommand(args []Value) Value {
 
 	res := make([]Value, 0, 8)
 	hmap.Scan(func(key, value []byte) {
-		res = append(res, Value{typ: BULK, bulk: key})
-		res = append(res, Value{typ: BULK, bulk: value})
+		res = append(res, newBulkValue(key))
+		res = append(res, newBulkValue(value))
 	})
 	return newArrayValue(res)
 }

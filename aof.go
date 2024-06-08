@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"os"
+
+	"github.com/tidwall/mmap"
 )
 
 const (
@@ -44,8 +46,17 @@ func (aof *Aof) Flush() error {
 }
 
 func (aof *Aof) Read(fn func(value Value)) error {
+	// Read file data by mmap.
+	data, err := mmap.Open(aof.filePath, false)
+	if len(data) == 0 {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
 	// Iterate over the records in the file, applying the function to each.
-	reader := NewResp(aof.file)
+	reader := NewResp(data)
 	for {
 		value, err := reader.Read()
 		if err != nil {
