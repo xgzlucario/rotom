@@ -33,13 +33,13 @@ func main() {
 
 	config, err := LoadConfig(path)
 	if err != nil {
-		logger.Error().Msgf("load config error: %v", err)
+		logger.Fatal().Msgf("load config error: %v", err)
 	}
 	if err = initServer(config); err != nil {
-		logger.Error().Msgf("init server error: %v", err)
+		logger.Fatal().Msgf("init server error: %v", err)
 	}
 	if err = InitDB(config); err != nil {
-		logger.Error().Msgf("init db error: %v", err)
+		logger.Fatal().Msgf("init db error: %v", err)
 	}
 	if debug {
 		runDebug()

@@ -24,7 +24,7 @@ func startup() {
 
 var ctx = context.Background()
 
-func TestHandler(t *testing.T) {
+func TestCommand(t *testing.T) {
 	t.Parallel()
 	assert := assert.New(t)
 
@@ -107,5 +107,13 @@ func TestHandler(t *testing.T) {
 		// lrange
 		res, _ := rdb.LRange(ctx, "list", 0, -1).Result()
 		assert.Equal(res, []string{"c", "b", "a", "d", "e", "f"})
+
+		// lpop
+		val, _ := rdb.LPop(ctx, "list").Result()
+		assert.Equal(val, "c")
+
+		// rpop
+		val, _ = rdb.RPop(ctx, "list").Result()
+		assert.Equal(val, "f")
 	})
 }

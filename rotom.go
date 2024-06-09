@@ -1,9 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"strings"
-
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -41,43 +38,10 @@ type Server struct {
 	clients map[int]*Client
 }
 
-type Command struct {
-	// name is command string name.
-	// it should consist of all lowercase letters.
-	name string
-
-	// handler is this command real database handler function.
-	handler func([]Value) Value
-
-	// arity represents the minimal number of arguments that command accepts.
-	arity int
-
-	// persist indicates whether this command needs to be persisted.
-	// effective when `appendonly` is true.
-	persist bool
-}
-
 var (
 	db     DB
 	server Server
 )
-
-func lookupCommand(command string) *Command {
-	cmdStr := strings.ToLower(command)
-	for _, c := range cmdTable {
-		if c.name == cmdStr {
-			return c
-		}
-	}
-	return nil
-}
-
-func (cmd *Command) processCommand(args []Value) Value {
-	if len(args) < cmd.arity {
-		return newErrValue(ErrWrongNumberArgs(cmd.name))
-	}
-	return cmd.handler(args)
-}
 
 // InitDB initializes database and redo appendonly files if nedded.
 func InitDB(config *Config) (err error) {
@@ -181,7 +145,7 @@ func ProcessQueryBuf(client *Client) {
 			db.aof.Write(queryBuf)
 		}
 	} else {
-		res = newErrValue(fmt.Errorf("invalid command: %s", command))
+		res = newErrValue(ErrUnknownCommand(command))
 	}
 
 	client.reply = append(client.reply, res)

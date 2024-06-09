@@ -14,7 +14,7 @@ rotom 基于 [godis](https://github.com/archeryue/godis) 项目
 2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
 3. DB hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)
 4. AOF 支持
-5. 目前仅支持部分命令如 `ping`, `set`, `get`, `hset`, `hget`
+5. 目前支持命令 `set`, `get`, `hset`, `hget`, `hdel`, `lpush`, `rpush`, `lpop`, `rpop`, `lrange`
 
 ### 原理介绍
 
@@ -68,7 +68,7 @@ $ go run .
 
 ```
 REPOSITORY       TAG           IMAGE ID       CREATED         SIZE
-rotom            latest        270888260e99   3 minutes ago   21.2MB
+rotom            latest        22f42ce9ae0e   8 seconds ago   18.4MB
 ```
 
 然后启动容器：

@@ -10,7 +10,7 @@ WORKDIR /build
 
 COPY . .
 
-RUN go build -o rotom .
+RUN go build -ldflags="-s -w" -o rotom .
 
 FROM alpine:latest
 
@@ -27,6 +27,6 @@ WORKDIR /data
 COPY --from=builder /build/rotom /data/rotom
 COPY config.json /etc/rotom/config.json
 
-EXPOSE 6969
+EXPOSE 6379
 
 CMD ["./rotom", "-config", "/etc/rotom/config.json"]

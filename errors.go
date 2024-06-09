@@ -18,3 +18,7 @@ var (
 func ErrWrongNumberArgs(cmd string) error {
 	return fmt.Errorf("ERR wrong number of arguments for '%s' command", cmd)
 }
+
+func ErrUnknownCommand(cmd string) error {
+	return fmt.Errorf("ERR unknown command '%s'", cmd)
+}

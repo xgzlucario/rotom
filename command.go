@@ -1,26 +1,59 @@
 package main
 
 import (
-	"fmt"
+	"strings"
 
 	"github.com/xgzlucario/rotom/structx"
 )
 
-var (
-	// cmdTable is the list of all available commands.
-	cmdTable []*Command = []*Command{
-		{"ping", pingCommand, 0, false},
-		{"set", setCommand, 2, true},
-		{"get", getCommand, 1, false},
-		{"hset", hsetCommand, 3, true},
-		{"hget", hgetCommand, 2, false},
-		{"hdel", hdelCommand, 2, true},
-		{"hgetall", hgetallCommand, 1, false},
-		{"rpush", rpushCommand, 2, true},
-		{"lpush", lpushCommand, 2, true},
-		{"lrange", lrangeCommand, 3, false},
+type Command struct {
+	// name is command string name.
+	// it should consist of all lowercase letters.
+	name string
+
+	// handler is this command real database handler function.
+	handler func([]Value) Value
+
+	// arity represents the minimal number of arguments that command accepts.
+	arity int
+
+	// persist indicates whether this command needs to be persisted.
+	// effective when `appendonly` is true.
+	persist bool
+}
+
+// cmdTable is the list of all available commands.
+var cmdTable []*Command = []*Command{
+	{"ping", pingCommand, 0, false},
+	{"set", setCommand, 2, true},
+	{"get", getCommand, 1, false},
+	{"hset", hsetCommand, 3, true},
+	{"hget", hgetCommand, 2, false},
+	{"hdel", hdelCommand, 2, true},
+	{"hgetall", hgetallCommand, 1, false},
+	{"rpush", rpushCommand, 2, true},
+	{"lpush", lpushCommand, 2, true},
+	{"rpop", rpopCommand, 1, true},
+	{"lpop", lpopCommand, 1, true},
+	{"lrange", lrangeCommand, 3, false},
+}
+
+func lookupCommand(command string) *Command {
+	cmdStr := strings.ToLower(command)
+	for _, c := range cmdTable {
+		if c.name == cmdStr {
+			return c
+		}
 	}
-)
+	return nil
+}
+
+func (cmd *Command) processCommand(args []Value) Value {
+	if len(args) < cmd.arity {
+		return newErrValue(ErrWrongNumberArgs(cmd.name))
+	}
+	return cmd.handler(args)
+}
 
 func pingCommand(_ []Value) Value {
 	return Value{typ: STRING, raw: []byte("PONG")}
@@ -121,6 +154,14 @@ func hgetallCommand(args []Value) Value {
 	return newArrayValue(res)
 }
 
+func lpushCommand(args []Value) Value {
+	return pushInternal(args, true)
+}
+
+func rpushCommand(args []Value) Value {
+	return pushInternal(args, false)
+}
+
 func pushInternal(args []Value, isDirectLeft bool) Value {
 	key := args[0].ToString()
 
@@ -140,12 +181,33 @@ func pushInternal(args []Value, isDirectLeft bool) Value {
 	return newIntegerValue(ls.Size())
 }
 
-func lpushCommand(args []Value) Value {
-	return pushInternal(args, true)
+func lpopCommand(args []Value) Value {
+	return popInternal(args, true)
 }
 
-func rpushCommand(args []Value) Value {
-	return pushInternal(args, false)
+func rpopCommand(args []Value) Value {
+	return popInternal(args, false)
+}
+
+func popInternal(args []Value, isDirectLeft bool) Value {
+	key := args[0].ToString()
+
+	ls, err := fetchList(key)
+	if err != nil {
+		return newErrValue(err)
+	}
+
+	var val string
+	var ok bool
+	if isDirectLeft {
+		val, ok = ls.LPop()
+	} else {
+		val, ok = ls.RPop()
+	}
+	if ok {
+		return newBulkValue([]byte(val))
+	}
+	return newBulkValue(nil)
 }
 
 func lrangeCommand(args []Value) Value {
@@ -187,9 +249,8 @@ func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
 		if ok {
 			return v, nil
 		}
-		return v, fmt.Errorf("wrong type assert: %T->%T", item, v)
+		return v, ErrWrongType
 	}
-
 	v = new()
 	if len(setnx) > 0 && setnx[0] {
 		db.extras[key] = v
