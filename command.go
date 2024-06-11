@@ -67,7 +67,7 @@ func setCommand(args []Value) Value {
 }
 
 func getCommand(args []Value) Value {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 
 	value, _, ok := db.strs.Get(key)
 	if ok {

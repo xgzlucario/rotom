@@ -13,9 +13,13 @@ pprof:
 	go tool pprof -http=:18081 "http://192.168.1.6:6060/debug/pprof/profile?seconds=30"
 
 heap:
-	go tool pprof http://localhost:6060/debug/pprof/heap
+	go tool pprof http://192.168.1.6:6060/debug/pprof/heap
 
 build-docker:
 	docker build -t rotom .
+
+clean:
+	rm -f *.aof
+	rm -f coverage.html
 
 # rsync -av --exclude='.git' rotom/ 2:~/xgz/rotom

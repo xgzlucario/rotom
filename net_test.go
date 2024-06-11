@@ -14,15 +14,18 @@ func TestServer(t *testing.T) {
 	assert := assert.New(t)
 	testCount := 100
 
-	t.Run("serve", func(t *testing.T) {
+	t.Run("echo-server", func(t *testing.T) {
 		fd, err := TcpServer(20083)
 		assert.Nil(err)
+
+		var wg sync.WaitGroup
 
 		// start listener
 		go func() {
 			for {
 				cfd, err := Accept(fd)
 				assert.Nil(err)
+				wg.Add(1)
 
 				// read
 				var buf [32]byte
@@ -30,10 +33,9 @@ func TestServer(t *testing.T) {
 
 				// write
 				Write(cfd, buf[:n])
+				wg.Done()
 			}
 		}()
-
-		var wg sync.WaitGroup
 
 		// start clients
 		go func() {
@@ -58,7 +60,5 @@ func TestServer(t *testing.T) {
 		}()
 
 		wg.Wait()
-
-		time.Sleep(time.Second)
 	})
 }

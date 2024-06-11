@@ -1,6 +1,8 @@
 package main
 
 import (
+	"io"
+
 	cache "github.com/xgzlucario/GigaCache"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -47,6 +49,7 @@ var (
 func InitDB(config *Config) (err error) {
 	options := cache.DefaultOptions
 	options.ConcurrencySafe = false
+	options.EvictInterval = 5
 	db.strs = cache.New(options)
 	db.extras = make(map[string]any)
 
@@ -98,10 +101,12 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 
 func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
+
 	// grow query buffer
 	if len(client.queryBuf)-client.queryLen < MAX_BULK {
 		client.queryBuf = append(client.queryBuf, make([]byte, MAX_BULK)...)
 	}
+
 	n, err := Read(fd, client.queryBuf[client.queryLen:])
 	if n == 0 || err != nil {
 		logger.Error().Msgf("client %v read err: %v", fd, err)
@@ -109,6 +114,7 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 		return
 	}
 	client.queryLen += n
+
 	ProcessQueryBuf(client)
 }
 
@@ -125,30 +131,36 @@ func freeClient(client *Client) {
 
 func ProcessQueryBuf(client *Client) {
 	queryBuf := client.queryBuf[:client.queryLen]
+
 	resp := NewResp(queryBuf)
-
-	value, err := resp.Read()
-	if err != nil {
-		logger.Error().Msgf("read resp error: %v", err)
-		return
-	}
-
-	command := value.array[0].ToString()
-	args := value.array[1:]
-	var res Value
-
-	// look up for command
-	cmd := lookupCommand(command)
-	if cmd != nil {
-		res = cmd.processCommand(args)
-		if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
-			db.aof.Write(queryBuf)
+	for {
+		value, err := resp.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			logger.Error().Msgf("read resp error: %v", err)
+			return
 		}
-	} else {
-		res = newErrValue(ErrUnknownCommand(command))
+
+		command := value.array[0].ToStringUnsafe()
+		args := value.array[1:]
+		var res Value
+
+		// lookup for command
+		cmd := lookupCommand(command)
+		if cmd != nil {
+			res = cmd.processCommand(args)
+			if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
+				db.aof.Write(queryBuf)
+			}
+		} else {
+			res = newErrValue(ErrUnknownCommand(command))
+		}
+
+		client.reply = append(client.reply, res)
 	}
 
-	client.reply = append(client.reply, res)
 	resetClient(client)
 
 	// add writable event
@@ -158,15 +170,19 @@ func ProcessQueryBuf(client *Client) {
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
 
-	// send all replies back
+	// write all replies back
+	buf := make([]byte, 0, 32)
 	for _, elem := range client.reply {
-		_, err := Write(fd, elem.Marshal())
-		if err != nil {
-			logger.Error().Msgf("send reply err: %v", err)
-			freeClient(client)
-			return
-		}
+		buf = elem.Append(buf)
 	}
+
+	_, err := Write(fd, buf)
+	if err != nil {
+		logger.Error().Msgf("send reply err: %v", err)
+		freeClient(client)
+		return
+	}
+
 	client.reply = client.reply[:0]
 	loop.RemoveFileEvent(fd, AE_WRITABLE)
 }

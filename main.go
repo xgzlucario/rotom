@@ -50,6 +50,7 @@ func main() {
 	if server.config.AppendOnly {
 		server.aeLoop.AddTimeEvent(AE_NORMAL, 1000, ServerCronFlush, nil)
 	}
+	logger.Debug().Int("port", config.Port).Msg("running on")
 	logger.Debug().Msg("rotom server is ready to accept.")
 	server.aeLoop.AeMain()
 }

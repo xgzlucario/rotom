@@ -9,15 +9,15 @@ import (
 type FeType int
 
 const (
-	AE_READABLE FeType = 1
-	AE_WRITABLE FeType = 2
+	AE_READABLE FeType = iota + 1
+	AE_WRITABLE
 )
 
 type TeType int
 
 const (
-	AE_NORMAL TeType = 1
-	AE_ONCE   TeType = 2
+	AE_NORMAL TeType = iota + 1
+	AE_ONCE
 )
 
 type FileProc func(loop *AeLoop, fd int, extra interface{})

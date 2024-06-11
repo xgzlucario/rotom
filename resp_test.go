@@ -12,7 +12,7 @@ func TestValue(t *testing.T) {
 
 	t.Run("str-value", func(t *testing.T) {
 		value := ValueOK
-		data := value.Marshal()
+		data := value.Append(nil)
 		assert.Equal(string(data), "+OK\r\n")
 
 		_, err := NewResp(data).Read()
@@ -21,7 +21,7 @@ func TestValue(t *testing.T) {
 
 	t.Run("err-value", func(t *testing.T) {
 		value := newErrValue(errors.New("err message"))
-		data := value.Marshal()
+		data := value.Append(nil)
 		assert.Equal(string(data), "-err message\r\n")
 
 		_, err := NewResp(data).Read()
@@ -30,7 +30,7 @@ func TestValue(t *testing.T) {
 
 	t.Run("bulk-value", func(t *testing.T) {
 		value := newBulkValue([]byte("hello"))
-		data := value.Marshal()
+		data := value.Append(nil)
 		assert.Equal(string(data), "$5\r\nhello\r\n")
 		{
 			value2, err := NewResp(data).Read()
@@ -40,7 +40,7 @@ func TestValue(t *testing.T) {
 
 		// empty bulk string
 		value = newBulkValue([]byte(""))
-		data = value.Marshal()
+		data = value.Append(nil)
 		assert.Equal(string(data), "$0\r\n\r\n")
 		{
 			value2, err := NewResp(data).Read()
@@ -50,7 +50,7 @@ func TestValue(t *testing.T) {
 
 		// nil bulk string
 		value = newBulkValue(nil)
-		data = value.Marshal()
+		data = value.Append(nil)
 		assert.Equal(string(data), "$-1\r\n")
 		{
 			value2, err := NewResp(data).Read()
@@ -61,7 +61,7 @@ func TestValue(t *testing.T) {
 
 	t.Run("integer-value", func(t *testing.T) {
 		value := newIntegerValue(1)
-		data := value.Marshal()
+		data := value.Append(nil)
 		assert.Equal(string(data), ":1\r\n")
 
 		value2, err := NewResp(data).Read()
@@ -77,7 +77,7 @@ func TestValue(t *testing.T) {
 			newBulkValue([]byte("hello")),
 			newBulkValue([]byte("world")),
 		})
-		data := value.Marshal()
+		data := value.Append(nil)
 		assert.Equal(string(data), "*5\r\n:1\r\n:2\r\n:3\r\n$5\r\nhello\r\n$5\r\nworld\r\n")
 
 		value2, err := NewResp(data).Read()
@@ -98,7 +98,7 @@ func TestValue(t *testing.T) {
 
 		// marshal error type
 		value := Value{typ: 76}
-		data := value.Marshal()
+		data := value.Append(nil)
 		assert.Equal(string(data), ErrUnknownType.Error())
 	})
 }

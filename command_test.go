@@ -116,4 +116,8 @@ func TestCommand(t *testing.T) {
 		val, _ = rdb.RPop(ctx, "list").Result()
 		assert.Equal(val, "f")
 	})
+
+	t.Run("client-closed", func(t *testing.T) {
+		rdb.Close()
+	})
 }

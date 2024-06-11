@@ -7,7 +7,7 @@ require (
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/redis/go-redis/v9 v9.5.2
 	github.com/rs/zerolog v1.33.0
-	github.com/sakeven/RbTree v0.0.0-20240321014605-9899538dc980
+	github.com/sakeven/RbTree v1.1.1
 	github.com/stretchr/testify v1.9.0
 	github.com/tidwall/mmap v0.3.0
 	github.com/xgzlucario/GigaCache v0.0.0-20240605031700-e88a04a9dd84

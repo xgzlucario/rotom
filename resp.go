@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"unsafe"
 )
 
 const (
@@ -165,6 +166,10 @@ func (v Value) ToString() string {
 	return string(v.raw)
 }
 
+func (v Value) ToStringUnsafe() string {
+	return *(*string)(unsafe.Pointer(&v.raw))
+}
+
 func (v Value) ToInt() (int, error) {
 	return strconv.Atoi(string(v.raw))
 }
@@ -173,77 +178,73 @@ func (v Value) ToBytes() []byte {
 	return v.raw
 }
 
-// Marshal converts a Value object into its corresponding RESP bytes.
-func (v Value) Marshal() []byte {
+// Append converts a Value object into its corresponding RESP bytes.
+func (v Value) Append(b []byte) []byte {
 	switch v.typ {
 	case ARRAY:
-		return v.marshalArray()
+		return v.appendArray(b)
 	case BULK:
-		return v.marshalBulk()
+		return v.appendBulk(b)
 	case STRING:
-		return v.marshalString()
+		return v.appendString(b)
 	case INTEGER:
-		return v.marshalInteger()
+		return v.appendInteger(b)
 	case NULL:
-		return v.marshallNull()
+		return v.appendNull(b)
 	case ERROR:
-		return v.marshallError()
+		return v.appendError(b)
 	default:
-		return []byte(ErrUnknownType.Error())
+		return append(b, ErrUnknownType.Error()...)
 	}
 }
 
-func (v Value) marshalInteger() []byte {
-	buf := make([]byte, 0, 1+len(v.raw)+2)
-	buf = append(buf, INTEGER)
-	buf = append(buf, v.raw...)
-	buf = append(buf, CRLF...)
-	return buf
+// appendInteger appends a integer value into RESP format.
+func (v Value) appendInteger(b []byte) []byte {
+	b = append(b, INTEGER)
+	b = append(b, v.raw...)
+	b = append(b, CRLF...)
+	return b
 }
 
-// marshalString marshals a string value into RESP format.
-func (v Value) marshalString() []byte {
-	buf := make([]byte, 0, 1+len(v.raw)+2)
-	buf = append(buf, STRING)
-	buf = append(buf, v.raw...)
-	buf = append(buf, CRLF...)
-	return buf
+// appendString appends a string value into RESP format.
+func (v Value) appendString(b []byte) []byte {
+	b = append(b, STRING)
+	b = append(b, v.raw...)
+	b = append(b, CRLF...)
+	return b
 }
 
-// marshalBulk marshals a bulk string into RESP format.
-func (v Value) marshalBulk() []byte {
+// appendBulk appends a bulk string into RESP format.
+func (v Value) appendBulk(b []byte) []byte {
 	format := strconv.Itoa(len(v.raw))
-	buf := make([]byte, 0, 1+len(format)+2+len(v.raw)+2)
-	buf = append(buf, BULK)
-	buf = append(buf, format...)
-	buf = append(buf, CRLF...)
-	buf = append(buf, v.raw...)
-	buf = append(buf, CRLF...)
-	return buf
+	b = append(b, BULK)
+	b = append(b, format...)
+	b = append(b, CRLF...)
+	b = append(b, v.raw...)
+	b = append(b, CRLF...)
+	return b
 }
 
-// marshalArray marshals an array of values into RESP format.
-func (v Value) marshalArray() []byte {
-	buf := make([]byte, 0, 16)
-	buf = append(buf, ARRAY)
-	buf = append(buf, strconv.Itoa(len(v.array))...)
-	buf = append(buf, CRLF...)
+// appendArray appends an array of values into RESP format.
+func (v Value) appendArray(b []byte) []byte {
+	b = append(b, ARRAY)
+	b = append(b, strconv.Itoa(len(v.array))...)
+	b = append(b, CRLF...)
 	for _, val := range v.array {
-		buf = append(buf, val.Marshal()...)
+		b = val.Append(b)
 	}
-	return buf
+	return b
 }
 
-// marshallError marshals an error message into RESP format.
-func (v Value) marshallError() []byte {
-	buf := make([]byte, 0, 1+len(v.raw)+2)
-	buf = append(buf, ERROR)
-	buf = append(buf, v.raw...)
-	buf = append(buf, CRLF...)
-	return buf
+// appendError appends an error message into RESP format.
+func (v Value) appendError(b []byte) []byte {
+	b = append(b, ERROR)
+	b = append(b, v.raw...)
+	b = append(b, CRLF...)
+	return b
 }
 
-// marshallNull marshals a null value into RESP bulk string format.
-func (v Value) marshallNull() []byte {
-	return []byte("$-1\r\n")
+// appendNull appends a null value into RESP bulk string format.
+func (v Value) appendNull(b []byte) []byte {
+	return append(b, "$-1\r\n"...)
 }
