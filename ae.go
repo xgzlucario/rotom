@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -104,7 +105,9 @@ func (loop *AeLoop) RemoveFileEvent(fd int, mask FeType) {
 	}
 	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{Fd: int32(fd), Events: ev})
 	if err != nil {
-		logger.Error().Msgf("epoll del error: %v", err)
+		if !os.IsNotExist(err) {
+			logger.Error().Msgf("epoll del error: %v", err)
+		}
 	}
 	// ae ctl
 	loop.FileEvents[getFeKey(fd, mask)] = nil

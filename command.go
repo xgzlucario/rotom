@@ -107,8 +107,8 @@ func hsetCommand(args []Value) Value {
 }
 
 func hgetCommand(args []Value) Value {
-	hash := args[0].ToString()
-	key := args[1].ToString()
+	hash := args[0].ToStringUnsafe()
+	key := args[1].ToStringUnsafe()
 
 	hmap, err := fetchMap(hash)
 	if err != nil {

@@ -108,11 +108,16 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	}
 
 	n, err := Read(fd, client.queryBuf[client.queryLen:])
-	if n == 0 || err != nil {
+	if err != nil {
 		logger.Error().Msgf("client %v read err: %v", fd, err)
 		freeClient(client)
 		return
 	}
+	if n == 0 {
+		freeClient(client)
+		return
+	}
+
 	client.queryLen += n
 
 	ProcessQueryBuf(client)
@@ -155,7 +160,9 @@ func ProcessQueryBuf(client *Client) {
 				db.aof.Write(queryBuf)
 			}
 		} else {
-			res = newErrValue(ErrUnknownCommand(command))
+			err := ErrUnknownCommand(command)
+			logger.Warn().Msgf("%v", err)
+			res = newErrValue(err)
 		}
 
 		client.reply = append(client.reply, res)
