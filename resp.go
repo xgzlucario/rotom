@@ -31,6 +31,7 @@ type Value struct {
 	array []Value // Used for arrays of nested values
 }
 
+// Arg represents the raw arguments bytes of RESP.
 type Arg []byte
 
 // Resp is a parser for RESP encoded data.
@@ -82,15 +83,15 @@ func parseInt(b []byte) (int, error) {
 	return strconv.Atoi(b2s(b))
 }
 
-func (r *Resp) ReadNextCommand(argsBuf []Arg) (res []Arg, err error) {
+func (r *Resp) ReadNextCommand(argsBuf []Arg) (args []Arg, err error) {
 	if len(r.b) == 0 {
 		return nil, io.EOF
 	}
-	res = argsBuf[:0]
+	args = argsBuf[:0]
 
 	switch r.b[0] {
 	case ARRAY:
-		// read CRLF
+		// command_bulk format
 		before, after, ok := cutByCRLF(r.b[1:])
 		if !ok {
 			return nil, ErrCRLFNotFound
@@ -104,29 +105,34 @@ func (r *Resp) ReadNextCommand(argsBuf []Arg) (res []Arg, err error) {
 		for i := 0; i < count; i++ {
 			switch r.b[0] {
 			case BULK:
-				// read CRLF
-				before, after, ok := cutByCRLF(r.b[1:])
-				if !ok {
-					return nil, ErrCRLFNotFound
-				}
-				count, err := parseInt(before)
-				if err != nil {
-					return nil, err
-				}
-				r.b = after
-
-				res = append(res, r.b[:count])
-				r.b = r.b[count+2:]
-
 			default:
-				return nil, fmt.Errorf("unsupport array-in type: %c", r.b[0])
+				return nil, fmt.Errorf("unsupport array-in type: '%c'", r.b[0])
 			}
+
+			// read CRLF
+			before, after, ok := cutByCRLF(r.b[1:])
+			if !ok {
+				return nil, ErrCRLFNotFound
+			}
+			count, err := parseInt(before)
+			if err != nil {
+				return nil, err
+			}
+			r.b = after
+
+			args = append(args, r.b[:count])
+			r.b = r.b[count+2:]
 		}
 
 	default:
-		return nil, fmt.Errorf("unknown command: %s", r.b)
+		// command_inline format
+		before, after, ok := cutByCRLF(r.b)
+		if !ok {
+			return nil, ErrUnknownCommand(string(r.b))
+		}
+		args = append(args, before)
+		r.b = after
 	}
-
 	return
 }
 

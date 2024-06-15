@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strconv"
+
 	"github.com/xgzlucario/rotom/structx"
 )
 
@@ -25,6 +27,7 @@ var cmdTable []*Command = []*Command{
 	{"ping", pingCommand, 0, false},
 	{"set", setCommand, 2, true},
 	{"get", getCommand, 1, false},
+	{"incr", incrCommand, 1, true},
 	{"hset", hsetCommand, 3, true},
 	{"hget", hgetCommand, 2, false},
 	{"hdel", hdelCommand, 2, true},
@@ -75,6 +78,24 @@ func setCommand(args []Arg) Value {
 	value := args[1].ToBytes()
 	db.strs.Set(key, value)
 	return ValueOK
+}
+
+func incrCommand(args []Arg) Value {
+	key := args[0].ToString()
+	val, _, ok := db.strs.Get(key)
+	if !ok {
+		db.strs.Set(key, []byte("1"))
+		return newIntegerValue(1)
+
+	} else {
+		num, err := strconv.Atoi(b2s(val))
+		if err != nil {
+			return newErrValue(ErrParseInteger)
+		}
+		num++
+		db.strs.Set(key, []byte(strconv.Itoa(num)))
+		return newIntegerValue(num)
+	}
 }
 
 func getCommand(args []Arg) Value {

@@ -13,11 +13,10 @@ const (
 )
 
 type (
-	Map    = *structx.Map
-	Set    = *structx.Set
-	List   = *structx.List
-	ZSet   = *structx.ZSet
-	BitMap = *structx.Bitmap
+	Map  = *structx.Map
+	Set  = *structx.Set
+	List = *structx.List
+	ZSet = *structx.ZSet
 )
 
 type DB struct {

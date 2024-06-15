@@ -54,6 +54,18 @@ func TestCommand(t *testing.T) {
 		assert.Equal(res, "")
 	})
 
+	t.Run("incr", func(t *testing.T) {
+		res, _ := rdb.Incr(ctx, "testIncr").Result()
+		assert.Equal(res, int64(1))
+
+		res, _ = rdb.Incr(ctx, "testIncr").Result()
+		assert.Equal(res, int64(2))
+
+		rdb.Set(ctx, "notNum", "bar", 0)
+		_, err := rdb.Incr(ctx, "notNum").Result()
+		assert.Equal(err.Error(), ErrParseInteger.Error())
+	})
+
 	t.Run("hash", func(t *testing.T) {
 		// hset
 		res, _ := rdb.HSet(ctx, "map", "k1", "v1").Result()

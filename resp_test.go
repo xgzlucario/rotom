@@ -14,18 +14,12 @@ func TestValue(t *testing.T) {
 		value := ValueOK
 		data := value.Append(nil)
 		assert.Equal(string(data), "+OK\r\n")
-
-		_, err := NewResp(data).ReadNextCommand(nil)
-		assert.NotNil(err)
 	})
 
 	t.Run("err-value", func(t *testing.T) {
 		value := newErrValue(errors.New("err message"))
 		data := value.Append(nil)
 		assert.Equal(string(data), "-err message\r\n")
-
-		_, err := NewResp(data).ReadNextCommand(nil)
-		assert.NotNil(err)
 	})
 
 	t.Run("bulk-value", func(t *testing.T) {
@@ -77,5 +71,19 @@ func TestValue(t *testing.T) {
 		assert.Equal(string(before), "1234")
 		assert.Equal(string(after), "5678")
 		assert.True(ok)
+	})
+
+	t.Run("readCommandBulk", func(t *testing.T) {
+		args, err := NewResp([]byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")).ReadNextCommand(nil)
+		assert.Equal(args[0].ToString(), "SET")
+		assert.Equal(args[1].ToString(), "foo")
+		assert.Equal(args[2].ToString(), "bar")
+		assert.Nil(err)
+	})
+
+	t.Run("readCommandInline", func(t *testing.T) {
+		args, err := NewResp([]byte("PING\r\n")).ReadNextCommand(nil)
+		assert.Equal(args[0].ToString(), "PING")
+		assert.Nil(err)
 	})
 }
