@@ -1,8 +1,6 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/xgzlucario/rotom/structx"
 )
 
@@ -12,7 +10,7 @@ type Command struct {
 	name string
 
 	// handler is this command real database handler function.
-	handler func([]Value) Value
+	handler func([]Arg) Value
 
 	// arity represents the minimal number of arguments that command accepts.
 	arity int
@@ -39,34 +37,47 @@ var cmdTable []*Command = []*Command{
 }
 
 func lookupCommand(command string) *Command {
-	cmdStr := strings.ToLower(command)
 	for _, c := range cmdTable {
-		if c.name == cmdStr {
+		if equalCommand(command, c.name) {
 			return c
 		}
 	}
 	return nil
 }
 
-func (cmd *Command) processCommand(args []Value) Value {
+func equalCommand(str, lowerText string) bool {
+	if len(str) != len(lowerText) {
+		return false
+	}
+	const s = 'a' - 'A'
+	for i, lo := range lowerText {
+		delta := lo - rune(str[i])
+		if delta != 0 && delta != s {
+			return false
+		}
+	}
+	return true
+}
+
+func (cmd *Command) processCommand(args []Arg) Value {
 	if len(args) < cmd.arity {
 		return newErrValue(ErrWrongNumberArgs(cmd.name))
 	}
 	return cmd.handler(args)
 }
 
-func pingCommand(_ []Value) Value {
+func pingCommand(_ []Arg) Value {
 	return Value{typ: STRING, raw: []byte("PONG")}
 }
 
-func setCommand(args []Value) Value {
+func setCommand(args []Arg) Value {
 	key := args[0].ToString()
 	value := args[1].ToBytes()
 	db.strs.Set(key, value)
 	return ValueOK
 }
 
-func getCommand(args []Value) Value {
+func getCommand(args []Arg) Value {
 	key := args[0].ToStringUnsafe()
 
 	value, _, ok := db.strs.Get(key)
@@ -81,7 +92,7 @@ func getCommand(args []Value) Value {
 	return ValueNull
 }
 
-func hsetCommand(args []Value) Value {
+func hsetCommand(args []Arg) Value {
 	hash := args[0].ToString()
 	args = args[1:]
 
@@ -106,7 +117,7 @@ func hsetCommand(args []Value) Value {
 	return newIntegerValue(newFields)
 }
 
-func hgetCommand(args []Value) Value {
+func hgetCommand(args []Arg) Value {
 	hash := args[0].ToStringUnsafe()
 	key := args[1].ToStringUnsafe()
 
@@ -121,7 +132,7 @@ func hgetCommand(args []Value) Value {
 	return newBulkValue(value)
 }
 
-func hdelCommand(args []Value) Value {
+func hdelCommand(args []Arg) Value {
 	hash := args[0].ToString()
 	keys := args[1:]
 
@@ -138,7 +149,7 @@ func hdelCommand(args []Value) Value {
 	return newIntegerValue(success)
 }
 
-func hgetallCommand(args []Value) Value {
+func hgetallCommand(args []Arg) Value {
 	hash := args[0].ToString()
 
 	hmap, err := fetchMap(hash)
@@ -154,15 +165,15 @@ func hgetallCommand(args []Value) Value {
 	return newArrayValue(res)
 }
 
-func lpushCommand(args []Value) Value {
+func lpushCommand(args []Arg) Value {
 	return pushInternal(args, true)
 }
 
-func rpushCommand(args []Value) Value {
+func rpushCommand(args []Arg) Value {
 	return pushInternal(args, false)
 }
 
-func pushInternal(args []Value, isDirectLeft bool) Value {
+func pushInternal(args []Arg, isDirectLeft bool) Value {
 	key := args[0].ToString()
 
 	ls, err := fetchList(key, true)
@@ -181,15 +192,15 @@ func pushInternal(args []Value, isDirectLeft bool) Value {
 	return newIntegerValue(ls.Size())
 }
 
-func lpopCommand(args []Value) Value {
+func lpopCommand(args []Arg) Value {
 	return popInternal(args, true)
 }
 
-func rpopCommand(args []Value) Value {
+func rpopCommand(args []Arg) Value {
 	return popInternal(args, false)
 }
 
-func popInternal(args []Value, isDirectLeft bool) Value {
+func popInternal(args []Arg, isDirectLeft bool) Value {
 	key := args[0].ToString()
 
 	ls, err := fetchList(key)
@@ -210,7 +221,7 @@ func popInternal(args []Value, isDirectLeft bool) Value {
 	return newBulkValue(nil)
 }
 
-func lrangeCommand(args []Value) Value {
+func lrangeCommand(args []Arg) Value {
 	key := args[0].ToString()
 	start, err := args[1].ToInt()
 	if err != nil {

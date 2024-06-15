@@ -49,7 +49,7 @@ var (
 func InitDB(config *Config) (err error) {
 	options := cache.DefaultOptions
 	options.ConcurrencySafe = false
-	options.EvictInterval = 5
+	options.DisableEvict = true
 	db.strs = cache.New(options)
 	db.extras = make(map[string]any)
 
@@ -63,13 +63,12 @@ func InitDB(config *Config) (err error) {
 		logger.Debug().Msg("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
-		err = db.aof.Read(func(value Value) {
-			command := value.array[0].ToString()
-			args := value.array[1:]
+		err = db.aof.Read(func(args []Arg) {
+			command := args[0].ToString()
 
 			cmd := lookupCommand(command)
 			if cmd != nil {
-				cmd.processCommand(args)
+				cmd.processCommand(args[1:])
 			}
 		})
 		if err != nil {
@@ -136,10 +135,11 @@ func freeClient(client *Client) {
 
 func ProcessQueryBuf(client *Client) {
 	queryBuf := client.queryBuf[:client.queryLen]
+	argsBuf := make([]Arg, 3)
 
 	resp := NewResp(queryBuf)
 	for {
-		value, err := resp.Read()
+		args, err := resp.ReadNextCommand(argsBuf)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -148,8 +148,8 @@ func ProcessQueryBuf(client *Client) {
 			return
 		}
 
-		command := value.array[0].ToStringUnsafe()
-		args := value.array[1:]
+		command := args[0].ToStringUnsafe()
+		args = args[1:]
 		var res Value
 
 		// lookup for command
@@ -183,11 +183,14 @@ func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 		buf = elem.Append(buf)
 	}
 
-	_, err := Write(fd, buf)
+	n, err := Write(fd, buf)
 	if err != nil {
 		logger.Error().Msgf("send reply err: %v", err)
 		freeClient(client)
 		return
+	}
+	if n != len(buf) {
+		logger.Error().Msgf("send packet size error: %d %d", n, len(buf))
 	}
 
 	client.reply = client.reply[:0]
@@ -209,10 +212,13 @@ func initServer(config *Config) (err error) {
 	return nil
 }
 
-// ServerCronFlush flush aof file for every second.
 func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
 	err := db.aof.Flush()
 	if err != nil {
 		logger.Error().Msgf("flush aof buffer error: %v", err)
 	}
+}
+
+func ServerCronEvict(loop *AeLoop, id int, extra interface{}) {
+	db.strs.EvictExpiredKeys()
 }

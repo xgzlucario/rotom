@@ -48,7 +48,7 @@ func (aof *Aof) Flush() error {
 	return aof.file.Sync()
 }
 
-func (aof *Aof) Read(fn func(value Value)) error {
+func (aof *Aof) Read(fn func(args []Arg)) error {
 	// Read file data by mmap.
 	data, err := mmap.Open(aof.filePath, false)
 	if len(data) == 0 {
@@ -61,14 +61,14 @@ func (aof *Aof) Read(fn func(value Value)) error {
 	// Iterate over the records in the file, applying the function to each.
 	reader := NewResp(data)
 	for {
-		value, err := reader.Read()
+		values, err := reader.ReadNextCommand(nil)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			return err
 		}
-		fn(value)
+		fn(values)
 	}
 
 	return nil

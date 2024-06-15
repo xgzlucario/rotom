@@ -53,13 +53,9 @@ git clone https://github.com/xgzlucario/rotom
 
 ```
 $ go run .
-2024/06/05 15:26:47 cmd arguments: config=config.json, debug=false
-2024/06/05 15:26:47 read config file: {
-    "port": 6379,
-    "appendonly": false,
-    "appendfilename": "appendonly.aof"
-}
-2024/06/05 15:26:47 rotom server is ready to accept.
+2024-06-15 16:41:22 DBG read cmd arguments config=config.json debug=true
+2024-06-15 16:41:22 DBG running on port=6379
+2024-06-15 16:41:22 DBG rotom server is ready to accept.
 ```
 
 **容器运行**
@@ -68,7 +64,7 @@ $ go run .
 
 ```
 REPOSITORY       TAG           IMAGE ID       CREATED         SIZE
-rotom            latest        22f42ce9ae0e   8 seconds ago   18.4MB
+rotom            latest        22f42ce9ae0e   8 seconds ago   18.6MB
 ```
 
 然后启动容器：

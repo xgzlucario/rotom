@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"strconv"
@@ -32,8 +31,9 @@ type Value struct {
 	array []Value // Used for arrays of nested values
 }
 
+type Arg []byte
+
 // Resp is a parser for RESP encoded data.
-// It is a ZERO-COPY parser.
 type Resp struct {
 	b []byte
 }
@@ -64,118 +64,90 @@ func newArrayValue(value []Value) Value {
 	return Value{typ: ARRAY, array: value}
 }
 
-// readLine reads a line ending with CRLF from the reader.
-func (r *Resp) readLine() ([]byte, int, error) {
-	before, after, found := bytes.Cut(r.b, CRLF)
-	if found {
-		r.b = after
-		return before, len(before) + 2, nil
+func cutByCRLF(buf []byte) (before, after []byte, found bool) {
+	if len(buf) <= 2 {
+		return
 	}
-	return nil, 0, ErrCRLFNotFound
+	for i, b := range buf {
+		if b == '\r' {
+			if buf[i+1] == '\n' {
+				return buf[:i], buf[i+2:], true
+			}
+		}
+	}
+	return
 }
 
-// readInteger reads an integer value following the ':' prefix.
-func (r *Resp) readInteger() (x int, n int, err error) {
-	line, n, err := r.readLine()
-	if err != nil {
-		return 0, 0, err
-	}
-	i64, err := strconv.ParseInt(string(line), 10, 64)
-	if err != nil {
-		return 0, n, err
-	}
-	return int(i64), n, nil
+func parseInt(b []byte) (int, error) {
+	return strconv.Atoi(b2s(b))
 }
 
-func (r *Resp) readByte() (byte, error) {
+func (r *Resp) ReadNextCommand(argsBuf []Arg) (res []Arg, err error) {
 	if len(r.b) == 0 {
-		return 0, io.EOF
+		return nil, io.EOF
 	}
-	b := r.b[0]
-	r.b = r.b[1:]
-	return b, nil
-}
+	res = argsBuf[:0]
 
-// Read parses the next RESP value from the stream.
-func (r *Resp) Read() (Value, error) {
-	_type, err := r.readByte()
-	if err != nil {
-		return Value{}, err
-	}
-
-	switch _type {
+	switch r.b[0] {
 	case ARRAY:
-		return r.readArray()
-	case BULK:
-		return r.readBulk()
-	case INTEGER:
-		len, _, err := r.readInteger()
-		if err != nil {
-			return Value{}, err
-		} else {
-			return newIntegerValue(len), nil
+		// read CRLF
+		before, after, ok := cutByCRLF(r.b[1:])
+		if !ok {
+			return nil, ErrCRLFNotFound
 		}
+		count, err := parseInt(before)
+		if err != nil {
+			return nil, err
+		}
+		r.b = after
+
+		for i := 0; i < count; i++ {
+			switch r.b[0] {
+			case BULK:
+				// read CRLF
+				before, after, ok := cutByCRLF(r.b[1:])
+				if !ok {
+					return nil, ErrCRLFNotFound
+				}
+				count, err := parseInt(before)
+				if err != nil {
+					return nil, err
+				}
+				r.b = after
+
+				res = append(res, r.b[:count])
+				r.b = r.b[count+2:]
+
+			default:
+				return nil, fmt.Errorf("unsupport array-in type: %c", r.b[0])
+			}
+		}
+
 	default:
-		return Value{}, fmt.Errorf("%w: %c", ErrUnknownType, _type)
-	}
-}
-
-// readArray reads an array prefixed with '*' from the stream.
-func (r *Resp) readArray() (Value, error) {
-	value := Value{typ: ARRAY}
-
-	n, _, err := r.readInteger()
-	if err != nil {
-		return Value{}, err
+		return nil, fmt.Errorf("unknown command: %s", r.b)
 	}
 
-	value.array = make([]Value, n)
-	for i := range value.array {
-		v, err := r.Read()
-		if err != nil {
-			return Value{}, err
-		}
-		value.array[i] = v
-	}
-
-	return value, nil
+	return
 }
 
-// readBulk reads a bulk string prefixed with '$' from the stream.
-func (r *Resp) readBulk() (Value, error) {
-	value := Value{typ: BULK}
-
-	n, _, err := r.readInteger()
-	if err != nil {
-		return Value{}, err
-	}
-
-	if n == -1 { // RESP Bulk strings can be null, indicated by "$-1"
-		return Value{typ: NULL}, err
-	}
-
-	value.raw = r.b[:n]
-	r.b = r.b[n:]
-
-	r.readLine() // Read the trailing CRLF
-
-	return value, nil
+func (a Arg) ToString() string {
+	return string(a)
 }
 
-func (v Value) ToString() string {
-	return string(v.raw)
+func (a Arg) ToStringUnsafe() string {
+	return b2s(a)
 }
 
-func (v Value) ToStringUnsafe() string {
-	return *(*string)(unsafe.Pointer(&v.raw))
+func (a Arg) ToInt() (int, error) {
+	return strconv.Atoi(b2s(a))
 }
 
-func (v Value) ToInt() (int, error) {
-	return strconv.Atoi(string(v.raw))
+func (a Arg) ToBytes() []byte {
+	return a
 }
 
-func (v Value) ToBytes() []byte {
-	return v.raw
+func b2s(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }
 
 // Append converts a Value object into its corresponding RESP bytes.
