@@ -1,18 +1,15 @@
 package structx
 
 import (
-	cache "github.com/xgzlucario/GigaCache"
+	"github.com/xgzlucario/rotom/dict"
 )
 
 type Map struct {
-	m *cache.GigaCache
+	m *dict.Dict
 }
 
-func defaultOptions() cache.Options {
-	options := cache.DefaultOptions
-	options.ConcurrencySafe = false
-	// the hash keys is no need expire
-	options.DisableEvict = true
+func defaultOptions() dict.Options {
+	options := dict.DefaultOptions
 	options.ShardCount = 1
 	options.IndexSize = 8
 	options.BufferSize = 32
@@ -20,7 +17,7 @@ func defaultOptions() cache.Options {
 }
 
 func NewMap() (s *Map) {
-	return &Map{m: cache.New(defaultOptions())}
+	return &Map{m: dict.New(defaultOptions())}
 }
 
 func (m *Map) Get(key string) ([]byte, int64, bool) {
@@ -35,8 +32,8 @@ func (m *Map) Remove(key string) bool {
 	return m.m.Remove(key)
 }
 
-func (m *Map) Scan(fn func(key, value []byte)) {
-	m.m.Scan(func(key, val []byte, _ int64) (next bool) {
+func (m *Map) Scan(fn func(key string, value []byte)) {
+	m.m.Scan(func(key string, val []byte, _ int64) (next bool) {
 		fn(key, val)
 		return true
 	})

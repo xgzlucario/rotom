@@ -3,7 +3,7 @@ package main
 import (
 	"io"
 
-	cache "github.com/xgzlucario/GigaCache"
+	"github.com/xgzlucario/rotom/dict"
 	"github.com/xgzlucario/rotom/structx"
 )
 
@@ -20,7 +20,7 @@ type (
 )
 
 type DB struct {
-	strs   *cache.GigaCache
+	strs   *dict.Dict
 	extras map[string]any
 	aof    *Aof
 }
@@ -46,10 +46,7 @@ var (
 
 // InitDB initializes database and redo appendonly files if nedded.
 func InitDB(config *Config) (err error) {
-	options := cache.DefaultOptions
-	options.ConcurrencySafe = false
-	options.DisableEvict = true
-	db.strs = cache.New(options)
+	db.strs = dict.New(dict.DefaultOptions)
 	db.extras = make(map[string]any)
 
 	if config.AppendOnly {
@@ -219,5 +216,5 @@ func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
 }
 
 func ServerCronEvict(loop *AeLoop, id int, extra interface{}) {
-	db.strs.EvictExpiredKeys()
+	db.strs.EvictExpired()
 }

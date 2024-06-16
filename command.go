@@ -179,8 +179,8 @@ func hgetallCommand(args []Arg) Value {
 	}
 
 	res := make([]Value, 0, 8)
-	hmap.Scan(func(key, value []byte) {
-		res = append(res, newBulkValue(key))
+	hmap.Scan(func(key string, value []byte) {
+		res = append(res, newBulkValue([]byte(key)))
 		res = append(res, newBulkValue(value))
 	})
 	return newArrayValue(res)
