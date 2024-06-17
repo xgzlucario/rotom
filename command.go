@@ -7,8 +7,7 @@ import (
 )
 
 type Command struct {
-	// name is command string name.
-	// it should consist of all lowercase letters.
+	// name is lowercase letters command name.
 	name string
 
 	// handler is this command real database handler function.
@@ -24,18 +23,19 @@ type Command struct {
 
 // cmdTable is the list of all available commands.
 var cmdTable []*Command = []*Command{
-	{"ping", pingCommand, 0, false},
 	{"set", setCommand, 2, true},
 	{"get", getCommand, 1, false},
 	{"incr", incrCommand, 1, true},
 	{"hset", hsetCommand, 3, true},
 	{"hget", hgetCommand, 2, false},
 	{"hdel", hdelCommand, 2, true},
-	{"hgetall", hgetallCommand, 1, false},
 	{"rpush", rpushCommand, 2, true},
 	{"lpush", lpushCommand, 2, true},
 	{"rpop", rpopCommand, 1, true},
 	{"lpop", lpopCommand, 1, true},
+	{"sadd", saddCommand, 2, true},
+	{"ping", pingCommand, 0, false},
+	{"hgetall", hgetallCommand, 1, false},
 	{"lrange", lrangeCommand, 3, false},
 }
 
@@ -130,7 +130,7 @@ func hsetCommand(args []Arg) Value {
 	var newFields int
 	for i := 0; i < len(args); i += 2 {
 		key := args[i].ToString()
-		value := args[i+1].ToBytes()
+		value := args[i+1].Clone()
 		if hmap.Set(key, value) {
 			newFields++
 		}
@@ -146,7 +146,7 @@ func hgetCommand(args []Arg) Value {
 	if err != nil {
 		return newErrValue(ErrWrongType)
 	}
-	value, _, ok := hmap.Get(key)
+	value, ok := hmap.Get(key)
 	if !ok {
 		return ValueNull
 	}
@@ -266,12 +266,34 @@ func lrangeCommand(args []Arg) Value {
 	return newArrayValue(res)
 }
 
+func saddCommand(args []Arg) Value {
+	key := args[0].ToString()
+	args = args[1:]
+
+	set, err := fetchSet(key, true)
+	if err != nil {
+		return newErrValue(err)
+	}
+
+	var newItems int
+	for i := 0; i < len(args); i++ {
+		if set.Add(args[i].ToString()) {
+			newItems++
+		}
+	}
+	return newIntegerValue(newItems)
+}
+
 func fetchMap(key string, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return structx.NewMap() }, setnx...)
 }
 
 func fetchList(key string, setnx ...bool) (List, error) {
 	return fetch(key, func() List { return structx.NewList() }, setnx...)
+}
+
+func fetchSet(key string, setnx ...bool) (Set, error) {
+	return fetch(key, func() Set { return structx.NewSet() }, setnx...)
 }
 
 func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {

@@ -1,44 +1,36 @@
 package structx
 
 import (
-	"github.com/xgzlucario/rotom/dict"
+	"github.com/cockroachdb/swiss"
 )
 
 type Map struct {
-	m *dict.Dict
+	m *swiss.Map[string, []byte]
 }
 
-func defaultOptions() dict.Options {
-	options := dict.DefaultOptions
-	options.ShardCount = 1
-	options.IndexSize = 8
-	options.BufferSize = 32
-	return options
+func NewMap() *Map {
+	return &Map{m: swiss.New[string, []byte](8)}
 }
 
-func NewMap() (s *Map) {
-	return &Map{m: dict.New(defaultOptions())}
-}
-
-func (m *Map) Get(key string) ([]byte, int64, bool) {
+func (m *Map) Get(key string) ([]byte, bool) {
 	return m.m.Get(key)
 }
 
-func (m *Map) Set(key string, val []byte) (newField bool) {
-	return m.m.Set(key, val)
+func (m *Map) Set(key string, val []byte) bool {
+	_, ok := m.m.Get(key)
+	m.m.Put(key, val)
+	return !ok
 }
 
 func (m *Map) Remove(key string) bool {
-	return m.m.Remove(key)
+	_, ok := m.m.Get(key)
+	m.m.Delete(key)
+	return ok
 }
 
 func (m *Map) Scan(fn func(key string, value []byte)) {
-	m.m.Scan(func(key string, val []byte, _ int64) (next bool) {
+	m.m.All(func(key string, val []byte) (next bool) {
 		fn(key, val)
 		return true
 	})
-}
-
-func (m *Map) Len() (n int) {
-	return m.m.GetStats().Len
 }

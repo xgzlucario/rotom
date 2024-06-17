@@ -129,6 +129,11 @@ func TestCommand(t *testing.T) {
 		assert.Equal(val, "f")
 	})
 
+	t.Run("set", func(t *testing.T) {
+		n, _ := rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
+		assert.Equal(n, int64(3))
+	})
+
 	t.Run("client-closed", func(t *testing.T) {
 		rdb.Close()
 	})

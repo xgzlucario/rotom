@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"unsafe"
 )
@@ -79,10 +80,6 @@ func cutByCRLF(buf []byte) (before, after []byte, found bool) {
 	return
 }
 
-func parseInt(b []byte) (int, error) {
-	return strconv.Atoi(b2s(b))
-}
-
 func (r *Resp) ReadNextCommand(argsBuf []Arg) (args []Arg, err error) {
 	if len(r.b) == 0 {
 		return nil, io.EOF
@@ -96,7 +93,7 @@ func (r *Resp) ReadNextCommand(argsBuf []Arg) (args []Arg, err error) {
 		if !ok {
 			return nil, ErrCRLFNotFound
 		}
-		count, err := parseInt(before)
+		count, err := strconv.Atoi(b2s(before))
 		if err != nil {
 			return nil, err
 		}
@@ -114,7 +111,7 @@ func (r *Resp) ReadNextCommand(argsBuf []Arg) (args []Arg, err error) {
 			if !ok {
 				return nil, ErrCRLFNotFound
 			}
-			count, err := parseInt(before)
+			count, err := strconv.Atoi(b2s(before))
 			if err != nil {
 				return nil, err
 			}
@@ -150,6 +147,10 @@ func (a Arg) ToInt() (int, error) {
 
 func (a Arg) ToBytes() []byte {
 	return a
+}
+
+func (a Arg) Clone() []byte {
+	return slices.Clone(a)
 }
 
 func b2s(b []byte) string {

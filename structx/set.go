@@ -1,35 +1,19 @@
 package structx
 
-import (
-	mapset "github.com/deckarep/golang-set/v2"
-)
+import "github.com/cockroachdb/swiss"
 
-// Set
 type Set struct {
-	mapset.Set[string]
+	m *swiss.Map[string, struct{}]
 }
 
-// NewSet
 func NewSet() *Set {
-	return &Set{mapset.NewSet[string]()}
+	return &Set{m: swiss.New[string, struct{}](8)}
 }
 
-// Clone
-func (s *Set) Clone() *Set {
-	return &Set{s.Set.Clone()}
-}
-
-// Union
-func (s *Set) Union(other *Set) {
-	s.Set = s.Set.Union(other.Set)
-}
-
-// Intersect
-func (s *Set) Intersect(other *Set) {
-	s.Set = s.Set.Intersect(other.Set)
-}
-
-// Difference
-func (s *Set) Difference(other *Set) {
-	s.Set = s.Set.SymmetricDifference(other.Set)
+func (s *Set) Add(key string) bool {
+	if _, ok := s.m.Get(key); ok {
+		return false
+	}
+	s.m.Put(key, struct{}{})
+	return true
 }

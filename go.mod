@@ -4,7 +4,6 @@ go 1.22
 
 require (
 	github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964
-	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/redis/go-redis/v9 v9.5.2
 	github.com/rs/zerolog v1.33.0
 	github.com/sakeven/RbTree v1.1.1
