@@ -31,7 +31,7 @@ func main() {
 	c := ""
 	entries := 0
 	flag.StringVar(&c, "cache", "dict", "map to bench.")
-	flag.IntVar(&entries, "entries", 2000*10000, "number of entries to test.")
+	flag.IntVar(&entries, "entries", 1000*10000, "number of entries to test.")
 	flag.Parse()
 
 	fmt.Println(c)
@@ -51,7 +51,7 @@ func main() {
 			val []byte
 			ts  int64
 		}
-		m := make(map[string]Item)
+		m := make(map[string]Item, entries)
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
 			m[string(k)] = Item{val: v, ts: 0}
@@ -62,7 +62,7 @@ func main() {
 			val []byte
 			ts  int64
 		}
-		m := swiss.New[string, Item](8)
+		m := swiss.New[string, Item](entries)
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
 			m.Put(string(k), Item{val: v, ts: 0})

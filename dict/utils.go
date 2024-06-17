@@ -43,9 +43,10 @@ type Options struct {
 }
 
 var DefaultOptions = Options{
-	ShardCount: 1024,
-	IndexSize:  1024,
-	BufferSize: 64 * KB,
+	ShardCount:   1024,
+	IndexSize:    1024,
+	BufferSize:   64 * KB,
+	MigrateRatio: 0.4,
 }
 
 func validateOptions(options Options) error {

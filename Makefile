@@ -18,6 +18,9 @@ heap:
 build-docker:
 	docker build -t rotom .
 
+bench:
+	go test -bench . -benchmem
+
 clean:
 	rm -f *.aof
 	rm -f coverage.html

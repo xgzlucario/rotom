@@ -49,11 +49,15 @@ func (dict *Dict) getShard(key string) *shard {
 func (dict *Dict) Get(key string) ([]byte, int64, bool) {
 	shard := dict.getShard(key)
 	idx, ok := shard.index.Get(key)
-	if ok && !idx.expired() {
-		_, val := shard.findEntry(idx)
-		return val, idx.lo, ok
+	if !ok {
+		return nil, 0, false
 	}
-	return nil, 0, false
+	if idx.expired() {
+		shard.removeEntry(key, idx)
+		return nil, 0, false
+	}
+	_, val := shard.findEntry(idx)
+	return val, idx.lo, ok
 }
 
 func (dict *Dict) SetTx(key string, val []byte, expiration int64) bool {
@@ -85,29 +89,32 @@ func (dict *Dict) SetEx(kstr string, value []byte, duration time.Duration) bool 
 func (dict *Dict) Remove(key string) bool {
 	shard := dict.getShard(key)
 	idx, ok := shard.index.Get(key)
-	if ok {
-		shard.removeEntry(key, idx)
-		return !idx.expired()
+	if !ok {
+		return false
 	}
-	return false
+	shard.removeEntry(key, idx)
+	return !idx.expired()
 }
 
 func (dict *Dict) SetTTL(key string, expiration int64) bool {
 	shard := dict.getShard(key)
 	idx, ok := shard.index.Get(key)
-	if ok && !idx.expired() {
-		shard.index.Put(key, idx.setTTL(expiration))
-		return true
+	if !ok {
+		return false
 	}
-	return false
+	if idx.expired() {
+		shard.removeEntry(key, idx)
+		return false
+	}
+	shard.index.Put(key, idx.setTTL(expiration))
+	return true
 }
 
 type Walker func(key string, value []byte, ttl int64) (next bool)
 
 func (dict *Dict) Scan(callback Walker) {
 	for _, shard := range dict.shards {
-		next := shard.scan(callback)
-		if !next {
+		if !shard.scan(callback) {
 			return
 		}
 	}
@@ -121,8 +128,7 @@ func (dict *Dict) Migrate() {
 
 func (dict *Dict) EvictExpired() {
 	id := rand.IntN(len(dict.shards))
-	shard := dict.shards[id]
-	shard.evictExpired()
+	dict.shards[id].evictExpired()
 }
 
 // Stats represents the runtime statistics of Dict.
