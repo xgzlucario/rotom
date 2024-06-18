@@ -83,7 +83,7 @@ func (loop *AeLoop) AddFileEvent(fd int, mask FeType, proc FileProc, extra inter
 	ev |= fe2ep[mask]
 	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{Fd: int32(fd), Events: ev})
 	if err != nil {
-		logger.Error().Msgf("epoll ctl error: %v", err)
+		log.Error().Msgf("epoll ctl error: %v", err)
 		return
 	}
 	// ae ctl
@@ -106,7 +106,7 @@ func (loop *AeLoop) RemoveFileEvent(fd int, mask FeType) {
 	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{Fd: int32(fd), Events: ev})
 	if err != nil {
 		if !os.IsNotExist(err) {
-			logger.Error().Msgf("epoll del error: %v", err)
+			log.Error().Msgf("epoll del error: %v", err)
 		}
 	}
 	// ae ctl
@@ -190,7 +190,7 @@ retry:
 		if err == unix.EINTR {
 			goto retry
 		}
-		logger.Error().Msgf("epoll wait error: %v", err)
+		log.Error().Msgf("epoll wait error: %v", err)
 		return
 	}
 

@@ -24,10 +24,6 @@ func TestAof(t *testing.T) {
 		aof, err := NewAof("test.aof")
 		assert.Nil(err)
 		defer aof.Close()
-
-		// aof.Read(func(value []Value) {
-		// 	assert.Equal(value.Append(nil), setCommand)
-		// })
 	})
 
 	t.Run("read-error", func(t *testing.T) {

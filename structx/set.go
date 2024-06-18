@@ -17,3 +17,12 @@ func (s *Set) Add(key string) bool {
 	s.m.Put(key, struct{}{})
 	return true
 }
+
+func (s *Set) Pop() (item string, ok bool) {
+	s.m.All(func(key string, _ struct{}) bool {
+		s.m.Delete(key)
+		item, ok = key, true
+		return false
+	})
+	return
+}

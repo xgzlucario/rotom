@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"testing"
 	"time"
 
@@ -13,10 +12,10 @@ import (
 func startup() {
 	config := &Config{Port: 20082}
 	if err := InitDB(config); err != nil {
-		log.Panic("init db error:", err)
+		log.Panic().Msgf("init db error: %v", err)
 	}
 	if err := initServer(config); err != nil {
-		log.Panicf("init server error: %v\n", err)
+		log.Panic().Msgf("init server error: %v", err)
 	}
 	server.aeLoop.AddFileEvent(server.fd, AE_READABLE, AcceptHandler, nil)
 	server.aeLoop.AeMain()
@@ -132,6 +131,30 @@ func TestCommand(t *testing.T) {
 	t.Run("set", func(t *testing.T) {
 		n, _ := rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
 		assert.Equal(n, int64(3))
+
+		for i := 0; i < 3; i++ {
+			val, _ := rdb.SPop(ctx, "set").Result()
+			assert.NotEqual(val, "")
+		}
+
+		_, err := rdb.SPop(ctx, "set").Result()
+		assert.Equal(err, redis.Nil)
+	})
+
+	t.Run("zset", func(t *testing.T) {
+		n, _ := rdb.ZAdd(ctx, "zs1", redis.Z{Member: "a"}).Result()
+		assert.Equal(n, int64(1))
+
+		n, _ = rdb.ZAdd(ctx, "zs1",
+			redis.Z{Member: "a"},
+			redis.Z{Member: "b"},
+			redis.Z{Member: "c"}).Result()
+		assert.Equal(n, int64(2))
+	})
+
+	t.Run("mset", func(t *testing.T) {
+		res, _ := rdb.MSet(ctx, "mk1", "mv1", "mk2", "mv2").Result()
+		assert.Equal(res, "OK")
 	})
 
 	t.Run("client-closed", func(t *testing.T) {

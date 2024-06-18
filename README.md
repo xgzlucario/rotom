@@ -14,7 +14,7 @@ rotom 基于 [godis](https://github.com/archeryue/godis) 项目
 2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
 3. DB hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)
 4. AOF 支持
-5. 目前支持命令 `set`, `get`, `hset`, `hget`, `hdel`, `lpush`, `rpush`, `lpop`, `rpop`, `lrange`
+5. 目前支持所有 redis-benchmark 命令（17种）
 
 ### 原理介绍
 

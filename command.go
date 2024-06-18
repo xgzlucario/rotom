@@ -24,6 +24,7 @@ type Command struct {
 // cmdTable is the list of all available commands.
 var cmdTable []*Command = []*Command{
 	{"set", setCommand, 2, true},
+	{"mset", msetCommand, 2, true},
 	{"get", getCommand, 1, false},
 	{"incr", incrCommand, 1, true},
 	{"hset", hsetCommand, 3, true},
@@ -34,9 +35,13 @@ var cmdTable []*Command = []*Command{
 	{"rpop", rpopCommand, 1, true},
 	{"lpop", lpopCommand, 1, true},
 	{"sadd", saddCommand, 2, true},
+	{"spop", spopCommand, 1, true},
+	{"zadd", zaddCommand, 3, true},
 	{"ping", pingCommand, 0, false},
 	{"hgetall", hgetallCommand, 1, false},
 	{"lrange", lrangeCommand, 3, false},
+	{"zpopmin", func(a []Arg) Value { return ValueOK }, 0, false}, // TODO
+	{"xadd", func(a []Arg) Value { return ValueOK }, 0, false},    // TODO
 }
 
 func lookupCommand(command string) *Command {
@@ -80,6 +85,19 @@ func setCommand(args []Arg) Value {
 	return ValueOK
 }
 
+func msetCommand(args []Arg) Value {
+	// check arguments number
+	if len(args)%2 == 1 {
+		return newErrValue(ErrWrongNumberArgs("hset"))
+	}
+	for i := 0; i < len(args); i += 2 {
+		key := args[i].ToString()
+		value := args[i+1].ToBytes()
+		db.strs.Set(key, value)
+	}
+	return ValueOK
+}
+
 func incrCommand(args []Arg) Value {
 	key := args[0].ToString()
 	val, _, ok := db.strs.Get(key)
@@ -106,7 +124,7 @@ func getCommand(args []Arg) Value {
 		return newBulkValue(value)
 	}
 	// check extra maps
-	_, ok = db.extras[key]
+	_, ok = db.extras.Get(key)
 	if ok {
 		return newErrValue(ErrWrongType)
 	}
@@ -146,10 +164,7 @@ func hgetCommand(args []Arg) Value {
 	if err != nil {
 		return newErrValue(ErrWrongType)
 	}
-	value, ok := hmap.Get(key)
-	if !ok {
-		return ValueNull
-	}
+	value, _ := hmap.Get(key)
 	return newBulkValue(value)
 }
 
@@ -284,6 +299,45 @@ func saddCommand(args []Arg) Value {
 	return newIntegerValue(newItems)
 }
 
+func spopCommand(args []Arg) Value {
+	key := args[0].ToString()
+
+	set, err := fetchSet(key)
+	if err != nil {
+		return newErrValue(err)
+	}
+
+	item, ok := set.Pop()
+	if ok {
+		return newBulkValue([]byte(item))
+	}
+	return ValueNull
+}
+
+func zaddCommand(args []Arg) Value {
+	key := args[0].ToString()
+	args = args[1:]
+
+	zset, err := fetchZSet(key, true)
+	if err != nil {
+		return newErrValue(err)
+	}
+
+	var newFields int
+	for i := 0; i < len(args); i += 2 {
+		score, err := args[i].ToInt()
+		if err != nil {
+			return newErrValue(err)
+		}
+		key := args[i+1].ToString()
+
+		if zset.Set(key, int64(score)) {
+			newFields++
+		}
+	}
+	return newIntegerValue(newFields)
+}
+
 func fetchMap(key string, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return structx.NewMap() }, setnx...)
 }
@@ -296,8 +350,12 @@ func fetchSet(key string, setnx ...bool) (Set, error) {
 	return fetch(key, func() Set { return structx.NewSet() }, setnx...)
 }
 
+func fetchZSet(key string, setnx ...bool) (ZSet, error) {
+	return fetch(key, func() ZSet { return structx.NewZSet() }, setnx...)
+}
+
 func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
-	item, ok := db.extras[key]
+	item, ok := db.extras.Get(key)
 	if ok {
 		v, ok := item.(T)
 		if ok {
@@ -307,7 +365,7 @@ func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
 	}
 	v = new()
 	if len(setnx) > 0 && setnx[0] {
-		db.extras[key] = v
+		db.extras.Put(key, v)
 	}
 	return v, nil
 }

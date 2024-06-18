@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 
+	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/dict"
 	"github.com/xgzlucario/rotom/structx"
 )
@@ -21,7 +22,7 @@ type (
 
 type DB struct {
 	strs   *dict.Dict
-	extras map[string]any
+	extras *swiss.Map[string, any]
 	aof    *Aof
 }
 
@@ -47,16 +48,16 @@ var (
 // InitDB initializes database and redo appendonly files if nedded.
 func InitDB(config *Config) (err error) {
 	db.strs = dict.New(dict.DefaultOptions)
-	db.extras = make(map[string]any)
+	db.extras = swiss.New[string, any](64)
 
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)
 		if err != nil {
-			logger.Error().Msgf("failed to initialize aof file: %v", err)
+			log.Error().Msgf("failed to initialize aof file: %v", err)
 			return
 		}
 
-		logger.Debug().Msg("start loading aof file...")
+		log.Debug().Msg("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
 		err = db.aof.Read(func(args []Arg) {
@@ -68,7 +69,7 @@ func InitDB(config *Config) (err error) {
 			}
 		})
 		if err != nil {
-			logger.Error().Msgf("read appendonly file error: %v", err)
+			log.Error().Msgf("read appendonly file error: %v", err)
 			return
 		}
 	}
@@ -80,7 +81,7 @@ func InitDB(config *Config) (err error) {
 func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	cfd, err := Accept(fd)
 	if err != nil {
-		logger.Error().Msgf("accept err: %v", err)
+		log.Error().Msgf("accept err: %v", err)
 		return
 	}
 	// create client
@@ -91,7 +92,7 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	}
 	server.clients[cfd] = client
 	loop.AddFileEvent(cfd, AE_READABLE, ReadQueryFromClient, client)
-	logger.Debug().Msgf("accept client, fd: %d", cfd)
+	log.Debug().Msgf("accept client, fd: %d", cfd)
 }
 
 func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
@@ -104,7 +105,7 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 
 	n, err := Read(fd, client.queryBuf[client.queryLen:])
 	if err != nil {
-		logger.Error().Msgf("client %v read err: %v", fd, err)
+		log.Error().Msgf("client %v read err: %v", fd, err)
 		freeClient(client)
 		return
 	}
@@ -140,7 +141,7 @@ func ProcessQueryBuf(client *Client) {
 			if err == io.EOF {
 				break
 			}
-			logger.Error().Msgf("read resp error: %v", err)
+			log.Error().Msgf("read resp error: %v", err)
 			return
 		}
 
@@ -157,7 +158,7 @@ func ProcessQueryBuf(client *Client) {
 			}
 		} else {
 			err := ErrUnknownCommand(command)
-			logger.Warn().Msgf("%v", err)
+			log.Warn().Msgf("%v", err)
 			res = newErrValue(err)
 		}
 
@@ -181,12 +182,12 @@ func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 
 	n, err := Write(fd, buf)
 	if err != nil {
-		logger.Error().Msgf("send reply err: %v", err)
+		log.Error().Msgf("send reply err: %v", err)
 		freeClient(client)
 		return
 	}
 	if n != len(buf) {
-		logger.Error().Msgf("send packet size error: %d %d", n, len(buf))
+		log.Error().Msgf("send packet size error: %d %d", n, len(buf))
 	}
 
 	client.reply = client.reply[:0]
@@ -211,7 +212,7 @@ func initServer(config *Config) (err error) {
 func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
 	err := db.aof.Flush()
 	if err != nil {
-		logger.Error().Msgf("flush aof buffer error: %v", err)
+		log.Error().Msgf("flush aof buffer error: %v", err)
 	}
 }
 

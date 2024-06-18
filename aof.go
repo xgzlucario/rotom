@@ -60,8 +60,9 @@ func (aof *Aof) Read(fn func(args []Arg)) error {
 
 	// Iterate over the records in the file, applying the function to each.
 	reader := NewResp(data)
+	argsBuf := make([]Arg, 3)
 	for {
-		values, err := reader.ReadNextCommand(nil)
+		values, err := reader.ReadNextCommand(argsBuf)
 		if err != nil {
 			if err == io.EOF {
 				break

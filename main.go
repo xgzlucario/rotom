@@ -10,7 +10,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-var logger = zerolog.
+var log = zerolog.
 	New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime}).
 	Level(zerolog.TraceLevel).
 	With().
@@ -29,24 +29,24 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "run with debug mode.")
 	flag.Parse()
 
-	logger.Debug().Str("config", path).Bool("debug", debug).Msg("read cmd arguments")
+	log.Debug().Str("config", path).Bool("debug", debug).Msg("read cmd arguments")
 
 	config, err := LoadConfig(path)
 	if err != nil {
-		logger.Fatal().Msgf("load config error: %v", err)
+		log.Fatal().Msgf("load config error: %v", err)
 	}
 	if err = initServer(config); err != nil {
-		logger.Fatal().Msgf("init server error: %v", err)
+		log.Fatal().Msgf("init server error: %v", err)
 	}
 	if err = InitDB(config); err != nil {
-		logger.Fatal().Msgf("init db error: %v", err)
+		log.Fatal().Msgf("init db error: %v", err)
 	}
 	if debug {
 		runDebug()
 	}
 
-	logger.Debug().Int("port", config.Port).Msg("running on")
-	logger.Debug().Msg("rotom server is ready to accept.")
+	log.Debug().Int("port", config.Port).Msg("running on")
+	log.Debug().Msg("rotom server is ready to accept.")
 
 	// register main aeLoop event
 	server.aeLoop.AddFileEvent(server.fd, AE_READABLE, AcceptHandler, nil)
