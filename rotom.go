@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"io"
+	"net"
 
 	"github.com/xgzlucario/rotom/dict"
 	"github.com/xgzlucario/rotom/structx"
@@ -30,10 +32,12 @@ type Client struct {
 	queryLen int
 	queryBuf []byte
 	reply    []Value
+	conn     net.Conn
 }
 
 type Server struct {
 	fd      int
+	ln      net.Listener
 	config  *Config
 	aeLoop  *AeLoop
 	clients map[int]*Client
@@ -78,16 +82,19 @@ func InitDB(config *Config) (err error) {
 
 // AcceptHandler is the main file event of aeloop.
 func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
-	cfd, err := Accept(fd)
+	conn, err := server.ln.Accept()
 	if err != nil {
 		logger.Error().Msgf("accept err: %v", err)
 		return
 	}
+	cfd := socketFD(conn)
+
 	// create client
 	client := &Client{
 		fd:       cfd,
 		reply:    make([]Value, 0, 8),
 		queryBuf: make([]byte, DEFAULT_IO_BUF),
+		conn:     conn,
 	}
 	server.clients[cfd] = client
 	loop.AddFileEvent(cfd, AE_READABLE, ReadQueryFromClient, client)
@@ -102,13 +109,9 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 		client.queryBuf = append(client.queryBuf, make([]byte, MAX_BULK)...)
 	}
 
-	n, err := Read(fd, client.queryBuf[client.queryLen:])
+	n, err := client.conn.Read(client.queryBuf[client.queryLen:])
 	if err != nil {
 		logger.Error().Msgf("client %v read err: %v", fd, err)
-		freeClient(client)
-		return
-	}
-	if n == 0 {
 		freeClient(client)
 		return
 	}
@@ -126,7 +129,7 @@ func freeClient(client *Client) {
 	delete(server.clients, client.fd)
 	server.aeLoop.RemoveFileEvent(client.fd, AE_READABLE)
 	server.aeLoop.RemoveFileEvent(client.fd, AE_WRITABLE)
-	Close(client.fd)
+	client.conn.Close()
 }
 
 func ProcessQueryBuf(client *Client) {
@@ -179,7 +182,7 @@ func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 		buf = elem.Append(buf)
 	}
 
-	n, err := Write(fd, buf)
+	n, err := client.conn.Write(buf)
 	if err != nil {
 		logger.Error().Msgf("send reply err: %v", err)
 		freeClient(client)
@@ -200,11 +203,16 @@ func initServer(config *Config) (err error) {
 	if err != nil {
 		return err
 	}
-	server.fd, err = TcpServer(config.Port)
+
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", config.Port))
 	if err != nil {
-		Close(server.fd)
 		return err
 	}
+
+	server.ln = ln
+	server.fd = listenerFD(ln)
+	logger.Debug().Msgf("=========listen on fd: %d", server.fd)
+
 	return nil
 }
 

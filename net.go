@@ -1,44 +1,21 @@
 package main
 
 import (
-	"golang.org/x/sys/unix"
+	"net"
+	"reflect"
 )
 
-const BACKLOG int = 64
+func socketFD(conn net.Conn) int {
+	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
+	fdVal := tcpConn.FieldByName("fd")
+	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
 
-func Accept(fd int) (int, error) {
-	nfd, _, err := unix.Accept(fd)
-	return nfd, err
+	return int(pfdVal.FieldByName("Sysfd").Int())
 }
 
-func Read(fd int, buf []byte) (int, error) {
-	return unix.Read(fd, buf)
-}
+func listenerFD(ln net.Listener) int {
+	fdVal := reflect.Indirect(reflect.ValueOf(ln)).FieldByName("fd")
+	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
 
-func Write(fd int, buf []byte) (int, error) {
-	return unix.Write(fd, buf)
-}
-
-func Close(fd int) {
-	unix.Close(fd)
-}
-
-func TcpServer(port int) (int, error) {
-	s, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
-	if err != nil {
-		return -1, err
-	}
-	err = unix.SetsockoptInt(s, unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
-	if err != nil {
-		return -1, err
-	}
-	err = unix.Bind(s, &unix.SockaddrInet4{Port: port})
-	if err != nil {
-		return -1, err
-	}
-	err = unix.Listen(s, BACKLOG)
-	if err != nil {
-		return -1, err
-	}
-	return s, nil
+	return int(pfdVal.FieldByName("Sysfd").Int())
 }
