@@ -80,299 +80,66 @@ docker run --rm -p 6379:6379 --name rotom rotom:latest
 ```
 goos: linux
 goarch: amd64
-pkg: github.com/xgzlucario/rotom
-cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
+pkg: github.com/xgzlucario/rotom/dict
+cpu: AMD Ryzen 7 5800H with Radeon Graphics
 ```
 
-![img](bench.png)
-
-ROTOM SET
+测试命令
 
 ```bash
-====== SET ======
-  100000 requests completed in 0.31 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  multi-thread: no
-
-Latency by percentile distribution:
-0.000% <= 0.039 milliseconds (cumulative count 1)
-50.000% <= 0.087 milliseconds (cumulative count 66525)
-75.000% <= 0.095 milliseconds (cumulative count 81798)
-87.500% <= 0.103 milliseconds (cumulative count 87619)
-93.750% <= 0.119 milliseconds (cumulative count 94105)
-96.875% <= 0.151 milliseconds (cumulative count 96975)
-98.438% <= 0.215 milliseconds (cumulative count 98491)
-99.219% <= 0.295 milliseconds (cumulative count 99241)
-99.609% <= 0.407 milliseconds (cumulative count 99625)
-99.805% <= 0.599 milliseconds (cumulative count 99827)
-99.902% <= 0.791 milliseconds (cumulative count 99906)
-99.951% <= 0.935 milliseconds (cumulative count 99962)
-99.976% <= 1.439 milliseconds (cumulative count 99976)
-99.988% <= 1.455 milliseconds (cumulative count 99994)
-99.997% <= 1.463 milliseconds (cumulative count 99999)
-99.999% <= 1.471 milliseconds (cumulative count 100000)
-100.000% <= 1.471 milliseconds (cumulative count 100000)
-
-Cumulative distribution of latencies:
-87.619% <= 0.103 milliseconds (cumulative count 87619)
-98.423% <= 0.207 milliseconds (cumulative count 98423)
-99.267% <= 0.303 milliseconds (cumulative count 99267)
-99.625% <= 0.407 milliseconds (cumulative count 99625)
-99.761% <= 0.503 milliseconds (cumulative count 99761)
-99.827% <= 0.607 milliseconds (cumulative count 99827)
-99.856% <= 0.703 milliseconds (cumulative count 99856)
-99.934% <= 0.807 milliseconds (cumulative count 99934)
-99.962% <= 1.007 milliseconds (cumulative count 99962)
-100.000% <= 1.503 milliseconds (cumulative count 100000)
-
-Summary:
-  throughput summary: 317460.31 requests per second
-  latency summary (msec):
-          avg       min       p50       p95       p99       max
-        0.094     0.032     0.087     0.127     0.263     1.471
+redis-benchmark --csv
 ```
 
-ROTOM GET
+ROTOM
 
-```bash
-====== GET ======
-  100000 requests completed in 0.33 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  multi-thread: no
-
-Latency by percentile distribution:
-0.000% <= 0.039 milliseconds (cumulative count 5)
-50.000% <= 0.087 milliseconds (cumulative count 58882)
-75.000% <= 0.095 milliseconds (cumulative count 88023)
-93.750% <= 0.111 milliseconds (cumulative count 93816)
-96.875% <= 0.151 milliseconds (cumulative count 97137)
-98.438% <= 0.199 milliseconds (cumulative count 98621)
-99.219% <= 0.255 milliseconds (cumulative count 99325)
-99.609% <= 0.295 milliseconds (cumulative count 99616)
-99.805% <= 0.391 milliseconds (cumulative count 99807)
-99.902% <= 0.535 milliseconds (cumulative count 99917)
-99.951% <= 0.991 milliseconds (cumulative count 99953)
-99.976% <= 1.023 milliseconds (cumulative count 99978)
-99.988% <= 1.039 milliseconds (cumulative count 99996)
-99.997% <= 1.047 milliseconds (cumulative count 100000)
-100.000% <= 1.047 milliseconds (cumulative count 100000)
-
-Cumulative distribution of latencies:
-91.824% <= 0.103 milliseconds (cumulative count 91824)
-98.738% <= 0.207 milliseconds (cumulative count 98738)
-99.632% <= 0.303 milliseconds (cumulative count 99632)
-99.825% <= 0.407 milliseconds (cumulative count 99825)
-99.873% <= 0.503 milliseconds (cumulative count 99873)
-99.919% <= 0.607 milliseconds (cumulative count 99919)
-99.920% <= 0.703 milliseconds (cumulative count 99920)
-99.921% <= 0.807 milliseconds (cumulative count 99921)
-99.947% <= 0.903 milliseconds (cumulative count 99947)
-99.975% <= 1.007 milliseconds (cumulative count 99975)
-100.000% <= 1.103 milliseconds (cumulative count 100000)
-
-Summary:
-  throughput summary: 303030.28 requests per second
-  latency summary (msec):
-          avg       min       p50       p95       p99       max
-        0.090     0.032     0.087     0.119     0.223     1.047
+```
+"test","rps","avg_latency_ms","min_latency_ms","p50_latency_ms","p95_latency_ms","p99_latency_ms","max_latency_ms"
+"PING_INLINE","84674.01","0.316","0.136","0.303","0.399","0.567","2.967"
+"PING_MBULK","85397.09","0.314","0.120","0.303","0.391","0.583","8.111"
+"SET","83472.46","0.326","0.112","0.311","0.407","0.567","6.471"
+"GET","87412.59","0.308","0.112","0.295","0.375","0.575","4.479"
+"INCR","87032.20","0.313","0.120","0.303","0.383","0.503","5.519"
+"LPUSH","35323.21","1.374","0.264","1.351","1.911","2.359","12.783"
+"RPUSH","86805.56","0.317","0.104","0.303","0.391","0.575","8.383"
+"LPOP","33990.48","1.429","0.280","1.431","1.951","2.423","7.479"
+"RPOP","85984.52","0.314","0.160","0.303","0.383","0.551","5.367"
+"SADD","86956.52","0.316","0.112","0.303","0.391","0.615","6.143"
+"HSET","87183.96","0.319","0.088","0.303","0.391","0.615","7.031"
+"SPOP","86281.27","0.313","0.096","0.303","0.383","0.527","9.247"
+"ZADD","88495.58","0.314","0.112","0.303","0.383","0.551","6.207"
+"ZPOPMIN","86132.64","0.313","0.112","0.303","0.383","0.543","7.135"
+"LPUSH (needed to benchmark LRANGE)","34710.17","1.400","0.296","1.351","1.983","2.495","4.583"
+"LRANGE_100 (first 100 elements)","18667.16","1.345","0.592","1.343","1.703","1.951","4.975"
+"LRANGE_300 (first 300 elements)","9813.54","2.538","0.384","2.535","3.151","3.767","8.311"
+"LRANGE_500 (first 500 elements)","6947.34","3.570","0.520","3.527","4.519","5.479","13.783"
+"LRANGE_600 (first 600 elements)","5622.08","4.415","0.592","4.335","5.871","7.535","13.663"
+"MSET (10 keys)","56947.61","0.531","0.232","0.463","0.959","1.567","7.535"
+"XADD","75585.79","0.364","0.096","0.327","0.559","0.943","10.167"
 ```
 
-ROTOM HSET
+REDIS
 
-```bash
-====== HSET ======
-  100000 requests completed in 0.30 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  multi-thread: no
-
-Latency by percentile distribution:
-0.000% <= 0.031 milliseconds (cumulative count 2)
-50.000% <= 0.079 milliseconds (cumulative count 65935)
-75.000% <= 0.087 milliseconds (cumulative count 82455)
-87.500% <= 0.095 milliseconds (cumulative count 89086)
-93.750% <= 0.111 milliseconds (cumulative count 94258)
-96.875% <= 0.135 milliseconds (cumulative count 97222)
-98.438% <= 0.167 milliseconds (cumulative count 98445)
-99.219% <= 0.215 milliseconds (cumulative count 99257)
-99.609% <= 0.351 milliseconds (cumulative count 99616)
-99.805% <= 0.575 milliseconds (cumulative count 99812)
-99.902% <= 0.671 milliseconds (cumulative count 99903)
-99.951% <= 0.855 milliseconds (cumulative count 99958)
-99.976% <= 0.887 milliseconds (cumulative count 99989)
-99.994% <= 0.951 milliseconds (cumulative count 99996)
-99.997% <= 0.959 milliseconds (cumulative count 100000)
-100.000% <= 0.959 milliseconds (cumulative count 100000)
-
-Cumulative distribution of latencies:
-92.230% <= 0.103 milliseconds (cumulative count 92230)
-99.152% <= 0.207 milliseconds (cumulative count 99152)
-99.525% <= 0.303 milliseconds (cumulative count 99525)
-99.729% <= 0.407 milliseconds (cumulative count 99729)
-99.781% <= 0.503 milliseconds (cumulative count 99781)
-99.863% <= 0.607 milliseconds (cumulative count 99863)
-99.918% <= 0.703 milliseconds (cumulative count 99918)
-99.990% <= 0.903 milliseconds (cumulative count 99990)
-100.000% <= 1.007 milliseconds (cumulative count 100000)
-
-Summary:
-  throughput summary: 328947.38 requests per second
-  latency summary (msec):
-          avg       min       p50       p95       p99       max
-        0.085     0.024     0.079     0.119     0.199     0.959
 ```
-
-REDIS SET
-
-```bash
-====== SET ======
-  100000 requests completed in 0.37 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  host configuration "save": 3600 1 300 100 60 10000
-  host configuration "appendonly": no
-  multi-thread: no
-
-Latency by percentile distribution:
-0.000% <= 0.031 milliseconds (cumulative count 2)
-50.000% <= 0.095 milliseconds (cumulative count 66242)
-75.000% <= 0.103 milliseconds (cumulative count 86834)
-87.500% <= 0.111 milliseconds (cumulative count 94421)
-96.875% <= 0.127 milliseconds (cumulative count 97184)
-98.438% <= 0.159 milliseconds (cumulative count 98449)
-99.219% <= 0.207 milliseconds (cumulative count 99221)
-99.609% <= 0.311 milliseconds (cumulative count 99640)
-99.805% <= 0.519 milliseconds (cumulative count 99830)
-99.902% <= 0.727 milliseconds (cumulative count 99909)
-99.951% <= 0.839 milliseconds (cumulative count 99953)
-99.976% <= 0.983 milliseconds (cumulative count 99998)
-99.998% <= 0.991 milliseconds (cumulative count 99999)
-99.999% <= 0.999 milliseconds (cumulative count 100000)
-100.000% <= 0.999 milliseconds (cumulative count 100000)
-
-Cumulative distribution of latencies:
-86.834% <= 0.103 milliseconds (cumulative count 86834)
-99.221% <= 0.207 milliseconds (cumulative count 99221)
-99.609% <= 0.303 milliseconds (cumulative count 99609)
-99.727% <= 0.407 milliseconds (cumulative count 99727)
-99.763% <= 0.503 milliseconds (cumulative count 99763)
-99.841% <= 0.607 milliseconds (cumulative count 99841)
-99.891% <= 0.703 milliseconds (cumulative count 99891)
-99.941% <= 0.807 milliseconds (cumulative count 99941)
-99.969% <= 0.903 milliseconds (cumulative count 99969)
-100.000% <= 1.007 milliseconds (cumulative count 100000)
-
-Summary:
-  throughput summary: 273972.59 requests per second
-  latency summary (msec):
-          avg       min       p50       p95       p99       max
-        0.096     0.024     0.095     0.119     0.191     0.999
-```
-
-REDIS GET
-
-```bash
-====== GET ======
-  100000 requests completed in 0.37 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  host configuration "save": 3600 1 300 100 60 10000
-  host configuration "appendonly": no
-  multi-thread: no
-
-Latency by percentile distribution:
-0.000% <= 0.039 milliseconds (cumulative count 7)
-50.000% <= 0.095 milliseconds (cumulative count 57828)
-75.000% <= 0.103 milliseconds (cumulative count 82527)
-87.500% <= 0.111 milliseconds (cumulative count 93180)
-93.750% <= 0.119 milliseconds (cumulative count 96200)
-96.875% <= 0.127 milliseconds (cumulative count 97042)
-98.438% <= 0.167 milliseconds (cumulative count 98596)
-99.219% <= 0.199 milliseconds (cumulative count 99315)
-99.609% <= 0.231 milliseconds (cumulative count 99673)
-99.805% <= 0.295 milliseconds (cumulative count 99808)
-99.902% <= 0.471 milliseconds (cumulative count 99903)
-99.951% <= 0.527 milliseconds (cumulative count 99963)
-99.976% <= 0.567 milliseconds (cumulative count 99977)
-99.988% <= 0.703 milliseconds (cumulative count 99991)
-99.994% <= 0.711 milliseconds (cumulative count 99996)
-99.997% <= 0.719 milliseconds (cumulative count 100000)
-100.000% <= 0.719 milliseconds (cumulative count 100000)
-
-Cumulative distribution of latencies:
-82.527% <= 0.103 milliseconds (cumulative count 82527)
-99.451% <= 0.207 milliseconds (cumulative count 99451)
-99.825% <= 0.303 milliseconds (cumulative count 99825)
-99.890% <= 0.407 milliseconds (cumulative count 99890)
-99.937% <= 0.503 milliseconds (cumulative count 99937)
-99.980% <= 0.607 milliseconds (cumulative count 99980)
-99.991% <= 0.703 milliseconds (cumulative count 99991)
-100.000% <= 0.807 milliseconds (cumulative count 100000)
-
-Summary:
-  throughput summary: 269541.78 requests per second
-  latency summary (msec):
-          avg       min       p50       p95       p99       max
-        0.097     0.032     0.095     0.119     0.191     0.719
-```
-
-REDIS HSET
-
-```bash
-====== HSET ======
-  100000 requests completed in 0.36 seconds
-  50 parallel clients
-  3 bytes payload
-  keep alive: 1
-  host configuration "save": 3600 1 300 100 60 10000
-  host configuration "appendonly": no
-  multi-thread: no
-
-Latency by percentile distribution:
-0.000% <= 0.031 milliseconds (cumulative count 2)
-50.000% <= 0.095 milliseconds (cumulative count 68152)
-75.000% <= 0.103 milliseconds (cumulative count 87772)
-93.750% <= 0.111 milliseconds (cumulative count 94344)
-96.875% <= 0.135 milliseconds (cumulative count 97131)
-98.438% <= 0.183 milliseconds (cumulative count 98442)
-99.219% <= 0.255 milliseconds (cumulative count 99252)
-99.609% <= 0.351 milliseconds (cumulative count 99626)
-99.805% <= 0.519 milliseconds (cumulative count 99817)
-99.902% <= 0.607 milliseconds (cumulative count 99903)
-99.951% <= 1.311 milliseconds (cumulative count 99955)
-99.976% <= 1.399 milliseconds (cumulative count 99977)
-99.988% <= 1.455 milliseconds (cumulative count 99988)
-99.994% <= 1.479 milliseconds (cumulative count 99995)
-99.997% <= 1.495 milliseconds (cumulative count 99997)
-99.998% <= 1.511 milliseconds (cumulative count 99999)
-99.999% <= 1.527 milliseconds (cumulative count 100000)
-100.000% <= 1.527 milliseconds (cumulative count 100000)
-
-Cumulative distribution of latencies:
-87.772% <= 0.103 milliseconds (cumulative count 87772)
-98.811% <= 0.207 milliseconds (cumulative count 98811)
-99.485% <= 0.303 milliseconds (cumulative count 99485)
-99.681% <= 0.407 milliseconds (cumulative count 99681)
-99.770% <= 0.503 milliseconds (cumulative count 99770)
-99.903% <= 0.607 milliseconds (cumulative count 99903)
-99.904% <= 0.703 milliseconds (cumulative count 99904)
-99.931% <= 0.807 milliseconds (cumulative count 99931)
-99.950% <= 1.207 milliseconds (cumulative count 99950)
-99.951% <= 1.303 milliseconds (cumulative count 99951)
-99.979% <= 1.407 milliseconds (cumulative count 99979)
-99.997% <= 1.503 milliseconds (cumulative count 99997)
-100.000% <= 1.607 milliseconds (cumulative count 100000)
-
-Summary:
-  throughput summary: 274725.28 requests per second
-  latency summary (msec):
-          avg       min       p50       p95       p99       max
-        0.096     0.024     0.095     0.119     0.223     1.527
+"test","rps","avg_latency_ms","min_latency_ms","p50_latency_ms","p95_latency_ms","p99_latency_ms","max_latency_ms"
+"PING_INLINE","76394.20","0.341","0.088","0.335","0.439","0.663","2.391"
+"PING_MBULK","74349.44","0.349","0.104","0.343","0.455","0.623","3.087"
+"SET","77639.75","0.335","0.080","0.327","0.423","0.551","3.079"
+"GET","73475.39","0.353","0.080","0.343","0.471","0.631","3.551"
+"INCR","75757.57","0.342","0.120","0.335","0.439","0.551","2.511"
+"LPUSH","76804.91","0.337","0.096","0.327","0.431","0.567","3.135"
+"RPUSH","76863.95","0.338","0.080","0.327","0.431","0.543","2.455"
+"LPOP","76628.36","0.339","0.112","0.327","0.431","0.591","2.687"
+"RPOP","75642.96","0.344","0.088","0.335","0.439","0.591","3.607"
+"SADD","65231.57","0.399","0.096","0.375","0.591","0.831","3.495"
+"HSET","71123.76","0.367","0.112","0.351","0.495","0.679","2.959"
+"SPOP","74074.07","0.349","0.152","0.335","0.455","0.623","3.591"
+"ZADD","74962.52","0.348","0.112","0.335","0.455","0.591","6.383"
+"ZPOPMIN","71994.23","0.360","0.096","0.351","0.487","0.687","2.575"
+"LPUSH (needed to benchmark LRANGE)","72833.21","0.359","0.104","0.343","0.503","0.711","2.095"
+"LRANGE_100 (first 100 elements)","39494.47","0.647","0.192","0.631","0.847","1.079","3.375"
+"LRANGE_300 (first 300 elements)","16920.47","1.482","0.296","1.463","1.927","2.263","4.319"
+"LRANGE_500 (first 500 elements)","11713.72","2.130","0.408","2.071","2.831","3.439","9.655"
+"LRANGE_600 (first 600 elements)","10833.06","2.298","0.432","2.271","2.847","3.247","6.015"
+"MSET (10 keys)","84459.46","0.319","0.096","0.311","0.407","0.583","2.663"
+"XADD","81433.22","0.323","0.104","0.311","0.415","0.519","2.503"
 ```
