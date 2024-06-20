@@ -1,7 +1,6 @@
 package dict
 
 import (
-	"maps"
 	"testing"
 )
 
@@ -101,23 +100,6 @@ func BenchmarkRemove(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			k, _ := genKV(i)
 			m.Remove(k)
-		}
-	})
-}
-
-func BenchmarkMigrate(b *testing.B) {
-	b.Run("stdmap", func(b *testing.B) {
-		m := getStdmap(10000)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			maps.Clone(m)
-		}
-	})
-	b.Run("dict", func(b *testing.B) {
-		m := getDict(10000)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			m.Migrate()
 		}
 	})
 }

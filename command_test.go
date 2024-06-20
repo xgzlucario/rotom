@@ -10,7 +10,9 @@ import (
 )
 
 func startup() {
-	config := &Config{Port: 20082}
+	config := &Config{
+		Port: 20082,
+	}
 	if err := InitDB(config); err != nil {
 		log.Panic().Msgf("init db error: %v", err)
 	}
@@ -18,6 +20,8 @@ func startup() {
 		log.Panic().Msgf("init server error: %v", err)
 	}
 	server.aeLoop.AddFileEvent(server.fd, AE_READABLE, AcceptHandler, nil)
+	server.aeLoop.AddTimeEvent(AE_NORMAL, 100, ServerCronFlush, nil)
+	server.aeLoop.AddTimeEvent(AE_NORMAL, 100, ServerCronEvict, nil)
 	server.aeLoop.AeMain()
 }
 
