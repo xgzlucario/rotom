@@ -201,6 +201,9 @@ func initServer(config *Config) (err error) {
 }
 
 func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
+	if db.aof == nil {
+		return
+	}
 	err := db.aof.Flush()
 	if err != nil {
 		log.Error().Msgf("flush aof buffer error: %v", err)
