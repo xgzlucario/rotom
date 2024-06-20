@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	DEFAULT_IO_BUF = 16 * KB
-	MAX_BULK       = 4 * KB
+	READER_BUF_SIZE = 16 * KB
+	WRITER_BUF_SIZE = 4 * KB
+	MAX_READER_SIZE = 4 * KB
 )
 
 type (
@@ -30,7 +31,7 @@ type Client struct {
 	fd       int
 	queryLen int
 	queryBuf []byte
-	reply    []Value
+	replyBuf *RESPWriter
 }
 
 type Server struct {
@@ -53,25 +54,22 @@ func InitDB(config *Config) (err error) {
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)
 		if err != nil {
-			log.Error().Msgf("failed to initialize aof file: %v", err)
 			return
 		}
 
 		log.Debug().Msg("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
-		err = db.aof.Read(func(args []Arg) {
+		emptyWriter := NewWriter(WRITER_BUF_SIZE)
+		return db.aof.Read(func(args []RESP) {
 			command := args[0].ToString()
 
 			cmd := lookupCommand(command)
 			if cmd != nil {
-				cmd.processCommand(args[1:])
+				cmd.processCommand(emptyWriter, args[1:])
+				emptyWriter.Reset()
 			}
 		})
-		if err != nil {
-			log.Error().Msgf("read appendonly file error: %v", err)
-			return
-		}
 	}
 
 	return nil
@@ -87,8 +85,8 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	// create client
 	client := &Client{
 		fd:       cfd,
-		reply:    make([]Value, 0, 8),
-		queryBuf: make([]byte, DEFAULT_IO_BUF),
+		replyBuf: NewWriter(WRITER_BUF_SIZE),
+		queryBuf: make([]byte, READER_BUF_SIZE),
 	}
 	server.clients[cfd] = client
 	loop.AddFileEvent(cfd, AE_READABLE, ReadQueryFromClient, client)
@@ -99,8 +97,8 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
 
 	// grow query buffer
-	if len(client.queryBuf)-client.queryLen < MAX_BULK {
-		client.queryBuf = append(client.queryBuf, make([]byte, MAX_BULK)...)
+	if len(client.queryBuf)-client.queryLen < MAX_READER_SIZE {
+		client.queryBuf = append(client.queryBuf, make([]byte, MAX_READER_SIZE)...)
 	}
 
 	n, err := Read(fd, client.queryBuf[client.queryLen:])
@@ -132,11 +130,11 @@ func freeClient(client *Client) {
 
 func ProcessQueryBuf(client *Client) {
 	queryBuf := client.queryBuf[:client.queryLen]
-	argsBuf := make([]Arg, 3)
+	argsBuf := make([]RESP, 3)
 
-	resp := NewResp(queryBuf)
+	reader := NewReader(queryBuf)
 	for {
-		args, err := resp.ReadNextCommand(argsBuf)
+		args, err := reader.ReadNextCommand(argsBuf)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -147,22 +145,19 @@ func ProcessQueryBuf(client *Client) {
 
 		command := args[0].ToStringUnsafe()
 		args = args[1:]
-		var res Value
 
 		// lookup for command
 		cmd := lookupCommand(command)
 		if cmd != nil {
-			res = cmd.processCommand(args)
-			if server.config.AppendOnly && cmd.persist && res.typ != ERROR {
+			cmd.processCommand(client.replyBuf, args)
+			if server.config.AppendOnly && cmd.persist { // TODO: optimize error RESP
 				db.aof.Write(queryBuf)
 			}
 		} else {
 			err := ErrUnknownCommand(command)
+			client.replyBuf.WriteError(err)
 			log.Warn().Msgf("%v", err)
-			res = newErrValue(err)
 		}
-
-		client.reply = append(client.reply, res)
 	}
 
 	resetClient(client)
@@ -173,24 +168,19 @@ func ProcessQueryBuf(client *Client) {
 
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
+	sentbuf := client.replyBuf.b.Bytes()
 
-	// write all replies back
-	buf := make([]byte, 0, 32)
-	for _, elem := range client.reply {
-		buf = elem.Append(buf)
-	}
-
-	n, err := Write(fd, buf)
+	n, err := Write(fd, sentbuf)
 	if err != nil {
 		log.Error().Msgf("send reply err: %v", err)
 		freeClient(client)
 		return
 	}
-	if n != len(buf) {
-		log.Error().Msgf("send packet size error: %d %d", n, len(buf))
+	if n != len(sentbuf) {
+		log.Error().Msgf("send packet size error: %d %d", n, len(sentbuf))
 	}
 
-	client.reply = client.reply[:0]
+	client.replyBuf.Reset()
 	loop.RemoveFileEvent(fd, AE_WRITABLE)
 }
 

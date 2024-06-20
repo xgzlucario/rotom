@@ -7,58 +7,48 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestValue(t *testing.T) {
+func TestWriter(t *testing.T) {
 	assert := assert.New(t)
+	writer := NewWriter(16)
 
-	t.Run("str-value", func(t *testing.T) {
-		value := ValueOK
-		data := value.Append(nil)
-		assert.Equal(string(data), "+OK\r\n")
+	t.Run("string", func(t *testing.T) {
+		writer.WriteString("OK")
+		assert.Equal(writer.b.String(), "+OK\r\n")
+		writer.Reset()
 	})
 
-	t.Run("err-value", func(t *testing.T) {
-		value := newErrValue(errors.New("err message"))
-		data := value.Append(nil)
-		assert.Equal(string(data), "-err message\r\n")
+	t.Run("error", func(t *testing.T) {
+		writer.WriteError(errors.New("err message"))
+		assert.Equal(writer.b.String(), "-err message\r\n")
+		writer.Reset()
 	})
 
-	t.Run("bulk-value", func(t *testing.T) {
-		value := newBulkValue([]byte("hello"))
-		data := value.Append(nil)
-		assert.Equal(string(data), "$5\r\nhello\r\n")
+	t.Run("bulk", func(t *testing.T) {
+		writer.WriteBulk([]byte("hello"))
+		assert.Equal(writer.b.String(), "$5\r\nhello\r\n")
+		writer.Reset()
 
-		// empty bulk string
-		value = newBulkValue([]byte(""))
-		data = value.Append(nil)
-		assert.Equal(string(data), "$0\r\n\r\n")
-
-		// nil bulk string
-		value = newBulkValue(nil)
-		data = value.Append(nil)
-		assert.Equal(string(data), "$-1\r\n")
+		writer.WriteBulkString("world")
+		assert.Equal(writer.b.String(), "$5\r\nworld\r\n")
+		writer.Reset()
 	})
 
-	t.Run("integer-value", func(t *testing.T) {
-		value := newIntegerValue(1)
-		data := value.Append(nil)
-		assert.Equal(string(data), ":1\r\n")
+	t.Run("integer", func(t *testing.T) {
+		writer.WriteInteger(5)
+		assert.Equal(writer.b.String(), ":5\r\n")
+		writer.Reset()
 	})
 
-	t.Run("error-value", func(t *testing.T) {
+	t.Run("error-reader", func(t *testing.T) {
 		// read nil
-		_, err := NewResp(nil).ReadNextCommand(nil)
+		_, err := NewReader(nil).ReadNextCommand(nil)
 		assert.NotNil(err)
 
 		for _, prefix := range []byte{BULK, INTEGER, ARRAY} {
 			data := append([]byte{prefix}, "an error message"...)
-			_, err := NewResp(data).ReadNextCommand(nil)
+			_, err := NewReader(data).ReadNextCommand(nil)
 			assert.NotNil(err)
 		}
-
-		// marshal error type
-		value := Value{typ: 76}
-		data := value.Append(nil)
-		assert.Equal(string(data), ErrUnknownType.Error())
 	})
 
 	t.Run("cutByCRLF", func(t *testing.T) {
@@ -71,10 +61,14 @@ func TestValue(t *testing.T) {
 		assert.Equal(string(before), "1234")
 		assert.Equal(string(after), "5678")
 		assert.True(ok)
+
+		// error cases
+		_, _, ok = cutByCRLF([]byte("A"))
+		assert.False(ok)
 	})
 
 	t.Run("readCommandBulk", func(t *testing.T) {
-		args, err := NewResp([]byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")).ReadNextCommand(nil)
+		args, err := NewReader([]byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")).ReadNextCommand(nil)
 		assert.Equal(args[0].ToString(), "SET")
 		assert.Equal(args[1].ToString(), "foo")
 		assert.Equal(args[2].ToString(), "bar")
@@ -82,7 +76,7 @@ func TestValue(t *testing.T) {
 	})
 
 	t.Run("readCommandInline", func(t *testing.T) {
-		args, err := NewResp([]byte("PING\r\n")).ReadNextCommand(nil)
+		args, err := NewReader([]byte("PING\r\n")).ReadNextCommand(nil)
 		assert.Equal(args[0].ToString(), "PING")
 		assert.Nil(err)
 	})

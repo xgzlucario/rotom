@@ -28,6 +28,10 @@ func (m *Map) Remove(key string) bool {
 	return ok
 }
 
+func (m *Map) Len() int {
+	return m.m.Len()
+}
+
 func (m *Map) Scan(fn func(key string, value []byte)) {
 	m.m.All(func(key string, val []byte) (next bool) {
 		fn(key, val)

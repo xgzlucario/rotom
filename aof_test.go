@@ -30,7 +30,7 @@ func TestAof(t *testing.T) {
 		aof, _ := NewAof("not-exist.aof")
 		defer aof.Close()
 
-		aof.Read(func(args []Arg) {
+		aof.Read(func(args []RESP) {
 			panic("should not call")
 		})
 	})

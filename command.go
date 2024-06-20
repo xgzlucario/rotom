@@ -11,7 +11,7 @@ type Command struct {
 	name string
 
 	// handler is this command real database handler function.
-	handler func([]Arg) Value
+	handler func(respWriter *RESPWriter, args []RESP)
 
 	// arity represents the minimal number of arguments that command accepts.
 	arity int
@@ -40,8 +40,8 @@ var cmdTable []*Command = []*Command{
 	{"ping", pingCommand, 0, false},
 	{"hgetall", hgetallCommand, 1, false},
 	{"lrange", lrangeCommand, 3, false},
-	{"zpopmin", func(a []Arg) Value { return ValueOK }, 0, false}, // TODO
-	{"xadd", func(a []Arg) Value { return ValueOK }, 0, false},    // TODO
+	{"zpopmin", todoCommand, 0, false},
+	{"xadd", todoCommand, 0, false},
 }
 
 func lookupCommand(command string) *Command {
@@ -67,82 +67,86 @@ func equalCommand(str, lowerText string) bool {
 	return true
 }
 
-func (cmd *Command) processCommand(args []Arg) Value {
+func (cmd *Command) processCommand(writer *RESPWriter, args []RESP) {
 	if len(args) < cmd.arity {
-		return newErrValue(ErrWrongNumberArgs(cmd.name))
+		writer.WriteError(ErrWrongNumberArgs(cmd.name))
+		return
 	}
-	return cmd.handler(args)
+	cmd.handler(writer, args)
 }
 
-func pingCommand(_ []Arg) Value {
-	return Value{typ: STRING, raw: []byte("PONG")}
+func pingCommand(writer *RESPWriter, _ []RESP) {
+	writer.WriteString("PONG")
 }
 
-func setCommand(args []Arg) Value {
+func setCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 	value := args[1].ToBytes()
 	db.strs.Set(key, value)
-	return ValueOK
+	writer.WriteString("OK")
 }
 
-func msetCommand(args []Arg) Value {
+func msetCommand(writer *RESPWriter, args []RESP) {
 	// check arguments number
 	if len(args)%2 == 1 {
-		return newErrValue(ErrWrongNumberArgs("hset"))
+		writer.WriteError(ErrWrongNumberArgs("hset"))
+		return
 	}
 	for i := 0; i < len(args); i += 2 {
 		key := args[i].ToString()
 		value := args[i+1].ToBytes()
 		db.strs.Set(key, value)
 	}
-	return ValueOK
+	writer.WriteString("OK")
 }
 
-func incrCommand(args []Arg) Value {
+func incrCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 	val, _, ok := db.strs.Get(key)
 	if !ok {
 		db.strs.Set(key, []byte("1"))
-		return newIntegerValue(1)
-
-	} else {
-		num, err := strconv.Atoi(b2s(val))
-		if err != nil {
-			return newErrValue(ErrParseInteger)
-		}
-		num++
-		db.strs.Set(key, []byte(strconv.Itoa(num)))
-		return newIntegerValue(num)
+		writer.WriteInteger(1)
+		return
 	}
+	num, err := strconv.Atoi(b2s(val))
+	if err != nil {
+		writer.WriteError(ErrParseInteger)
+	}
+	num++
+	db.strs.Set(key, []byte(strconv.Itoa(num)))
+	writer.WriteInteger(num)
 }
 
-func getCommand(args []Arg) Value {
+func getCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToStringUnsafe()
 
 	value, _, ok := db.strs.Get(key)
 	if ok {
-		return newBulkValue(value)
+		writer.WriteBulk(value)
+		return
 	}
 	// check extra maps
 	_, ok = db.extras.Get(key)
 	if ok {
-		return newErrValue(ErrWrongType)
+		writer.WriteError(ErrWrongType)
 	}
-	return ValueNull
+	writer.WriteNull()
 }
 
-func hsetCommand(args []Arg) Value {
+func hsetCommand(writer *RESPWriter, args []RESP) {
 	hash := args[0].ToString()
 	args = args[1:]
 
 	// check arguments number
 	if len(args)%2 == 1 {
-		return newErrValue(ErrWrongNumberArgs("hset"))
+		writer.WriteError(ErrWrongNumberArgs("hset"))
+		return
 	}
 
 	hmap, err := fetchMap(hash, true)
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 
 	var newFields int
@@ -153,28 +157,35 @@ func hsetCommand(args []Arg) Value {
 			newFields++
 		}
 	}
-	return newIntegerValue(newFields)
+	writer.WriteInteger(newFields)
 }
 
-func hgetCommand(args []Arg) Value {
+func hgetCommand(writer *RESPWriter, args []RESP) {
 	hash := args[0].ToStringUnsafe()
 	key := args[1].ToStringUnsafe()
 
 	hmap, err := fetchMap(hash)
 	if err != nil {
-		return newErrValue(ErrWrongType)
+		writer.WriteError(ErrWrongType)
+		return
 	}
-	value, _ := hmap.Get(key)
-	return newBulkValue(value)
+
+	value, ok := hmap.Get(key)
+	if ok {
+		writer.WriteBulk(value)
+	} else {
+		writer.WriteNull()
+	}
 }
 
-func hdelCommand(args []Arg) Value {
+func hdelCommand(writer *RESPWriter, args []RESP) {
 	hash := args[0].ToString()
 	keys := args[1:]
 
 	hmap, err := fetchMap(hash)
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 	var success int
 	for _, v := range keys {
@@ -182,112 +193,132 @@ func hdelCommand(args []Arg) Value {
 			success++
 		}
 	}
-	return newIntegerValue(success)
+	writer.WriteInteger(success)
 }
 
-func hgetallCommand(args []Arg) Value {
+func hgetallCommand(writer *RESPWriter, args []RESP) {
 	hash := args[0].ToString()
 
 	hmap, err := fetchMap(hash)
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 
-	res := make([]Value, 0, 8)
+	writer.WriteArrayHead(hmap.Len() * 2)
 	hmap.Scan(func(key string, value []byte) {
-		res = append(res, newBulkValue([]byte(key)))
-		res = append(res, newBulkValue(value))
+		writer.WriteBulkString(key)
+		writer.WriteBulk(value)
 	})
-	return newArrayValue(res)
 }
 
-func lpushCommand(args []Arg) Value {
-	return pushInternal(args, true)
-}
-
-func rpushCommand(args []Arg) Value {
-	return pushInternal(args, false)
-}
-
-func pushInternal(args []Arg, isDirectLeft bool) Value {
+func lpushCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 
 	ls, err := fetchList(key, true)
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
-	if isDirectLeft {
-		for _, arg := range args[1:] {
-			ls.LPush(arg.ToString())
-		}
-	} else {
-		for _, arg := range args[1:] {
-			ls.RPush(arg.ToString())
-		}
+
+	for _, arg := range args[1:] {
+		ls.LPush(arg.ToString())
 	}
-	return newIntegerValue(ls.Size())
+	writer.WriteInteger(ls.Size())
 }
 
-func lpopCommand(args []Arg) Value {
-	return popInternal(args, true)
+func rpushCommand(writer *RESPWriter, args []RESP) {
+	key := args[0].ToString()
+
+	ls, err := fetchList(key, true)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+
+	for _, arg := range args[1:] {
+		ls.RPush(arg.ToString())
+	}
+	writer.WriteInteger(ls.Size())
 }
 
-func rpopCommand(args []Arg) Value {
-	return popInternal(args, false)
-}
-
-func popInternal(args []Arg, isDirectLeft bool) Value {
+func lpopCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 
 	ls, err := fetchList(key)
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 
-	var val string
-	var ok bool
-	if isDirectLeft {
-		val, ok = ls.LPop()
-	} else {
-		val, ok = ls.RPop()
-	}
+	val, ok := ls.LPop()
 	if ok {
-		return newBulkValue([]byte(val))
+		writer.WriteBulkString(val)
+	} else {
+		writer.WriteNull()
 	}
-	return newBulkValue(nil)
 }
 
-func lrangeCommand(args []Arg) Value {
+func rpopCommand(writer *RESPWriter, args []RESP) {
+	key := args[0].ToString()
+
+	ls, err := fetchList(key)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+
+	val, ok := ls.RPop()
+	if ok {
+		writer.WriteBulkString(val)
+	} else {
+		writer.WriteNull()
+	}
+}
+
+func lrangeCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 	start, err := args[1].ToInt()
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 	end, err := args[2].ToInt()
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 
 	ls, err := fetchList(key)
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 
-	var res []Value
+	// calculate list size
+	size := end - start
+	if end == -1 {
+		size = ls.Size()
+	}
+	if size < 0 {
+		size = 0
+	}
+
+	writer.WriteArrayHead(size)
 	ls.Range(start, end, func(data []byte) (stop bool) {
-		res = append(res, newBulkValue(data))
+		writer.WriteBulk(data)
 		return false
 	})
-	return newArrayValue(res)
 }
 
-func saddCommand(args []Arg) Value {
+func saddCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 	args = args[1:]
 
 	set, err := fetchSet(key, true)
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 
 	var newItems int
@@ -296,46 +327,55 @@ func saddCommand(args []Arg) Value {
 			newItems++
 		}
 	}
-	return newIntegerValue(newItems)
+	writer.WriteInteger(newItems)
 }
 
-func spopCommand(args []Arg) Value {
+func spopCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 
 	set, err := fetchSet(key)
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 
 	item, ok := set.Pop()
 	if ok {
-		return newBulkValue([]byte(item))
+		writer.WriteBulkString(item)
+	} else {
+		writer.WriteNull()
 	}
-	return ValueNull
 }
 
-func zaddCommand(args []Arg) Value {
+func zaddCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 	args = args[1:]
 
 	zset, err := fetchZSet(key, true)
 	if err != nil {
-		return newErrValue(err)
+		writer.WriteError(err)
+		return
 	}
 
 	var newFields int
 	for i := 0; i < len(args); i += 2 {
 		score, err := args[i].ToInt()
 		if err != nil {
-			return newErrValue(err)
+			writer.WriteError(err)
+			return
 		}
-		key := args[i+1].ToString()
 
+		key := args[i+1].ToString()
 		if zset.Set(key, int64(score)) {
 			newFields++
 		}
 	}
-	return newIntegerValue(newFields)
+	writer.WriteInteger(newFields)
+}
+
+// TODO
+func todoCommand(writer *RESPWriter, _ []RESP) {
+	writer.WriteString("OK")
 }
 
 func fetchMap(key string, setnx ...bool) (Map, error) {

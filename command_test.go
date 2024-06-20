@@ -24,7 +24,6 @@ func startup() {
 var ctx = context.Background()
 
 func TestCommand(t *testing.T) {
-	t.Parallel()
 	assert := assert.New(t)
 
 	go startup()

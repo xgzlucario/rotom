@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"slices"
@@ -14,58 +15,23 @@ const (
 	INTEGER = ':'
 	BULK    = '$'
 	ARRAY   = '*'
-	NULL    = 0xff
 )
 
 var (
 	CRLF = []byte("\r\n")
-
-	ValueOK = Value{typ: STRING, raw: []byte("OK")}
-
-	ValueNull = Value{typ: NULL}
 )
 
-// Value represents the different types of RESP (Redis Serialization Protocol) values.
-type Value struct {
-	typ   byte    // Type of value ('string', 'error', 'integer', 'bulk', 'array', 'null')
-	raw   []byte  // Used for string, error, integer and bulk strings
-	array []Value // Used for arrays of nested values
-}
-
-// Arg represents the raw arguments bytes of RESP.
-type Arg []byte
-
-// Resp is a parser for RESP encoded data.
-type Resp struct {
+// RESPReader is a reader for RESP (Redis Serialization Protocol) messages.
+type RESPReader struct {
 	b []byte
 }
 
-// NewResp creates a new Resp object with a buffered reader.
-// DO NOT EDIT the `input` param because it will be referenced during read.
-func NewResp(input []byte) *Resp {
-	return &Resp{b: input}
+// NewReader creates a new Resp object with a buffered reader.
+func NewReader(input []byte) *RESPReader {
+	return &RESPReader{b: input}
 }
 
-func newErrValue(err error) Value {
-	return Value{typ: ERROR, raw: []byte(err.Error())}
-}
-
-func newBulkValue(bulk []byte) Value {
-	if bulk == nil {
-		return Value{typ: NULL}
-	}
-	return Value{typ: BULK, raw: bulk}
-}
-
-func newIntegerValue(n int) Value {
-	format := strconv.Itoa(n)
-	return Value{typ: INTEGER, raw: []byte(format)}
-}
-
-func newArrayValue(value []Value) Value {
-	return Value{typ: ARRAY, array: value}
-}
-
+// cutByCRLF splits the buffer by the first occurrence of CRLF.
 func cutByCRLF(buf []byte) (before, after []byte, found bool) {
 	if len(buf) <= 2 {
 		return
@@ -80,7 +46,9 @@ func cutByCRLF(buf []byte) (before, after []byte, found bool) {
 	return
 }
 
-func (r *Resp) ReadNextCommand(argsBuf []Arg) (args []Arg, err error) {
+// ReadNextCommand reads the next RESP command from the RESPReader.
+// It parses both COMMAND_BULK and COMMAND_INLINE formats.
+func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 	if len(r.b) == 0 {
 		return nil, io.EOF
 	}
@@ -133,97 +101,92 @@ func (r *Resp) ReadNextCommand(argsBuf []Arg) (args []Arg, err error) {
 	return
 }
 
-func (a Arg) ToString() string {
-	return string(a)
+// RESPWriter is a writer that helps construct RESP (Redis Serialization Protocol) messages.
+type RESPWriter struct {
+	b *bytes.Buffer
 }
 
-func (a Arg) ToStringUnsafe() string {
-	return b2s(a)
+// NewWriter initializes a new RESPWriter with a given capacity.
+func NewWriter(cap int) *RESPWriter {
+	return &RESPWriter{bytes.NewBuffer(make([]byte, 0, cap))}
 }
 
-func (a Arg) ToInt() (int, error) {
-	return strconv.Atoi(b2s(a))
+// WriteArrayHead writes the RESP array header with the given length.
+func (w *RESPWriter) WriteArrayHead(arrayLen int) {
+	w.b.WriteByte(ARRAY)
+	w.b.WriteString(strconv.Itoa(arrayLen))
+	w.b.Write(CRLF)
 }
 
-func (a Arg) ToBytes() []byte {
-	return a
+// WriteBulk writes a RESP bulk string from a byte slice.
+func (w *RESPWriter) WriteBulk(bluk []byte) {
+	w.WriteBulkString(b2s(bluk))
 }
 
-func (a Arg) Clone() []byte {
-	return slices.Clone(a)
+// WriteBulkString writes a RESP bulk string from a string.
+func (w *RESPWriter) WriteBulkString(bluk string) {
+	w.b.WriteByte(BULK)
+	w.b.WriteString(strconv.Itoa(len(bluk)))
+	w.b.Write(CRLF)
+	w.b.WriteString(bluk)
+	w.b.Write(CRLF)
+}
+
+// WriteError writes a RESP error message.
+func (w *RESPWriter) WriteError(err error) {
+	w.b.WriteByte(ERROR)
+	w.b.WriteString(err.Error())
+	w.b.Write(CRLF)
+}
+
+// WriteString writes a RESP simple string.
+func (w *RESPWriter) WriteString(str string) {
+	w.b.WriteByte(STRING)
+	w.b.WriteString(str)
+	w.b.Write(CRLF)
+}
+
+// WriteInteger writes a RESP integer.
+func (w *RESPWriter) WriteInteger(num int) {
+	w.b.WriteByte(INTEGER)
+	w.b.WriteString(strconv.Itoa(num))
+	w.b.Write(CRLF)
+}
+
+// WriteNull writes a RESP null bulk string.
+func (w *RESPWriter) WriteNull() {
+	w.b.WriteString("$-1")
+	w.b.Write(CRLF)
+}
+
+// Reset resets the internal buffer.
+func (w *RESPWriter) Reset() {
+	w.b.Reset()
+}
+
+// RESP represents the RESP (Redis Serialization Protocol) message in byte slice format.
+type RESP []byte
+
+func (r RESP) ToString() string {
+	return string(r)
+}
+
+func (r RESP) ToStringUnsafe() string {
+	return b2s(r)
+}
+
+func (r RESP) ToInt() (int, error) {
+	return strconv.Atoi(b2s(r))
+}
+
+func (r RESP) ToBytes() []byte {
+	return r
+}
+
+func (r RESP) Clone() []byte {
+	return slices.Clone(r)
 }
 
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
-}
-
-// Append converts a Value object into its corresponding RESP bytes.
-func (v Value) Append(b []byte) []byte {
-	switch v.typ {
-	case ARRAY:
-		return v.appendArray(b)
-	case BULK:
-		return v.appendBulk(b)
-	case STRING:
-		return v.appendString(b)
-	case INTEGER:
-		return v.appendInteger(b)
-	case NULL:
-		return v.appendNull(b)
-	case ERROR:
-		return v.appendError(b)
-	default:
-		return append(b, ErrUnknownType.Error()...)
-	}
-}
-
-// appendInteger appends a integer value into RESP format.
-func (v Value) appendInteger(b []byte) []byte {
-	b = append(b, INTEGER)
-	b = append(b, v.raw...)
-	b = append(b, CRLF...)
-	return b
-}
-
-// appendString appends a string value into RESP format.
-func (v Value) appendString(b []byte) []byte {
-	b = append(b, STRING)
-	b = append(b, v.raw...)
-	b = append(b, CRLF...)
-	return b
-}
-
-// appendBulk appends a bulk string into RESP format.
-func (v Value) appendBulk(b []byte) []byte {
-	format := strconv.Itoa(len(v.raw))
-	b = append(b, BULK)
-	b = append(b, format...)
-	b = append(b, CRLF...)
-	b = append(b, v.raw...)
-	b = append(b, CRLF...)
-	return b
-}
-
-// appendArray appends an array of values into RESP format.
-func (v Value) appendArray(b []byte) []byte {
-	b = append(b, ARRAY)
-	b = append(b, strconv.Itoa(len(v.array))...)
-	b = append(b, CRLF...)
-	for _, val := range v.array {
-		b = val.Append(b)
-	}
-	return b
-}
-
-// appendError appends an error message into RESP format.
-func (v Value) appendError(b []byte) []byte {
-	b = append(b, ERROR)
-	b = append(b, v.raw...)
-	b = append(b, CRLF...)
-	return b
-}
-
-// appendNull appends a null value into RESP bulk string format.
-func (v Value) appendNull(b []byte) []byte {
-	return append(b, "$-1\r\n"...)
 }
