@@ -1,6 +1,8 @@
-package structx
+package hash
 
-import "github.com/cockroachdb/swiss"
+import (
+	"github.com/cockroachdb/swiss"
+)
 
 type Set struct {
 	m *swiss.Map[string, struct{}]

@@ -4,8 +4,10 @@ import (
 	"io"
 
 	"github.com/cockroachdb/swiss"
-	"github.com/xgzlucario/rotom/dict"
-	"github.com/xgzlucario/rotom/structx"
+	"github.com/xgzlucario/rotom/internal/dict"
+	"github.com/xgzlucario/rotom/internal/hash"
+	"github.com/xgzlucario/rotom/internal/list"
+	"github.com/xgzlucario/rotom/internal/zset"
 )
 
 const (
@@ -15,10 +17,10 @@ const (
 )
 
 type (
-	Map  = *structx.Map
-	Set  = *structx.Set
-	List = *structx.List
-	ZSet = *structx.ZSet
+	Map  = *hash.Map
+	Set  = *hash.Set
+	List = *list.QuickList
+	ZSet = *zset.ZSet
 )
 
 type DB struct {

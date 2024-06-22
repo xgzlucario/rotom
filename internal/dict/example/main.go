@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/xgzlucario/rotom/dict"
+	"github.com/xgzlucario/rotom/internal/dict"
 )
 
 type Quantile struct {

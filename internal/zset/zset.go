@@ -1,4 +1,4 @@
-package structx
+package zset
 
 import (
 	rbtree "github.com/sakeven/RbTree"

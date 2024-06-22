@@ -7,8 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/cockroachdb/swiss"
-	"github.com/xgzlucario/rotom/dict"
+	"github.com/xgzlucario/quicklist"
 )
 
 var previousPause time.Duration
@@ -22,16 +21,15 @@ func gcPause() time.Duration {
 	return pause
 }
 
-func genKV(id int) (string, []byte) {
-	k := fmt.Sprintf("%08x", id)
-	return k, []byte(k)
+func genKey(id int) string {
+	return fmt.Sprintf("%08x", id)
 }
 
 func main() {
 	c := ""
 	entries := 0
-	flag.StringVar(&c, "cache", "dict", "map to bench.")
-	flag.IntVar(&entries, "entries", 1000*10000, "number of entries to test.")
+	flag.StringVar(&c, "list", "[]string", "list to bench.")
+	flag.IntVar(&entries, "entries", 2000*10000, "number of entries to test.")
 	flag.Parse()
 
 	fmt.Println(c)
@@ -39,34 +37,23 @@ func main() {
 
 	start := time.Now()
 	switch c {
-	case "dict":
-		m := dict.New(dict.DefaultOptions)
+	case "[]string":
+		ls := make([]string, 0)
 		for i := 0; i < entries; i++ {
-			k, v := genKV(i)
-			m.Set(k, v)
+			ls = append(ls, genKey(i))
 		}
+		defer func() {
+			_ = len(ls)
+		}()
 
-	case "stdmap":
-		type Item struct {
-			val []byte
-			ts  int64
-		}
-		m := make(map[string]Item, entries)
+	case "quicklist":
+		ls := quicklist.New()
 		for i := 0; i < entries; i++ {
-			k, v := genKV(i)
-			m[string(k)] = Item{val: v, ts: 0}
+			ls.RPush(genKey(i))
 		}
-
-	case "swiss":
-		type Item struct {
-			val []byte
-			ts  int64
-		}
-		m := swiss.New[string, Item](entries)
-		for i := 0; i < entries; i++ {
-			k, v := genKV(i)
-			m.Put(string(k), Item{val: v, ts: 0})
-		}
+		defer func() {
+			_ = ls.Size()
+		}()
 	}
 	cost := time.Since(start)
 

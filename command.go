@@ -3,7 +3,9 @@ package main
 import (
 	"strconv"
 
-	"github.com/xgzlucario/rotom/structx"
+	"github.com/xgzlucario/rotom/internal/hash"
+	"github.com/xgzlucario/rotom/internal/list"
+	"github.com/xgzlucario/rotom/internal/zset"
 )
 
 type Command struct {
@@ -379,19 +381,19 @@ func todoCommand(writer *RESPWriter, _ []RESP) {
 }
 
 func fetchMap(key string, setnx ...bool) (Map, error) {
-	return fetch(key, func() Map { return structx.NewMap() }, setnx...)
+	return fetch(key, func() Map { return hash.NewMap() }, setnx...)
 }
 
 func fetchList(key string, setnx ...bool) (List, error) {
-	return fetch(key, func() List { return structx.NewList() }, setnx...)
+	return fetch(key, func() List { return list.New() }, setnx...)
 }
 
 func fetchSet(key string, setnx ...bool) (Set, error) {
-	return fetch(key, func() Set { return structx.NewSet() }, setnx...)
+	return fetch(key, func() Set { return hash.NewSet() }, setnx...)
 }
 
 func fetchZSet(key string, setnx ...bool) (ZSet, error) {
-	return fetch(key, func() ZSet { return structx.NewZSet() }, setnx...)
+	return fetch(key, func() ZSet { return zset.NewZSet() }, setnx...)
 }
 
 func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {

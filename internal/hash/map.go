@@ -1,4 +1,4 @@
-package structx
+package hash
 
 import (
 	"github.com/cockroachdb/swiss"
