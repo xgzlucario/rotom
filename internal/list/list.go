@@ -34,7 +34,8 @@ func newNode() *Node {
 	return &Node{ListPack: NewListPack()}
 }
 
-func (ls *QuickList) lpush(key string) {
+// LPush
+func (ls *QuickList) LPush(key string) {
 	if len(ls.head.data)+len(key) >= maxListPackSize {
 		n := newNode()
 		n.next = ls.head
@@ -44,14 +45,8 @@ func (ls *QuickList) lpush(key string) {
 	ls.head.Insert(0, key)
 }
 
-// LPush
-func (ls *QuickList) LPush(keys ...string) {
-	for _, k := range keys {
-		ls.lpush(k)
-	}
-}
-
-func (ls *QuickList) rpush(key string) {
+// RPush
+func (ls *QuickList) RPush(key string) {
 	if len(ls.tail.data)+len(key) >= maxListPackSize {
 		n := newNode()
 		ls.tail.next = n
@@ -59,13 +54,6 @@ func (ls *QuickList) rpush(key string) {
 		ls.tail = n
 	}
 	ls.tail.Insert(-1, key)
-}
-
-// RPush
-func (ls *QuickList) RPush(keys ...string) {
-	for _, k := range keys {
-		ls.rpush(k)
-	}
 }
 
 // Index

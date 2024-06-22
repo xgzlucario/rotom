@@ -91,7 +91,7 @@ func setCommand(writer *RESPWriter, args []RESP) {
 func msetCommand(writer *RESPWriter, args []RESP) {
 	// check arguments number
 	if len(args)%2 == 1 {
-		writer.WriteError(ErrWrongNumberArgs("hset"))
+		writer.WriteError(ErrWrongNumberArgs("mset"))
 		return
 	}
 	for i := 0; i < len(args); i += 2 {
@@ -104,17 +104,21 @@ func msetCommand(writer *RESPWriter, args []RESP) {
 
 func incrCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
+
 	val, _, ok := db.strs.Get(key)
 	if !ok {
 		db.strs.Set(key, []byte("1"))
 		writer.WriteInteger(1)
 		return
 	}
-	num, err := strconv.Atoi(b2s(val))
+
+	num, err := RESP(val).ToInt()
 	if err != nil {
 		writer.WriteError(ErrParseInteger)
+		return
 	}
 	num++
+
 	db.strs.Set(key, []byte(strconv.Itoa(num)))
 	writer.WriteInteger(num)
 }
@@ -127,12 +131,14 @@ func getCommand(writer *RESPWriter, args []RESP) {
 		writer.WriteBulk(value)
 		return
 	}
+
 	// check extra maps
 	_, ok = db.extras.Get(key)
 	if ok {
 		writer.WriteError(ErrWrongType)
+	} else {
+		writer.WriteNull()
 	}
-	writer.WriteNull()
 }
 
 func hsetCommand(writer *RESPWriter, args []RESP) {
@@ -181,7 +187,7 @@ func hgetCommand(writer *RESPWriter, args []RESP) {
 }
 
 func hdelCommand(writer *RESPWriter, args []RESP) {
-	hash := args[0].ToString()
+	hash := args[0].ToStringUnsafe()
 	keys := args[1:]
 
 	hmap, err := fetchMap(hash)
@@ -199,7 +205,7 @@ func hdelCommand(writer *RESPWriter, args []RESP) {
 }
 
 func hgetallCommand(writer *RESPWriter, args []RESP) {
-	hash := args[0].ToString()
+	hash := args[0].ToStringUnsafe()
 
 	hmap, err := fetchMap(hash)
 	if err != nil {
@@ -224,7 +230,7 @@ func lpushCommand(writer *RESPWriter, args []RESP) {
 	}
 
 	for _, arg := range args[1:] {
-		ls.LPush(arg.ToString())
+		ls.LPush(arg.ToStringUnsafe())
 	}
 	writer.WriteInteger(ls.Size())
 }
@@ -239,13 +245,13 @@ func rpushCommand(writer *RESPWriter, args []RESP) {
 	}
 
 	for _, arg := range args[1:] {
-		ls.RPush(arg.ToString())
+		ls.RPush(arg.ToStringUnsafe())
 	}
 	writer.WriteInteger(ls.Size())
 }
 
 func lpopCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 
 	ls, err := fetchList(key)
 	if err != nil {
@@ -262,7 +268,7 @@ func lpopCommand(writer *RESPWriter, args []RESP) {
 }
 
 func rpopCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 
 	ls, err := fetchList(key)
 	if err != nil {
@@ -279,7 +285,7 @@ func rpopCommand(writer *RESPWriter, args []RESP) {
 }
 
 func lrangeCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 	start, err := args[1].ToInt()
 	if err != nil {
 		writer.WriteError(err)

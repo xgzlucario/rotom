@@ -10,11 +10,11 @@ rotom 基于 [godis](https://github.com/archeryue/godis) 项目
 
 ### 实现特性
 
-1. 使用 unix 网络编程实现的基于 epoll 的 AeLoop 事件循环
+1. 基于 epoll 网络模型，还原了 Redis 中的 AeLoop 单线程事件循环
 2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
-3. DB hashmap 基于 [GigaCache](https://github.com/xgzlucario/GigaCache)
+3. 实现了 dict, quicklist, hash, set, zset 数据结构
 4. AOF 支持
-5. 目前支持所有 redis-benchmark 命令（17种）
+5. 支持 17 种常用命令
 
 ### 原理介绍
 
@@ -24,10 +24,10 @@ IO多路复用是一种同时监听多个 socket 的技术，当一个或多个 
 
 **AeLoop 事件循环**
 
-AeLoop(Async Event Loop) 是 Redis 的核心异步事件驱动机制，主要有以下步骤：
+AeLoop(Async Event Loop) 是 Redis 的核心异步事件驱动机制，主要有以下部分：
 
-1. 文件事件（FileEvent）：使用 IO 多路复用处理网络 socket 上的读写事件。事件类型分为 `AE_READABLE` 和 `AE_WRIABLE`
-2. 时间事件（TimeEvent）：处理需要延迟执行或定时执行的任务，如每隔 `100ms` 进行过期淘汰
+1. FileEvent：使用 IO 多路复用处理网络 socket 上的读写事件。事件类型分为 `AE_READABLE` 和 `AE_WRIABLE`
+2. TimeEvent：处理需要延迟执行或定时执行的任务，如每隔 `100ms` 进行过期淘汰
 3. 当事件就绪时，通过该事件绑定的回调函数进行处理
 
 在 rotom 内部实现中，还原了 Redis 中的 AeLoop 事件循环机制，具体来说：

@@ -7,11 +7,11 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type FeType int
+type FeType uint32
 
 const (
-	AE_READABLE FeType = iota + 1
-	AE_WRITABLE
+	AE_READABLE FeType = unix.EPOLLIN
+	AE_WRITABLE FeType = unix.EPOLLOUT
 )
 
 type TeType int
@@ -49,8 +49,6 @@ type AeLoop struct {
 	stop            bool
 }
 
-var fe2ep = [3]uint32{0, unix.EPOLLIN, unix.EPOLLOUT}
-
 func getFeKey(fd int, mask FeType) int {
 	if mask == AE_READABLE {
 		return fd
@@ -59,12 +57,12 @@ func getFeKey(fd int, mask FeType) int {
 	}
 }
 
-func (loop *AeLoop) getEpollMask(fd int) (ev uint32) {
+func (loop *AeLoop) getEpollMask(fd int) (ev FeType) {
 	if loop.FileEvents[getFeKey(fd, AE_READABLE)] != nil {
-		ev |= fe2ep[AE_READABLE]
+		ev |= AE_READABLE
 	}
 	if loop.FileEvents[getFeKey(fd, AE_WRITABLE)] != nil {
-		ev |= fe2ep[AE_WRITABLE]
+		ev |= AE_WRITABLE
 	}
 	return
 }
@@ -72,7 +70,7 @@ func (loop *AeLoop) getEpollMask(fd int) (ev uint32) {
 func (loop *AeLoop) AddFileEvent(fd int, mask FeType, proc FileProc, extra interface{}) {
 	// epoll ctl
 	ev := loop.getEpollMask(fd)
-	if ev&fe2ep[mask] != 0 {
+	if ev&mask != 0 {
 		// event is already registered
 		return
 	}
@@ -80,8 +78,11 @@ func (loop *AeLoop) AddFileEvent(fd int, mask FeType, proc FileProc, extra inter
 	if ev != 0 {
 		op = unix.EPOLL_CTL_MOD
 	}
-	ev |= fe2ep[mask]
-	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{Fd: int32(fd), Events: ev})
+	ev |= mask
+	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{
+		Fd:     int32(fd),
+		Events: uint32(ev),
+	})
 	if err != nil {
 		log.Error().Msgf("epoll ctl error: %v", err)
 		return
@@ -99,11 +100,14 @@ func (loop *AeLoop) RemoveFileEvent(fd int, mask FeType) {
 	// epoll ctl
 	op := unix.EPOLL_CTL_DEL
 	ev := loop.getEpollMask(fd)
-	ev &= ^fe2ep[mask]
+	ev &= ^mask
 	if ev != 0 {
 		op = unix.EPOLL_CTL_MOD
 	}
-	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{Fd: int32(fd), Events: ev})
+	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{
+		Fd:     int32(fd),
+		Events: uint32(ev),
+	})
 	if err != nil {
 		if !os.IsNotExist(err) {
 			log.Error().Msgf("epoll del error: %v", err)
@@ -237,7 +241,7 @@ func (loop *AeLoop) AeProcess(tes []*AeTimeEvent, fes []*AeFileEvent) {
 }
 
 func (loop *AeLoop) AeMain() {
-	for {
+	for !loop.stop {
 		loop.AeProcess(loop.AeWait())
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/xgzlucario/quicklist"
+	"github.com/xgzlucario/rotom/internal/list"
 )
 
 var previousPause time.Duration
@@ -47,7 +47,7 @@ func main() {
 		}()
 
 	case "quicklist":
-		ls := quicklist.New()
+		ls := list.New()
 		for i := 0; i < entries; i++ {
 			ls.RPush(genKey(i))
 		}

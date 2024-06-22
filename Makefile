@@ -8,6 +8,7 @@ test-cover:
 	go test ./... -race -coverprofile=coverage.txt -covermode=atomic
 	go tool cover -html=coverage.txt -o coverage.html
 	rm coverage.txt
+	rm *.aof
 
 pprof:
 	go tool pprof -http=:18081 "http://192.168.1.6:6060/debug/pprof/profile?seconds=30"
@@ -20,9 +21,5 @@ build-docker:
 
 bench:
 	go test -bench . -benchmem
-
-clean:
-	rm -f *.aof
-	rm -f coverage.html
 
 # rsync -av --exclude='.git' rotom/ 2:~/xgz/rotom

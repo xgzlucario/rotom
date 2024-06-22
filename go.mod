@@ -9,7 +9,6 @@ require (
 	github.com/sakeven/RbTree v1.1.1
 	github.com/stretchr/testify v1.9.0
 	github.com/tidwall/mmap v0.3.0
-	github.com/xgzlucario/quicklist v0.0.0-20240530174658-6f1a884f579b
 	golang.org/x/sys v0.21.0
 )
 
