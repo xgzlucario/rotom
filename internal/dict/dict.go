@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/swiss"
+	"github.com/xgzlucario/rotom/internal/pkg"
 )
 
 const (
@@ -17,6 +18,10 @@ const (
 	maxFailed = 3
 )
 
+var (
+	dictAllocator = pkg.NewAllocator[string, Idx]()
+)
+ 
 // Dict is the hashmap for Rotom.
 type Dict struct {
 	mask   uint32
@@ -31,7 +36,7 @@ func New(options Options) *Dict {
 	for i := range dict.shards {
 		dict.shards[i] = &shard{
 			options: &options,
-			index:   swiss.New[string, Idx](options.IndexSize),
+			index:   swiss.New(options.IndexSize, swiss.WithAllocator(dictAllocator)),
 			data:    make([]byte, 0, options.BufferSize),
 		}
 	}
@@ -114,12 +119,6 @@ func (dict *Dict) Scan(callback Walker) {
 		if !shard.scan(callback) {
 			return
 		}
-	}
-}
-
-func (dict *Dict) Migrate() {
-	for _, shard := range dict.shards {
-		shard.migrate()
 	}
 }
 
@@ -206,18 +205,20 @@ func (s *shard) evictExpired() {
 func (s *shard) migrate() {
 	newData := make([]byte, 0, len(s.data))
 	nanosec := time.Now().UnixNano()
+	newIndex := swiss.New(s.index.Len(), swiss.WithAllocator(dictAllocator))
 
 	s.index.All(func(key string, idx Idx) bool {
 		if idx.expiredWith(nanosec) {
-			s.index.Delete(key)
 			return true
 		}
-		s.index.Put(key, idx.setStart(len(newData)))
+		newIndex.Put(key, idx.setStart(len(newData)))
 		entry, _ := s.findEntry(idx)
 		newData = append(newData, entry...)
 		return true
 	})
 
+	s.index.Close()
+	s.index = newIndex
 	s.data = newData
 	s.unused = 0
 	s.migrations++
@@ -225,10 +226,10 @@ func (s *shard) migrate() {
 
 func (s *shard) findEntry(idx Idx) (entry, val []byte) {
 	pos := idx.start()
-	// read vlen
+	// read value len
 	vlen, n := binary.Uvarint(s.data[pos:])
 	pos += n
-	// read val
+	// read value
 	val = s.data[pos : pos+int(vlen)]
 	pos += int(vlen)
 

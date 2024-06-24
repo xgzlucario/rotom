@@ -1,46 +1,45 @@
 package dict
 
 import (
+	"runtime"
 	"testing"
+
+	"github.com/cockroachdb/swiss"
 )
 
 const N = 100 * 10000
 
-func getStdmap(num int) map[string][]byte {
-	m := map[string][]byte{}
-	for i := 0; i < num; i++ {
-		k, v := genKV(i)
-		m[k] = v
+func getStdmap(n int) map[string]int {
+	m := make(map[string]int, n)
+	for i := 0; i < n; i++ {
+		k, _ := genKV(i)
+		m[k] = i
 	}
 	return m
 }
 
-func getDict(num int, options ...Options) *Dict {
-	opt := DefaultOptions
-	if len(options) > 0 {
-		opt = options[0]
-	}
-	m := New(opt)
-	for i := 0; i < num; i++ {
-		k, v := genKV(i)
-		m.Set(k, v)
+func getSwiss(n int) *swiss.Map[string, int] {
+	m := swiss.New[string, int](n)
+	for i := 0; i < n; i++ {
+		k, _ := genKV(i)
+		m.Put(k, i)
 	}
 	return m
 }
 
 func BenchmarkSet(b *testing.B) {
 	b.Run("stdmap", func(b *testing.B) {
-		m := map[string][]byte{}
+		m := make(map[string]int, 8)
 		for i := 0; i < b.N; i++ {
-			k, v := genKV(i)
-			m[k] = v
+			k, _ := genKV(i)
+			m[k] = i
 		}
 	})
-	b.Run("dict", func(b *testing.B) {
-		m := New(DefaultOptions)
+	b.Run("swiss", func(b *testing.B) {
+		m := swiss.New[string, int](8)
 		for i := 0; i < b.N; i++ {
-			k, v := genKV(i)
-			m.Set(k, v)
+			k, _ := genKV(i)
+			m.Put(k, i)
 		}
 	})
 }
@@ -54,8 +53,8 @@ func BenchmarkGet(b *testing.B) {
 			_ = m[k]
 		}
 	})
-	b.Run("dict", func(b *testing.B) {
-		m := getDict(N)
+	b.Run("swiss", func(b *testing.B) {
+		m := getSwiss(N)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			k, _ := genKV(i)
@@ -64,42 +63,32 @@ func BenchmarkGet(b *testing.B) {
 	})
 }
 
-func BenchmarkScan(b *testing.B) {
-	b.Run("stdmap", func(b *testing.B) {
-		m := getStdmap(N)
+func BenchmarkGC(b *testing.B) {
+	b.Run("swiss1", func(b *testing.B) {
+		m := swiss.New[string, int](N)
+		data := make([]byte, 0)
+		for i := 0; i < N; i++ {
+			k, v := genKV(i)
+			m.Put(k, i)
+			data = append(data, v...)
+		}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			for k, v := range m {
-				_, _ = k, v
-			}
+			runtime.GC()
 		}
+		m.Put("xgz", len(data))
 	})
-	b.Run("dict", func(b *testing.B) {
-		m := getDict(N)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			m.Scan(func(s string, b []byte, i int64) bool {
-				return true
-			})
-		}
-	})
-}
 
-func BenchmarkRemove(b *testing.B) {
-	b.Run("stdmap", func(b *testing.B) {
-		m := getStdmap(N)
+	b.Run("swiss2", func(b *testing.B) {
+		m := swiss.New[string, []byte](N)
+		for i := 0; i < N; i++ {
+			k, v := genKV(i)
+			m.Put(k, v)
+		}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			k, _ := genKV(i)
-			delete(m, k)
+			runtime.GC()
 		}
-	})
-	b.Run("dict", func(b *testing.B) {
-		m := getDict(N)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			k, _ := genKV(i)
-			m.Remove(k)
-		}
+		m.Put("xgz", []byte("hello"))
 	})
 }

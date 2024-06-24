@@ -2,6 +2,11 @@ package hash
 
 import (
 	"github.com/cockroachdb/swiss"
+	"github.com/xgzlucario/rotom/internal/pkg"
+)
+
+var (
+	setAllocator = pkg.NewAllocator[string, struct{}]()
 )
 
 type Set struct {
@@ -9,7 +14,7 @@ type Set struct {
 }
 
 func NewSet() *Set {
-	return &Set{m: swiss.New[string, struct{}](8)}
+	return &Set{m: swiss.New[string, struct{}](8, swiss.WithAllocator(setAllocator))}
 }
 
 func (s *Set) Add(key string) bool {
@@ -27,4 +32,8 @@ func (s *Set) Pop() (item string, ok bool) {
 		return false
 	})
 	return
+}
+
+func (s *Set) Free() {
+	s.m.Close()
 }

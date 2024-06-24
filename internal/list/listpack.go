@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/binary"
 	"slices"
+
+	"github.com/xgzlucario/rotom/internal/pkg"
 )
 
 var (
 	maxListPackSize = 8 * 1024
 
-	bpool = NewBufferPool()
+	bpool = pkg.NewBufferPool()
 )
 
 // ListPack is a lists of strings serialization format on Redis.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/dict"
+	"github.com/xgzlucario/rotom/internal/pkg"
 )
 
 var previousPause time.Duration
@@ -38,34 +39,34 @@ func main() {
 	fmt.Println("entries:", entries)
 
 	start := time.Now()
+	q := pkg.NewQuantile(entries)
+
 	switch c {
 	case "dict":
 		m := dict.New(dict.DefaultOptions)
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
+			start := time.Now()
 			m.Set(k, v)
+			q.Add(float64(time.Since(start)))
 		}
 
 	case "stdmap":
-		type Item struct {
-			val []byte
-			ts  int64
-		}
-		m := make(map[string]Item, entries)
+		m := make(map[string][]byte, 8)
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
-			m[string(k)] = Item{val: v, ts: 0}
+			start := time.Now()
+			m[k] = v
+			q.Add(float64(time.Since(start)))
 		}
 
 	case "swiss":
-		type Item struct {
-			val []byte
-			ts  int64
-		}
-		m := swiss.New[string, Item](entries)
+		m := swiss.New[string, []byte](8)
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
-			m.Put(string(k), Item{val: v, ts: 0})
+			start := time.Now()
+			m.Put(k, v)
+			q.Add(float64(time.Since(start)))
 		}
 	}
 	cost := time.Since(start)
@@ -76,11 +77,11 @@ func main() {
 	runtime.ReadMemStats(&mem)
 	debug.ReadGCStats(&stat)
 
-	fmt.Println("alloc:", mem.Alloc/1024/1024, "mb")
 	fmt.Println("gcsys:", mem.GCSys/1024/1024, "mb")
 	fmt.Println("heap inuse:", mem.HeapInuse/1024/1024, "mb")
 	fmt.Println("heap object:", mem.HeapObjects/1024, "k")
 	fmt.Println("gc:", stat.NumGC)
 	fmt.Println("pause:", gcPause())
 	fmt.Println("cost:", cost)
+	q.Print()
 }

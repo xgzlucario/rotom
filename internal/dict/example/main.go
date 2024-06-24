@@ -6,36 +6,12 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"runtime"
-	"slices"
 	"strconv"
 	"time"
 
 	"github.com/xgzlucario/rotom/internal/dict"
+	"github.com/xgzlucario/rotom/internal/pkg"
 )
-
-type Quantile struct {
-	f []float64
-}
-
-func NewQuantile(size int) *Quantile {
-	return &Quantile{f: make([]float64, 0, size)}
-}
-
-func (q *Quantile) Add(v float64) {
-	q.f = append(q.f, v)
-}
-
-func (q *Quantile) quantile(p float64) float64 {
-	r := q.f[int(float64(len(q.f))*p)]
-	return r
-}
-
-func (q *Quantile) Print() {
-	slices.Sort(q.f)
-	fmt.Printf("90th: %.0f ns\n", q.quantile(0.9))
-	fmt.Printf("99th: %.0f ns\n", q.quantile(0.99))
-	fmt.Printf("999th: %.0f ns\n", q.quantile(0.999))
-}
 
 const N = 100 * 10000
 
@@ -53,7 +29,7 @@ func main() {
 }
 
 func benchmark(options dict.Options) {
-	quant := NewQuantile(N)
+	quant := pkg.NewQuantile(N)
 
 	var count int64
 	var memStats runtime.MemStats
