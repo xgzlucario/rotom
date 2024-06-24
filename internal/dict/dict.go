@@ -19,9 +19,10 @@ const (
 )
 
 var (
+	bufferpool    = pkg.NewBufferPool()
 	dictAllocator = pkg.NewAllocator[string, Idx]()
 )
- 
+
 // Dict is the hashmap for Rotom.
 type Dict struct {
 	mask   uint32
@@ -37,7 +38,7 @@ func New(options Options) *Dict {
 		dict.shards[i] = &shard{
 			options: &options,
 			index:   swiss.New(options.IndexSize, swiss.WithAllocator(dictAllocator)),
-			data:    make([]byte, 0, options.BufferSize),
+			data:    bufferpool.Get(options.BufferSize)[:0],
 		}
 	}
 	return dict
@@ -203,7 +204,7 @@ func (s *shard) evictExpired() {
 
 // migrate transfers valid key-value pairs to a new container to save memory.
 func (s *shard) migrate() {
-	newData := make([]byte, 0, len(s.data))
+	newData := bufferpool.Get(len(s.data))[:0]
 	nanosec := time.Now().UnixNano()
 	newIndex := swiss.New(s.index.Len(), swiss.WithAllocator(dictAllocator))
 
@@ -218,6 +219,7 @@ func (s *shard) migrate() {
 	})
 
 	s.index.Close()
+	bufferpool.Put(s.data)
 	s.index = newIndex
 	s.data = newData
 	s.unused = 0

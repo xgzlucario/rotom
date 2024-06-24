@@ -2,14 +2,14 @@ package pkg
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/cockroachdb/swiss"
 )
 
+// Allocator is a group pool for swissmap.
 type Allocator[K comparable, V any] struct {
 	pool      *sync.Pool
-	miss, hit atomic.Uint64
+	miss, hit uint64
 }
 
 func NewAllocator[K comparable, V any]() *Allocator[K, V] {
@@ -25,11 +25,11 @@ func (p *Allocator[K, V]) Alloc(want int) []swiss.Group[K, V] {
 
 	if cap(*buf) < want {
 		*buf = make([]swiss.Group[K, V], want)
-		p.miss.Add(1)
+		p.miss++
 
 	} else {
 		*buf = (*buf)[:want]
-		p.hit.Add(1)
+		p.hit++
 	}
 
 	return *buf
@@ -40,9 +40,9 @@ func (p *Allocator[K, V]) Free(b []swiss.Group[K, V]) {
 }
 
 func (p *Allocator[K, V]) Miss() uint64 {
-	return p.miss.Load()
+	return p.miss
 }
 
 func (p *Allocator[K, V]) Hit() uint64 {
-	return p.hit.Load()
+	return p.hit
 }

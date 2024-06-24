@@ -2,13 +2,12 @@ package pkg
 
 import (
 	"sync"
-	"sync/atomic"
 )
 
 // BufferPool is a bytes buffer pool.
 type BufferPool struct {
 	pool      *sync.Pool
-	miss, hit atomic.Uint64
+	miss, hit uint64
 }
 
 // Get returns buffer with length of want.
@@ -17,11 +16,11 @@ func (p *BufferPool) Get(want int) []byte {
 
 	if cap(*buf) < want {
 		*buf = make([]byte, want)
-		p.miss.Add(1)
+		p.miss++
 
 	} else {
 		*buf = (*buf)[:want]
-		p.hit.Add(1)
+		p.hit++
 	}
 
 	return *buf
