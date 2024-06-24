@@ -24,9 +24,6 @@ type Dict struct {
 }
 
 func New(options Options) *Dict {
-	if err := validateOptions(options); err != nil {
-		panic(err)
-	}
 	dict := &Dict{
 		mask:   options.ShardCount - 1,
 		shards: make([]*shard, options.ShardCount),
@@ -133,12 +130,10 @@ func (dict *Dict) EvictExpired() {
 
 // Stats represents the runtime statistics of Dict.
 type Stats struct {
-	Len       int
-	Alloc     uint64
-	Unused    uint64
-	Migrates  uint64
-	Evictions uint64
-	Probes    uint64
+	Len      int
+	Alloc    uint64
+	Unused   uint64
+	Migrates uint64
 }
 
 // GetStats returns the current runtime statistics of Dict.
@@ -148,8 +143,6 @@ func (c *Dict) GetStats() (stats Stats) {
 		stats.Alloc += uint64(len(shard.data))
 		stats.Unused += uint64(shard.unused)
 		stats.Migrates += uint64(shard.migrations)
-		stats.Evictions += shard.evictions
-		stats.Probes += shard.probes
 	}
 	return
 }
@@ -159,11 +152,6 @@ func (s Stats) UnusedRate() float64 {
 	return float64(s.Unused) / float64(s.Alloc) * 100
 }
 
-// EvictionRate calculates the percentage of evictions relative to probes.
-func (s Stats) EvictionRate() float64 {
-	return float64(s.Evictions) / float64(s.Probes) * 100
-}
-
 // shard is the data container for Dict.
 type shard struct {
 	options    *Options
@@ -171,8 +159,6 @@ type shard struct {
 	data       []byte
 	unused     uint32
 	migrations uint32
-	evictions  uint64
-	probes     uint64
 }
 
 func (s *shard) appendEntry(val []byte, ts int64) Idx {
@@ -201,13 +187,10 @@ func (s *shard) evictExpired() {
 
 	// probing
 	s.index.All(func(key string, idx Idx) bool {
-		s.probes++
+		failed++
 		if idx.expiredWith(nanosec) {
 			s.removeEntry(key, idx)
-			s.evictions++
 			failed = 0
-		} else {
-			failed++
 		}
 		return failed <= maxFailed
 	})

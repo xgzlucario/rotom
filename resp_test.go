@@ -38,6 +38,10 @@ func TestWriter(t *testing.T) {
 		assert.Equal(writer.b.String(), ":5\r\n")
 		writer.Reset()
 	})
+}
+
+func TestReader(t *testing.T) {
+	assert := assert.New(t)
 
 	t.Run("error-reader", func(t *testing.T) {
 		// read nil
@@ -65,9 +69,15 @@ func TestWriter(t *testing.T) {
 		// error cases
 		_, _, ok = cutByCRLF([]byte("A"))
 		assert.False(ok)
+
+		_, _, ok = cutByCRLF([]byte("ABC"))
+		assert.False(ok)
+
+		_, _, ok = cutByCRLF([]byte("1234\r"))
+		assert.False(ok)
 	})
 
-	t.Run("readCommandBulk", func(t *testing.T) {
+	t.Run("command-bulk", func(t *testing.T) {
 		args, err := NewReader([]byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")).ReadNextCommand(nil)
 		assert.Equal(args[0].ToString(), "SET")
 		assert.Equal(args[1].ToString(), "foo")
@@ -75,7 +85,7 @@ func TestWriter(t *testing.T) {
 		assert.Nil(err)
 	})
 
-	t.Run("readCommandInline", func(t *testing.T) {
+	t.Run("command-inline", func(t *testing.T) {
 		args, err := NewReader([]byte("PING\r\n")).ReadNextCommand(nil)
 		assert.Equal(args[0].ToString(), "PING")
 		assert.Nil(err)

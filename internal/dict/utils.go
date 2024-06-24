@@ -1,7 +1,6 @@
 package dict
 
 import (
-	"errors"
 	"math/bits"
 	"unsafe"
 )
@@ -47,11 +46,4 @@ var DefaultOptions = Options{
 	IndexSize:    1024,
 	BufferSize:   32 * KB,
 	MigrateRatio: 0.4,
-}
-
-func validateOptions(options Options) error {
-	if options.ShardCount == 0 {
-		return errors.New("cache/options: invalid shard count")
-	}
-	return nil
 }

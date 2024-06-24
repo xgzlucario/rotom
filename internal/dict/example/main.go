@@ -97,9 +97,6 @@ func benchmark(options dict.Options) {
 		formatSize(stat.Alloc),
 		stat.UnusedRate(),
 	)
-	fmt.Printf("[Evict] probe: %vw / %vw (%.1f%%) | mgr: %d\n",
-		stat.Evictions/1e5, stat.Probes/1e5, stat.EvictionRate(),
-		stat.Migrates)
 
 	// mem stats
 	runtime.ReadMemStats(&memStats)

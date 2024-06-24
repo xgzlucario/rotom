@@ -33,10 +33,11 @@ func NewReader(input []byte) *RESPReader {
 
 // cutByCRLF splits the buffer by the first occurrence of CRLF.
 func cutByCRLF(buf []byte) (before, after []byte, found bool) {
-	if len(buf) <= 2 {
+	n := len(buf)
+	if n <= 2 {
 		return
 	}
-	for i, b := range buf {
+	for i, b := range buf[:n-1] {
 		if b == '\r' {
 			if buf[i+1] == '\n' {
 				return buf[:i], buf[i+2:], true
@@ -160,32 +161,20 @@ func (w *RESPWriter) WriteNull() {
 }
 
 // Reset resets the internal buffer.
-func (w *RESPWriter) Reset() {
-	w.b.Reset()
-}
+func (w *RESPWriter) Reset() { w.b.Reset() }
 
 // RESP represents the RESP (Redis Serialization Protocol) message in byte slice format.
 type RESP []byte
 
-func (r RESP) ToString() string {
-	return string(r)
-}
+func (r RESP) ToString() string { return string(r) }
 
-func (r RESP) ToStringUnsafe() string {
-	return b2s(r)
-}
+func (r RESP) ToStringUnsafe() string { return b2s(r) }
 
-func (r RESP) ToInt() (int, error) {
-	return strconv.Atoi(b2s(r))
-}
+func (r RESP) ToInt() (int, error) { return strconv.Atoi(b2s(r)) }
 
-func (r RESP) ToBytes() []byte {
-	return r
-}
+func (r RESP) ToBytes() []byte { return r }
 
-func (r RESP) Clone() []byte {
-	return slices.Clone(r)
-}
+func (r RESP) Clone() []byte { return slices.Clone(r) }
 
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))

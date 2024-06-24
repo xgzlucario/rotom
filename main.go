@@ -35,9 +35,6 @@ func main() {
 	if err != nil {
 		log.Fatal().Msgf("load config error: %v", err)
 	}
-
-	log.Debug().Bool("appendonly", config.AppendOnly).Int("port", config.Port).Msg("read config file")
-
 	if err = initServer(config); err != nil {
 		log.Fatal().Msgf("init server error: %v", err)
 	}

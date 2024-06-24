@@ -31,13 +31,13 @@ func TestCommand(t *testing.T) {
 	assert := assert.New(t)
 
 	go startup()
-	time.Sleep(time.Second / 5)
+	time.Sleep(time.Second / 3)
 
 	// wait for client starup
 	rdb := redis.NewClient(&redis.Options{
 		Addr: ":20082",
 	})
-	time.Sleep(time.Second / 5)
+	time.Sleep(time.Second / 3)
 
 	t.Run("ping", func(t *testing.T) {
 		res, _ := rdb.Ping(ctx).Result()
