@@ -49,18 +49,18 @@ func (dict *Dict) getShard(key string) *shard {
 	return dict.shards[uint32(hash)&dict.mask]
 }
 
-func (dict *Dict) Get(key string) ([]byte, int64, bool) {
+func (dict *Dict) Get(key string) ([]byte, bool) {
 	shard := dict.getShard(key)
 	idx, ok := shard.index.Get(key)
 	if !ok {
-		return nil, 0, false
+		return nil, false
 	}
 	if idx.expired() {
 		shard.removeEntry(key, idx)
-		return nil, 0, false
+		return nil, false
 	}
 	_, val := shard.findEntry(idx)
-	return val, idx.lo, ok
+	return val, ok
 }
 
 func (dict *Dict) SetTx(key string, val []byte, expiration int64) bool {

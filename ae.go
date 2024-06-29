@@ -1,17 +1,9 @@
 package main
 
 import (
-	"os"
 	"time"
 
 	"golang.org/x/sys/unix"
-)
-
-type FeType uint32
-
-const (
-	AE_READABLE FeType = unix.EPOLLIN
-	AE_WRITABLE FeType = unix.EPOLLOUT
 )
 
 type TeType int
@@ -26,7 +18,6 @@ type TimeProc func(loop *AeLoop, id int, extra interface{})
 
 type AeFileEvent struct {
 	fd    int
-	mask  FeType
 	proc  FileProc
 	extra interface{}
 }
@@ -49,72 +40,61 @@ type AeLoop struct {
 	stop            bool
 }
 
-func getFeKey(fd int, mask FeType) int {
-	if mask == AE_READABLE {
-		return fd
-	} else {
-		return fd * -1
-	}
-}
-
-func (loop *AeLoop) getEpollMask(fd int) (ev FeType) {
-	if loop.FileEvents[getFeKey(fd, AE_READABLE)] != nil {
-		ev |= AE_READABLE
-	}
-	if loop.FileEvents[getFeKey(fd, AE_WRITABLE)] != nil {
-		ev |= AE_WRITABLE
-	}
-	return
-}
-
-func (loop *AeLoop) AddFileEvent(fd int, mask FeType, proc FileProc, extra interface{}) {
-	// epoll ctl
-	ev := loop.getEpollMask(fd)
-	if ev&mask != 0 {
-		// event is already registered
-		return
-	}
-	op := unix.EPOLL_CTL_ADD
-	if ev != 0 {
-		op = unix.EPOLL_CTL_MOD
-	}
-	ev |= mask
-	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{
+func (loop *AeLoop) AddRead(fd int, proc FileProc, extra interface{}) {
+	err := unix.EpollCtl(loop.fileEventFd, unix.EPOLL_CTL_ADD, fd, &unix.EpollEvent{
 		Fd:     int32(fd),
-		Events: uint32(ev),
+		Events: unix.EPOLLIN,
 	})
 	if err != nil {
-		log.Error().Msgf("epoll ctl error: %v", err)
-		return
+		panic(err)
 	}
-	// ae ctl
-	loop.FileEvents[getFeKey(fd, mask)] = &AeFileEvent{
+	loop.FileEvents[fd] = &AeFileEvent{
 		fd:    fd,
-		mask:  mask,
 		proc:  proc,
 		extra: extra,
 	}
 }
 
-func (loop *AeLoop) RemoveFileEvent(fd int, mask FeType) {
-	// epoll ctl
-	op := unix.EPOLL_CTL_DEL
-	ev := loop.getEpollMask(fd)
-	ev &= ^mask
-	if ev != 0 {
-		op = unix.EPOLL_CTL_MOD
-	}
-	err := unix.EpollCtl(loop.fileEventFd, op, fd, &unix.EpollEvent{
+func (loop *AeLoop) ModRead(fd int, proc FileProc, extra interface{}) {
+	err := unix.EpollCtl(loop.fileEventFd, unix.EPOLL_CTL_MOD, fd, &unix.EpollEvent{
 		Fd:     int32(fd),
-		Events: uint32(ev),
+		Events: unix.EPOLLIN,
 	})
 	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Error().Msgf("epoll del error: %v", err)
-		}
+		panic(err)
 	}
-	// ae ctl
-	loop.FileEvents[getFeKey(fd, mask)] = nil
+	loop.FileEvents[fd] = &AeFileEvent{
+		fd:    fd,
+		proc:  proc,
+		extra: extra,
+	}
+}
+
+func (loop *AeLoop) ModWrite(fd int, proc FileProc, extra interface{}) {
+	err := unix.EpollCtl(loop.fileEventFd, unix.EPOLL_CTL_MOD, fd, &unix.EpollEvent{
+		Fd:     int32(fd),
+		Events: unix.EPOLLOUT,
+	})
+	if err != nil {
+		panic(err)
+	}
+	loop.FileEvents[fd] = &AeFileEvent{
+		fd:    fd,
+		proc:  proc,
+		extra: extra,
+	}
+}
+
+func (loop *AeLoop) ModDetach(fd int) {
+	err := unix.EpollCtl(loop.fileEventFd, unix.EPOLL_CTL_DEL, fd, &unix.EpollEvent{
+		Fd:     int32(fd),
+		Events: unix.EPOLLIN | unix.EPOLLOUT,
+	})
+	if err != nil {
+		panic(err)
+	}
+	// remove file event
+	delete(loop.FileEvents, fd)
 }
 
 func GetMsTime() int64 {
@@ -201,13 +181,13 @@ retry:
 	// collect file events
 	for _, ev := range events[:n] {
 		if ev.Events&unix.EPOLLIN != 0 {
-			fe := loop.FileEvents[getFeKey(int(ev.Fd), AE_READABLE)]
+			fe := loop.FileEvents[int(ev.Fd)]
 			if fe != nil {
 				fes = append(fes, fe)
 			}
 		}
 		if ev.Events&unix.EPOLLOUT != 0 {
-			fe := loop.FileEvents[getFeKey(int(ev.Fd), AE_WRITABLE)]
+			fe := loop.FileEvents[int(ev.Fd)]
 			if fe != nil {
 				fes = append(fes, fe)
 			}

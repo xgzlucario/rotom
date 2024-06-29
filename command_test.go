@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"math/rand/v2"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,9 +22,7 @@ func startup() {
 	if err := initServer(config); err != nil {
 		log.Panic().Msgf("init server error: %v", err)
 	}
-	server.aeLoop.AddFileEvent(server.fd, AE_READABLE, AcceptHandler, nil)
-	server.aeLoop.AddTimeEvent(AE_NORMAL, 100, ServerCronFlush, nil)
-	server.aeLoop.AddTimeEvent(AE_NORMAL, 100, ServerCronEvict, nil)
+	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
 	server.aeLoop.AeMain()
 }
 
@@ -158,6 +159,27 @@ func TestCommand(t *testing.T) {
 	t.Run("mset", func(t *testing.T) {
 		res, _ := rdb.MSet(ctx, "mk1", "mv1", "mk2", "mv2").Result()
 		assert.Equal(res, "OK")
+	})
+
+	t.Run("concurrency", func(t *testing.T) {
+		var wg sync.WaitGroup
+		for i := 0; i < 10000; i++ {
+			wg.Add(1)
+			go func() {
+				key := fmt.Sprintf("key-%08x", rand.Int())
+				value := fmt.Sprintf("val-%08x", rand.Int())
+
+				_, err := rdb.Set(ctx, key, value, 0).Result()
+				assert.Nil(err)
+
+				res, err := rdb.Get(ctx, key).Result()
+				assert.Equal(res, value)
+				assert.Nil(err)
+
+				wg.Done()
+			}()
+		}
+		wg.Wait()
 	})
 
 	t.Run("client-closed", func(t *testing.T) {

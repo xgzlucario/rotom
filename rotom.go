@@ -93,8 +93,7 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 		argsBuf:     make([]RESP, 8),
 	}
 	server.clients[cfd] = client
-	loop.AddFileEvent(cfd, AE_READABLE, ReadQueryFromClient, client)
-	log.Debug().Msgf("accept client, fd: %d", cfd)
+	loop.AddRead(cfd, ReadQueryFromClient, client)
 }
 
 func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
@@ -117,7 +116,6 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	}
 
 	client.queryLen += n
-
 	ProcessQueryBuf(client)
 }
 
@@ -127,8 +125,7 @@ func resetClient(client *Client) {
 
 func freeClient(client *Client) {
 	delete(server.clients, client.fd)
-	server.aeLoop.RemoveFileEvent(client.fd, AE_READABLE)
-	server.aeLoop.RemoveFileEvent(client.fd, AE_WRITABLE)
+	server.aeLoop.ModDetach(client.fd)
 	Close(client.fd)
 }
 
@@ -159,14 +156,12 @@ func ProcessQueryBuf(client *Client) {
 		} else {
 			err := ErrUnknownCommand(command)
 			client.replyWriter.WriteError(err)
-			log.Warn().Msgf("%v", err)
+			log.Warn().Msgf("ERR %v", err)
 		}
 	}
 
 	resetClient(client)
-
-	// add writable event
-	server.aeLoop.AddFileEvent(client.fd, AE_WRITABLE, SendReplyToClient, client)
+	server.aeLoop.ModWrite(client.fd, SendReplyToClient, client)
 }
 
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
@@ -184,7 +179,7 @@ func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	}
 
 	client.replyWriter.Reset()
-	loop.RemoveFileEvent(fd, AE_WRITABLE)
+	loop.ModRead(fd, ReadQueryFromClient, client)
 }
 
 func initServer(config *Config) (err error) {

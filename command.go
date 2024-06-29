@@ -105,7 +105,7 @@ func msetCommand(writer *RESPWriter, args []RESP) {
 func incrCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 
-	val, _, ok := db.strs.Get(key)
+	val, ok := db.strs.Get(key)
 	if !ok {
 		db.strs.Set(key, []byte("1"))
 		writer.WriteInteger(1)
@@ -126,7 +126,7 @@ func incrCommand(writer *RESPWriter, args []RESP) {
 func getCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToStringUnsafe()
 
-	value, _, ok := db.strs.Get(key)
+	value, ok := db.strs.Get(key)
 	if ok {
 		writer.WriteBulk(value)
 		return
