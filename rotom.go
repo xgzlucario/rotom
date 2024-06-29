@@ -92,6 +92,8 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 		queryBuf:    make([]byte, READ_BUF_SIZE),
 		argsBuf:     make([]RESP, 8),
 	}
+
+	log.Debug().Msgf("accept client, fd: %d", cfd)
 	server.clients[cfd] = client
 	loop.AddRead(cfd, ReadQueryFromClient, client)
 }
