@@ -63,11 +63,9 @@ func (loop *AeLoop) ModRead(fd int, proc FileProc, extra interface{}) {
 	if err != nil {
 		panic(err)
 	}
-	loop.FileEvents[fd] = &AeFileEvent{
-		fd:    fd,
-		proc:  proc,
-		extra: extra,
-	}
+	fe := loop.FileEvents[fd]
+	fe.proc = proc
+	fe.extra = extra
 }
 
 func (loop *AeLoop) ModWrite(fd int, proc FileProc, extra interface{}) {
@@ -78,11 +76,9 @@ func (loop *AeLoop) ModWrite(fd int, proc FileProc, extra interface{}) {
 	if err != nil {
 		panic(err)
 	}
-	loop.FileEvents[fd] = &AeFileEvent{
-		fd:    fd,
-		proc:  proc,
-		extra: extra,
-	}
+	fe := loop.FileEvents[fd]
+	fe.proc = proc
+	fe.extra = extra
 }
 
 func (loop *AeLoop) ModDetach(fd int) {
@@ -93,7 +89,6 @@ func (loop *AeLoop) ModDetach(fd int) {
 	if err != nil {
 		panic(err)
 	}
-	// remove file event
 	delete(loop.FileEvents, fd)
 }
 
@@ -152,9 +147,7 @@ func (loop *AeLoop) nearestTime() int64 {
 	var nearest int64 = GetMsTime() + 1000
 	p := loop.TimeEvents
 	for p != nil {
-		if p.when < nearest {
-			nearest = p.when
-		}
+		nearest = min(nearest, p.when)
 		p = p.next
 	}
 	return nearest
