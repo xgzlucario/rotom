@@ -207,5 +207,5 @@ func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
 }
 
 func ServerCronEvict(loop *AeLoop, id int, extra interface{}) {
-	// db.strs.EvictExpired()
+	db.dict.EvictExpired()
 }

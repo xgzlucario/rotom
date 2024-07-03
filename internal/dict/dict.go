@@ -23,10 +23,8 @@ func (dict *Dict) Get(key string) (any, bool) {
 	return dict.data.Get(key)
 }
 
-func (dict *Dict) Set(key string, value any) bool {
-	_, ok := dict.data.Get(key)
+func (dict *Dict) Set(key string, value any) {
 	dict.data.Put(key, value)
-	return !ok
 }
 
 func (dict *Dict) Remove(key string) bool {
@@ -45,7 +43,7 @@ func (dict *Dict) SetTTL(key string, expiration int64) bool {
 	return true
 }
 
-func (dict *Dict) EvictExpired(key string, expiration int64) {
+func (dict *Dict) EvictExpired() {
 	nanosec := time.Now().UnixNano()
 	count := 0
 	dict.expire.All(func(key string, value int64) bool {

@@ -14,7 +14,7 @@ type Set struct {
 }
 
 func NewSet() *Set {
-	return &Set{m: swiss.New[string, struct{}](8, swiss.WithAllocator(setAllocator))}
+	return &Set{m: swiss.New(8, swiss.WithAllocator(setAllocator))}
 }
 
 func (s *Set) Add(key string) bool {

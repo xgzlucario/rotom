@@ -9,7 +9,7 @@ import (
 )
 
 func genKV(i int) (string, []byte) {
-	k := fmt.Sprintf("%09x", i)
+	k := fmt.Sprintf("%08x", i)
 	return k, []byte(k)
 }
 
