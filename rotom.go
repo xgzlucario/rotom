@@ -3,7 +3,6 @@ package main
 import (
 	"io"
 
-	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
@@ -24,9 +23,8 @@ type (
 )
 
 type DB struct {
-	strs   *dict.Dict
-	extras *swiss.Map[string, any]
-	aof    *Aof
+	dict *dict.Dict
+	aof  *Aof
 }
 
 type Client struct {
@@ -51,8 +49,7 @@ var (
 
 // InitDB initializes database and redo appendonly files if nedded.
 func InitDB(config *Config) (err error) {
-	db.strs = dict.New(dict.DefaultOptions)
-	db.extras = swiss.New[string, any](64)
+	db.dict = dict.New()
 
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)
@@ -210,5 +207,5 @@ func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
 }
 
 func ServerCronEvict(loop *AeLoop, id int, extra interface{}) {
-	db.strs.EvictExpired()
+	// db.strs.EvictExpired()
 }
