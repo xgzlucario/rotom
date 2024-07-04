@@ -9,7 +9,7 @@ require (
 	github.com/sakeven/RbTree v1.1.1
 	github.com/stretchr/testify v1.9.0
 	github.com/tidwall/mmap v0.3.0
-	golang.org/x/sys v0.21.0
+	golang.org/x/sys v0.22.0
 )
 
 require (

@@ -172,6 +172,7 @@ retry:
 	}
 
 	// collect file events
+	fes = make([]*AeFileEvent, 0, n)
 	for _, ev := range events[:n] {
 		if ev.Events&unix.EPOLLIN != 0 {
 			fe := loop.FileEvents[int(ev.Fd)]
