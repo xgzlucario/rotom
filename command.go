@@ -13,7 +13,7 @@ type Command struct {
 	name string
 
 	// handler is this command real database handler function.
-	handler func(respWriter *RESPWriter, args []RESP)
+	handler func(writer *RESPWriter, args []RESP)
 
 	// arity represents the minimal number of arguments that command accepts.
 	arity int

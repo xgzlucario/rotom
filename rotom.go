@@ -196,7 +196,7 @@ func initServer(config *Config) (err error) {
 	return nil
 }
 
-func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
+func SyncAOF(loop *AeLoop, id int, extra interface{}) {
 	if db.aof == nil {
 		return
 	}
@@ -206,6 +206,6 @@ func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
 	}
 }
 
-func ServerCronEvict(loop *AeLoop, id int, extra interface{}) {
+func EvictExpired(loop *AeLoop, id int, extra interface{}) {
 	db.dict.EvictExpired()
 }

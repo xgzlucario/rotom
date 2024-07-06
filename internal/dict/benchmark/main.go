@@ -69,19 +69,6 @@ func main() {
 			m.Put(k, v)
 			q.Add(float64(time.Since(start)))
 		}
-
-	case "swiss-shard":
-		const shardCount = 1024
-		m := make([]*swiss.Map[string, any], shardCount)
-		for i := range m {
-			m[i] = swiss.New[string, any](8)
-		}
-		for i := 0; i < entries; i++ {
-			k, v := genKV(i)
-			start := time.Now()
-			m[i%shardCount].Put(k, v)
-			q.Add(float64(time.Since(start)))
-		}
 	}
 	cost := time.Since(start)
 
