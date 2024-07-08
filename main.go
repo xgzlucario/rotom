@@ -10,15 +10,22 @@ import (
 	"github.com/rs/zerolog"
 )
 
-var log = zerolog.
-	New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime}).
-	Level(zerolog.TraceLevel).
-	With().
-	Timestamp().
-	Logger()
+var (
+	log       = initLogger()
+	buildTime string
+)
 
 func runDebug() {
 	go http.ListenAndServe(":6060", nil)
+}
+
+func initLogger() zerolog.Logger {
+	return zerolog.
+		New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime}).
+		Level(zerolog.TraceLevel).
+		With().
+		Timestamp().
+		Logger()
 }
 
 func main() {
@@ -29,7 +36,8 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "run with debug mode.")
 	flag.Parse()
 
-	log.Debug().Str("config", path).Bool("debug", debug).Msg("read cmd arguments")
+	log.Info().Str("buildTime", buildTime).Msg("current version")
+	log.Info().Str("config", path).Bool("debug", debug).Msg("read cmd arguments")
 
 	config, err := LoadConfig(path)
 	if err != nil {
@@ -45,8 +53,8 @@ func main() {
 		runDebug()
 	}
 
-	log.Debug().Int("port", config.Port).Msg("running on")
-	log.Debug().Msg("rotom server is ready to accept.")
+	log.Info().Int("port", config.Port).Msg("running on")
+	log.Info().Msg("rotom server is ready to accept.")
 
 	// register main aeLoop event
 	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)

@@ -16,10 +16,14 @@ pprof:
 heap:
 	go tool pprof http://192.168.1.6:6060/debug/pprof/heap
 
-build-docker:
-	docker build -t rotom .
-
 bench:
 	go test -bench . -benchmem
 
+build:
+	go build -o rotom -ldflags "-s -w -X main.buildTime=$(shell date +%y%m%d_%H%M%S%z)"
+
+build-docker:
+	docker build --build-arg BUILD_TIME=$(shell date +%y%m%d_%H%M%S%z) -t rotom .
+
+# tmp command
 # rsync -av --exclude='.git' rotom/ 2:~/xgz/rotom

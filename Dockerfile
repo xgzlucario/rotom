@@ -6,11 +6,13 @@ LABEL stage=gobuilder \
 ENV CGO_ENABLED 0
 ENV GOPROXY https://goproxy.cn,direct
 
+ARG BUILD_TIME
+
 WORKDIR /build
 
 COPY . .
 
-RUN go build -ldflags="-s -w" -o rotom .
+RUN go build -ldflags="-s -w -X main.buildTime=${BUILD_TIME}" -o rotom .
 
 FROM alpine:latest
 
