@@ -1,9 +1,5 @@
 package list
 
-import (
-	"math"
-)
-
 //	 +------------------------------ QuickList -----------------------------+
 //	 |	     +-----------+     +-----------+             +-----------+      |
 //	head --- | listpack0 | <-> | listpack1 | <-> ... <-> | listpackN | --- tail
@@ -42,7 +38,7 @@ func (ls *QuickList) LPush(key string) {
 		ls.head.prev = n
 		ls.head = n
 	}
-	ls.head.Insert(0, key)
+	// ls.head.Insert(0, key)
 }
 
 // RPush
@@ -53,7 +49,7 @@ func (ls *QuickList) RPush(key string) {
 		n.prev = ls.tail
 		ls.tail = n
 	}
-	ls.tail.Insert(-1, key)
+	// ls.tail.Insert(-1, key)
 }
 
 // Index
@@ -74,7 +70,7 @@ func (ls *QuickList) LPop() (string, bool) {
 func (ls *QuickList) RPop() (key string, ok bool) {
 	for lp := ls.tail; lp != nil; lp = lp.prev {
 		if lp.size > 0 {
-			return lp.Remove(-1)
+			// return lp.Remove(-1)
 		}
 		ls.free(lp)
 	}
@@ -102,38 +98,38 @@ func (ls *QuickList) find(index int) (*Node, int) {
 
 // Set
 func (ls *QuickList) Set(index int, key string) bool {
-	lp, indexInternal := ls.find(index)
-	if lp != nil {
-		return lp.Set(indexInternal, key)
-	}
+	// lp, indexInternal := ls.find(index)
+	// if lp != nil {
+	// 	return lp.Set(indexInternal, key)
+	// }
 	return false
 }
 
 // Remove
 func (ls *QuickList) Remove(index int) (val string, ok bool) {
-	lp, indexInternal := ls.find(index)
-	if lp != nil {
-		val, ok = lp.Remove(indexInternal)
-		ls.free(lp)
-	}
+	// lp, indexInternal := ls.find(index)
+	// if lp != nil {
+	// 	val, ok = lp.Remove(indexInternal)
+	// 	ls.free(lp)
+	// }
 	return
 }
 
 // RemoveFirst
 func (ls *QuickList) RemoveFirst(key string) (res int, ok bool) {
-	for lp := ls.head; lp != nil; lp = lp.next {
-		if lp.size == 0 {
-			ls.free(lp)
+	// for lp := ls.head; lp != nil; lp = lp.next {
+	// 	if lp.size == 0 {
+	// 		ls.free(lp)
 
-		} else {
-			n, ok := lp.RemoveFirst(key)
-			if ok {
-				return res + n, true
-			} else {
-				res += lp.Size()
-			}
-		}
-	}
+	// 	} else {
+	// 		n, ok := lp.RemoveFirst(key)
+	// 		if ok {
+	// 			return res + n, true
+	// 		} else {
+	// 			res += lp.Size()
+	// 		}
+	// 	}
+	// }
 	return 0, false
 }
 
@@ -148,56 +144,56 @@ func (ls *QuickList) Size() (n int) {
 type lsIterator func(data []byte) (stop bool)
 
 func (ls *QuickList) iterFront(start, end int, f lsIterator) {
-	count := end - start
-	if end == -1 {
-		count = math.MaxInt
-	}
-	if start < 0 || count < 0 {
-		return
-	}
+	// count := end - start
+	// if end == -1 {
+	// 	count = math.MaxInt
+	// }
+	// if start < 0 || count < 0 {
+	// 	return
+	// }
 
-	lp, indexInternal := ls.find(start)
+	// lp, indexInternal := ls.find(start)
 
-	var stop bool
-	for !stop && count > 0 && lp != nil {
-		lp.Range(indexInternal, -1, func(data []byte, _ int) bool {
-			stop = f(data)
-			count--
-			return stop || count == 0
-		})
-		lp = lp.next
-		indexInternal = 0
-	}
+	// var stop bool
+	// for !stop && count > 0 && lp != nil {
+	// 	lp.Range(indexInternal, -1, func(data []byte, _ int) bool {
+	// 		stop = f(data)
+	// 		count--
+	// 		return stop || count == 0
+	// 	})
+	// 	lp = lp.next
+	// 	indexInternal = 0
+	// }
 }
 
 func (ls *QuickList) iterBack(start, end int, f lsIterator) {
-	count := end - start
-	if end == -1 {
-		count = math.MaxInt
-	}
-	if start < 0 || count < 0 {
-		return
-	}
+	// count := end - start
+	// if end == -1 {
+	// 	count = math.MaxInt
+	// }
+	// if start < 0 || count < 0 {
+	// 	return
+	// }
 
-	lp := ls.tail
-	for start > lp.Size() {
-		start -= lp.Size()
-		lp = lp.prev
-		if lp == nil {
-			return
-		}
-	}
+	// lp := ls.tail
+	// for start > lp.Size() {
+	// 	start -= lp.Size()
+	// 	lp = lp.prev
+	// 	if lp == nil {
+	// 		return
+	// 	}
+	// }
 
-	var stop bool
-	for !stop && count > 0 && lp != nil {
-		lp.RevRange(start, -1, func(data []byte, _ int) bool {
-			stop = f(data)
-			count--
-			return stop || count == 0
-		})
-		lp = lp.prev
-		start = 0
-	}
+	// var stop bool
+	// for !stop && count > 0 && lp != nil {
+	// 	lp.RevRange(start, -1, func(data []byte, _ int) bool {
+	// 		stop = f(data)
+	// 		count--
+	// 		return stop || count == 0
+	// 	})
+	// 	lp = lp.prev
+	// 	start = 0
+	// }
 }
 
 // Range
