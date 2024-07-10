@@ -266,13 +266,15 @@ func TestIterator(t *testing.T) {
 	data = it.Next()
 	assert.Equal(string(data), "004")
 
-	removed := it.Remove()
+	removed := it.RemoveNext()
 	assert.Equal(string(removed), "002")
+
+	removed = it.RemovePrev()
+	assert.Equal(string(removed), "004")
 
 	it.SeekEnd()
 
 	assert.Equal(string(it.Prev()), "003")
-	assert.Equal(string(it.Prev()), "004")
 	assert.Equal(string(it.Prev()), "001")
 }
 

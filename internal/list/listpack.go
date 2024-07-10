@@ -106,16 +106,26 @@ func (it *lpIterator) Insert(data string) {
 	bpool.Put(alloc)
 }
 
-func (it *lpIterator) Remove() []byte {
+func (it *lpIterator) RemoveNext() []byte {
 	before := it.index
 	data := slices.Clone(it.Next())
 	after := it.index
 	it.data = slices.Delete(it.data, before, after)
+	it.index -= (after - before)
 	it.size--
 	return data
 }
 
-// encode data to [data_len, data, entry_len].
+func (it *lpIterator) RemovePrev() []byte {
+	after := it.index
+	data := slices.Clone(it.Prev())
+	before := it.index
+	it.data = slices.Delete(it.data, before, after)
+	it.index -= (after - before)
+	it.size--
+	return data
+}
+
 func appendEntry(dst []byte, data string) []byte {
 	if dst == nil {
 		dst = bpool.Get(maxListPackSize)[:0]
