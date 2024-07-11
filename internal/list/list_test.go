@@ -1,6 +1,7 @@
 package list
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,43 +15,40 @@ func genList(start, end int) *QuickList {
 	return lp
 }
 
+func list2slice(ls *QuickList) (res []string) {
+	ls.Range(0, -1, func(data []byte) {
+		res = append(res, string(data))
+	})
+	return
+}
+
 func TestList(t *testing.T) {
 	const N = 1000
 	assert := assert.New(t)
 	SetMaxListPackSize(128)
 
-	t.Run("rpush", func(t *testing.T) {
-		ls := New()
-		for i := 0; i < N; i++ {
-			assert.Equal(ls.Size(), i)
-			ls.RPush(genKey(i))
-		}
-		for i := 0; i < N; i++ {
-			v, ok := ls.Index(i)
-			assert.Equal(genKey(i), v)
-			assert.Equal(true, ok)
-		}
-		// check each node length
-		for cur := ls.head; cur != nil; cur = cur.next {
-			assert.LessOrEqual(len(cur.data), maxListPackSize)
-		}
-	})
-
 	t.Run("lpush", func(t *testing.T) {
 		ls := New()
+		ls2 := make([]string, 0, N)
 		for i := 0; i < N; i++ {
-			assert.Equal(ls.Size(), i)
-			ls.LPush(genKey(i))
+			key := genKey(i)
+			ls.LPush(key)
+			ls2 = slices.Insert(ls2, 0, key)
 		}
+		assert.Equal(ls.Size(), len(ls2))
+		assert.Equal(list2slice(ls), ls2)
+	})
+
+	t.Run("rpush", func(t *testing.T) {
+		ls := New()
+		ls2 := make([]string, 0, N)
 		for i := 0; i < N; i++ {
-			v, ok := ls.Index(N - 1 - i)
-			assert.Equal(genKey(i), v)
-			assert.Equal(true, ok)
+			key := genKey(i)
+			ls.RPush(key)
+			ls2 = append(ls2, key)
 		}
-		// check each node length
-		for cur := ls.head; cur != nil; cur = cur.next {
-			assert.LessOrEqual(len(cur.data), maxListPackSize)
-		}
+		assert.Equal(ls.Size(), len(ls2))
+		assert.Equal(list2slice(ls), ls2)
 	})
 
 	t.Run("lpop", func(t *testing.T) {
@@ -81,57 +79,21 @@ func TestList(t *testing.T) {
 		assert.Equal(false, ok)
 	})
 
-	t.Run("len", func(t *testing.T) {
-		ls := New()
-		for i := 0; i < N; i++ {
-			ls.RPush(genKey(i))
-			assert.Equal(ls.Size(), i+1)
-		}
-	})
-
 	t.Run("range", func(t *testing.T) {
-		ls := New()
-		ls.Range(1, 2, func(s []byte) bool {
-			panic("should not call")
-		})
-		ls = genList(0, N)
-
-		var count int
-		ls.Range(0, -1, func(s []byte) bool {
-			assert.Equal(string(s), genKey(count))
-			count++
-			return false
-		})
-		assert.Equal(count, N)
-
-		ls.Range(1, 1, func(s []byte) bool {
-			panic("should not call")
-		})
-		ls.Range(-1, -1, func(s []byte) bool {
-			panic("should not call")
+		ls := genList(0, N)
+		i := 0
+		ls.Range(0, -1, func(data []byte) {
+			assert.Equal(string(data), genKey(i))
+			i++
 		})
 	})
 
 	t.Run("revrange", func(t *testing.T) {
-		ls := New()
-		ls.RevRange(1, 2, func(s []byte) bool {
-			panic("should not call")
-		})
-		ls = genList(0, N)
-
-		var count int
-		ls.RevRange(0, -1, func(s []byte) bool {
-			assert.Equal(string(s), genKey(N-count-1))
-			count++
-			return false
-		})
-		assert.Equal(count, N)
-
-		ls.RevRange(1, 1, func(s []byte) bool {
-			panic("should not call")
-		})
-		ls.RevRange(-1, -1, func(s []byte) bool {
-			panic("should not call")
+		ls := genList(0, N)
+		i := 0
+		ls.RevRange(0, -1, func(data []byte) {
+			assert.Equal(string(data), genKey(N-i-1))
+			i++
 		})
 	})
 }

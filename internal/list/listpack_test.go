@@ -27,28 +27,66 @@ func lp2list(lp *ListPack) (res []string) {
 	return
 }
 
-func TestIterator(t *testing.T) {
+func TestListpack(t *testing.T) {
 	assert := assert.New(t)
-	lp := NewListPack()
-	it := lp.NewIterator()
 
-	lp.RPush("001", "002", "003")
-	assert.Equal(lp2list(lp), []string{"001", "002", "003"})
+	t.Run("rpush", func(t *testing.T) {
+		lp := NewListPack()
+		lp.RPush("A")
+		lp.RPush("B", "C")
+		assert.Equal(lp.Size(), 3)
+		assert.Equal(lp2list(lp), []string{"A", "B", "C"})
+	})
 
-	// lpush
-	lp.LPush("004")
-	assert.Equal(lp2list(lp), []string{"004", "001", "002", "003"})
+	t.Run("rpush", func(t *testing.T) {
+		lp := NewListPack()
+		lp.LPush("A")
+		lp.LPush("B", "C")
+		assert.Equal(lp.Size(), 3)
+		assert.Equal(lp2list(lp), []string{"B", "C", "A"})
+	})
 
-	// next
-	data := it.Next()
-	assert.Equal(string(data), "004")
+	t.Run("lpop", func(t *testing.T) {
+		lp := NewListPack()
+		lp.LPush("A", "B", "C")
 
-	// remove
-	removed := it.RemoveNext()
-	assert.Equal(string(removed), "001")
-	assert.Equal(lp2list(lp), []string{"004", "002", "003"})
+		val, ok := lp.LPop()
+		assert.Equal(val, "A")
+		assert.True(ok)
 
-	removed = it.RemovePrev()
-	assert.Equal(string(removed), "004")
-	assert.Equal(lp2list(lp), []string{"002", "003"})
+		val, ok = lp.LPop()
+		assert.Equal(val, "B")
+		assert.True(ok)
+
+		val, ok = lp.LPop()
+		assert.Equal(val, "C")
+		assert.True(ok)
+
+		// empty
+		val, ok = lp.LPop()
+		assert.Equal(val, "")
+		assert.False(ok)
+	})
+
+	t.Run("rpop", func(t *testing.T) {
+		lp := NewListPack()
+		lp.LPush("A", "B", "C")
+
+		val, ok := lp.RPop()
+		assert.Equal(val, "C")
+		assert.True(ok)
+
+		val, ok = lp.RPop()
+		assert.Equal(val, "B")
+		assert.True(ok)
+
+		val, ok = lp.RPop()
+		assert.Equal(val, "A")
+		assert.True(ok)
+
+		// empty
+		val, ok = lp.RPop()
+		assert.Equal(val, "")
+		assert.False(ok)
+	})
 }

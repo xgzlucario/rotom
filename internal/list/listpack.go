@@ -35,7 +35,7 @@ type ListPack struct {
 }
 
 func NewListPack() *ListPack {
-	return &ListPack{data: make([]byte, 0, 32)}
+	return &ListPack{data: bpool.Get(32)[:0]}
 }
 
 func (lp *ListPack) Size() int {
@@ -51,17 +51,11 @@ func (lp *ListPack) RPush(data ...string) {
 }
 
 func (lp *ListPack) LPop() (string, bool) {
-	if lp.size == 0 {
-		return "", false
-	}
-	return lp.NewIterator().RemoveNext(), true
+	return lp.NewIterator().RemoveNext()
 }
 
 func (lp *ListPack) RPop() (string, bool) {
-	if lp.size == 0 {
-		return "", false
-	}
-	return lp.NewIterator().SeekEnd().RemovePrev(), true
+	return lp.NewIterator().SeekEnd().RemovePrev()
 }
 
 type lpIterator struct {
@@ -141,23 +135,29 @@ func (it *lpIterator) Insert(datas ...string) {
 	bpool.Put(alloc)
 }
 
-func (it *lpIterator) RemoveNext() string {
+func (it *lpIterator) RemoveNext() (string, bool) {
+	if it.IsEnd() {
+		return "", false
+	}
 	before := it.index
-	data := string(it.Next())
+	data := string(it.Next()) // seek to next
 	after := it.index
 	it.data = slices.Delete(it.data, before, after)
-	it.index = before
+	it.index = before // back to prev
 	it.size--
-	return data
+	return data, true
 }
 
-func (it *lpIterator) RemovePrev() string {
+func (it *lpIterator) RemovePrev() (string, bool) {
+	if it.IsBegin() {
+		return "", false
+	}
 	before := it.index
-	data := string(it.Prev())
+	data := string(it.Prev()) // seek to prev
 	after := it.index
 	it.data = slices.Delete(it.data, after, before)
 	it.size--
-	return data
+	return data, true
 }
 
 func appendEntry(dst []byte, data string) []byte {

@@ -318,9 +318,8 @@ func lrangeCommand(writer *RESPWriter, args []RESP) {
 	}
 
 	writer.WriteArrayHead(size)
-	ls.Range(start, end, func(data []byte) (stop bool) {
+	ls.Range(start, end, func(data []byte) {
 		writer.WriteBulk(data)
-		return false
 	})
 }
 

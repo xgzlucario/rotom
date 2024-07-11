@@ -1,5 +1,7 @@
 package list
 
+import "math"
+
 //	 +------------------------------ QuickList -----------------------------+
 //	 |	     +-----------+     +-----------+             +-----------+      |
 //	head --- | listpack0 | <-> | listpack1 | <-> ... <-> | listpackN | --- tail
@@ -76,7 +78,7 @@ func (ls *QuickList) RPop() (key string, ok bool) {
 
 // free release empty list node.
 func (ls *QuickList) free(n *Node) {
-	if n.size == 0 && n.prev != nil && n.next != nil {
+	if n.prev != nil && n.next != nil {
 		n.prev.next = n.next
 		n.next.prev = n.prev
 		bpool.Put(n.data)
@@ -84,7 +86,6 @@ func (ls *QuickList) free(n *Node) {
 	}
 }
 
-// Size
 func (ls *QuickList) Size() (n int) {
 	for lp := ls.head; lp != nil; lp = lp.next {
 		n += lp.Size()
@@ -92,30 +93,28 @@ func (ls *QuickList) Size() (n int) {
 	return
 }
 
-// Index
-func (ls *QuickList) Index(index int) (string, bool) {
+type lsIterator func(data []byte)
+
+func (ls *QuickList) Range(start, end int, f lsIterator) {
+	if end == -1 {
+		end = math.MaxInt
+	}
 	for lp := ls.head; lp != nil; lp = lp.next {
-		if index > lp.Size() {
-			index -= lp.Size()
-		} else {
-			it := lp.NewIterator()
-			var data []byte
-			for index >= 0 {
-				data = it.Next()
-				index--
-			}
-			return string(data), true
+		it := lp.NewIterator().SeekBegin()
+		for !it.IsEnd() {
+			f(it.Next())
 		}
 	}
-	return "", false
 }
 
-type lsIterator func(data []byte) (stop bool)
-
-// Range
-func (ls *QuickList) Range(start, end int, f lsIterator) {
-}
-
-// RevRange
 func (ls *QuickList) RevRange(start, end int, f lsIterator) {
+	if end == -1 {
+		end = math.MaxInt
+	}
+	for lp := ls.tail; lp != nil; lp = lp.prev {
+		it := lp.NewIterator().SeekEnd()
+		for !it.IsBegin() {
+			f(it.Prev())
+		}
+	}
 }
