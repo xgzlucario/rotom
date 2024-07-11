@@ -42,6 +42,28 @@ func (lp *ListPack) Size() int {
 	return int(lp.size)
 }
 
+func (lp *ListPack) LPush(data ...string) {
+	lp.NewIterator().Insert(data...)
+}
+
+func (lp *ListPack) RPush(data ...string) {
+	lp.NewIterator().SeekEnd().Insert(data...)
+}
+
+func (lp *ListPack) LPop() (string, bool) {
+	if lp.size == 0 {
+		return "", false
+	}
+	return lp.NewIterator().RemoveNext(), true
+}
+
+func (lp *ListPack) RPop() (string, bool) {
+	if lp.size == 0 {
+		return "", false
+	}
+	return lp.NewIterator().SeekEnd().RemovePrev(), true
+}
+
 type lpIterator struct {
 	*ListPack
 	index int
@@ -51,9 +73,19 @@ func (lp *ListPack) NewIterator() *lpIterator {
 	return &lpIterator{ListPack: lp}
 }
 
-func (it *lpIterator) SeekBegin() { it.index = 0 }
+func (it *lpIterator) SeekBegin() *lpIterator {
+	it.index = 0
+	return it
+}
 
-func (it *lpIterator) SeekEnd() { it.index = len(it.data) }
+func (it *lpIterator) SeekEnd() *lpIterator {
+	it.index = len(it.data)
+	return it
+}
+
+func (it *lpIterator) IsBegin() bool { return it.index == 0 }
+
+func (it *lpIterator) IsEnd() bool { return it.index == len(it.data) }
 
 func (it *lpIterator) Next() []byte {
 	//
@@ -65,7 +97,7 @@ func (it *lpIterator) Next() []byte {
 	//      |<--- n ---->|<- data_len ->|<-- size_entry_len ->|
 	//
 	dataLen, n := binary.Uvarint(it.data[it.index:])
-	indexNext := it.index + n + int(dataLen) + +SizeUvarint(dataLen+uint64(n))
+	indexNext := it.index + n + int(dataLen) + SizeUvarint(dataLen+uint64(n))
 
 	dataStartPos := it.index + n
 	dataEndPos := dataStartPos + int(dataLen)
@@ -99,29 +131,31 @@ func (it *lpIterator) Prev() []byte {
 	return data
 }
 
-func (it *lpIterator) Insert(data string) {
-	alloc := appendEntry(nil, data)
+func (it *lpIterator) Insert(datas ...string) {
+	var alloc []byte
+	for _, data := range datas {
+		alloc = appendEntry(alloc, data)
+		it.size++
+	}
 	it.data = slices.Insert(it.data, it.index, alloc...)
-	it.size++
 	bpool.Put(alloc)
 }
 
-func (it *lpIterator) RemoveNext() []byte {
+func (it *lpIterator) RemoveNext() string {
 	before := it.index
-	data := slices.Clone(it.Next())
+	data := string(it.Next())
 	after := it.index
 	it.data = slices.Delete(it.data, before, after)
-	it.index -= (after - before)
+	it.index = before
 	it.size--
 	return data
 }
 
-func (it *lpIterator) RemovePrev() []byte {
-	after := it.index
-	data := slices.Clone(it.Prev())
+func (it *lpIterator) RemovePrev() string {
 	before := it.index
-	it.data = slices.Delete(it.data, before, after)
-	it.index -= (after - before)
+	data := string(it.Prev())
+	after := it.index
+	it.data = slices.Delete(it.data, after, before)
 	it.size--
 	return data
 }

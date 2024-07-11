@@ -25,21 +25,15 @@ func BenchmarkListPack(b *testing.B) {
 		}
 	})
 	b.Run("lpush", func(b *testing.B) {
-		ls := NewListPack()
-		it := ls.NewIterator()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			it.SeekBegin()
-			it.Insert(genKey(i))
+		lp := NewListPack()
+		for i := 0; i < 99999; i++ {
+			lp.LPush("A")
 		}
 	})
 	b.Run("rpush", func(b *testing.B) {
-		ls := NewListPack()
-		it := ls.NewIterator()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			it.SeekEnd()
-			it.Insert(genKey(i))
+		lp := NewListPack()
+		for i := 0; i < 99999; i++ {
+			lp.RPush("A")
 		}
 	})
 }
