@@ -60,7 +60,12 @@ func (lp *ListPack) LPop() (string, bool) {
 }
 
 func (lp *ListPack) RPop() (string, bool) {
-	return lp.Iterator().SeekEnd().RemovePrev()
+	if lp.size == 0 {
+		return "", false
+	}
+	it := lp.Iterator().SeekEnd()
+	it.Prev()
+	return it.RemoveNext()
 }
 
 func (lp *ListPack) Compress() {
@@ -162,26 +167,13 @@ func (it *lpIterator) Insert(datas ...string) {
 }
 
 func (it *lpIterator) RemoveNext() (string, bool) {
-	if it.IsEnd() {
+	if it.size == 0 {
 		return "", false
 	}
 	before := it.index
 	data := string(it.Next())
 	after := it.index
 	it.data = slices.Delete(it.data, before, after)
-	it.index = min(before, after)
-	it.size--
-	return data, true
-}
-
-func (it *lpIterator) RemovePrev() (string, bool) {
-	if it.IsBegin() {
-		return "", false
-	}
-	before := it.index
-	data := string(it.Prev())
-	after := it.index
-	it.data = slices.Delete(it.data, after, before)
 	it.size--
 	return data, true
 }
