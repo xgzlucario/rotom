@@ -17,36 +17,32 @@ func BenchmarkList(b *testing.B) {
 			ls.RPush(genKey(i))
 		}
 	})
-}
-
-func BenchmarkListPack(b *testing.B) {
-	const N = 1000
-	b.Run("next", func(b *testing.B) {
-		ls := genListPack(0, N)
-		it := ls.NewIterator()
+	b.Run("lpop", func(b *testing.B) {
+		ls := genList(0, b.N)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			it.SeekBegin().Next()
+			ls.LPop()
 		}
 	})
-	b.Run("prev", func(b *testing.B) {
-		ls := genListPack(0, N)
-		it := ls.NewIterator()
+	b.Run("rpop", func(b *testing.B) {
+		ls := genList(0, b.N)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			it.SeekEnd().Prev()
+			ls.RPop()
 		}
 	})
-	b.Run("lpush", func(b *testing.B) {
-		lp := NewListPack()
-		for i := 0; i < 10*10000; i++ {
-			lp.LPush("A")
+	b.Run("range", func(b *testing.B) {
+		ls := genList(0, 1000)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ls.Range(0, -1, func([]byte) {})
 		}
 	})
-	b.Run("rpush", func(b *testing.B) {
-		lp := NewListPack()
-		for i := 0; i < 10*10000; i++ {
-			lp.RPush("A")
+	b.Run("revrange", func(b *testing.B) {
+		ls := genList(0, 1000)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ls.RevRange(0, -1, func([]byte) {})
 		}
 	})
 }

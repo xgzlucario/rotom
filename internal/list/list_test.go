@@ -86,6 +86,7 @@ func TestList(t *testing.T) {
 			assert.Equal(string(data), genKey(i))
 			i++
 		})
+		assert.Equal(i, N)
 	})
 
 	t.Run("revrange", func(t *testing.T) {
@@ -95,5 +96,6 @@ func TestList(t *testing.T) {
 			assert.Equal(string(data), genKey(N-i-1))
 			i++
 		})
+		assert.Equal(i, N)
 	})
 }

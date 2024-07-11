@@ -93,26 +93,24 @@ func (ls *QuickList) Size() (n int) {
 	return
 }
 
-type lsIterator func(data []byte)
-
-func (ls *QuickList) Range(start, end int, f lsIterator) {
+func (ls *QuickList) Range(start, end int, f func(data []byte)) {
 	if end == -1 {
 		end = math.MaxInt
 	}
 	for lp := ls.head; lp != nil; lp = lp.next {
-		it := lp.NewIterator().SeekBegin()
+		it := lp.Iterator().SeekBegin()
 		for !it.IsEnd() {
 			f(it.Next())
 		}
 	}
 }
 
-func (ls *QuickList) RevRange(start, end int, f lsIterator) {
+func (ls *QuickList) RevRange(start, end int, f func(data []byte)) {
 	if end == -1 {
 		end = math.MaxInt
 	}
 	for lp := ls.tail; lp != nil; lp = lp.prev {
-		it := lp.NewIterator().SeekEnd()
+		it := lp.Iterator().SeekEnd()
 		for !it.IsBegin() {
 			f(it.Prev())
 		}

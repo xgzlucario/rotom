@@ -7,20 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func genListPack(start, end int) *ListPack {
-	lp := NewListPack()
-	for i := start; i < end; i++ {
-		lp.RPush(genKey(i))
-	}
-	return lp
-}
-
 func genKey(i int) string {
 	return fmt.Sprintf("%06x", i)
 }
 
 func lp2list(lp *ListPack) (res []string) {
-	it := lp.NewIterator()
+	it := lp.Iterator()
 	for !it.IsEnd() {
 		res = append(res, string(it.Next()))
 	}
@@ -88,5 +80,13 @@ func TestListpack(t *testing.T) {
 		val, ok = lp.RPop()
 		assert.Equal(val, "")
 		assert.False(ok)
+	})
+
+	t.Run("compress", func(t *testing.T) {
+		lp := NewListPack()
+		lp.LPush("A", "B", "C", "D", "E")
+		lp.Compress()
+		lp.Decompress()
+		assert.Equal(lp2list(lp), []string{"A", "B", "C", "D", "E"})
 	})
 }

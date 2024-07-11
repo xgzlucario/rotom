@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"slices"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/xgzlucario/rotom/internal/pkg"
 )
 
@@ -11,6 +12,9 @@ var (
 	maxListPackSize = 8 * 1024
 
 	bpool = pkg.NewBufferPool()
+
+	encoder, _ = zstd.NewWriter(nil)
+	decoder, _ = zstd.NewReader(nil)
 )
 
 // ListPack is a lists of strings serialization format on Redis.
@@ -30,8 +34,9 @@ var (
 	Using this structure, it is fast to iterate from both sides.
 */
 type ListPack struct {
-	size uint16
-	data []byte
+	compress bool
+	size     uint16
+	data     []byte
 }
 
 func NewListPack() *ListPack {
@@ -43,19 +48,33 @@ func (lp *ListPack) Size() int {
 }
 
 func (lp *ListPack) LPush(data ...string) {
-	lp.NewIterator().Insert(data...)
+	lp.Iterator().Insert(data...)
 }
 
 func (lp *ListPack) RPush(data ...string) {
-	lp.NewIterator().SeekEnd().Insert(data...)
+	lp.Iterator().SeekEnd().Insert(data...)
 }
 
 func (lp *ListPack) LPop() (string, bool) {
-	return lp.NewIterator().RemoveNext()
+	return lp.Iterator().RemoveNext()
 }
 
 func (lp *ListPack) RPop() (string, bool) {
-	return lp.NewIterator().SeekEnd().RemovePrev()
+	return lp.Iterator().SeekEnd().RemovePrev()
+}
+
+func (lp *ListPack) Compress() {
+	if !lp.compress {
+		lp.data = encoder.EncodeAll(lp.data, make([]byte, 0, len(lp.data)/4))
+		lp.compress = true
+	}
+}
+
+func (lp *ListPack) Decompress() {
+	if lp.compress {
+		lp.data, _ = decoder.DecodeAll(lp.data, nil)
+		lp.compress = false
+	}
 }
 
 type lpIterator struct {
@@ -63,7 +82,7 @@ type lpIterator struct {
 	index int
 }
 
-func (lp *ListPack) NewIterator() *lpIterator {
+func (lp *ListPack) Iterator() *lpIterator {
 	return &lpIterator{ListPack: lp}
 }
 
@@ -126,6 +145,13 @@ func (it *lpIterator) Prev() []byte {
 }
 
 func (it *lpIterator) Insert(datas ...string) {
+	if it.IsEnd() {
+		for _, data := range datas {
+			it.data = appendEntry(it.data, data)
+			it.size++
+		}
+		return
+	}
 	var alloc []byte
 	for _, data := range datas {
 		alloc = appendEntry(alloc, data)
@@ -140,10 +166,10 @@ func (it *lpIterator) RemoveNext() (string, bool) {
 		return "", false
 	}
 	before := it.index
-	data := string(it.Next()) // seek to next
+	data := string(it.Next())
 	after := it.index
 	it.data = slices.Delete(it.data, before, after)
-	it.index = before // back to prev
+	it.index = min(before, after)
 	it.size--
 	return data, true
 }
@@ -153,7 +179,7 @@ func (it *lpIterator) RemovePrev() (string, bool) {
 		return "", false
 	}
 	before := it.index
-	data := string(it.Prev()) // seek to prev
+	data := string(it.Prev())
 	after := it.index
 	it.data = slices.Delete(it.data, after, before)
 	it.size--
