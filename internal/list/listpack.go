@@ -35,7 +35,7 @@ var (
 */
 type ListPack struct {
 	compress bool
-	size     uint16
+	size     uint32
 	data     []byte
 }
 
@@ -70,14 +70,16 @@ func (lp *ListPack) RPop() (string, bool) {
 
 func (lp *ListPack) Compress() {
 	if !lp.compress {
-		lp.data = encoder.EncodeAll(lp.data, make([]byte, 0, len(lp.data)/4))
+		dst := encoder.EncodeAll(lp.data, bpool.Get(len(lp.data))[:0])
+		bpool.Put(lp.data)
+		lp.data = slices.Clip(dst)
 		lp.compress = true
 	}
 }
 
 func (lp *ListPack) Decompress() {
 	if lp.compress {
-		lp.data, _ = decoder.DecodeAll(lp.data, nil)
+		lp.data, _ = decoder.DecodeAll(lp.data, bpool.Get(maxListPackSize)[:0])
 		lp.compress = false
 	}
 }
@@ -157,7 +159,7 @@ func (it *lpIterator) Insert(datas ...string) {
 		}
 		return
 	}
-	var alloc []byte
+	alloc := bpool.Get(maxListPackSize)[:0]
 	for _, data := range datas {
 		alloc = appendEntry(alloc, data)
 		it.size++
@@ -179,9 +181,6 @@ func (it *lpIterator) RemoveNext() (string, bool) {
 }
 
 func appendEntry(dst []byte, data string) []byte {
-	if dst == nil {
-		dst = bpool.Get(maxListPackSize)[:0]
-	}
 	before := len(dst)
 	dst = appendUvarint(dst, len(data), false)
 	dst = append(dst, data...)
