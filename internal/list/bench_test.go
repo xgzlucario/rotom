@@ -31,18 +31,32 @@ func BenchmarkList(b *testing.B) {
 			ls.RPop()
 		}
 	})
-	b.Run("range", func(b *testing.B) {
+	b.Run("range_all", func(b *testing.B) {
 		ls := genList(0, 1000)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			ls.Range(0, -1, func([]byte) {})
 		}
 	})
-	b.Run("revrange", func(b *testing.B) {
+	b.Run("range_100", func(b *testing.B) {
+		ls := genList(0, 1000)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ls.Range(0, 100, func([]byte) {})
+		}
+	})
+	b.Run("revrange_all", func(b *testing.B) {
 		ls := genList(0, 1000)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			ls.RevRange(0, -1, func([]byte) {})
+		}
+	})
+	b.Run("revrange_100", func(b *testing.B) {
+		ls := genList(0, 1000)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ls.RevRange(0, 100, func([]byte) {})
 		}
 	})
 }

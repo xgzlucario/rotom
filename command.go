@@ -60,8 +60,8 @@ func equalCommand(str, lowerText string) bool {
 		return false
 	}
 	const s = 'a' - 'A'
-	for i, lo := range lowerText {
-		delta := lo - rune(str[i])
+	for i, lt := range lowerText {
+		delta := lt - rune(str[i])
 		if delta != 0 && delta != s {
 			return false
 		}

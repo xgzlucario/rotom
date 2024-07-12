@@ -8,11 +8,12 @@ import (
 	"github.com/xgzlucario/rotom/internal/pkg"
 )
 
-var (
+const (
 	maxListPackSize = 8 * 1024
+)
 
-	bpool = pkg.NewBufferPool()
-
+var (
+	bpool      = pkg.NewBufferPool()
 	encoder, _ = zstd.NewWriter(nil)
 	decoder, _ = zstd.NewReader(nil)
 )

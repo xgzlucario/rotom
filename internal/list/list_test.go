@@ -23,9 +23,8 @@ func list2slice(ls *QuickList) (res []string) {
 }
 
 func TestList(t *testing.T) {
-	const N = 1000
+	const N = 10000
 	assert := assert.New(t)
-	SetMaxListPackSize(128)
 
 	t.Run("lpush", func(t *testing.T) {
 		ls := New()
@@ -87,6 +86,15 @@ func TestList(t *testing.T) {
 			i++
 		})
 		assert.Equal(i, N)
+
+		for _, start := range []int{100, 1000, 5000} {
+			i = 0
+			ls.Range(start, start+100, func(data []byte) {
+				assert.Equal(string(data), genKey(start+i))
+				i++
+			})
+			assert.Equal(i, 100)
+		}
 	})
 
 	t.Run("revrange", func(t *testing.T) {
@@ -97,5 +105,14 @@ func TestList(t *testing.T) {
 			i++
 		})
 		assert.Equal(i, N)
+
+		for _, start := range []int{100, 1000, 5000} {
+			i = 0
+			ls.RevRange(start, start+100, func(data []byte) {
+				assert.Equal(string(data), genKey(N-start-i-1))
+				i++
+			})
+			assert.Equal(i, 100)
+		}
 	})
 }

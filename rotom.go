@@ -155,7 +155,7 @@ func ProcessQueryBuf(client *Client) {
 		} else {
 			err := ErrUnknownCommand(command)
 			client.replyWriter.WriteError(err)
-			log.Warn().Msgf("ERR %v", err)
+			log.Error().Msg(err.Error())
 		}
 	}
 
@@ -197,12 +197,8 @@ func initServer(config *Config) (err error) {
 }
 
 func SyncAOF(loop *AeLoop, id int, extra interface{}) {
-	if db.aof == nil {
-		return
-	}
-	err := db.aof.Flush()
-	if err != nil {
-		log.Error().Msgf("flush aof buffer error: %v", err)
+	if err := db.aof.Flush(); err != nil {
+		log.Error().Msgf("sync aof error: %v", err)
 	}
 }
 

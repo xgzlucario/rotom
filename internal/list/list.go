@@ -18,10 +18,6 @@ type Node struct {
 	prev, next *Node
 }
 
-func SetMaxListPackSize(s int) {
-	maxListPackSize = s
-}
-
 // New create a quicklist instance.
 func New() *QuickList {
 	n := newNode()
@@ -97,11 +93,28 @@ func (ls *QuickList) Range(start, end int, f func(data []byte)) {
 	if end == -1 {
 		end = math.MaxInt
 	}
-	for lp := ls.head; lp != nil; lp = lp.next {
-		it := lp.Iterator().SeekBegin()
-		for !it.IsEnd() {
-			f(it.Next())
+	count := end - start
+
+	lp := ls.head
+	for lp != nil && start > lp.Size() {
+		start -= lp.Size()
+		lp = lp.next
+	}
+
+	it := lp.Iterator().SeekBegin()
+	for range start {
+		it.Next()
+	}
+
+	for range count {
+		if it.IsEnd() {
+			if lp.next == nil {
+				return
+			}
+			lp = lp.next
+			it = lp.Iterator().SeekBegin()
 		}
+		f(it.Next())
 	}
 }
 
@@ -109,10 +122,27 @@ func (ls *QuickList) RevRange(start, end int, f func(data []byte)) {
 	if end == -1 {
 		end = math.MaxInt
 	}
-	for lp := ls.tail; lp != nil; lp = lp.prev {
-		it := lp.Iterator().SeekEnd()
-		for !it.IsBegin() {
-			f(it.Prev())
+	count := end - start
+
+	lp := ls.tail
+	for lp != nil && start > lp.Size() {
+		start -= lp.Size()
+		lp = lp.prev
+	}
+
+	it := lp.Iterator().SeekEnd()
+	for range start {
+		it.Prev()
+	}
+
+	for range count {
+		if it.IsBegin() {
+			if lp.prev == nil {
+				return
+			}
+			lp = lp.prev
+			it = lp.Iterator().SeekEnd()
 		}
+		f(it.Prev())
 	}
 }
