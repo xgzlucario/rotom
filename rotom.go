@@ -3,7 +3,6 @@ package main
 import (
 	"io"
 
-	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
@@ -17,16 +16,15 @@ const (
 )
 
 type (
-	Map  = *hash.Map
-	Set  = *hash.Set
+	Map  = hash.MapI
+	Set  = hash.SetI
 	List = *list.QuickList
 	ZSet = *zset.ZSet
 )
 
 type DB struct {
-	strs   *dict.Dict
-	extras *swiss.Map[string, any]
-	aof    *Aof
+	dict *dict.Dict
+	aof  *Aof
 }
 
 type Client struct {
@@ -51,8 +49,7 @@ var (
 
 // InitDB initializes database and redo appendonly files if nedded.
 func InitDB(config *Config) (err error) {
-	db.strs = dict.New(dict.DefaultOptions)
-	db.extras = swiss.New[string, any](64)
+	db.dict = dict.New()
 
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)
@@ -158,7 +155,7 @@ func ProcessQueryBuf(client *Client) {
 		} else {
 			err := ErrUnknownCommand(command)
 			client.replyWriter.WriteError(err)
-			log.Warn().Msgf("ERR %v", err)
+			log.Error().Msg(err.Error())
 		}
 	}
 
@@ -199,16 +196,12 @@ func initServer(config *Config) (err error) {
 	return nil
 }
 
-func ServerCronFlush(loop *AeLoop, id int, extra interface{}) {
-	if db.aof == nil {
-		return
-	}
-	err := db.aof.Flush()
-	if err != nil {
-		log.Error().Msgf("flush aof buffer error: %v", err)
+func SyncAOF(loop *AeLoop, id int, extra interface{}) {
+	if err := db.aof.Flush(); err != nil {
+		log.Error().Msgf("sync aof error: %v", err)
 	}
 }
 
-func ServerCronEvict(loop *AeLoop, id int, extra interface{}) {
-	db.strs.EvictExpired()
+func EvictExpired(loop *AeLoop, id int, extra interface{}) {
+	db.dict.EvictExpired()
 }

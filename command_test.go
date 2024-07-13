@@ -97,10 +97,8 @@ func TestCommand(t *testing.T) {
 		assert.Equal(resm, map[string]string{"k1": "v1", "k2": "v2", "k3": "v3", "k4": "v4", "k5": "v5"})
 
 		// hdel
-		{
-			res, _ := rdb.HDel(ctx, "map", "k1", "k2", "k3", "k99").Result()
-			assert.Equal(res, int64(3))
-		}
+		res, _ = rdb.HDel(ctx, "map", "k1", "k2", "k3", "k99").Result()
+		assert.Equal(res, int64(3))
 
 		// error
 		_, err := rdb.HSet(ctx, "map").Result()
@@ -123,6 +121,9 @@ func TestCommand(t *testing.T) {
 		res, _ := rdb.LRange(ctx, "list", 0, -1).Result()
 		assert.Equal(res, []string{"c", "b", "a", "d", "e", "f"})
 
+		res, _ = rdb.LRange(ctx, "list", 1, 3).Result()
+		assert.Equal(res, []string{"b", "a"})
+
 		// lpop
 		val, _ := rdb.LPop(ctx, "list").Result()
 		assert.Equal(val, "c")
@@ -136,6 +137,7 @@ func TestCommand(t *testing.T) {
 		n, _ := rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
 		assert.Equal(n, int64(3))
 
+		// spop
 		for i := 0; i < 3; i++ {
 			val, _ := rdb.SPop(ctx, "set").Result()
 			assert.NotEqual(val, "")
@@ -143,6 +145,11 @@ func TestCommand(t *testing.T) {
 
 		_, err := rdb.SPop(ctx, "set").Result()
 		assert.Equal(err, redis.Nil)
+
+		// srem
+		rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
+		res, _ := rdb.SRem(ctx, "set", "k1", "k2", "k999").Result()
+		assert.Equal(res, int64(2))
 	})
 
 	t.Run("zset", func(t *testing.T) {

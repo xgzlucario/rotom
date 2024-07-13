@@ -32,18 +32,19 @@ func main() {
 	c := ""
 	entries := 0
 	flag.StringVar(&c, "cache", "dict", "map to bench.")
-	flag.IntVar(&entries, "entries", 1000*10000, "number of entries to test.")
+	flag.IntVar(&entries, "entries", 2000*10000, "number of entries to test.")
 	flag.Parse()
 
 	fmt.Println(c)
 	fmt.Println("entries:", entries)
 
+	debug.SetGCPercent(10)
 	start := time.Now()
 	q := pkg.NewQuantile(entries)
 
 	switch c {
 	case "dict":
-		m := dict.New(dict.DefaultOptions)
+		m := dict.New()
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
 			start := time.Now()
@@ -52,7 +53,7 @@ func main() {
 		}
 
 	case "stdmap":
-		m := make(map[string][]byte, 8)
+		m := make(map[string]any, 8)
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
 			start := time.Now()
@@ -61,7 +62,7 @@ func main() {
 		}
 
 	case "swiss":
-		m := swiss.New[string, []byte](8)
+		m := swiss.New[string, any](8)
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
 			start := time.Now()

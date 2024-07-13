@@ -2,19 +2,24 @@ package hash
 
 import (
 	"github.com/cockroachdb/swiss"
-	"github.com/xgzlucario/rotom/internal/pkg"
 )
 
-var (
-	mapAllocator = pkg.NewAllocator[string, []byte]()
-)
+type MapI interface {
+	Set(key string, val []byte) (ok bool)
+	Get(key string) (val []byte, ok bool)
+	Remove(key string) (ok bool)
+	Len() int
+	Scan(iterator func(key string, val []byte))
+}
+
+var _ MapI = (*Map)(nil)
 
 type Map struct {
 	m *swiss.Map[string, []byte]
 }
 
 func NewMap() *Map {
-	return &Map{m: swiss.New(8, swiss.WithAllocator(mapAllocator))}
+	return &Map{m: swiss.New[string, []byte](8)}
 }
 
 func (m *Map) Get(key string) ([]byte, bool) {
@@ -42,8 +47,4 @@ func (m *Map) Scan(fn func(key string, value []byte)) {
 		fn(key, val)
 		return true
 	})
-}
-
-func (m *Map) Free() {
-	m.m.Close()
 }

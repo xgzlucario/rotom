@@ -1,12 +1,10 @@
 package list
 
 import (
-	"fmt"
 	"testing"
 )
 
 func BenchmarkList(b *testing.B) {
-	const N = 10000
 	b.Run("lpush", func(b *testing.B) {
 		ls := New()
 		for i := 0; i < b.N; i++ {
@@ -33,61 +31,68 @@ func BenchmarkList(b *testing.B) {
 			ls.RPop()
 		}
 	})
-	b.Run("index", func(b *testing.B) {
-		ls := genList(0, N)
+	b.Run("range_all", func(b *testing.B) {
+		ls := genList(0, 1000)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ls.Index(i % N)
+			ls.Range(0, -1, func([]byte) {})
 		}
 	})
-	b.Run("set", func(b *testing.B) {
-		ls := genList(0, N)
+	b.Run("range_100", func(b *testing.B) {
+		ls := genList(0, 1000)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ls.Set(i%N, genKey(N-i))
+			ls.Range(0, 100, func([]byte) {})
 		}
 	})
-	b.Run("range", func(b *testing.B) {
-		ls := genList(0, N)
+	b.Run("revrange_all", func(b *testing.B) {
+		ls := genList(0, 1000)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ls.Range(0, -1, func(s []byte) (stop bool) {
-				return false
-			})
+			ls.RevRange(0, -1, func([]byte) {})
 		}
 	})
-	b.Run("revrange", func(b *testing.B) {
-		ls := genList(0, N)
+	b.Run("revrange_100", func(b *testing.B) {
+		ls := genList(0, 1000)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ls.RevRange(0, -1, func(s []byte) (stop bool) {
-				return false
-			})
+			ls.RevRange(0, 100, func([]byte) {})
 		}
 	})
 }
 
 func BenchmarkListPack(b *testing.B) {
-	const N = 1000
-	b.Run("set/same-len", func(b *testing.B) {
-		ls := genListPack(0, N)
+	b.Run("compress", func(b *testing.B) {
+		lp := NewListPack()
+		for i := 0; i < 1000; i++ {
+			lp.RPush("rotom")
+		}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ls.Set(i%N, fmt.Sprintf("%08x", i))
+			lp.Compress()
+			lp.Decompress()
 		}
 	})
-	b.Run("set/less-len", func(b *testing.B) {
-		ls := genListPack(0, N)
+	b.Run("replaceBegin", func(b *testing.B) {
+		lp := NewListPack()
+		for i := 0; i < 1000; i++ {
+			lp.RPush("rotom")
+		}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ls.Set(i%N, fmt.Sprintf("%07x", i))
+			it := lp.Iterator()
+			it.ReplaceNext("abcde")
 		}
 	})
-	b.Run("set/great-len", func(b *testing.B) {
-		ls := genListPack(0, N)
+	b.Run("replaceEnd", func(b *testing.B) {
+		lp := NewListPack()
+		for i := 0; i < 1000; i++ {
+			lp.RPush("rotom")
+		}
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ls.Set(i%N, fmt.Sprintf("%09x", i))
+			it := lp.Iterator().SeekLast()
+			it.ReplaceNext("abcde")
 		}
 	})
 }

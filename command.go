@@ -13,7 +13,7 @@ type Command struct {
 	name string
 
 	// handler is this command real database handler function.
-	handler func(respWriter *RESPWriter, args []RESP)
+	handler func(writer *RESPWriter, args []RESP)
 
 	// arity represents the minimal number of arguments that command accepts.
 	arity int
@@ -37,6 +37,7 @@ var cmdTable []*Command = []*Command{
 	{"rpop", rpopCommand, 1, true},
 	{"lpop", lpopCommand, 1, true},
 	{"sadd", saddCommand, 2, true},
+	{"srem", sremCommand, 2, true},
 	{"spop", spopCommand, 1, true},
 	{"zadd", zaddCommand, 3, true},
 	{"ping", pingCommand, 0, false},
@@ -60,8 +61,8 @@ func equalCommand(str, lowerText string) bool {
 		return false
 	}
 	const s = 'a' - 'A'
-	for i, lo := range lowerText {
-		delta := lo - rune(str[i])
+	for i, lt := range lowerText {
+		delta := lt - rune(str[i])
 		if delta != 0 && delta != s {
 			return false
 		}
@@ -83,8 +84,8 @@ func pingCommand(writer *RESPWriter, _ []RESP) {
 
 func setCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
-	value := args[1].ToBytes()
-	db.strs.Set(key, value)
+	value := args[1].Clone()
+	db.dict.Set(key, value)
 	writer.WriteString("OK")
 }
 
@@ -96,8 +97,8 @@ func msetCommand(writer *RESPWriter, args []RESP) {
 	}
 	for i := 0; i < len(args); i += 2 {
 		key := args[i].ToString()
-		value := args[i+1].ToBytes()
-		db.strs.Set(key, value)
+		value := args[i+1].Clone()
+		db.dict.Set(key, value)
 	}
 	writer.WriteString("OK")
 }
@@ -105,39 +106,44 @@ func msetCommand(writer *RESPWriter, args []RESP) {
 func incrCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 
-	val, ok := db.strs.Get(key)
+	val, ok := db.dict.Get(key)
 	if !ok {
-		db.strs.Set(key, []byte("1"))
+		db.dict.Set(key, []byte("1"))
 		writer.WriteInteger(1)
 		return
 	}
 
-	num, err := RESP(val).ToInt()
+	valBytes, ok := val.([]byte)
+	if !ok {
+		writer.WriteError(ErrWrongType)
+		return
+	}
+
+	num, err := RESP(valBytes).ToInt()
 	if err != nil {
 		writer.WriteError(ErrParseInteger)
 		return
 	}
 	num++
 
-	db.strs.Set(key, []byte(strconv.Itoa(num)))
+	db.dict.Set(key, []byte(strconv.Itoa(num)))
 	writer.WriteInteger(num)
 }
 
 func getCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToStringUnsafe()
 
-	value, ok := db.strs.Get(key)
-	if ok {
-		writer.WriteBulk(value)
+	val, ok := db.dict.Get(key)
+	if !ok {
+		writer.WriteNull()
 		return
 	}
 
-	// check extra maps
-	_, ok = db.extras.Get(key)
+	valBytes, ok := val.([]byte)
 	if ok {
-		writer.WriteError(ErrWrongType)
+		writer.WriteBulk(valBytes)
 	} else {
-		writer.WriteNull()
+		writer.WriteError(ErrWrongType)
 	}
 }
 
@@ -313,9 +319,8 @@ func lrangeCommand(writer *RESPWriter, args []RESP) {
 	}
 
 	writer.WriteArrayHead(size)
-	ls.Range(start, end, func(data []byte) (stop bool) {
+	ls.Range(start, end, func(data []byte) {
 		writer.WriteBulk(data)
-		return false
 	})
 }
 
@@ -336,6 +341,24 @@ func saddCommand(writer *RESPWriter, args []RESP) {
 		}
 	}
 	writer.WriteInteger(newItems)
+}
+
+func sremCommand(writer *RESPWriter, args []RESP) {
+	key := args[0].ToString()
+
+	set, err := fetchSet(key)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+
+	var count int
+	for _, arg := range args[1:] {
+		if set.Remove(arg.ToStringUnsafe()) {
+			count++
+		}
+	}
+	writer.WriteInteger(count)
 }
 
 func spopCommand(writer *RESPWriter, args []RESP) {
@@ -403,7 +426,7 @@ func fetchZSet(key string, setnx ...bool) (ZSet, error) {
 }
 
 func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
-	item, ok := db.extras.Get(key)
+	item, ok := db.dict.Get(key)
 	if ok {
 		v, ok := item.(T)
 		if ok {
@@ -413,7 +436,7 @@ func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
 	}
 	v = new()
 	if len(setnx) > 0 && setnx[0] {
-		db.extras.Put(key, v)
+		db.dict.Set(key, v)
 	}
 	return v, nil
 }
