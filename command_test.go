@@ -137,6 +137,7 @@ func TestCommand(t *testing.T) {
 		n, _ := rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
 		assert.Equal(n, int64(3))
 
+		// spop
 		for i := 0; i < 3; i++ {
 			val, _ := rdb.SPop(ctx, "set").Result()
 			assert.NotEqual(val, "")
@@ -144,6 +145,11 @@ func TestCommand(t *testing.T) {
 
 		_, err := rdb.SPop(ctx, "set").Result()
 		assert.Equal(err, redis.Nil)
+
+		// srem
+		rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
+		res, _ := rdb.SRem(ctx, "set", "k1", "k2", "k999").Result()
+		assert.Equal(res, int64(2))
 	})
 
 	t.Run("zset", func(t *testing.T) {

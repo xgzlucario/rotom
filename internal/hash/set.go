@@ -1,39 +1,34 @@
 package hash
 
 import (
-	"github.com/cockroachdb/swiss"
-	"github.com/xgzlucario/rotom/internal/pkg"
+	mapset "github.com/deckarep/golang-set/v2"
 )
 
-var (
-	setAllocator = pkg.NewAllocator[string, struct{}]()
-)
+type SetI interface {
+	Add(key string) (ok bool)
+	Remove(key string) (ok bool)
+	Pop() (key string, ok bool)
+	Len() int
+}
+
+var _ SetI = (*Set)(nil)
 
 type Set struct {
-	m *swiss.Map[string, struct{}]
+	mapset.Set[string]
 }
 
 func NewSet() *Set {
-	return &Set{m: swiss.New(8, swiss.WithAllocator(setAllocator))}
+	return &Set{mapset.NewThreadUnsafeSet[string]()}
 }
 
-func (s *Set) Add(key string) bool {
-	if _, ok := s.m.Get(key); ok {
+func (s Set) Remove(key string) bool {
+	if !s.ContainsOne(key) {
 		return false
 	}
-	s.m.Put(key, struct{}{})
+	s.Set.Remove(key)
 	return true
 }
 
-func (s *Set) Pop() (item string, ok bool) {
-	s.m.All(func(key string, _ struct{}) bool {
-		s.m.Delete(key)
-		item, ok = key, true
-		return false
-	})
-	return
-}
-
-func (s *Set) Free() {
-	s.m.Close()
+func (s Set) Len() int {
+	return s.Cardinality()
 }

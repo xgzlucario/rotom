@@ -73,4 +73,26 @@ func BenchmarkListPack(b *testing.B) {
 			lp.Decompress()
 		}
 	})
+	b.Run("replaceBegin", func(b *testing.B) {
+		lp := NewListPack()
+		for i := 0; i < 1000; i++ {
+			lp.RPush("rotom")
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			it := lp.Iterator()
+			it.ReplaceNext("abcde")
+		}
+	})
+	b.Run("replaceEnd", func(b *testing.B) {
+		lp := NewListPack()
+		for i := 0; i < 1000; i++ {
+			lp.RPush("rotom")
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			it := lp.Iterator().SeekLast()
+			it.ReplaceNext("abcde")
+		}
+	})
 }

@@ -40,7 +40,7 @@ type ListPack struct {
 	data     []byte
 }
 
-func NewListPack() *ListPack {
+func NewListPack(val ...string) *ListPack {
 	return &ListPack{data: bpool.Get(32)[:0]}
 }
 
@@ -53,7 +53,7 @@ func (lp *ListPack) LPush(data ...string) {
 }
 
 func (lp *ListPack) RPush(data ...string) {
-	lp.Iterator().SeekEnd().Insert(data...)
+	lp.Iterator().SeekLast().Insert(data...)
 }
 
 func (lp *ListPack) LPop() (string, bool) {
@@ -61,10 +61,7 @@ func (lp *ListPack) LPop() (string, bool) {
 }
 
 func (lp *ListPack) RPop() (string, bool) {
-	if lp.size == 0 {
-		return "", false
-	}
-	it := lp.Iterator().SeekEnd()
+	it := lp.Iterator().SeekLast()
 	it.Prev()
 	return it.RemoveNext()
 }
@@ -94,21 +91,24 @@ func (lp *ListPack) Iterator() *lpIterator {
 	return &lpIterator{ListPack: lp}
 }
 
-func (it *lpIterator) SeekBegin() *lpIterator {
+func (it *lpIterator) SeekFirst() *lpIterator {
 	it.index = 0
 	return it
 }
 
-func (it *lpIterator) SeekEnd() *lpIterator {
+func (it *lpIterator) SeekLast() *lpIterator {
 	it.index = len(it.data)
 	return it
 }
 
-func (it *lpIterator) IsBegin() bool { return it.index == 0 }
+func (it *lpIterator) IsFirst() bool { return it.index == 0 }
 
-func (it *lpIterator) IsEnd() bool { return it.index == len(it.data) }
+func (it *lpIterator) IsLast() bool { return it.index == len(it.data) }
 
 func (it *lpIterator) Next() []byte {
+	if it.IsLast() {
+		return nil
+	}
 	//
 	//    index     dataStartPos    dataEndPos            indexNext
 	//      |            |              |                     |
@@ -130,6 +130,9 @@ func (it *lpIterator) Next() []byte {
 }
 
 func (it *lpIterator) Prev() []byte {
+	if it.IsFirst() {
+		return nil
+	}
 	//
 	//    indexNext  dataStartPos    dataEndPos               index
 	//        |            |              |                     |
@@ -153,7 +156,7 @@ func (it *lpIterator) Prev() []byte {
 }
 
 func (it *lpIterator) Insert(datas ...string) {
-	if it.IsEnd() {
+	if it.IsLast() {
 		for _, data := range datas {
 			it.data = appendEntry(it.data, data)
 			it.size++
@@ -169,16 +172,33 @@ func (it *lpIterator) Insert(datas ...string) {
 	bpool.Put(alloc)
 }
 
-func (it *lpIterator) RemoveNext() (string, bool) {
+func (it *lpIterator) removeNext(copyNext bool) (data string, ok bool) {
 	if it.size == 0 {
 		return "", false
 	}
 	before := it.index
-	data := string(it.Next())
+
+	if copyNext {
+		data = string(it.Next())
+	} else {
+		it.Next()
+	}
+
 	after := it.index
 	it.data = slices.Delete(it.data, before, after)
+	it.index = before
 	it.size--
+
 	return data, true
+}
+
+func (it *lpIterator) RemoveNext() (string, bool) {
+	return it.removeNext(true)
+}
+
+func (it *lpIterator) ReplaceNext(key string) {
+	it.removeNext(false)
+	it.Insert(key)
 }
 
 func appendEntry(dst []byte, data string) []byte {

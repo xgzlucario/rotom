@@ -37,6 +37,7 @@ var cmdTable []*Command = []*Command{
 	{"rpop", rpopCommand, 1, true},
 	{"lpop", lpopCommand, 1, true},
 	{"sadd", saddCommand, 2, true},
+	{"srem", sremCommand, 2, true},
 	{"spop", spopCommand, 1, true},
 	{"zadd", zaddCommand, 3, true},
 	{"ping", pingCommand, 0, false},
@@ -340,6 +341,24 @@ func saddCommand(writer *RESPWriter, args []RESP) {
 		}
 	}
 	writer.WriteInteger(newItems)
+}
+
+func sremCommand(writer *RESPWriter, args []RESP) {
+	key := args[0].ToString()
+
+	set, err := fetchSet(key)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+
+	var count int
+	for _, arg := range args[1:] {
+		if set.Remove(arg.ToStringUnsafe()) {
+			count++
+		}
+	}
+	writer.WriteInteger(count)
 }
 
 func spopCommand(writer *RESPWriter, args []RESP) {

@@ -101,18 +101,18 @@ func (ls *QuickList) Range(start, end int, f func(data []byte)) {
 		lp = lp.next
 	}
 
-	it := lp.Iterator().SeekBegin()
+	it := lp.Iterator().SeekFirst()
 	for range start {
 		it.Next()
 	}
 
 	for range count {
-		if it.IsEnd() {
+		if it.IsLast() {
 			if lp.next == nil {
 				return
 			}
 			lp = lp.next
-			it = lp.Iterator().SeekBegin()
+			it = lp.Iterator().SeekFirst()
 		}
 		f(it.Next())
 	}
@@ -130,18 +130,18 @@ func (ls *QuickList) RevRange(start, end int, f func(data []byte)) {
 		lp = lp.prev
 	}
 
-	it := lp.Iterator().SeekEnd()
+	it := lp.Iterator().SeekLast()
 	for range start {
 		it.Prev()
 	}
 
 	for range count {
-		if it.IsBegin() {
+		if it.IsFirst() {
 			if lp.prev == nil {
 				return
 			}
 			lp = lp.prev
-			it = lp.Iterator().SeekEnd()
+			it = lp.Iterator().SeekLast()
 		}
 		f(it.Prev())
 	}

@@ -16,8 +16,8 @@ const (
 )
 
 type (
-	Map  = *hash.Map
-	Set  = *hash.Set
+	Map  = hash.MapI
+	Set  = hash.SetI
 	List = *list.QuickList
 	ZSet = *zset.ZSet
 )

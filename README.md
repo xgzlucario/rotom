@@ -4,17 +4,15 @@
 
 ## 介绍
 
-这里是 rotom，一个使用 Go 编写的 tiny Redis Server。基于 IO 多路复用技术，还原了 Redis 中的 AeLoop 核心事件循环机制。
-
-rotom 基于 [godis](https://github.com/archeryue/godis) 项目
+这里是 rotom，一个使用 Go 编写的 tiny Redis Server。基于 IO 多路复用还原了 Redis 中的 AeLoop 核心事件循环机制。
 
 ### 实现特性
 
 1. 基于 epoll 网络模型，还原了 Redis 中的 AeLoop 单线程事件循环
 2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
-3. 实现了 dict, quicklist, hash, set, zset 数据结构
+3. 实现了 dict, quicklist(listpack), hash(map, zipmap), set(mapset, zipset), zset 数据结构
 4. AOF 支持
-5. 支持 17 种常用命令
+5. 支持 18 种常用命令
 
 ### 原理介绍
 
@@ -64,7 +62,7 @@ $ go run .
 
 ```
 REPOSITORY       TAG           IMAGE ID       CREATED         SIZE
-rotom            latest        22f42ce9ae0e   8 seconds ago   18.6MB
+rotom            latest        22f42ce9ae0e   8 seconds ago   18.8MB
 ```
 
 然后启动容器：
