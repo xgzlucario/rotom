@@ -53,6 +53,21 @@ func testMapI(m MapI, t *testing.T) {
 	assert.True(ok)
 	assert.Equal(string(val), "newval3")
 
+	// scan
+	count := 0
+	m.Scan(func(key string, val []byte) {
+		switch key {
+		case "key1":
+			assert.Equal(val, []byte("newval1"))
+		case "key2":
+			assert.Equal(val, []byte("newval2"))
+		case "key3":
+			assert.Equal(val, []byte("newval3"))
+		}
+		count++
+	})
+	assert.Equal(count, 3)
+
 	// remove
 	assert.True(m.Remove("key1"))
 	assert.True(m.Remove("key2"))

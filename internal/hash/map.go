@@ -5,11 +5,11 @@ import (
 )
 
 type MapI interface {
-	Set(key string, val []byte) (ok bool)
-	Get(key string) (val []byte, ok bool)
-	Remove(key string) (ok bool)
+	Set(key string, val []byte) bool
+	Get(key string) ([]byte, bool)
+	Remove(key string) bool
 	Len() int
-	Scan(iterator func(key string, val []byte))
+	Scan(fn func(key string, val []byte))
 }
 
 var _ MapI = (*Map)(nil)
@@ -19,7 +19,7 @@ type Map struct {
 }
 
 func NewMap() *Map {
-	return &Map{m: swiss.New[string, []byte](8)}
+	return &Map{m: swiss.New[string, []byte](64)}
 }
 
 func (m *Map) Get(key string) ([]byte, bool) {
@@ -42,7 +42,7 @@ func (m *Map) Len() int {
 	return m.m.Len()
 }
 
-func (m *Map) Scan(fn func(key string, value []byte)) {
+func (m *Map) Scan(fn func(key string, val []byte)) {
 	m.m.All(func(key string, val []byte) (next bool) {
 		fn(key, val)
 		return true

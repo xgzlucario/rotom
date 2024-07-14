@@ -64,6 +64,20 @@ func (zm *ZipMap) Len() int {
 }
 
 func (zm *ZipMap) Scan(fn func(string, []byte)) {
+	it := zm.m.Iterator().SeekLast()
+	for !it.IsFirst() {
+		valBytes := it.Prev()
+		keyBytes := it.Prev()
+		fn(b2s(keyBytes), valBytes)
+	}
+}
+
+func (zm *ZipMap) ToMap() *Map {
+	m := NewMap()
+	zm.Scan(func(key string, value []byte) {
+		m.Set(key, value)
+	})
+	return m
 }
 
 func b2s(b []byte) string {

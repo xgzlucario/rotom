@@ -44,10 +44,25 @@ func (zs *ZipSet) Remove(key string) bool {
 	return false
 }
 
+func (zs *ZipSet) Scan(fn func(string)) {
+	it := zs.m.Iterator().SeekLast()
+	for !it.IsFirst() {
+		fn(b2s(it.Prev()))
+	}
+}
+
 func (zs *ZipSet) Pop() (string, bool) {
 	return zs.m.RPop()
 }
 
 func (zs *ZipSet) Len() int {
 	return zs.m.Size()
+}
+
+func (zs *ZipSet) ToSet() *Set {
+	s := NewSet()
+	s.Scan(func(key string) {
+		s.Add(key)
+	})
+	return s
 }

@@ -410,7 +410,7 @@ func todoCommand(writer *RESPWriter, _ []RESP) {
 }
 
 func fetchMap(key string, setnx ...bool) (Map, error) {
-	return fetch(key, func() Map { return hash.NewMap() }, setnx...)
+	return fetch(key, func() Map { return hash.NewZipMap() }, setnx...)
 }
 
 func fetchList(key string, setnx ...bool) (List, error) {
@@ -418,7 +418,7 @@ func fetchList(key string, setnx ...bool) (List, error) {
 }
 
 func fetchSet(key string, setnx ...bool) (Set, error) {
-	return fetch(key, func() Set { return hash.NewSet() }, setnx...)
+	return fetch(key, func() Set { return hash.NewZipSet() }, setnx...)
 }
 
 func fetchZSet(key string, setnx ...bool) (ZSet, error) {

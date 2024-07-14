@@ -67,19 +67,21 @@ func (lp *ListPack) RPop() (string, bool) {
 }
 
 func (lp *ListPack) Compress() {
-	if !lp.compress {
-		dst := encoder.EncodeAll(lp.data, bpool.Get(len(lp.data))[:0])
-		bpool.Put(lp.data)
-		lp.data = slices.Clip(dst)
-		lp.compress = true
+	if lp.compress {
+		return
 	}
+	dst := encoder.EncodeAll(lp.data, bpool.Get(len(lp.data))[:0])
+	bpool.Put(lp.data)
+	lp.data = slices.Clip(dst)
+	lp.compress = true
 }
 
 func (lp *ListPack) Decompress() {
-	if lp.compress {
-		lp.data, _ = decoder.DecodeAll(lp.data, bpool.Get(maxListPackSize)[:0])
-		lp.compress = false
+	if !lp.compress {
+		return
 	}
+	lp.data, _ = decoder.DecodeAll(lp.data, bpool.Get(maxListPackSize)[:0])
+	lp.compress = false
 }
 
 type lpIterator struct {
@@ -172,33 +174,32 @@ func (it *lpIterator) Insert(datas ...string) {
 	bpool.Put(alloc)
 }
 
-func (it *lpIterator) removeNext(copyNext bool) (data string, ok bool) {
-	if it.size == 0 {
+func (it *lpIterator) RemoveNext() (string, bool) {
+	if it.IsLast() {
 		return "", false
 	}
 	before := it.index
-
-	if copyNext {
-		data = string(it.Next())
-	} else {
-		it.Next()
-	}
-
+	next := string(it.Next())
 	after := it.index
+
 	it.data = slices.Delete(it.data, before, after)
 	it.index = before
 	it.size--
 
-	return data, true
-}
-
-func (it *lpIterator) RemoveNext() (string, bool) {
-	return it.removeNext(true)
+	return next, true
 }
 
 func (it *lpIterator) ReplaceNext(key string) {
-	it.removeNext(false)
-	it.Insert(key)
+	if it.IsLast() {
+		return
+	}
+	before := it.index
+	it.Next()
+	after := it.index
+
+	alloc := appendEntry(nil, key)
+	it.data = slices.Replace(it.data, before, after, alloc...)
+	it.index = before
 }
 
 func appendEntry(dst []byte, data string) []byte {

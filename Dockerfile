@@ -21,7 +21,7 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/re
 RUN apk add --no-cache ca-certificates tzdata && \
     update-ca-certificates
 
-RUN apk --no-cache add redis
+RUN apk --no-cache add redis bash
 
 VOLUME /data
 WORKDIR /data
