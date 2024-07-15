@@ -51,8 +51,7 @@ func (zm *ZipMap) Remove(key string) bool {
 		it.Prev()
 		keyBytes := it.Prev()
 		if key == b2s(keyBytes) {
-			it.RemoveNext()
-			it.RemoveNext()
+			it.RemoveNexts(2)
 			return true
 		}
 	}
@@ -79,6 +78,10 @@ func (zm *ZipMap) ToMap() *Map {
 	})
 	return m
 }
+
+func (zm *ZipMap) Compress() { zm.m.Compress() }
+
+func (zm *ZipMap) Decompress() { zm.m.Decompress() }
 
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))

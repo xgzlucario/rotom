@@ -11,6 +11,17 @@ func TestSet(t *testing.T) {
 	testSetI(NewZipSet(), t)
 }
 
+func TestZipSet2Set(t *testing.T) {
+	assert := assert.New(t)
+
+	m := NewZipSet()
+	m.Add("key1")
+	m.Add("key2")
+	m.Add("key3")
+
+	assert.ElementsMatch(m.ToSet().ToSlice(), []string{"key1", "key2", "key3"})
+}
+
 func testSetI(m SetI, t *testing.T) {
 	assert := assert.New(t)
 
@@ -18,6 +29,7 @@ func testSetI(m SetI, t *testing.T) {
 	assert.True(m.Add("key1"))
 	assert.True(m.Add("key2"))
 	assert.True(m.Add("key3"))
+	assert.False(m.Add("key1"))
 
 	// len
 	assert.Equal(m.Len(), 3)

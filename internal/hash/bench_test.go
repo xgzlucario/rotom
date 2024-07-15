@@ -37,6 +37,14 @@ func benchMapI(name string, newf func() MapI, b *testing.B) {
 			m.Set(k, []byte(k))
 		}
 	})
+	b.Run(name+"/remove", func(b *testing.B) {
+		m := genMap(newf(), b.N)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			k := genKey(i)
+			m.Remove(k)
+		}
+	})
 	b.Run(name+"/scan", func(b *testing.B) {
 		m := genMap(newf(), N)
 		b.ResetTimer()

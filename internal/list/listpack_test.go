@@ -43,6 +43,8 @@ func TestListpack(t *testing.T) {
 		lp.LPush("A", "B", "C")
 
 		it := lp.Iterator()
+		// bound check
+		it.Prev()
 
 		val, ok := it.RemoveNext()
 		assert.Equal(val, "A")
@@ -67,6 +69,8 @@ func TestListpack(t *testing.T) {
 		lp.LPush("A", "B", "C")
 
 		it := lp.Iterator().SeekLast()
+		// bound check
+		it.Next()
 
 		it.Prev()
 		val, ok := it.RemoveNext()
@@ -90,6 +94,25 @@ func TestListpack(t *testing.T) {
 		assert.False(ok)
 	})
 
+	t.Run("removeNexts", func(t *testing.T) {
+		lp := NewListPack()
+		lp.LPush("aa", "bb", "cc", "dd", "ee")
+
+		str, ok := lp.Iterator().RemoveNext()
+		assert.Equal(str, "aa")
+		assert.True(ok)
+
+		res := lp.Iterator().RemoveNexts(2)
+		assert.Equal(res, []string{"bb", "cc"})
+
+		res = lp.Iterator().RemoveNexts(3)
+		assert.Equal(res, []string{"dd", "ee"})
+
+		str, ok = lp.Iterator().RemoveNext()
+		assert.Equal(str, "")
+		assert.False(ok)
+	})
+
 	t.Run("replaceNext", func(t *testing.T) {
 		lp := NewListPack()
 		lp.LPush("TEST1", "TEST2", "TEST3")
@@ -103,12 +126,17 @@ func TestListpack(t *testing.T) {
 
 		it.ReplaceNext("TTTTTT")
 		assert.Equal(lp2list(lp), []string{"TTTTTT", "TEST2", "TEST3"})
+
+		it.SeekLast().ReplaceNext("a")
+		assert.Equal(lp2list(lp), []string{"TTTTTT", "TEST2", "TEST3"})
 	})
 
 	t.Run("compress", func(t *testing.T) {
 		lp := NewListPack()
 		lp.LPush("A", "B", "C", "D", "E")
 		lp.Compress()
+		lp.Compress()
+		lp.Decompress()
 		lp.Decompress()
 		assert.Equal(lp2list(lp), []string{"A", "B", "C", "D", "E"})
 	})

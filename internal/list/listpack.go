@@ -40,8 +40,8 @@ type ListPack struct {
 	data     []byte
 }
 
-func NewListPack(val ...string) *ListPack {
-	return &ListPack{data: bpool.Get(32)[:0]}
+func NewListPack() *ListPack {
+	return &ListPack{data: make([]byte, 0, 32)}
 }
 
 func (lp *ListPack) Size() int {
@@ -70,9 +70,7 @@ func (lp *ListPack) Compress() {
 	if lp.compress {
 		return
 	}
-	dst := encoder.EncodeAll(lp.data, bpool.Get(len(lp.data))[:0])
-	bpool.Put(lp.data)
-	lp.data = slices.Clip(dst)
+	lp.data = encoder.EncodeAll(lp.data, make([]byte, 0, len(lp.data)/3))
 	lp.compress = true
 }
 
@@ -80,7 +78,7 @@ func (lp *ListPack) Decompress() {
 	if !lp.compress {
 		return
 	}
-	lp.data, _ = decoder.DecodeAll(lp.data, bpool.Get(maxListPackSize)[:0])
+	lp.data, _ = decoder.DecodeAll(lp.data, nil)
 	lp.compress = false
 }
 
@@ -175,18 +173,32 @@ func (it *lpIterator) Insert(datas ...string) {
 }
 
 func (it *lpIterator) RemoveNext() (string, bool) {
-	if it.IsLast() {
+	res := it.RemoveNexts(1)
+	if len(res) == 0 {
 		return "", false
 	}
-	before := it.index
-	next := string(it.Next())
-	after := it.index
+	return res[0], true
+}
 
+func (it *lpIterator) RemoveNexts(num int) (res []string) {
+	res = make([]string, 0, num)
+	before := it.index
+	var after int
+
+	for i := 0; i < num; i++ {
+		if it.IsLast() {
+			goto BREAK
+		}
+		res = append(res, string(it.Next()))
+		it.size--
+	}
+
+BREAK:
+	after = it.index
 	it.data = slices.Delete(it.data, before, after)
 	it.index = before
-	it.size--
 
-	return next, true
+	return
 }
 
 func (it *lpIterator) ReplaceNext(key string) {
