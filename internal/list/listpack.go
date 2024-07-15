@@ -49,6 +49,9 @@ func (lp *ListPack) Size() int {
 }
 
 func (lp *ListPack) LPush(data ...string) {
+	if len(data) > 1 {
+		slices.Reverse(data)
+	}
 	lp.Iterator().Insert(data...)
 }
 

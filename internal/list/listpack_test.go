@@ -24,27 +24,23 @@ func TestListpack(t *testing.T) {
 
 	t.Run("rpush", func(t *testing.T) {
 		lp := NewListPack()
-		lp.RPush("A")
-		lp.RPush("B", "C")
+		lp.RPush("A", "B", "C")
 		assert.Equal(lp.Size(), 3)
 		assert.Equal(lp2list(lp), []string{"A", "B", "C"})
 	})
 
-	t.Run("rpush", func(t *testing.T) {
+	t.Run("lpush", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("A")
-		lp.LPush("B", "C")
+		lp.LPush("A", "B", "C")
 		assert.Equal(lp.Size(), 3)
-		assert.Equal(lp2list(lp), []string{"B", "C", "A"})
+		assert.Equal(lp2list(lp), []string{"C", "B", "A"})
 	})
 
 	t.Run("lpop", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("A", "B", "C")
+		lp.RPush("A", "B", "C")
 
 		it := lp.Iterator()
-		// bound check
-		it.Prev()
 
 		val, ok := it.RemoveNext()
 		assert.Equal(val, "A")
@@ -66,11 +62,9 @@ func TestListpack(t *testing.T) {
 
 	t.Run("rpop", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("A", "B", "C")
+		lp.RPush("A", "B", "C")
 
 		it := lp.Iterator().SeekLast()
-		// bound check
-		// it.Next()
 
 		it.Prev()
 		val, ok := it.RemoveNext()
@@ -96,7 +90,7 @@ func TestListpack(t *testing.T) {
 
 	t.Run("removeNexts", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("aa", "bb", "cc", "dd", "ee")
+		lp.RPush("aa", "bb", "cc", "dd", "ee")
 
 		str, ok := lp.Iterator().RemoveNext()
 		assert.Equal(str, "aa")
@@ -115,7 +109,7 @@ func TestListpack(t *testing.T) {
 
 	t.Run("replaceNext", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("TEST1", "TEST2", "TEST3")
+		lp.RPush("TEST1", "TEST2", "TEST3")
 
 		it := lp.Iterator()
 		it.ReplaceNext("TEST4")
@@ -133,11 +127,11 @@ func TestListpack(t *testing.T) {
 
 	t.Run("compress", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("A", "B", "C", "D", "E")
+		lp.RPush("A", "B", "C")
 		lp.Compress()
 		lp.Compress()
 		lp.Decompress()
 		lp.Decompress()
-		assert.Equal(lp2list(lp), []string{"A", "B", "C", "D", "E"})
+		assert.Equal(lp2list(lp), []string{"A", "B", "C"})
 	})
 }
