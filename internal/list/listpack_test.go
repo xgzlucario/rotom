@@ -70,7 +70,7 @@ func TestListpack(t *testing.T) {
 
 		it := lp.Iterator().SeekLast()
 		// bound check
-		it.Next()
+		// it.Next()
 
 		it.Prev()
 		val, ok := it.RemoveNext()

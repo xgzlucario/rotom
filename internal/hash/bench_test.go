@@ -24,14 +24,16 @@ func BenchmarkMap(b *testing.B) {
 
 func benchMapI(name string, newf func() MapI, b *testing.B) {
 	const N = 512
-	b.Run(name+"/set", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			genMap(newf(), N)
-		}
-	})
-	b.Run(name+"/update", func(b *testing.B) {
+	b.Run(name+"/get", func(b *testing.B) {
 		m := genMap(newf(), N)
 		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			k := genKey(i % N)
+			m.Get(k)
+		}
+	})
+	b.Run(name+"/set", func(b *testing.B) {
+		m := newf()
 		for i := 0; i < b.N; i++ {
 			k := genKey(i % N)
 			m.Set(k, []byte(k))

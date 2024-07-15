@@ -61,6 +61,9 @@ func (lp *ListPack) LPop() (string, bool) {
 }
 
 func (lp *ListPack) RPop() (string, bool) {
+	if lp.Size() == 0 {
+		return "", false
+	}
 	it := lp.Iterator().SeekLast()
 	it.Prev()
 	return it.RemoveNext()
@@ -106,9 +109,6 @@ func (it *lpIterator) IsFirst() bool { return it.index == 0 }
 func (it *lpIterator) IsLast() bool { return it.index == len(it.data) }
 
 func (it *lpIterator) Next() []byte {
-	if it.IsLast() {
-		return nil
-	}
 	//
 	//    index     dataStartPos    dataEndPos            indexNext
 	//      |            |              |                     |
@@ -130,9 +130,6 @@ func (it *lpIterator) Next() []byte {
 }
 
 func (it *lpIterator) Prev() []byte {
-	if it.IsFirst() {
-		return nil
-	}
 	//
 	//    indexNext  dataStartPos    dataEndPos               index
 	//        |            |              |                     |
@@ -173,10 +170,10 @@ func (it *lpIterator) Insert(datas ...string) {
 }
 
 func (it *lpIterator) RemoveNext() (string, bool) {
-	res := it.RemoveNexts(1)
-	if len(res) == 0 {
+	if it.IsLast() {
 		return "", false
 	}
+	res := it.RemoveNexts(1)
 	return res[0], true
 }
 
