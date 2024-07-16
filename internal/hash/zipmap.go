@@ -87,7 +87,7 @@ func (zm *ZipMap) Remove(key string) bool {
 
 		kb, _ := decodeEntry(entry)
 		if key == kb {
-			it.RemoveNext()
+			it.RemoveNexts(1, nil)
 			return true
 		}
 	}

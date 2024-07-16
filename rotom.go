@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"runtime"
 
 	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
@@ -40,6 +41,8 @@ type Server struct {
 	config  *Config
 	aeLoop  *AeLoop
 	clients map[int]*Client
+
+	outOfMemory bool
 }
 
 var (
@@ -145,13 +148,19 @@ func ProcessQueryBuf(client *Client) {
 		command := args[0].ToStringUnsafe()
 		args = args[1:]
 
-		// lookup for command
 		cmd := lookupCommand(command)
 		if cmd != nil {
 			cmd.processCommand(client.replyWriter, args)
-			if server.config.AppendOnly && cmd.persist { // TODO: optimize AOF operation
+
+			if server.outOfMemory {
+				client.replyWriter.WriteError(errOOM)
+				goto WRITE
+			}
+
+			if server.config.AppendOnly && cmd.persist {
 				db.aof.Write(queryBuf)
 			}
+
 		} else {
 			err := ErrUnknownCommand(command)
 			client.replyWriter.WriteError(err)
@@ -159,6 +168,7 @@ func ProcessQueryBuf(client *Client) {
 		}
 	}
 
+WRITE:
 	resetClient(client)
 	server.aeLoop.ModWrite(client.fd, SendReplyToClient, client)
 }
@@ -204,4 +214,21 @@ func SyncAOF(loop *AeLoop, id int, extra interface{}) {
 
 func EvictExpired(loop *AeLoop, id int, extra interface{}) {
 	db.dict.EvictExpired()
+}
+
+func CheckOutOfMemory(loop *AeLoop, id int, extra interface{}) {
+	oom := server.outOfMemory
+	var mem runtime.MemStats
+
+	if server.config.MaxMemory == 0 {
+		if oom {
+			server.outOfMemory = false
+		}
+		return
+	}
+	if oom {
+		runtime.GC()
+	}
+	runtime.ReadMemStats(&mem)
+	server.outOfMemory = int(mem.HeapAlloc) > server.config.MaxMemory
 }

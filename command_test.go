@@ -66,7 +66,7 @@ func TestCommand(t *testing.T) {
 
 		rdb.Set(ctx, "notNum", "bar", 0)
 		_, err := rdb.Incr(ctx, "notNum").Result()
-		assert.Equal(err.Error(), ErrParseInteger.Error())
+		assert.Equal(err.Error(), errParseInteger.Error())
 	})
 
 	t.Run("hash", func(t *testing.T) {
@@ -102,10 +102,10 @@ func TestCommand(t *testing.T) {
 
 		// error
 		_, err := rdb.HSet(ctx, "map").Result()
-		assert.Equal(err.Error(), ErrWrongNumberArgs("hset").Error())
+		assert.Equal(err.Error(), errInvalidArguments.Error())
 
 		_, err = rdb.HSet(ctx, "map", "k1", "v1", "k2").Result()
-		assert.Equal(err.Error(), ErrWrongNumberArgs("hset").Error())
+		assert.Equal(err.Error(), errInvalidArguments.Error())
 	})
 
 	t.Run("list", func(t *testing.T) {

@@ -59,6 +59,7 @@ func main() {
 	// register main aeLoop event
 	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
 	server.aeLoop.AddTimeEvent(AE_NORMAL, 100, EvictExpired, nil)
+	server.aeLoop.AddTimeEvent(AE_NORMAL, 5000, CheckOutOfMemory, nil)
 	if server.config.AppendOnly {
 		server.aeLoop.AddTimeEvent(AE_NORMAL, 1000, SyncAOF, nil)
 	}

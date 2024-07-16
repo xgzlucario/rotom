@@ -37,7 +37,7 @@ func (zs *ZipSet) Remove(key string) bool {
 	it := zs.m.Iterator().SeekLast()
 	for !it.IsFirst() {
 		if key == b2s(it.Prev()) {
-			it.RemoveNext()
+			it.RemoveNexts(1, nil)
 			return true
 		}
 	}

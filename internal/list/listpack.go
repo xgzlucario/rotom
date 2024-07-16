@@ -59,17 +59,23 @@ func (lp *ListPack) RPush(data ...string) {
 	lp.Iterator().SeekLast().Insert(data...)
 }
 
-func (lp *ListPack) LPop() (string, bool) {
-	return lp.Iterator().RemoveNext()
+func (lp *ListPack) LPop() (val string, ok bool) {
+	lp.Iterator().RemoveNexts(1, func(b []byte) {
+		val, ok = string(b), true
+	})
+	return
 }
 
-func (lp *ListPack) RPop() (string, bool) {
+func (lp *ListPack) RPop() (val string, ok bool) {
 	if lp.Size() == 0 {
 		return "", false
 	}
 	it := lp.Iterator().SeekLast()
 	it.Prev()
-	return it.RemoveNext()
+	it.RemoveNexts(1, func(b []byte) {
+		val, ok = string(b), true
+	})
+	return
 }
 
 func (lp *ListPack) Compress() {
@@ -166,33 +172,24 @@ func (it *lpIterator) Insert(datas ...string) {
 	bpool.Put(alloc)
 }
 
-func (it *lpIterator) RemoveNext() (string, bool) {
-	if it.IsLast() {
-		return "", false
-	}
-	res := it.RemoveNexts(1)
-	return res[0], true
-}
-
-func (it *lpIterator) RemoveNexts(num int) (res []string) {
-	res = make([]string, 0, num)
+func (it *lpIterator) RemoveNexts(num int, onDelete func([]byte)) {
 	before := it.index
-	var after int
 
 	for i := 0; i < num; i++ {
 		if it.IsLast() {
 			goto BREAK
 		}
-		res = append(res, string(it.Next()))
+		next := it.Next()
+		if onDelete != nil {
+			onDelete(next)
+		}
 		it.size--
 	}
 
 BREAK:
-	after = it.index
+	after := it.index
 	it.data = slices.Delete(it.data, before, after)
 	it.index = before
-
-	return
 }
 
 func (it *lpIterator) ReplaceNext(key string) {

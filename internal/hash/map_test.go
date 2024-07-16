@@ -83,6 +83,11 @@ func testMapI(m MapI, t *testing.T) {
 	assert.True(m.Remove("key3"))
 	assert.False(m.Remove("notexist"))
 
+	// scan
+	m.Scan(func(string, []byte) {
+		panic("should not call")
+	})
+
 	// len
 	assert.Equal(m.Len(), 0)
 }

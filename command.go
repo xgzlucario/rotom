@@ -26,7 +26,6 @@ type Command struct {
 // cmdTable is the list of all available commands.
 var cmdTable []*Command = []*Command{
 	{"set", setCommand, 2, true},
-	{"mset", msetCommand, 2, true},
 	{"get", getCommand, 1, false},
 	{"incr", incrCommand, 1, true},
 	{"hset", hsetCommand, 3, true},
@@ -43,6 +42,9 @@ var cmdTable []*Command = []*Command{
 	{"ping", pingCommand, 0, false},
 	{"hgetall", hgetallCommand, 1, false},
 	{"lrange", lrangeCommand, 3, false},
+
+	// TODO
+	{"mset", todoCommand, 0, false},
 	{"zpopmin", todoCommand, 0, false},
 	{"xadd", todoCommand, 0, false},
 }
@@ -72,7 +74,7 @@ func equalCommand(str, lowerText string) bool {
 
 func (cmd *Command) processCommand(writer *RESPWriter, args []RESP) {
 	if len(args) < cmd.arity {
-		writer.WriteError(ErrWrongNumberArgs(cmd.name))
+		writer.WriteError(errInvalidArguments)
 		return
 	}
 	cmd.handler(writer, args)
@@ -89,20 +91,6 @@ func setCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteString("OK")
 }
 
-func msetCommand(writer *RESPWriter, args []RESP) {
-	// check arguments number
-	if len(args)%2 == 1 {
-		writer.WriteError(ErrWrongNumberArgs("mset"))
-		return
-	}
-	for i := 0; i < len(args); i += 2 {
-		key := args[i].ToString()
-		value := args[i+1].Clone()
-		db.dict.Set(key, value)
-	}
-	writer.WriteString("OK")
-}
-
 func incrCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 
@@ -115,13 +103,13 @@ func incrCommand(writer *RESPWriter, args []RESP) {
 
 	valBytes, ok := val.([]byte)
 	if !ok {
-		writer.WriteError(ErrWrongType)
+		writer.WriteError(errWrongType)
 		return
 	}
 
 	num, err := RESP(valBytes).ToInt()
 	if err != nil {
-		writer.WriteError(ErrParseInteger)
+		writer.WriteError(errParseInteger)
 		return
 	}
 	num++
@@ -143,7 +131,7 @@ func getCommand(writer *RESPWriter, args []RESP) {
 	if ok {
 		writer.WriteBulk(valBytes)
 	} else {
-		writer.WriteError(ErrWrongType)
+		writer.WriteError(errWrongType)
 	}
 }
 
@@ -151,9 +139,8 @@ func hsetCommand(writer *RESPWriter, args []RESP) {
 	hash := args[0].ToString()
 	args = args[1:]
 
-	// check arguments number
 	if len(args)%2 == 1 {
-		writer.WriteError(ErrWrongNumberArgs("hset"))
+		writer.WriteError(errInvalidArguments)
 		return
 	}
 
@@ -180,7 +167,7 @@ func hgetCommand(writer *RESPWriter, args []RESP) {
 
 	hmap, err := fetchMap(hash)
 	if err != nil {
-		writer.WriteError(ErrWrongType)
+		writer.WriteError(errWrongType)
 		return
 	}
 
@@ -432,7 +419,7 @@ func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
 		if ok {
 			return v, nil
 		}
-		return v, ErrWrongType
+		return v, errWrongType
 	}
 	v = new()
 	if len(setnx) > 0 && setnx[0] {

@@ -60,6 +60,11 @@ func testSetI(m SetI, t *testing.T) {
 	assert.Equal(key, "")
 	assert.False(ok)
 
+	// scan
+	m.Scan(func(string) {
+		panic("should not call")
+	})
+
 	// len
 	assert.Equal(m.Len(), 0)
 }

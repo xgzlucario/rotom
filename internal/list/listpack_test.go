@@ -8,7 +8,7 @@ import (
 )
 
 func genKey(i int) string {
-	return fmt.Sprintf("%06x", i)
+	return fmt.Sprintf("%08x", i)
 }
 
 func lp2list(lp *ListPack) (res []string) {
@@ -40,22 +40,20 @@ func TestListpack(t *testing.T) {
 		lp := NewListPack()
 		lp.RPush("A", "B", "C")
 
-		it := lp.Iterator()
-
-		val, ok := it.RemoveNext()
+		val, ok := lp.LPop()
 		assert.Equal(val, "A")
 		assert.True(ok)
 
-		val, ok = it.RemoveNext()
+		val, ok = lp.LPop()
 		assert.Equal(val, "B")
 		assert.True(ok)
 
-		val, ok = it.RemoveNext()
+		val, ok = lp.LPop()
 		assert.Equal(val, "C")
 		assert.True(ok)
 
 		// empty
-		val, ok = it.RemoveNext()
+		val, ok = lp.LPop()
 		assert.Equal(val, "")
 		assert.False(ok)
 	})
@@ -64,26 +62,20 @@ func TestListpack(t *testing.T) {
 		lp := NewListPack()
 		lp.RPush("A", "B", "C")
 
-		it := lp.Iterator().SeekLast()
-
-		it.Prev()
-		val, ok := it.RemoveNext()
+		val, ok := lp.RPop()
 		assert.Equal(val, "C")
 		assert.True(ok)
 
-		it.Prev()
-		val, ok = it.RemoveNext()
+		val, ok = lp.RPop()
 		assert.Equal(val, "B")
 		assert.True(ok)
 
-		it.Prev()
-		val, ok = it.RemoveNext()
+		val, ok = lp.RPop()
 		assert.Equal(val, "A")
 		assert.True(ok)
 
 		// empty
-		it.Prev()
-		val, ok = it.RemoveNext()
+		val, ok = lp.RPop()
 		assert.Equal(val, "")
 		assert.False(ok)
 	})
@@ -92,19 +84,32 @@ func TestListpack(t *testing.T) {
 		lp := NewListPack()
 		lp.RPush("aa", "bb", "cc", "dd", "ee")
 
-		str, ok := lp.Iterator().RemoveNext()
-		assert.Equal(str, "aa")
-		assert.True(ok)
+		lp.Iterator().RemoveNexts(1, func(b []byte) {
+			assert.Equal(string(b), "aa")
+		})
 
-		res := lp.Iterator().RemoveNexts(2)
-		assert.Equal(res, []string{"bb", "cc"})
+		var index int
+		lp.Iterator().RemoveNexts(5, func(b []byte) {
+			switch index {
+			case 0:
+				assert.Equal(string(b), "bb")
+			case 1:
+				assert.Equal(string(b), "cc")
+			case 2:
+				assert.Equal(string(b), "dd")
+			case 3:
+				assert.Equal(string(b), "ee")
+			}
+			index++
+		})
 
-		res = lp.Iterator().RemoveNexts(3)
-		assert.Equal(res, []string{"dd", "ee"})
+		lp.Iterator().RemoveNexts(1, func([]byte) {
+			panic("should not call")
+		})
 
-		str, ok = lp.Iterator().RemoveNext()
-		assert.Equal(str, "")
-		assert.False(ok)
+		lp.Iterator().SeekLast().RemoveNexts(1, func([]byte) {
+			panic("should not call")
+		})
 	})
 
 	t.Run("replaceNext", func(t *testing.T) {
