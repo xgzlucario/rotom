@@ -63,3 +63,29 @@ func testSetI(m SetI, t *testing.T) {
 	// len
 	assert.Equal(m.Len(), 0)
 }
+
+func TestToSet(t *testing.T) {
+	assert := assert.New(t)
+
+	m := NewZipSet()
+	m.Add("key1")
+	m.Add("key2")
+	m.Add("key3")
+
+	m.Compress()
+	m.Decompress()
+
+	nm := m.ToSet()
+
+	// scan
+	count := 0
+	nm.Scan(func(key string) {
+		switch key {
+		case "key1", "key2", "key3":
+		default:
+			panic("error")
+		}
+		count++
+	})
+	assert.Equal(count, 3)
+}

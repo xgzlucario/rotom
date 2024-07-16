@@ -77,6 +77,7 @@ func (lp *ListPack) Compress() {
 		return
 	}
 	lp.data = encoder.EncodeAll(lp.data, make([]byte, 0, len(lp.data)/3))
+	lp.data = slices.Clip(lp.data)
 	lp.compress = true
 }
 
@@ -156,14 +157,7 @@ func (it *lpIterator) Prev() []byte {
 }
 
 func (it *lpIterator) Insert(datas ...string) {
-	if it.IsLast() {
-		for _, data := range datas {
-			it.data = appendEntry(it.data, data)
-			it.size++
-		}
-		return
-	}
-	alloc := bpool.Get(maxListPackSize)[:0]
+	var alloc []byte
 	for _, data := range datas {
 		alloc = appendEntry(alloc, data)
 		it.size++
@@ -212,9 +206,13 @@ func (it *lpIterator) ReplaceNext(key string) {
 	alloc := appendEntry(nil, key)
 	it.data = slices.Replace(it.data, before, after, alloc...)
 	it.index = before
+	bpool.Put(alloc)
 }
 
 func appendEntry(dst []byte, data string) []byte {
+	if dst == nil {
+		dst = bpool.Get(len(data) + 10)[:0]
+	}
 	before := len(dst)
 	dst = appendUvarint(dst, len(data), false)
 	dst = append(dst, data...)

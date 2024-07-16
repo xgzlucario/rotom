@@ -33,10 +33,10 @@ func main() {
 	fmt.Println(c)
 
 	start := time.Now()
+	m := map[int]any{}
 
 	switch c {
 	case "map":
-		m := map[int]any{}
 		for i := 0; i < 10000; i++ {
 			hm := hash.NewMap()
 			for i := 0; i < 512; i++ {
@@ -47,7 +47,6 @@ func main() {
 		}
 
 	case "zipmap":
-		m := map[int]any{}
 		for i := 0; i < 10000; i++ {
 			hm := hash.NewZipMap()
 			for i := 0; i < 512; i++ {
@@ -58,7 +57,6 @@ func main() {
 		}
 
 	case "zipmap-compressed":
-		m := map[int]any{}
 		for i := 0; i < 10000; i++ {
 			hm := hash.NewZipMap()
 			for i := 0; i < 512; i++ {
