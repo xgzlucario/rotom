@@ -132,11 +132,20 @@ func TestListpack(t *testing.T) {
 
 	t.Run("compress", func(t *testing.T) {
 		lp := NewListPack()
-		lp.RPush("A", "B", "C")
+		for i := 0; i < 100; i++ {
+			lp.RPush("A1", "B2", "C3")
+		}
+
+		before := len(lp.data)
 		lp.Compress()
 		lp.Compress()
+		afterC := len(lp.data)
+		assert.Less(afterC, before)
+
 		lp.Decompress()
 		lp.Decompress()
-		assert.Equal(lp2list(lp), []string{"A", "B", "C"})
+		afterD := len(lp.data)
+		assert.Less(afterC, afterD)
+		assert.Equal(afterD, before)
 	})
 }

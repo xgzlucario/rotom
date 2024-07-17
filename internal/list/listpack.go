@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"slices"
 
-	"github.com/klauspost/compress/zstd"
+	"github.com/pierrec/lz4/v4"
 	"github.com/xgzlucario/rotom/internal/pkg"
 )
 
@@ -13,9 +13,9 @@ const (
 )
 
 var (
-	bpool      = pkg.NewBufferPool()
-	encoder, _ = zstd.NewWriter(nil)
-	decoder, _ = zstd.NewReader(nil)
+	bpool = pkg.NewBufferPool()
+
+	c lz4.Compressor
 )
 
 // ListPack is a lists of strings serialization format on Redis.
@@ -35,9 +35,9 @@ var (
 	Using this structure, it is fast to iterate from both sides.
 */
 type ListPack struct {
-	compress bool
-	size     uint32
-	data     []byte
+	srcLen uint32 // srcLen is data size before compressed.
+	size   uint32
+	data   []byte
 }
 
 func NewListPack() *ListPack {
@@ -79,20 +79,31 @@ func (lp *ListPack) RPop() (val string, ok bool) {
 }
 
 func (lp *ListPack) Compress() {
-	if lp.compress {
+	if lp.srcLen > 0 {
 		return
 	}
-	lp.data = encoder.EncodeAll(lp.data, make([]byte, 0, len(lp.data)/3))
-	lp.data = slices.Clip(lp.data)
-	lp.compress = true
+	if len(lp.data) == 0 {
+		return
+	}
+	lp.srcLen = uint32(len(lp.data))
+
+	dst := bpool.Get(lz4.CompressBlockBound(len(lp.data)))
+	n, _ := c.CompressBlock(lp.data, dst)
+
+	bpool.Put(lp.data)
+	lp.data = dst[:n]
 }
 
 func (lp *ListPack) Decompress() {
-	if !lp.compress {
+	if lp.srcLen == 0 {
 		return
 	}
-	lp.data, _ = decoder.DecodeAll(lp.data, nil)
-	lp.compress = false
+	dst := bpool.Get(int(lp.srcLen))
+	n, _ := lz4.UncompressBlock(lp.data, dst)
+
+	bpool.Put(lp.data)
+	lp.data = dst[:n]
+	lp.srcLen = 0
 }
 
 type lpIterator struct {
@@ -101,6 +112,9 @@ type lpIterator struct {
 }
 
 func (lp *ListPack) Iterator() *lpIterator {
+	if lp.srcLen > 0 {
+		lp.Decompress()
+	}
 	return &lpIterator{ListPack: lp}
 }
 
