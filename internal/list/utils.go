@@ -25,13 +25,7 @@ func uvarintReverse(buf []byte) (uint64, int) {
 	var s uint
 	for i := range buf {
 		b := buf[len(buf)-1-i]
-		if i == binary.MaxVarintLen64 {
-			return 0, -(i + 1) // overflow
-		}
 		if b < 0x80 {
-			if i == binary.MaxVarintLen64-1 && b > 1 {
-				return 0, -(i + 1) // overflow
-			}
 			return x | uint64(b)<<s, i + 1
 		}
 		x |= uint64(b&0x7f) << s

@@ -8,7 +8,7 @@ import (
 )
 
 func genKey(i int) string {
-	return fmt.Sprintf("%06x", i)
+	return fmt.Sprintf("%08x", i)
 }
 
 func lp2list(lp *ListPack) (res []string) {
@@ -24,75 +24,97 @@ func TestListpack(t *testing.T) {
 
 	t.Run("rpush", func(t *testing.T) {
 		lp := NewListPack()
-		lp.RPush("A")
-		lp.RPush("B", "C")
+		lp.RPush("A", "B", "C")
 		assert.Equal(lp.Size(), 3)
 		assert.Equal(lp2list(lp), []string{"A", "B", "C"})
 	})
 
-	t.Run("rpush", func(t *testing.T) {
+	t.Run("lpush", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("A")
-		lp.LPush("B", "C")
+		lp.LPush("A", "B", "C")
 		assert.Equal(lp.Size(), 3)
-		assert.Equal(lp2list(lp), []string{"B", "C", "A"})
+		assert.Equal(lp2list(lp), []string{"C", "B", "A"})
 	})
 
 	t.Run("lpop", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("A", "B", "C")
+		lp.RPush("A", "B", "C")
 
-		it := lp.Iterator()
-
-		val, ok := it.RemoveNext()
+		val, ok := lp.LPop()
 		assert.Equal(val, "A")
 		assert.True(ok)
 
-		val, ok = it.RemoveNext()
+		val, ok = lp.LPop()
 		assert.Equal(val, "B")
 		assert.True(ok)
 
-		val, ok = it.RemoveNext()
+		val, ok = lp.LPop()
 		assert.Equal(val, "C")
 		assert.True(ok)
 
 		// empty
-		val, ok = it.RemoveNext()
+		val, ok = lp.LPop()
 		assert.Equal(val, "")
 		assert.False(ok)
 	})
 
 	t.Run("rpop", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("A", "B", "C")
+		lp.RPush("A", "B", "C")
 
-		it := lp.Iterator().SeekLast()
-
-		it.Prev()
-		val, ok := it.RemoveNext()
+		val, ok := lp.RPop()
 		assert.Equal(val, "C")
 		assert.True(ok)
 
-		it.Prev()
-		val, ok = it.RemoveNext()
+		val, ok = lp.RPop()
 		assert.Equal(val, "B")
 		assert.True(ok)
 
-		it.Prev()
-		val, ok = it.RemoveNext()
+		val, ok = lp.RPop()
 		assert.Equal(val, "A")
 		assert.True(ok)
 
 		// empty
-		it.Prev()
-		val, ok = it.RemoveNext()
+		val, ok = lp.RPop()
 		assert.Equal(val, "")
 		assert.False(ok)
 	})
 
+	t.Run("removeNexts", func(t *testing.T) {
+		lp := NewListPack()
+		lp.RPush("aa", "bb", "cc", "dd", "ee")
+
+		lp.Iterator().RemoveNexts(1, func(b []byte) {
+			assert.Equal(string(b), "aa")
+		})
+
+		var index int
+		lp.Iterator().RemoveNexts(5, func(b []byte) {
+			switch index {
+			case 0:
+				assert.Equal(string(b), "bb")
+			case 1:
+				assert.Equal(string(b), "cc")
+			case 2:
+				assert.Equal(string(b), "dd")
+			case 3:
+				assert.Equal(string(b), "ee")
+			}
+			index++
+		})
+
+		lp.Iterator().RemoveNexts(1, func([]byte) {
+			panic("should not call")
+		})
+
+		lp.Iterator().SeekLast().RemoveNexts(1, func([]byte) {
+			panic("should not call")
+		})
+	})
+
 	t.Run("replaceNext", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("TEST1", "TEST2", "TEST3")
+		lp.RPush("TEST1", "TEST2", "TEST3")
 
 		it := lp.Iterator()
 		it.ReplaceNext("TEST4")
@@ -103,13 +125,27 @@ func TestListpack(t *testing.T) {
 
 		it.ReplaceNext("TTTTTT")
 		assert.Equal(lp2list(lp), []string{"TTTTTT", "TEST2", "TEST3"})
+
+		it.SeekLast().ReplaceNext("a")
+		assert.Equal(lp2list(lp), []string{"TTTTTT", "TEST2", "TEST3"})
 	})
 
 	t.Run("compress", func(t *testing.T) {
 		lp := NewListPack()
-		lp.LPush("A", "B", "C", "D", "E")
+		for i := 0; i < 100; i++ {
+			lp.RPush("A1", "B2", "C3")
+		}
+
+		before := len(lp.data)
 		lp.Compress()
+		lp.Compress()
+		afterC := len(lp.data)
+		assert.Less(afterC, before)
+
 		lp.Decompress()
-		assert.Equal(lp2list(lp), []string{"A", "B", "C", "D", "E"})
+		lp.Decompress()
+		afterD := len(lp.data)
+		assert.Less(afterC, afterD)
+		assert.Equal(afterD, before)
 	})
 }

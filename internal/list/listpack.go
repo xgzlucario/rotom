@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"slices"
 
-	"github.com/klauspost/compress/zstd"
-	"github.com/xgzlucario/rotom/internal/pkg"
+	"github.com/pierrec/lz4/v4"
+	"github.com/xgzlucario/rotom/internal/utils"
 )
 
 const (
@@ -13,9 +13,9 @@ const (
 )
 
 var (
-	bpool      = pkg.NewBufferPool()
-	encoder, _ = zstd.NewWriter(nil)
-	decoder, _ = zstd.NewReader(nil)
+	bpool = utils.NewBufferPool()
+
+	c lz4.Compressor
 )
 
 // ListPack is a lists of strings serialization format on Redis.
@@ -35,13 +35,13 @@ var (
 	Using this structure, it is fast to iterate from both sides.
 */
 type ListPack struct {
-	compress bool
-	size     uint32
-	data     []byte
+	srcLen uint32 // srcLen is data size before compressed.
+	size   uint32
+	data   []byte
 }
 
-func NewListPack(val ...string) *ListPack {
-	return &ListPack{data: bpool.Get(32)[:0]}
+func NewListPack() *ListPack {
+	return &ListPack{data: make([]byte, 0, 32)}
 }
 
 func (lp *ListPack) Size() int {
@@ -49,6 +49,9 @@ func (lp *ListPack) Size() int {
 }
 
 func (lp *ListPack) LPush(data ...string) {
+	if len(data) > 1 {
+		slices.Reverse(data)
+	}
 	lp.Iterator().Insert(data...)
 }
 
@@ -56,32 +59,51 @@ func (lp *ListPack) RPush(data ...string) {
 	lp.Iterator().SeekLast().Insert(data...)
 }
 
-func (lp *ListPack) LPop() (string, bool) {
-	return lp.Iterator().RemoveNext()
+func (lp *ListPack) LPop() (val string, ok bool) {
+	lp.Iterator().RemoveNexts(1, func(b []byte) {
+		val, ok = string(b), true
+	})
+	return
 }
 
-func (lp *ListPack) RPop() (string, bool) {
+func (lp *ListPack) RPop() (val string, ok bool) {
+	if lp.Size() == 0 {
+		return "", false
+	}
 	it := lp.Iterator().SeekLast()
 	it.Prev()
-	return it.RemoveNext()
+	it.RemoveNexts(1, func(b []byte) {
+		val, ok = string(b), true
+	})
+	return
 }
 
 func (lp *ListPack) Compress() {
-	if lp.compress {
+	if lp.srcLen > 0 {
 		return
 	}
-	dst := encoder.EncodeAll(lp.data, bpool.Get(len(lp.data))[:0])
+	if len(lp.data) == 0 {
+		return
+	}
+	lp.srcLen = uint32(len(lp.data))
+
+	dst := bpool.Get(lz4.CompressBlockBound(len(lp.data)))
+	n, _ := c.CompressBlock(lp.data, dst)
+
 	bpool.Put(lp.data)
-	lp.data = slices.Clip(dst)
-	lp.compress = true
+	lp.data = dst[:n]
 }
 
 func (lp *ListPack) Decompress() {
-	if !lp.compress {
+	if lp.srcLen == 0 {
 		return
 	}
-	lp.data, _ = decoder.DecodeAll(lp.data, bpool.Get(maxListPackSize)[:0])
-	lp.compress = false
+	dst := bpool.Get(int(lp.srcLen))
+	n, _ := lz4.UncompressBlock(lp.data, dst)
+
+	bpool.Put(lp.data)
+	lp.data = dst[:n]
+	lp.srcLen = 0
 }
 
 type lpIterator struct {
@@ -90,6 +112,9 @@ type lpIterator struct {
 }
 
 func (lp *ListPack) Iterator() *lpIterator {
+	if lp.srcLen > 0 {
+		lp.Decompress()
+	}
 	return &lpIterator{ListPack: lp}
 }
 
@@ -108,9 +133,6 @@ func (it *lpIterator) IsFirst() bool { return it.index == 0 }
 func (it *lpIterator) IsLast() bool { return it.index == len(it.data) }
 
 func (it *lpIterator) Next() []byte {
-	if it.IsLast() {
-		return nil
-	}
 	//
 	//    index     dataStartPos    dataEndPos            indexNext
 	//      |            |              |                     |
@@ -132,9 +154,6 @@ func (it *lpIterator) Next() []byte {
 }
 
 func (it *lpIterator) Prev() []byte {
-	if it.IsFirst() {
-		return nil
-	}
 	//
 	//    indexNext  dataStartPos    dataEndPos               index
 	//        |            |              |                     |
@@ -158,14 +177,7 @@ func (it *lpIterator) Prev() []byte {
 }
 
 func (it *lpIterator) Insert(datas ...string) {
-	if it.IsLast() {
-		for _, data := range datas {
-			it.data = appendEntry(it.data, data)
-			it.size++
-		}
-		return
-	}
-	alloc := bpool.Get(maxListPackSize)[:0]
+	var alloc []byte
 	for _, data := range datas {
 		alloc = appendEntry(alloc, data)
 		it.size++
@@ -174,19 +186,23 @@ func (it *lpIterator) Insert(datas ...string) {
 	bpool.Put(alloc)
 }
 
-func (it *lpIterator) RemoveNext() (string, bool) {
-	if it.IsLast() {
-		return "", false
-	}
+func (it *lpIterator) RemoveNexts(num int, onDelete func([]byte)) {
 	before := it.index
-	next := string(it.Next())
-	after := it.index
 
+	for i := 0; i < num; i++ {
+		if it.IsLast() {
+			break
+		}
+		next := it.Next()
+		if onDelete != nil {
+			onDelete(next)
+		}
+		it.size--
+	}
+
+	after := it.index
 	it.data = slices.Delete(it.data, before, after)
 	it.index = before
-	it.size--
-
-	return next, true
 }
 
 func (it *lpIterator) ReplaceNext(key string) {
@@ -200,9 +216,13 @@ func (it *lpIterator) ReplaceNext(key string) {
 	alloc := appendEntry(nil, key)
 	it.data = slices.Replace(it.data, before, after, alloc...)
 	it.index = before
+	bpool.Put(alloc)
 }
 
 func appendEntry(dst []byte, data string) []byte {
+	if dst == nil {
+		dst = bpool.Get(len(data) + 10)[:0]
+	}
 	before := len(dst)
 	dst = appendUvarint(dst, len(data), false)
 	dst = append(dst, data...)

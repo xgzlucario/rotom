@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/swiss"
+	"github.com/influxdata/tdigest"
 	"github.com/xgzlucario/rotom/internal/dict"
-	"github.com/xgzlucario/rotom/internal/pkg"
 )
 
 var previousPause time.Duration
@@ -40,7 +40,7 @@ func main() {
 
 	debug.SetGCPercent(10)
 	start := time.Now()
-	q := pkg.NewQuantile(entries)
+	td := tdigest.New()
 
 	switch c {
 	case "dict":
@@ -49,7 +49,7 @@ func main() {
 			k, v := genKV(i)
 			start := time.Now()
 			m.Set(k, v)
-			q.Add(float64(time.Since(start)))
+			td.Add(float64(time.Since(start)), 1)
 		}
 
 	case "stdmap":
@@ -58,7 +58,7 @@ func main() {
 			k, v := genKV(i)
 			start := time.Now()
 			m[k] = v
-			q.Add(float64(time.Since(start)))
+			td.Add(float64(time.Since(start)), 1)
 		}
 
 	case "swiss":
@@ -67,7 +67,7 @@ func main() {
 			k, v := genKV(i)
 			start := time.Now()
 			m.Put(k, v)
-			q.Add(float64(time.Since(start)))
+			td.Add(float64(time.Since(start)), 1)
 		}
 	}
 	cost := time.Since(start)
@@ -84,5 +84,10 @@ func main() {
 	fmt.Println("gc:", stat.NumGC)
 	fmt.Println("pause:", gcPause())
 	fmt.Println("cost:", cost)
-	q.Print()
+
+	// Compute Quantiles
+	fmt.Println("50th:", time.Duration(td.Quantile(0.5)))
+	fmt.Println("90th:", time.Duration(td.Quantile(0.9)))
+	fmt.Println("99th:", time.Duration(td.Quantile(0.99)))
+	fmt.Println("999th:", time.Duration(td.Quantile(0.999)))
 }

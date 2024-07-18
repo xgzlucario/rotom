@@ -60,7 +60,7 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 		// command_bulk format
 		before, after, ok := cutByCRLF(r.b[1:])
 		if !ok {
-			return nil, ErrCRLFNotFound
+			return nil, errCRLFNotFound
 		}
 		count, err := strconv.Atoi(b2s(before))
 		if err != nil {
@@ -78,7 +78,7 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 			// read CRLF
 			before, after, ok := cutByCRLF(r.b[1:])
 			if !ok {
-				return nil, ErrCRLFNotFound
+				return nil, errCRLFNotFound
 			}
 			count, err := strconv.Atoi(b2s(before))
 			if err != nil {

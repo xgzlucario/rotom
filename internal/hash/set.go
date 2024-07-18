@@ -5,10 +5,11 @@ import (
 )
 
 type SetI interface {
-	Add(key string) (ok bool)
-	Remove(key string) (ok bool)
+	Add(key string) bool
+	Exist(key string) bool
+	Remove(key string) bool
 	Pop() (key string, ok bool)
-	Scan(fn func(string))
+	Scan(fn func(key string))
 	Len() int
 }
 
@@ -19,19 +20,15 @@ type Set struct {
 }
 
 func NewSet() *Set {
-	return &Set{mapset.NewThreadUnsafeSetWithSize[string](64)}
+	return &Set{mapset.NewThreadUnsafeSetWithSize[string](512)}
 }
 
 func (s Set) Remove(key string) bool {
-	if !s.ContainsOne(key) {
+	if !s.Exist(key) {
 		return false
 	}
 	s.Set.Remove(key)
 	return true
-}
-
-func (s Set) Len() int {
-	return s.Cardinality()
 }
 
 func (s Set) Scan(fn func(string)) {
@@ -40,3 +37,9 @@ func (s Set) Scan(fn func(string)) {
 		return false
 	})
 }
+
+func (s Set) Exist(key string) bool {
+	return s.Set.ContainsOne(key)
+}
+
+func (s Set) Len() int { return s.Cardinality() }

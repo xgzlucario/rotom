@@ -37,7 +37,7 @@ func (zs *ZipSet) Remove(key string) bool {
 	it := zs.m.Iterator().SeekLast()
 	for !it.IsFirst() {
 		if key == b2s(it.Prev()) {
-			it.RemoveNext()
+			it.RemoveNexts(1, nil)
 			return true
 		}
 	}
@@ -51,17 +51,17 @@ func (zs *ZipSet) Scan(fn func(string)) {
 	}
 }
 
-func (zs *ZipSet) Pop() (string, bool) {
-	return zs.m.RPop()
-}
+func (zs *ZipSet) Pop() (string, bool) { return zs.m.RPop() }
 
-func (zs *ZipSet) Len() int {
-	return zs.m.Size()
-}
+func (zs *ZipSet) Len() int { return zs.m.Size() }
+
+func (zs *ZipSet) Compress() { zs.m.Compress() }
+
+func (zs *ZipSet) Decompress() { zs.m.Decompress() }
 
 func (zs *ZipSet) ToSet() *Set {
 	s := NewSet()
-	s.Scan(func(key string) {
+	zs.Scan(func(key string) {
 		s.Add(key)
 	})
 	return s

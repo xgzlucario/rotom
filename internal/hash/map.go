@@ -19,7 +19,7 @@ type Map struct {
 }
 
 func NewMap() *Map {
-	return &Map{m: swiss.New[string, []byte](64)}
+	return &Map{m: swiss.New[string, []byte](256)}
 }
 
 func (m *Map) Get(key string) ([]byte, bool) {
