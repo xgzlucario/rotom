@@ -28,7 +28,7 @@ func genKV(id int) (string, []byte) {
 
 func main() {
 	c := ""
-	flag.StringVar(&c, "obj", "map", "object to bench.")
+	flag.StringVar(&c, "obj", "hashmap", "object to bench.")
 	flag.Parse()
 	fmt.Println(c)
 
@@ -36,7 +36,7 @@ func main() {
 	m := map[int]any{}
 
 	switch c {
-	case "map":
+	case "hashmap":
 		for i := 0; i < 10000; i++ {
 			hm := hash.NewMap()
 			for i := 0; i < 512; i++ {

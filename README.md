@@ -14,28 +14,35 @@
 4. AOF 支持
 5. 支持 18 种常用命令
 
-### 原理介绍
-
-**IO 多路复用**
-
-IO多路复用是一种同时监听多个 socket 的技术，当一个或多个 socket 的读或写操作就绪时，程序会得到就绪事件通知，并进行相应的读写操作。常用的 IO多路复用机制有 select, poll, kqueue 等，在 Linux 平台上使用的是 epoll。
-
-**AeLoop 事件循环**
+### AELoop 事件循环
 
 AeLoop(Async Event Loop) 是 Redis 的核心异步事件驱动机制，主要有以下部分：
 
-1. FileEvent：使用 IO 多路复用处理网络 socket 上的读写事件。事件类型分为 `AE_READABLE` 和 `AE_WRIABLE`
+1. FileEvent：使用 IO 多路复用处理网络 socket 上的读写事件。事件类型分为 `READABLE` 和 `WRIABLE`
 2. TimeEvent：处理需要延迟执行或定时执行的任务，如每隔 `100ms` 进行过期淘汰
 3. 当事件就绪时，通过该事件绑定的回调函数进行处理
 
 在 rotom 内部实现中，还原了 Redis 中的 AeLoop 事件循环机制，具体来说：
 
-1. 当一个新的 tcp 连接到达时，通过 `AcceptHandler` 获取该 socket 连接的 fd，并添加至事件循环，注册 `AE_READABLE` 读事件
-2. 读事件就绪时，通过 `ReadQueryFromClient` 将数据读出至 `queryBuf`
+1. 当一个新的 tcp 连接到达时，通过 `AcceptHandler` 获取连接的 socket fd，并添加至事件循环，注册读事件
+2. 读事件就绪时，通过 `ReadQueryFromClient` 将缓冲数据读出至 `queryBuf`
 3. 通过 `ProcessQueryBuf` 从 `queryBuf` 中解析并执行对应命令
-4. 保存命令执行结果，并注册 socket fd 的 `AE_WRIABLE` 写事件
+4. 保存命令执行结果，并注册 socket fd 的写事件
 5. 写事件就绪时，通过 `SendReplyToClient` 将所有结果写回客户端，一个写事件可能一次性写回多个读事件的结果
 6. 资源释放，并不断循环上述过程，直到服务关闭
+
+### 数据结构
+
+rotom 在数据结构上做了许多优化，当 hash 和 set 较小时，使用空间紧凑的 `zipmap` 和 `zipset` 以优化内存效率，并在适时使用 `lz4` 压缩算法压缩较冷数据，以进一步节省内存。
+
+其中 `zipmap` 和 `zipset` 以及 `quicklist` 都基于 `listpack`, 这是 Redis 7.0+ 提出的新型压缩列表，支持正序及逆序遍历。
+
+### 计划
+
+- LRU 缓存及内存淘汰支持
+- dict 渐进式哈希支持
+- RDB 及 AOF Rewrite 支持
+- 兼容更多常用命令
 
 ## 使用
 
@@ -51,9 +58,10 @@ git clone https://github.com/xgzlucario/rotom
 
 ```
 $ go run .
-2024-06-15 16:41:22 DBG read cmd arguments config=config.json debug=true
-2024-06-15 16:41:22 DBG running on port=6379
-2024-06-15 16:41:22 DBG rotom server is ready to accept.
+2024-07-18 23:37:13 INF current version buildTime=240718_233649+0800
+2024-07-18 23:37:13 INF read cmd arguments config=/etc/rotom/config.json debug=false
+2024-07-18 23:37:13 INF running on port=6379
+2024-07-18 23:37:13 INF rotom server is ready to accept.
 ```
 
 **容器运行**
@@ -62,7 +70,7 @@ $ go run .
 
 ```
 REPOSITORY       TAG           IMAGE ID       CREATED         SIZE
-rotom            latest        22f42ce9ae0e   8 seconds ago   18.8MB
+rotom            latest        22f42ce9ae0e   8 seconds ago   20.5MB
 ```
 
 然后启动容器：

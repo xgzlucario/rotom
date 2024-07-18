@@ -5,7 +5,7 @@ import (
 	"slices"
 
 	"github.com/pierrec/lz4/v4"
-	"github.com/xgzlucario/rotom/internal/pkg"
+	"github.com/xgzlucario/rotom/internal/utils"
 )
 
 const (
@@ -13,7 +13,7 @@ const (
 )
 
 var (
-	bpool = pkg.NewBufferPool()
+	bpool = utils.NewBufferPool()
 
 	c lz4.Compressor
 )
@@ -191,7 +191,7 @@ func (it *lpIterator) RemoveNexts(num int, onDelete func([]byte)) {
 
 	for i := 0; i < num; i++ {
 		if it.IsLast() {
-			goto BREAK
+			break
 		}
 		next := it.Next()
 		if onDelete != nil {
@@ -200,7 +200,6 @@ func (it *lpIterator) RemoveNexts(num int, onDelete func([]byte)) {
 		it.size--
 	}
 
-BREAK:
 	after := it.index
 	it.data = slices.Delete(it.data, before, after)
 	it.index = before
