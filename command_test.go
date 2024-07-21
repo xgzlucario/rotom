@@ -210,6 +210,12 @@ func TestCommand(t *testing.T) {
 		wg.Wait()
 	})
 
+	t.Run("largeBody", func(t *testing.T) {
+		body := make([]byte, 1024*1024)
+		_, err := rdb.Set(ctx, "large", body, 0).Result()
+		assert.NotNil(err)
+	})
+
 	t.Run("client-closed", func(t *testing.T) {
 		rdb.Close()
 	})

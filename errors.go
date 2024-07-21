@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 )
 
 var (
@@ -10,9 +9,6 @@ var (
 	errParseInteger     = errors.New("ERR value is not an integer or out of range")
 	errCRLFNotFound     = errors.New("ERR CRLF not found in line")
 	errInvalidArguments = errors.New("ERR invalid number of arguments")
+	errUnknownCommand   = errors.New("ERR unknown command")
 	errOOM              = errors.New("ERR command not allowed when out of memory")
 )
-
-func ErrUnknownCommand(cmd string) error {
-	return fmt.Errorf("ERR unknown command '%s'", cmd)
-}

@@ -86,6 +86,11 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 			}
 			r.b = after
 
+			// bound check
+			if count > len(r.b) {
+				return nil, errInvalidArguments
+			}
+
 			args = append(args, r.b[:count])
 			r.b = r.b[count+2:]
 		}
@@ -94,7 +99,7 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 		// command_inline format
 		before, after, ok := cutByCRLF(r.b)
 		if !ok {
-			return nil, ErrUnknownCommand(string(r.b))
+			return nil, fmt.Errorf("%w '%s'", errUnknownCommand, r.b)
 		}
 		args = append(args, before)
 		r.b = after

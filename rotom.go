@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"runtime"
 
@@ -112,6 +113,11 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 		freeClient(client)
 		return
 	}
+	if n == MAX_READER_SIZE {
+		log.Error().Msgf("client %d read query too large, now free", fd)
+		freeClient(client)
+		return
+	}
 	if n == 0 {
 		freeClient(client)
 		return
@@ -162,7 +168,7 @@ func ProcessQueryBuf(client *Client) {
 			}
 
 		} else {
-			err := ErrUnknownCommand(command)
+			err := fmt.Errorf("%w '%s'", errUnknownCommand, command)
 			client.replyWriter.WriteError(err)
 			log.Error().Msg(err.Error())
 		}
