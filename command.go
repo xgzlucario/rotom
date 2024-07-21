@@ -3,6 +3,7 @@ package main
 import (
 	"strconv"
 
+	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/zset"
@@ -42,6 +43,7 @@ var cmdTable []*Command = []*Command{
 	{"ping", pingCommand, 0, false},
 	{"hgetall", hgetallCommand, 1, false},
 	{"lrange", lrangeCommand, 3, false},
+	{"flushdb", flushdbCommand, 0, true},
 
 	// TODO
 	{"mset", todoCommand, 0, false},
@@ -389,6 +391,11 @@ func zaddCommand(writer *RESPWriter, args []RESP) {
 		}
 	}
 	writer.WriteInteger(newFields)
+}
+
+func flushdbCommand(writer *RESPWriter, _ []RESP) {
+	db.dict = dict.New()
+	writer.WriteString("OK")
 }
 
 // TODO

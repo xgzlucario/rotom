@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -14,8 +15,11 @@ import (
 
 func startup() {
 	config := &Config{
-		Port: 20082,
+		Port:           20082,
+		AppendOnly:     true,
+		AppendFileName: "appendonly-test.aof",
 	}
+	os.Remove(config.AppendFileName)
 	if err := InitDB(config); err != nil {
 		log.Panic().Msgf("init db error: %v", err)
 	}
@@ -23,6 +27,7 @@ func startup() {
 		log.Panic().Msgf("init server error: %v", err)
 	}
 	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
+	server.aeLoop.AddTimeEvent(AE_NORMAL, 500, CheckOutOfMemory, nil)
 	server.aeLoop.AeMain()
 }
 
@@ -55,6 +60,18 @@ func TestCommand(t *testing.T) {
 		res, err := rdb.Get(ctx, "none").Result()
 		assert.Equal(err, redis.Nil)
 		assert.Equal(res, "")
+	})
+
+	t.Run("pipline", func(t *testing.T) {
+		pip := rdb.Pipeline()
+		pip.RPush(ctx, "ls-pip", "A", "B", "C")
+		pip.LPop(ctx, "ls-pip")
+
+		_, err := pip.Exec(ctx)
+		assert.Nil(err)
+
+		res, _ := rdb.LRange(ctx, "ls-pip", 0, -1).Result()
+		assert.Equal(res, []string{"B", "C"})
 	})
 
 	t.Run("incr", func(t *testing.T) {
@@ -163,9 +180,13 @@ func TestCommand(t *testing.T) {
 		assert.Equal(n, int64(2))
 	})
 
-	t.Run("mset", func(t *testing.T) {
-		res, _ := rdb.MSet(ctx, "mk1", "mv1", "mk2", "mv2").Result()
+	t.Run("flushdb", func(t *testing.T) {
+		rdb.Set(ctx, "test-flush", "1", 0)
+		res, _ := rdb.FlushDB(ctx).Result()
 		assert.Equal(res, "OK")
+
+		_, err := rdb.Get(ctx, "test-flush").Result()
+		assert.Equal(err, redis.Nil)
 	})
 
 	t.Run("concurrency", func(t *testing.T) {
