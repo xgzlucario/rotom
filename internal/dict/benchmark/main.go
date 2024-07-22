@@ -48,7 +48,7 @@ func main() {
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
 			start := time.Now()
-			m.Set(k, v)
+			m.Set(k, dict.TypeString, v)
 			td.Add(float64(time.Since(start)), 1)
 		}
 
@@ -84,10 +84,6 @@ func main() {
 	fmt.Println("gc:", stat.NumGC)
 	fmt.Println("pause:", gcPause())
 	fmt.Println("cost:", cost)
-
 	// Compute Quantiles
-	fmt.Println("50th:", time.Duration(td.Quantile(0.5)))
-	fmt.Println("90th:", time.Duration(td.Quantile(0.9)))
-	fmt.Println("99th:", time.Duration(td.Quantile(0.99)))
 	fmt.Println("999th:", time.Duration(td.Quantile(0.999)))
 }

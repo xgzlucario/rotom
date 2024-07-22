@@ -89,50 +89,61 @@ func pingCommand(writer *RESPWriter, _ []RESP) {
 func setCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 	value := args[1].Clone()
-	db.dict.Set(key, value)
+	db.dict.Set(key, dict.TypeString, value)
 	writer.WriteString("OK")
 }
 
 func incrCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 
-	val, ok := db.dict.Get(key)
+	object, ok := db.dict.Get(key)
 	if !ok {
-		db.dict.Set(key, []byte("1"))
+		db.dict.Set(key, dict.TypeInt, 1)
 		writer.WriteInteger(1)
 		return
 	}
 
-	valBytes, ok := val.([]byte)
-	if !ok {
+	switch object.Type() {
+	case dict.TypeInt:
+		num := object.Data().(int) + 1
+		object.SetData(num)
+		writer.WriteInteger(num)
+
+	case dict.TypeString:
+		bytes := object.Data().([]byte)
+		num, err := RESP(bytes).ToInt()
+		if err != nil {
+			writer.WriteError(errParseInteger)
+			return
+		}
+		num++
+		object.SetData([]byte(strconv.Itoa(num)))
+		writer.WriteInteger(num)
+
+	default:
 		writer.WriteError(errWrongType)
-		return
 	}
-
-	num, err := RESP(valBytes).ToInt()
-	if err != nil {
-		writer.WriteError(errParseInteger)
-		return
-	}
-	num++
-
-	db.dict.Set(key, []byte(strconv.Itoa(num)))
-	writer.WriteInteger(num)
 }
 
 func getCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToStringUnsafe()
 
-	val, ok := db.dict.Get(key)
+	object, ok := db.dict.Get(key)
 	if !ok {
 		writer.WriteNull()
 		return
 	}
 
-	valBytes, ok := val.([]byte)
-	if ok {
-		writer.WriteBulk(valBytes)
-	} else {
+	switch object.Type() {
+	case dict.TypeInt:
+		num := object.Data().(int)
+		writer.WriteBulkString(strconv.Itoa(num))
+
+	case dict.TypeString:
+		bytes := object.Data().([]byte)
+		writer.WriteBulk(bytes)
+
+	default:
 		writer.WriteError(errWrongType)
 	}
 }
@@ -404,33 +415,34 @@ func todoCommand(writer *RESPWriter, _ []RESP) {
 }
 
 func fetchMap(key string, setnx ...bool) (Map, error) {
-	return fetch(key, func() Map { return hash.NewZipMap() }, setnx...)
+	return fetch(key, dict.TypeZipMap, func() Map { return hash.NewZipMap() }, setnx...)
 }
 
 func fetchList(key string, setnx ...bool) (List, error) {
-	return fetch(key, func() List { return list.New() }, setnx...)
+	return fetch(key, dict.TypeList, func() List { return list.New() }, setnx...)
 }
 
 func fetchSet(key string, setnx ...bool) (Set, error) {
-	return fetch(key, func() Set { return hash.NewZipSet() }, setnx...)
+	return fetch(key, dict.TypeZipSet, func() Set { return hash.NewZipSet() }, setnx...)
 }
 
 func fetchZSet(key string, setnx ...bool) (ZSet, error) {
-	return fetch(key, func() ZSet { return zset.NewZSet() }, setnx...)
+	return fetch(key, dict.TypeZSet, func() ZSet { return zset.NewZSet() }, setnx...)
 }
 
-func fetch[T any](key string, new func() T, setnx ...bool) (v T, err error) {
-	item, ok := db.dict.Get(key)
+func fetch[T any](key string, typ dict.Type, new func() T, setnx ...bool) (v T, err error) {
+	object, ok := db.dict.Get(key)
 	if ok {
-		v, ok := item.(T)
-		if ok {
-			return v, nil
+		if object.Type() != typ {
+			return v, errWrongType
 		}
-		return v, errWrongType
+		v := object.Data().(T)
+		return v, nil
 	}
+
 	v = new()
 	if len(setnx) > 0 && setnx[0] {
-		db.dict.Set(key, v)
+		db.dict.Set(key, typ, v)
 	}
 	return v, nil
 }

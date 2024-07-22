@@ -8,23 +8,46 @@ import (
 
 // Dict is the hashmap for Rotom.
 type Dict struct {
-	data   *swiss.Map[string, any]
+	data   *swiss.Map[string, *Object]
 	expire *swiss.Map[string, int64]
 }
 
 func New() *Dict {
 	return &Dict{
-		data:   swiss.New[string, any](64),
+		data:   swiss.New[string, *Object](64),
 		expire: swiss.New[string, int64](64),
 	}
 }
 
-func (dict *Dict) Get(key string) (any, bool) {
-	return dict.data.Get(key)
+func (dict *Dict) Get(key string) (*Object, bool) {
+	object, ok := dict.data.Get(key)
+	if !ok {
+		return nil, false
+	}
+
+	// if object.hasTTL {
+	// ttl, ok := dict.expire.Get(key)
+	// if ttl > 0 || !ok { //
+	// }
+	// }
+
+	switch object.typ {
+	case TypeZipMapC, TypeZipSetC:
+		object.data.(Compressor).Decompress()
+		object.typ -= 1
+	}
+
+	object.updateLRU()
+
+	return object, true
 }
 
-func (dict *Dict) Set(key string, value any) {
-	dict.data.Put(key, value)
+func (dict *Dict) Set(key string, typ Type, data any) {
+	dict.data.Put(key, &Object{
+		typ:  typ,
+		lru:  uint32(time.Now().Unix()),
+		data: data,
+	})
 }
 
 func (dict *Dict) Remove(key string) bool {

@@ -19,10 +19,11 @@ func TestDict(t *testing.T) {
 
 	for i := 0; i < 10000; i++ {
 		key, value := genKV(rand.Int())
-		dict.Set(key, value)
+		dict.Set(key, TypeString, value)
 
-		res, ok := dict.Get(key)
+		object, ok := dict.Get(key)
 		assert.True(ok)
-		assert.Equal(res.([]byte), value)
+		assert.Equal(object.typ, TypeString)
+		assert.Equal(object.data.([]byte), value)
 	}
 }
