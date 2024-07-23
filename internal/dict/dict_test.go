@@ -17,6 +17,17 @@ func TestDict(t *testing.T) {
 	assert := assert.New(t)
 	dict := New()
 
+	dict.Set("key1", TypeString, []byte("hello"))
+	object, ok := dict.Get("key1")
+	assert.True(ok)
+	assert.Equal(object.Data(), []byte("hello"))
+	assert.Equal(object.Type(), TypeString)
+}
+
+func TestDictMultiSet(t *testing.T) {
+	assert := assert.New(t)
+	dict := New()
+
 	for i := 0; i < 10000; i++ {
 		key, value := genKV(rand.Int())
 		dict.Set(key, TypeString, value)

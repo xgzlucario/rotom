@@ -1,10 +1,27 @@
 package dict
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/swiss"
 )
+
+var (
+	_sec  atomic.Uint32
+	_nsec atomic.Int64
+)
+
+func init() {
+	// init backend ticker
+	tk := time.NewTicker(time.Microsecond)
+	go func() {
+		for t := range tk.C {
+			_sec.Store(uint32(t.Unix()))
+			_nsec.Store(t.UnixNano())
+		}
+	}()
+}
 
 // Dict is the hashmap for Rotom.
 type Dict struct {
@@ -25,11 +42,15 @@ func (dict *Dict) Get(key string) (*Object, bool) {
 		return nil, false
 	}
 
-	// if object.hasTTL {
-	// ttl, ok := dict.expire.Get(key)
-	// if ttl > 0 || !ok { //
-	// }
-	// }
+	if object.hasTTL {
+		nsecTTL, ok := dict.expire.Get(key)
+		if !ok || nsecTTL < _nsec.Load() {
+			// expired
+			dict.data.Delete(key)
+			dict.expire.Delete(key)
+			return nil, false
+		}
+	}
 
 	switch object.typ {
 	case TypeZipMapC, TypeZipSetC:
@@ -37,16 +58,17 @@ func (dict *Dict) Get(key string) (*Object, bool) {
 		object.typ -= 1
 	}
 
-	object.updateLRU()
+	// update access time
+	object.lastAccessd = _sec.Load()
 
 	return object, true
 }
 
 func (dict *Dict) Set(key string, typ Type, data any) {
 	dict.data.Put(key, &Object{
-		typ:  typ,
-		lru:  uint32(time.Now().Unix()),
-		data: data,
+		typ:         typ,
+		lastAccessd: _sec.Load(),
+		data:        data,
 	})
 }
 
@@ -58,10 +80,11 @@ func (dict *Dict) Remove(key string) bool {
 }
 
 func (dict *Dict) SetTTL(key string, expiration int64) bool {
-	_, ok := dict.data.Get(key)
+	object, ok := dict.data.Get(key)
 	if !ok {
 		return false
 	}
+	object.hasTTL = true
 	dict.expire.Put(key, expiration)
 	return true
 }

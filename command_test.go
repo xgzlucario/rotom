@@ -20,12 +20,7 @@ func startup() {
 		AppendFileName: "appendonly-test.aof",
 	}
 	os.Remove(config.AppendFileName)
-	if err := InitDB(config); err != nil {
-		log.Panic().Msgf("init db error: %v", err)
-	}
-	if err := initServer(config); err != nil {
-		log.Panic().Msgf("init server error: %v", err)
-	}
+	config4Server(config)
 	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
 	server.aeLoop.AddTimeEvent(AE_NORMAL, 500, CheckOutOfMemory, nil)
 	server.aeLoop.AeMain()
@@ -219,4 +214,17 @@ func TestCommand(t *testing.T) {
 	t.Run("client-closed", func(t *testing.T) {
 		rdb.Close()
 	})
+}
+
+func TestConfig(t *testing.T) {
+	assert := assert.New(t)
+
+	cfg, _ := LoadConfig("config.json")
+	assert.Equal(cfg.Port, 6379)
+
+	_, err := LoadConfig("not-exist.json")
+	assert.NotNil(err)
+
+	_, err = LoadConfig("go.mod")
+	assert.NotNil(err)
 }

@@ -15,10 +15,6 @@ var (
 	buildTime string
 )
 
-func runDebug() {
-	go http.ListenAndServe(":6060", nil)
-}
-
 func initLogger() zerolog.Logger {
 	return zerolog.
 		New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime}).
@@ -26,6 +22,15 @@ func initLogger() zerolog.Logger {
 		With().
 		Timestamp().
 		Logger()
+}
+
+func config4Server(config *Config) {
+	if err := initServer(config); err != nil {
+		log.Fatal().Msgf("init server error: %v", err)
+	}
+	if err := InitDB(config); err != nil {
+		log.Fatal().Msgf("init db error: %v", err)
+	}
 }
 
 func main() {
@@ -43,14 +48,9 @@ func main() {
 	if err != nil {
 		log.Fatal().Msgf("load config error: %v", err)
 	}
-	if err = initServer(config); err != nil {
-		log.Fatal().Msgf("init server error: %v", err)
-	}
-	if err = InitDB(config); err != nil {
-		log.Fatal().Msgf("init db error: %v", err)
-	}
+	config4Server(config)
 	if debug {
-		runDebug()
+		go http.ListenAndServe(":6060", nil)
 	}
 
 	log.Info().Int("port", config.Port).Msg("running on")

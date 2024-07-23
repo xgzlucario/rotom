@@ -24,6 +24,3 @@ build:
 
 build-docker:
 	docker build --build-arg BUILD_TIME=$(shell date +%y%m%d_%H%M%S%z) -t rotom .
-
-# tmp command
-# rsync -av --exclude='.git' rotom/ 2:~/xgz/rotom

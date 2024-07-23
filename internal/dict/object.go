@@ -1,7 +1,5 @@
 package dict
 
-import "time"
-
 // Type defines all rotom data types.
 type Type byte
 
@@ -23,11 +21,12 @@ type Compressor interface {
 	Decompress()
 }
 
-// Object is the basic unit for storing in dict.
+// Object is the basic element for storing in dict.
 type Object struct {
-	typ  Type
-	lru  uint32
-	data any
+	typ         Type
+	hasTTL      bool
+	lastAccessd uint32
+	data        any
 }
 
 func (o *Object) Type() Type { return o.typ }
@@ -35,5 +34,3 @@ func (o *Object) Type() Type { return o.typ }
 func (o *Object) Data() any { return o.data }
 
 func (o *Object) SetData(data any) { o.data = data }
-
-func (o *Object) updateLRU() { o.lru = uint32(time.Now().Unix()) }
