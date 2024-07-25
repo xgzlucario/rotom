@@ -1,5 +1,7 @@
 package dict
 
+import "time"
+
 // Type defines all rotom data types.
 type Type byte
 
@@ -8,10 +10,8 @@ const (
 	TypeInt
 	TypeMap
 	TypeZipMap
-	TypeZipMapC // compressed zipmap
 	TypeSet
 	TypeZipSet
-	TypeZipSetC // compressed zipset
 	TypeList
 	TypeZSet
 )
@@ -34,3 +34,7 @@ func (o *Object) Type() Type { return o.typ }
 func (o *Object) Data() any { return o.data }
 
 func (o *Object) SetData(data any) { o.data = data }
+
+func nsec2duration(nsec int64) (second int) {
+	return int(nsec-_nsec.Load()) / int(time.Second)
+}

@@ -7,6 +7,11 @@ import (
 	"github.com/cockroachdb/swiss"
 )
 
+const (
+	TTL_DEFAULT   = -1
+	KEY_NOT_EXIST = -2
+)
+
 var (
 	_sec  atomic.Uint32
 	_nsec atomic.Int64
@@ -36,32 +41,26 @@ func New() *Dict {
 	}
 }
 
-func (dict *Dict) Get(key string) (*Object, bool) {
+func (dict *Dict) Get(key string) (*Object, int) {
 	object, ok := dict.data.Get(key)
 	if !ok {
-		return nil, false
+		// key not exist
+		return nil, KEY_NOT_EXIST
 	}
 
+	object.lastAccessd = _sec.Load()
 	if object.hasTTL {
-		nsecTTL, ok := dict.expire.Get(key)
-		if !ok || nsecTTL < _nsec.Load() {
-			// expired
+		nsec, _ := dict.expire.Get(key)
+		// key expired
+		if nsec < _nsec.Load() {
 			dict.data.Delete(key)
 			dict.expire.Delete(key)
-			return nil, false
+			return nil, KEY_NOT_EXIST
 		}
+		return object, nsec2duration(nsec)
 	}
 
-	switch object.typ {
-	case TypeZipMapC, TypeZipSetC:
-		object.data.(Compressor).Decompress()
-		object.typ -= 1
-	}
-
-	// update access time
-	object.lastAccessd = _sec.Load()
-
-	return object, true
+	return object, TTL_DEFAULT
 }
 
 func (dict *Dict) Set(key string, typ Type, data any) {
@@ -72,28 +71,56 @@ func (dict *Dict) Set(key string, typ Type, data any) {
 	})
 }
 
-func (dict *Dict) Remove(key string) bool {
-	_, ok := dict.data.Get(key)
-	dict.data.Delete(key)
-	dict.expire.Delete(key)
-	return ok
+func (dict *Dict) SetWithTTL(key string, typ Type, data any, ttl int64) {
+	dict.data.Put(key, &Object{
+		typ:         typ,
+		lastAccessd: _sec.Load(),
+		data:        data,
+		hasTTL:      true,
+	})
+	dict.expire.Put(key, ttl)
 }
 
-func (dict *Dict) SetTTL(key string, expiration int64) bool {
+func (dict *Dict) Delete(key string) bool {
 	object, ok := dict.data.Get(key)
 	if !ok {
 		return false
 	}
-	object.hasTTL = true
-	dict.expire.Put(key, expiration)
+	dict.data.Delete(key)
+	if object.hasTTL {
+		dict.expire.Delete(key)
+	}
 	return true
 }
 
+// SetTTL set expire time for key.
+// return `0` if key not exist or expired.
+// return `1` if set successed.
+func (dict *Dict) SetTTL(key string, ttl int64) int {
+	object, ok := dict.data.Get(key)
+	if !ok {
+		// key not exist
+		return 0
+	}
+	if object.hasTTL {
+		nsec, _ := dict.expire.Get(key)
+		// key expired
+		if nsec < _nsec.Load() {
+			dict.data.Delete(key)
+			dict.expire.Delete(key)
+			return 0
+		}
+	}
+	// set ttl
+	object.hasTTL = true
+	dict.expire.Put(key, ttl)
+	return 1
+}
+
 func (dict *Dict) EvictExpired() {
-	nanosec := time.Now().UnixNano()
-	count := 0
-	dict.expire.All(func(key string, value int64) bool {
-		if nanosec > value {
+	var count int
+	dict.expire.All(func(key string, nsec int64) bool {
+		if _nsec.Load() > nsec {
 			dict.expire.Delete(key)
 			dict.data.Delete(key)
 		}

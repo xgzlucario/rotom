@@ -100,9 +100,6 @@ func TestToMap(t *testing.T) {
 	m.Set("key2", []byte("value2"))
 	m.Set("key3", []byte("value3"))
 
-	m.Compress()
-	m.Decompress()
-
 	nm := m.ToMap()
 
 	// scan

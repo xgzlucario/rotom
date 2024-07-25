@@ -46,17 +46,3 @@ func BenchmarkList(b *testing.B) {
 		}
 	})
 }
-
-func BenchmarkCompress(b *testing.B) {
-	b.Run("compress", func(b *testing.B) {
-		lp := NewListPack()
-		for i := 0; i < 256; i++ {
-			lp.RPush("Hello", "World")
-		}
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			lp.Compress()
-			lp.Decompress()
-		}
-	})
-}

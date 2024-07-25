@@ -129,23 +129,4 @@ func TestListpack(t *testing.T) {
 		it.SeekLast().ReplaceNext("a")
 		assert.Equal(lp2list(lp), []string{"TTTTTT", "TEST2", "TEST3"})
 	})
-
-	t.Run("compress", func(t *testing.T) {
-		lp := NewListPack()
-		for i := 0; i < 100; i++ {
-			lp.RPush("A1", "B2", "C3")
-		}
-
-		before := len(lp.data)
-		lp.Compress()
-		lp.Compress()
-		afterC := len(lp.data)
-		assert.Less(afterC, before)
-
-		lp.Decompress()
-		lp.Decompress()
-		afterD := len(lp.data)
-		assert.Less(afterC, afterD)
-		assert.Equal(afterD, before)
-	})
 }

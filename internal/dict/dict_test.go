@@ -1,40 +1,58 @@
 package dict
 
 import (
-	"fmt"
-	"math/rand/v2"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func genKV(i int) (string, []byte) {
-	k := fmt.Sprintf("%08x", i)
-	return k, []byte(k)
-}
-
 func TestDict(t *testing.T) {
 	assert := assert.New(t)
-	dict := New()
 
-	dict.Set("key1", TypeString, []byte("hello"))
-	object, ok := dict.Get("key1")
-	assert.True(ok)
-	assert.Equal(object.Data(), []byte("hello"))
-	assert.Equal(object.Type(), TypeString)
-}
+	t.Run("set", func(t *testing.T) {
+		dict := New()
+		dict.Set("key", TypeString, []byte("hello"))
 
-func TestDictMultiSet(t *testing.T) {
-	assert := assert.New(t)
-	dict := New()
+		object, ttl := dict.Get("key")
+		assert.Equal(ttl, TTL_DEFAULT)
+		assert.Equal(object.Data(), []byte("hello"))
+		assert.Equal(object.Type(), TypeString)
 
-	for i := 0; i < 10000; i++ {
-		key, value := genKV(rand.Int())
-		dict.Set(key, TypeString, value)
+		object, ttl = dict.Get("none")
+		assert.Nil(object)
+		assert.Equal(ttl, KEY_NOT_EXIST)
+	})
 
-		object, ok := dict.Get(key)
+	t.Run("setTTL", func(t *testing.T) {
+		dict := New()
+		dict.SetWithTTL("key", TypeString, []byte("hello"), time.Now().Add(time.Minute).UnixNano())
+
+		object, ttl := dict.Get("key")
+		assert.Equal(ttl, 60)
+		assert.Equal(object.Data(), []byte("hello"))
+		assert.Equal(object.Type(), TypeString)
+
+		ttl = dict.SetTTL("key", time.Now().Add(-time.Second).UnixNano())
+		assert.Equal(ttl, 1)
+
+		ttl = dict.SetTTL("not-exist", TTL_DEFAULT)
+		assert.Equal(ttl, 0)
+
+		// expired
+		object, ttl = dict.Get("key")
+		assert.Equal(ttl, KEY_NOT_EXIST)
+		assert.Nil(object)
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		dict := New()
+		dict.Set("key", TypeString, []byte("hello"))
+
+		ok := dict.Delete("key")
 		assert.True(ok)
-		assert.Equal(object.typ, TypeString)
-		assert.Equal(object.data.([]byte), value)
-	}
+
+		ok = dict.Delete("none")
+		assert.False(ok)
+	})
 }

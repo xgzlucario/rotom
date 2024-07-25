@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
@@ -94,7 +95,6 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 		argsBuf:     make([]RESP, 8),
 	}
 
-	log.Debug().Msgf("accept client, fd: %d", cfd)
 	server.clients[cfd] = client
 	loop.AddRead(cfd, ReadQueryFromClient, client)
 }
@@ -237,4 +237,19 @@ func CheckOutOfMemory(loop *AeLoop, id int, extra interface{}) {
 	}
 	runtime.ReadMemStats(&mem)
 	server.outOfMemory = int(mem.HeapAlloc) > server.config.MaxMemory
+}
+
+func SysMonitor(loop *AeLoop, id int, extra interface{}) {
+	var mem runtime.MemStats
+	var stat debug.GCStats
+
+	runtime.ReadMemStats(&mem)
+	debug.ReadGCStats(&stat)
+
+	log.Info().
+		Uint64("gcsys", mem.GCSys).
+		Uint64("heapInuse", mem.HeapInuse).
+		Uint64("heapObjects", mem.HeapObjects).
+		Int64("gc", stat.NumGC).
+		Msgf("[SYS]")
 }

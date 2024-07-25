@@ -96,8 +96,8 @@ func setCommand(writer *RESPWriter, args []RESP) {
 func incrCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 
-	object, ok := db.dict.Get(key)
-	if !ok {
+	object, ttl := db.dict.Get(key)
+	if ttl == dict.KEY_NOT_EXIST {
 		db.dict.Set(key, dict.TypeInt, 1)
 		writer.WriteInteger(1)
 		return
@@ -128,8 +128,8 @@ func incrCommand(writer *RESPWriter, args []RESP) {
 func getCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToStringUnsafe()
 
-	object, ok := db.dict.Get(key)
-	if !ok {
+	object, ttl := db.dict.Get(key)
+	if ttl == dict.KEY_NOT_EXIST {
 		writer.WriteNull()
 		return
 	}
@@ -431,8 +431,8 @@ func fetchZSet(key string, setnx ...bool) (ZSet, error) {
 }
 
 func fetch[T any](key string, typ dict.Type, new func() T, setnx ...bool) (v T, err error) {
-	object, ok := db.dict.Get(key)
-	if ok {
+	object, ttl := db.dict.Get(key)
+	if ttl != dict.KEY_NOT_EXIST {
 		if object.Type() != typ {
 			return v, errWrongType
 		}

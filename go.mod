@@ -6,7 +6,6 @@ require (
 	github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/influxdata/tdigest v0.0.1
-	github.com/pierrec/lz4/v4 v4.1.21
 	github.com/redis/go-redis/v9 v9.5.2
 	github.com/rs/zerolog v1.33.0
 	github.com/sakeven/RbTree v1.1.1

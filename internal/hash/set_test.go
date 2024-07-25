@@ -77,9 +77,6 @@ func TestToSet(t *testing.T) {
 	m.Add("key2")
 	m.Add("key3")
 
-	m.Compress()
-	m.Decompress()
-
 	nm := m.ToSet()
 
 	// scan

@@ -55,17 +55,6 @@ func main() {
 			}
 			m[i] = hm
 		}
-
-	case "zipmap-compressed":
-		for i := 0; i < 10000; i++ {
-			hm := hash.NewZipMap()
-			for i := 0; i < 512; i++ {
-				k, v := genKV(i)
-				hm.Set(k, v)
-			}
-			hm.Compress()
-			m[i] = hm
-		}
 	}
 	cost := time.Since(start)
 

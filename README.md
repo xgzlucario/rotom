@@ -33,9 +33,7 @@ AeLoop(Async Event Loop) 是 Redis 的核心异步事件驱动机制，主要有
 
 ### 数据结构
 
-rotom 在数据结构上做了许多优化，当 hash 和 set 较小时，使用空间紧凑的 `zipmap` 和 `zipset` 以优化内存效率，并在适时使用 `lz4` 压缩算法压缩较冷数据，以进一步节省内存。
-
-其中 `zipmap` 和 `zipset` 以及 `quicklist` 都基于 `listpack`, 这是 Redis 7.0+ 提出的新型压缩列表，支持正序及逆序遍历。
+rotom 在数据结构上做了许多优化，当 hash 和 set 较小时，使用空间紧凑的 `zipmap` 和 `zipset` 以优化内存效率。它们都基于 `listpack`, 这是 Redis 5.0+ 提出的新型压缩列表，支持正序及逆序遍历。
 
 ### 计划
 

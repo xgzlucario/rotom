@@ -112,10 +112,6 @@ func (zm *ZipMap) ToMap() *Map {
 
 func (zm *ZipMap) Len() int { return zm.m.Size() }
 
-func (zm *ZipMap) Compress() { zm.m.Compress() }
-
-func (zm *ZipMap) Decompress() { zm.m.Decompress() }
-
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }

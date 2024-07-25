@@ -55,10 +55,6 @@ func (zs *ZipSet) Pop() (string, bool) { return zs.m.RPop() }
 
 func (zs *ZipSet) Len() int { return zs.m.Size() }
 
-func (zs *ZipSet) Compress() { zs.m.Compress() }
-
-func (zs *ZipSet) Decompress() { zs.m.Decompress() }
-
 func (zs *ZipSet) ToSet() *Set {
 	s := NewSet()
 	zs.Scan(func(key string) {
