@@ -74,30 +74,30 @@ func (lp *ListPack) RPop() (val string, ok bool) {
 	return
 }
 
-type lpIterator struct {
+type LpIterator struct {
 	*ListPack
 	index int
 }
 
-func (lp *ListPack) Iterator() *lpIterator {
-	return &lpIterator{ListPack: lp}
+func (lp *ListPack) Iterator() *LpIterator {
+	return &LpIterator{ListPack: lp}
 }
 
-func (it *lpIterator) SeekFirst() *lpIterator {
+func (it *LpIterator) SeekFirst() *LpIterator {
 	it.index = 0
 	return it
 }
 
-func (it *lpIterator) SeekLast() *lpIterator {
+func (it *LpIterator) SeekLast() *LpIterator {
 	it.index = len(it.data)
 	return it
 }
 
-func (it *lpIterator) IsFirst() bool { return it.index == 0 }
+func (it *LpIterator) IsFirst() bool { return it.index == 0 }
 
-func (it *lpIterator) IsLast() bool { return it.index == len(it.data) }
+func (it *LpIterator) IsLast() bool { return it.index == len(it.data) }
 
-func (it *lpIterator) Next() []byte {
+func (it *LpIterator) Next() []byte {
 	//
 	//    index     dataStartPos    dataEndPos            indexNext
 	//      |            |              |                     |
@@ -118,7 +118,7 @@ func (it *lpIterator) Next() []byte {
 	return data
 }
 
-func (it *lpIterator) Prev() []byte {
+func (it *LpIterator) Prev() []byte {
 	//
 	//    indexNext  dataStartPos    dataEndPos               index
 	//        |            |              |                     |
@@ -141,7 +141,7 @@ func (it *lpIterator) Prev() []byte {
 	return data
 }
 
-func (it *lpIterator) Insert(datas ...string) {
+func (it *LpIterator) Insert(datas ...string) {
 	var alloc []byte
 	for _, data := range datas {
 		alloc = appendEntry(alloc, data)
@@ -151,7 +151,7 @@ func (it *lpIterator) Insert(datas ...string) {
 	bpool.Put(alloc)
 }
 
-func (it *lpIterator) RemoveNexts(num int, onDelete func([]byte)) {
+func (it *LpIterator) RemoveNexts(num int, onDelete func([]byte)) {
 	before := it.index
 
 	for i := 0; i < num; i++ {
@@ -170,7 +170,7 @@ func (it *lpIterator) RemoveNexts(num int, onDelete func([]byte)) {
 	it.index = before
 }
 
-func (it *lpIterator) ReplaceNext(key string) {
+func (it *LpIterator) ReplaceNext(key string) {
 	if it.IsLast() {
 		return
 	}

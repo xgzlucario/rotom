@@ -33,29 +33,7 @@ func decodeEntry(buf []byte) (key string, val []byte) {
 	return
 }
 
-func (zm *ZipMap) Set(key string, val []byte) (newField bool) {
-	it := zm.m.Iterator().SeekLast()
-	b := key[len(key)-1]
-	newEntry := b2s(encodeEntry(key, val))
-
-	for !it.IsFirst() {
-		entry := it.Prev()
-		// fast equal
-		if entry[len(entry)-1] != b {
-			continue
-		}
-
-		kb, _ := decodeEntry(entry)
-		if key == kb {
-			it.ReplaceNext(newEntry)
-			return false
-		}
-	}
-	zm.m.RPush(newEntry)
-	return true
-}
-
-func (zm *ZipMap) Get(key string) ([]byte, bool) {
+func (zm *ZipMap) seek(key string) (*list.LpIterator, []byte) {
 	it := zm.m.Iterator().SeekLast()
 	b := key[len(key)-1]
 
@@ -68,28 +46,36 @@ func (zm *ZipMap) Get(key string) ([]byte, bool) {
 
 		kb, vb := decodeEntry(entry)
 		if key == kb {
-			return vb, true
+			return it, vb
 		}
+	}
+	return nil, nil
+}
+
+func (zm *ZipMap) Set(key string, val []byte) (newField bool) {
+	entry := b2s(encodeEntry(key, val))
+	it, _ := zm.seek(key)
+	if it != nil {
+		it.ReplaceNext(entry)
+		return false
+	}
+	zm.m.RPush(entry)
+	return true
+}
+
+func (zm *ZipMap) Get(key string) ([]byte, bool) {
+	_, val := zm.seek(key)
+	if val != nil {
+		return val, true
 	}
 	return nil, false
 }
 
 func (zm *ZipMap) Remove(key string) bool {
-	it := zm.m.Iterator().SeekLast()
-	b := key[len(key)-1]
-
-	for !it.IsFirst() {
-		entry := it.Prev()
-		// fast equal
-		if entry[len(entry)-1] != b {
-			continue
-		}
-
-		kb, _ := decodeEntry(entry)
-		if key == kb {
-			it.RemoveNexts(1, nil)
-			return true
-		}
+	it, _ := zm.seek(key)
+	if it != nil {
+		it.RemoveNexts(1, nil)
+		return true
 	}
 	return false
 }

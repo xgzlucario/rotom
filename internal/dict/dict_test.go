@@ -26,23 +26,30 @@ func TestDict(t *testing.T) {
 
 	t.Run("setTTL", func(t *testing.T) {
 		dict := New()
+
 		dict.SetWithTTL("key", TypeString, []byte("hello"), time.Now().Add(time.Minute).UnixNano())
+		time.Sleep(time.Millisecond)
 
 		object, ttl := dict.Get("key")
-		assert.Equal(ttl, 60)
+		assert.Equal(ttl, 59)
 		assert.Equal(object.Data(), []byte("hello"))
 		assert.Equal(object.Type(), TypeString)
 
-		ttl = dict.SetTTL("key", time.Now().Add(-time.Second).UnixNano())
-		assert.Equal(ttl, 1)
+		res := dict.SetTTL("key", time.Now().Add(-time.Second).UnixNano())
+		assert.Equal(res, 1)
 
-		ttl = dict.SetTTL("not-exist", TTL_DEFAULT)
-		assert.Equal(ttl, 0)
+		res = dict.SetTTL("not-exist", TTL_DEFAULT)
+		assert.Equal(res, 0)
 
-		// expired
+		// get expired
 		object, ttl = dict.Get("key")
 		assert.Equal(ttl, KEY_NOT_EXIST)
 		assert.Nil(object)
+
+		// setTTL expired
+		dict.SetWithTTL("keyx", TypeString, []byte("hello"), time.Now().Add(-time.Second).UnixNano())
+		res = dict.SetTTL("keyx", 1)
+		assert.Equal(res, 0)
 	})
 
 	t.Run("delete", func(t *testing.T) {
@@ -54,5 +61,9 @@ func TestDict(t *testing.T) {
 
 		ok = dict.Delete("none")
 		assert.False(ok)
+
+		dict.SetWithTTL("keyx", TypeString, []byte("hello"), time.Now().UnixNano())
+		ok = dict.Delete("keyx")
+		assert.True(ok)
 	})
 }

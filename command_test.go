@@ -23,6 +23,7 @@ func startup() {
 	config4Server(config)
 	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
 	server.aeLoop.AddTimeEvent(AE_NORMAL, 500, CheckOutOfMemory, nil)
+	server.aeLoop.AddTimeEvent(AE_NORMAL, 1000, SysMonitor, nil)
 	server.aeLoop.AeMain()
 }
 
