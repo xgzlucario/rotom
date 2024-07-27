@@ -5,6 +5,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/xgzlucario/rotom/internal/hash"
+	"github.com/xgzlucario/rotom/internal/list"
+	"github.com/xgzlucario/rotom/internal/zset"
 )
 
 func TestDict(t *testing.T) {
@@ -12,7 +15,7 @@ func TestDict(t *testing.T) {
 
 	t.Run("set", func(t *testing.T) {
 		dict := New()
-		dict.Set("key", TypeString, []byte("hello"))
+		dict.Set("key", []byte("hello"))
 
 		object, ttl := dict.Get("key")
 		assert.Equal(ttl, TTL_DEFAULT)
@@ -27,7 +30,7 @@ func TestDict(t *testing.T) {
 	t.Run("setTTL", func(t *testing.T) {
 		dict := New()
 
-		dict.SetWithTTL("key", TypeString, []byte("hello"), time.Now().Add(time.Minute).UnixNano())
+		dict.SetWithTTL("key", []byte("hello"), time.Now().Add(time.Minute).UnixNano())
 		time.Sleep(time.Millisecond)
 
 		object, ttl := dict.Get("key")
@@ -47,14 +50,14 @@ func TestDict(t *testing.T) {
 		assert.Nil(object)
 
 		// setTTL expired
-		dict.SetWithTTL("keyx", TypeString, []byte("hello"), time.Now().Add(-time.Second).UnixNano())
+		dict.SetWithTTL("keyx", []byte("hello"), time.Now().Add(-time.Second).UnixNano())
 		res = dict.SetTTL("keyx", 1)
 		assert.Equal(res, 0)
 	})
 
 	t.Run("delete", func(t *testing.T) {
 		dict := New()
-		dict.Set("key", TypeString, []byte("hello"))
+		dict.Set("key", []byte("hello"))
 
 		ok := dict.Delete("key")
 		assert.True(ok)
@@ -62,8 +65,25 @@ func TestDict(t *testing.T) {
 		ok = dict.Delete("none")
 		assert.False(ok)
 
-		dict.SetWithTTL("keyx", TypeString, []byte("hello"), time.Now().UnixNano())
+		dict.SetWithTTL("keyx", []byte("hello"), time.Now().UnixNano())
 		ok = dict.Delete("keyx")
 		assert.True(ok)
+	})
+}
+
+func TestOnject(t *testing.T) {
+	assert := assert.New(t)
+
+	object := new(Object)
+	object.SetData([]byte("hello"))
+	object.SetData(1)
+	object.SetData(hash.NewZipMap())
+	object.SetData(hash.NewMap())
+	object.SetData(hash.NewZipSet())
+	object.SetData(hash.NewSet())
+	object.SetData(list.New())
+	object.SetData(zset.NewZSet())
+	assert.Panics(func() {
+		object.SetData(time.Now())
 	})
 }

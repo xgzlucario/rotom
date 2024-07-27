@@ -28,6 +28,7 @@ type Command struct {
 var cmdTable []*Command = []*Command{
 	{"set", setCommand, 2, true},
 	{"get", getCommand, 1, false},
+	{"del", delCommand, 1, true},
 	{"incr", incrCommand, 1, true},
 	{"hset", hsetCommand, 3, true},
 	{"hget", hgetCommand, 2, false},
@@ -44,7 +45,6 @@ var cmdTable []*Command = []*Command{
 	{"hgetall", hgetallCommand, 1, false},
 	{"lrange", lrangeCommand, 3, false},
 	{"flushdb", flushdbCommand, 0, true},
-
 	// TODO
 	{"mset", todoCommand, 0, false},
 	{"zpopmin", todoCommand, 0, false},
@@ -89,7 +89,7 @@ func pingCommand(writer *RESPWriter, _ []RESP) {
 func setCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 	value := args[1].Clone()
-	db.dict.Set(key, dict.TypeString, value)
+	db.dict.Set(key, value)
 	writer.WriteString("OK")
 }
 
@@ -98,13 +98,13 @@ func incrCommand(writer *RESPWriter, args []RESP) {
 
 	object, ttl := db.dict.Get(key)
 	if ttl == dict.KEY_NOT_EXIST {
-		db.dict.Set(key, dict.TypeInt, 1)
+		db.dict.Set(key, 1)
 		writer.WriteInteger(1)
 		return
 	}
 
 	switch object.Type() {
-	case dict.TypeInt:
+	case dict.TypeInteger:
 		num := object.Data().(int) + 1
 		object.SetData(num)
 		writer.WriteInteger(num)
@@ -135,7 +135,7 @@ func getCommand(writer *RESPWriter, args []RESP) {
 	}
 
 	switch object.Type() {
-	case dict.TypeInt:
+	case dict.TypeInteger:
 		num := object.Data().(int)
 		writer.WriteBulkString(strconv.Itoa(num))
 
@@ -146,6 +146,16 @@ func getCommand(writer *RESPWriter, args []RESP) {
 	default:
 		writer.WriteError(errWrongType)
 	}
+}
+
+func delCommand(writer *RESPWriter, args []RESP) {
+	var res int
+	for _, arg := range args {
+		if db.dict.Delete(arg.ToStringUnsafe()) {
+			res++
+		}
+	}
+	writer.WriteInteger(res)
 }
 
 func hsetCommand(writer *RESPWriter, args []RESP) {
@@ -203,7 +213,7 @@ func hdelCommand(writer *RESPWriter, args []RESP) {
 	}
 	var success int
 	for _, v := range keys {
-		if hmap.Remove(v.ToString()) {
+		if hmap.Remove(v.ToStringUnsafe()) {
 			success++
 		}
 	}
@@ -409,40 +419,61 @@ func flushdbCommand(writer *RESPWriter, _ []RESP) {
 	writer.WriteString("OK")
 }
 
-// TODO
 func todoCommand(writer *RESPWriter, _ []RESP) {
 	writer.WriteString("OK")
 }
 
 func fetchMap(key string, setnx ...bool) (Map, error) {
-	return fetch(key, dict.TypeZipMap, func() Map { return hash.NewZipMap() }, setnx...)
+	return fetch(key, func() Map { return hash.NewZipMap() }, setnx...)
 }
 
 func fetchList(key string, setnx ...bool) (List, error) {
-	return fetch(key, dict.TypeList, func() List { return list.New() }, setnx...)
+	return fetch(key, func() List { return list.New() }, setnx...)
 }
 
 func fetchSet(key string, setnx ...bool) (Set, error) {
-	return fetch(key, dict.TypeZipSet, func() Set { return hash.NewZipSet() }, setnx...)
+	return fetch(key, func() Set { return hash.NewZipSet() }, setnx...)
 }
 
 func fetchZSet(key string, setnx ...bool) (ZSet, error) {
-	return fetch(key, dict.TypeZSet, func() ZSet { return zset.NewZSet() }, setnx...)
+	return fetch(key, func() ZSet { return zset.NewZSet() }, setnx...)
 }
 
-func fetch[T any](key string, typ dict.Type, new func() T, setnx ...bool) (v T, err error) {
+func fetch[T any](key string, new func() T, setnx ...bool) (T, error) {
 	object, ttl := db.dict.Get(key)
+
 	if ttl != dict.KEY_NOT_EXIST {
-		if object.Type() != typ {
+		v, ok := object.Data().(T)
+		if !ok {
 			return v, errWrongType
 		}
-		v := object.Data().(T)
+
+		// conversion zipped structure
+		if len(setnx) > 0 && setnx[0] {
+			switch object.Type() {
+			case dict.TypeZipMap:
+				zm := object.Data().(*hash.ZipMap)
+				if zm.Len() < 256 {
+					break
+				}
+				object.SetData(zm.ToMap())
+
+			case dict.TypeZipSet:
+				zm := object.Data().(*hash.ZipSet)
+				if zm.Len() < 512 {
+					break
+				}
+				object.SetData(zm.ToSet())
+			}
+		}
+
 		return v, nil
 	}
 
-	v = new()
+	v := new()
 	if len(setnx) > 0 && setnx[0] {
-		db.dict.Set(key, typ, v)
+		db.dict.Set(key, v)
 	}
+
 	return v, nil
 }

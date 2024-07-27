@@ -33,13 +33,12 @@ func TestCommand(t *testing.T) {
 	assert := assert.New(t)
 
 	go startup()
-	time.Sleep(time.Second / 3)
+	time.Sleep(time.Second / 2)
 
 	// wait for client starup
 	rdb := redis.NewClient(&redis.Options{
 		Addr: ":20082",
 	})
-	time.Sleep(time.Second / 3)
 
 	t.Run("ping", func(t *testing.T) {
 		res, _ := rdb.Ping(ctx).Result()
@@ -56,6 +55,9 @@ func TestCommand(t *testing.T) {
 		res, err := rdb.Get(ctx, "none").Result()
 		assert.Equal(err, redis.Nil)
 		assert.Equal(res, "")
+
+		n, _ := rdb.Del(ctx, "foo", "none").Result()
+		assert.Equal(n, int64(1))
 	})
 
 	t.Run("pipline", func(t *testing.T) {
@@ -71,11 +73,21 @@ func TestCommand(t *testing.T) {
 	})
 
 	t.Run("incr", func(t *testing.T) {
-		res, _ := rdb.Incr(ctx, "testIncr").Result()
+		// incr num
+		res, _ := rdb.Incr(ctx, "testInt").Result()
 		assert.Equal(res, int64(1))
 
-		res, _ = rdb.Incr(ctx, "testIncr").Result()
+		res, _ = rdb.Incr(ctx, "testInt").Result()
 		assert.Equal(res, int64(2))
+
+		// get int
+		str, _ := rdb.Get(ctx, "testInt").Result()
+		assert.Equal(str, "2")
+
+		// incr string
+		rdb.Set(ctx, "testStr", "5", 0)
+		res, _ = rdb.Incr(ctx, "testStr").Result()
+		assert.Equal(res, int64(6))
 
 		rdb.Set(ctx, "notNum", "bar", 0)
 		_, err := rdb.Incr(ctx, "notNum").Result()

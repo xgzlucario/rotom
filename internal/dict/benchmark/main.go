@@ -48,7 +48,7 @@ func main() {
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
 			start := time.Now()
-			m.Set(k, dict.TypeString, v)
+			m.Set(k, v)
 			td.Add(float64(time.Since(start)), 1)
 		}
 

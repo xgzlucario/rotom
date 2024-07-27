@@ -83,6 +83,23 @@ func TestReader(t *testing.T) {
 		assert.Equal(args[1].ToString(), "foo")
 		assert.Equal(args[2].ToString(), "bar")
 		assert.Nil(err)
+
+		// error
+		args, err = NewReader([]byte("*A\r\n$3\r\nGET\r\n$3\r\nfoo\r\n")).ReadNextCommand(nil)
+		assert.Equal(len(args), 0)
+		assert.NotNil(err)
+
+		args, err = NewReader([]byte("*3\r\n$A\r\nGET\r\n$3\r\nfoo\r\n")).ReadNextCommand(nil)
+		assert.Equal(len(args), 0)
+		assert.NotNil(err)
+
+		args, err = NewReader([]byte("*3\r\n+PING")).ReadNextCommand(nil)
+		assert.Equal(len(args), 0)
+		assert.NotNil(err)
+
+		args, err = NewReader([]byte("*3\r\n$3ABC")).ReadNextCommand(nil)
+		assert.Equal(len(args), 0)
+		assert.NotNil(err)
 	})
 
 	t.Run("command-inline", func(t *testing.T) {

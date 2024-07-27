@@ -17,9 +17,7 @@ const (
 	ARRAY   = '*'
 )
 
-var (
-	CRLF = []byte("\r\n")
-)
+var CRLF = []byte("\r\n")
 
 // RESPReader is a reader for RESP (Redis Serialization Protocol) messages.
 type RESPReader struct {
@@ -176,8 +174,6 @@ func (r RESP) ToString() string { return string(r) }
 func (r RESP) ToStringUnsafe() string { return b2s(r) }
 
 func (r RESP) ToInt() (int, error) { return strconv.Atoi(b2s(r)) }
-
-func (r RESP) ToBytes() []byte { return r }
 
 func (r RESP) Clone() []byte { return slices.Clone(r) }
 

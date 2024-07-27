@@ -49,6 +49,7 @@ func (dict *Dict) Get(key string) (*Object, int) {
 	}
 
 	object.lastAccessd = _sec.Load()
+
 	if object.hasTTL {
 		nsec, _ := dict.expire.Get(key)
 		// key expired
@@ -63,17 +64,17 @@ func (dict *Dict) Get(key string) (*Object, int) {
 	return object, TTL_DEFAULT
 }
 
-func (dict *Dict) Set(key string, typ Type, data any) {
+func (dict *Dict) Set(key string, data any) {
 	dict.data.Put(key, &Object{
-		typ:         typ,
+		typ:         typeOfData(data),
 		lastAccessd: _sec.Load(),
 		data:        data,
 	})
 }
 
-func (dict *Dict) SetWithTTL(key string, typ Type, data any, ttl int64) {
+func (dict *Dict) SetWithTTL(key string, data any, ttl int64) {
 	dict.data.Put(key, &Object{
-		typ:         typ,
+		typ:         typeOfData(data),
 		lastAccessd: _sec.Load(),
 		data:        data,
 		hasTTL:      true,
