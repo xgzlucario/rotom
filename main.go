@@ -5,6 +5,8 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -33,6 +35,19 @@ func config4Server(config *Config) {
 	}
 }
 
+func printBanner(config *Config) {
+	log.Printf(`
+	________      _____                  
+	___  __ \_______  /_____________ ___   Rotom %d bit (%s/%s)
+	__  /_/ /  __ \  __/  __ \_  __ '__ \  Port: %d, Pid: %d
+	_  _, _// /_/ / /_ / /_/ /  / / / / /  Build: %s
+	/_/ |_| \____/\__/ \____//_/ /_/ /_/
+	   `,
+		strconv.IntSize, runtime.GOARCH, runtime.GOOS,
+		config.Port, os.Getpid(),
+		buildTime)
+}
+
 func main() {
 	var path string
 	var debug bool
@@ -41,19 +56,19 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "run with debug mode.")
 	flag.Parse()
 
-	log.Info().Str("buildTime", buildTime).Msg("current version")
-	log.Info().Str("config", path).Bool("debug", debug).Msg("read cmd arguments")
-
 	config, err := LoadConfig(path)
 	if err != nil {
 		log.Fatal().Msgf("load config error: %v", err)
 	}
-	config4Server(config)
+	printBanner(config)
+
 	if debug {
 		go http.ListenAndServe(":6060", nil)
 	}
 
-	log.Info().Int("port", config.Port).Msg("running on")
+	log.Info().Str("config", path).Msg("read config file")
+	config4Server(config)
+
 	log.Info().Msg("rotom server is ready to accept.")
 
 	// register main aeLoop event

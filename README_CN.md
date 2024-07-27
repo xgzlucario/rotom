@@ -79,9 +79,14 @@ git clone https://github.com/xgzlucario/rotom
 
 ```
 $ go run .
-2024-07-18 23:37:13 INF current version buildTime=240718_233649+0800
-2024-07-18 23:37:13 INF read cmd arguments config=/etc/rotom/config.json debug=false
-2024-07-18 23:37:13 INF running on port=6379
+2024-07-18 23:37:13 DBG 
+ ________      _____                  
+ ___  __ \_______  /_____________ ___   Rotom 64 bit (amd64/linux)
+ __  /_/ /  __ \  __/  __ \_  __ '__ \  Port: 6379, Pid: 15817
+ _  _, _// /_/ / /_ / /_/ /  / / / / /  Build: 
+ /_/ |_| \____/\__/ \____//_/ /_/ /_/
+
+2024-07-18 23:37:13 INF read config file config=config.json
 2024-07-18 23:37:13 INF rotom server is ready to accept.
 ```
 

@@ -142,6 +142,15 @@ func (it *LpIterator) Prev() []byte {
 }
 
 func (it *LpIterator) Insert(datas ...string) {
+	// fast insert to tail
+	if it.IsLast() {
+		for _, data := range datas {
+			it.data = appendEntry(it.data, data)
+			it.size++
+		}
+		return
+	}
+
 	var alloc []byte
 	for _, data := range datas {
 		alloc = appendEntry(alloc, data)
@@ -186,7 +195,8 @@ func (it *LpIterator) ReplaceNext(key string) {
 
 func appendEntry(dst []byte, data string) []byte {
 	if dst == nil {
-		dst = bpool.Get(len(data) + 10)[:0]
+		sz := len(data) + 2*SizeUvarint(uint64(len(data)))
+		dst = bpool.Get(sz)[:0]
 	}
 	before := len(dst)
 	dst = appendUvarint(dst, len(data), false)
