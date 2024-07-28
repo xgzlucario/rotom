@@ -23,6 +23,15 @@ func TestAof(t *testing.T) {
 	t.Run("read", func(t *testing.T) {
 		aof, err := NewAof("test.aof")
 		assert.Nil(err)
+
+		aof.Read(func(args []RESP) {
+			// SET foo bar
+			assert.Equal(len(args), 3)
+			assert.Equal(args[0].ToString(), "set")
+			assert.Equal(args[1].ToString(), "foo")
+			assert.Equal(args[2].ToString(), "bar")
+		})
+
 		defer aof.Close()
 	})
 

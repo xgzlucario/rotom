@@ -222,23 +222,6 @@ func EvictExpired(loop *AeLoop, id int, extra interface{}) {
 	db.dict.EvictExpired()
 }
 
-func CheckOutOfMemory(loop *AeLoop, id int, extra interface{}) {
-	oom := server.outOfMemory
-	var mem runtime.MemStats
-
-	if server.config.MaxMemory == 0 {
-		if oom {
-			server.outOfMemory = false
-		}
-		return
-	}
-	if oom {
-		runtime.GC()
-	}
-	runtime.ReadMemStats(&mem)
-	server.outOfMemory = int(mem.HeapAlloc) > server.config.MaxMemory
-}
-
 func SysMonitor(loop *AeLoop, id int, extra interface{}) {
 	var mem runtime.MemStats
 	var stat debug.GCStats
@@ -252,4 +235,13 @@ func SysMonitor(loop *AeLoop, id int, extra interface{}) {
 		Uint64("heapObjects", mem.HeapObjects).
 		Int64("gc", stat.NumGC).
 		Msgf("[SYS]")
+
+	// check outOfMemory
+	if server.config.MaxMemory == 0 {
+		return
+	}
+	if server.outOfMemory {
+		runtime.GC()
+	}
+	server.outOfMemory = int(mem.HeapAlloc) > server.config.MaxMemory
 }

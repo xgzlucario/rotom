@@ -19,13 +19,17 @@ var (
 
 func init() {
 	// init backend ticker
-	tk := time.NewTicker(time.Microsecond)
+	tk := time.NewTicker(time.Millisecond / 10)
 	go func() {
 		for t := range tk.C {
 			_sec.Store(uint32(t.Unix()))
 			_nsec.Store(t.UnixNano())
 		}
 	}()
+}
+
+func GetNanoTime() int64 {
+	return _nsec.Load()
 }
 
 // Dict is the hashmap for Rotom.

@@ -19,8 +19,8 @@ func Write(fd int, buf []byte) (int, error) {
 	return unix.Write(fd, buf)
 }
 
-func Close(fd int) {
-	unix.Close(fd)
+func Close(fd int) error {
+	return unix.Close(fd)
 }
 
 func TcpServer(port int) (int, error) {

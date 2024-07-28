@@ -1,8 +1,7 @@
 package main
 
 import (
-	"time"
-
+	"github.com/xgzlucario/rotom/internal/dict"
 	"golang.org/x/sys/unix"
 )
 
@@ -93,7 +92,7 @@ func (loop *AeLoop) ModDetach(fd int) {
 }
 
 func GetMsTime() int64 {
-	return time.Now().UnixNano() / 1e6
+	return dict.GetNanoTime() / 1e6
 }
 
 func (loop *AeLoop) AddTimeEvent(mask TeType, interval int64, proc TimeProc, extra interface{}) int {

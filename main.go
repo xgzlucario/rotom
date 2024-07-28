@@ -37,11 +37,11 @@ func config4Server(config *Config) {
 
 func printBanner(config *Config) {
 	log.Printf(`
-	________      _____                  
-	___  __ \_______  /_____________ ___   Rotom %d bit (%s/%s)
-	__  /_/ /  __ \  __/  __ \_  __ '__ \  Port: %d, Pid: %d
-	_  _, _// /_/ / /_ / /_/ /  / / / / /  Build: %s
-	/_/ |_| \____/\__/ \____//_/ /_/ /_/
+________      _____                  
+___  __ \_______  /_____________ ___   Rotom %d bit (%s/%s)
+__  /_/ /  __ \  __/  __ \_  __ '__ \  Port: %d, Pid: %d
+_  _, _// /_/ / /_ / /_/ /  / / / / /  Build: %s
+/_/ |_| \____/\__/ \____//_/ /_/ /_/
 	   `,
 		strconv.IntSize, runtime.GOARCH, runtime.GOOS,
 		config.Port, os.Getpid(),
@@ -74,7 +74,6 @@ func main() {
 	// register main aeLoop event
 	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
 	server.aeLoop.AddTimeEvent(AE_NORMAL, 100, EvictExpired, nil)
-	server.aeLoop.AddTimeEvent(AE_NORMAL, 5*1000, CheckOutOfMemory, nil)
 	server.aeLoop.AddTimeEvent(AE_NORMAL, 60*1000, SysMonitor, nil)
 	if server.config.AppendOnly {
 		server.aeLoop.AddTimeEvent(AE_NORMAL, 1000, SyncAOF, nil)
