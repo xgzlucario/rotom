@@ -100,11 +100,21 @@ func TestReader(t *testing.T) {
 		args, err = NewReader([]byte("*3\r\n$3ABC")).ReadNextCommand(nil)
 		assert.Equal(len(args), 0)
 		assert.NotNil(err)
+
+		args, err = NewReader([]byte("*1\r\n")).ReadNextCommand(nil)
+		assert.Equal(len(args), 0)
+		assert.NotNil(err)
 	})
 
 	t.Run("command-inline", func(t *testing.T) {
 		args, err := NewReader([]byte("PING\r\n")).ReadNextCommand(nil)
 		assert.Equal(args[0].ToString(), "PING")
 		assert.Nil(err)
+	})
+}
+
+func FuzzRESPReader(f *testing.F) {
+	f.Fuzz(func(t *testing.T, b []byte) {
+		NewReader(b).ReadNextCommand(nil)
 	})
 }

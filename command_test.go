@@ -224,6 +224,20 @@ func TestCommand(t *testing.T) {
 		assert.NotNil(err)
 	})
 
+	t.Run("trans-zipmap", func(t *testing.T) {
+		for i := 0; i <= 256; i++ {
+			k := fmt.Sprintf("%06x", i)
+			rdb.HSet(ctx, "zipmap", k, k)
+		}
+	})
+
+	t.Run("trans-zipset", func(t *testing.T) {
+		for i := 0; i <= 512; i++ {
+			k := fmt.Sprintf("%06x", i)
+			rdb.SAdd(ctx, "zipset", k)
+		}
+	})
+
 	t.Run("client-closed", func(t *testing.T) {
 		rdb.Close()
 	})

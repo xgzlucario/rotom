@@ -10,6 +10,9 @@ test-cover:
 	rm coverage.txt
 	rm *.aof
 
+fuzz-test:
+	go test -fuzz=FuzzRESPReader
+
 pprof:
 	go tool pprof -http=:18081 "http://192.168.1.6:6060/debug/pprof/profile?seconds=30"
 

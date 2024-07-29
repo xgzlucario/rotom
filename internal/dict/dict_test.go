@@ -31,7 +31,7 @@ func TestDict(t *testing.T) {
 		dict := New()
 
 		dict.SetWithTTL("key", []byte("hello"), time.Now().Add(time.Minute).UnixNano())
-		time.Sleep(time.Millisecond)
+		time.Sleep(time.Second / 10)
 
 		object, ttl := dict.Get("key")
 		assert.Equal(ttl, 59)

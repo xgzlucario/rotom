@@ -57,7 +57,7 @@ func typeOfData(data any) Type {
 	case *hash.Set:
 		return TypeSet
 	case *hash.ZipSet:
-		return TypeSet
+		return TypeZipSet
 	case *list.QuickList:
 		return TypeList
 	case *zset.ZSet:

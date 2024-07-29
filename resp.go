@@ -15,6 +15,7 @@ const (
 	INTEGER = ':'
 	BULK    = '$'
 	ARRAY   = '*'
+	MAP     = '%' // TODO: https://redis.io/docs/latest/develop/reference/protocol-spec/#maps
 )
 
 var CRLF = []byte("\r\n")
@@ -46,7 +47,7 @@ func cutByCRLF(buf []byte) (before, after []byte, found bool) {
 }
 
 // ReadNextCommand reads the next RESP command from the RESPReader.
-// It parses both COMMAND_BULK and COMMAND_INLINE formats.
+// It parses both `COMMAND_BULK` and `COMMAND_INLINE` formats.
 func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 	if len(r.b) == 0 {
 		return nil, io.EOF
@@ -66,11 +67,10 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 		}
 		r.b = after
 
+		// read bulk strings for range
 		for i := 0; i < count; i++ {
-			switch r.b[0] {
-			case BULK:
-			default:
-				return nil, fmt.Errorf("unsupport array-in type: '%c'", r.b[0])
+			if len(r.b) == 0 || r.b[0] != BULK {
+				return nil, errInvalidArguments
 			}
 
 			// read CRLF
@@ -85,7 +85,7 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 			r.b = after
 
 			// bound check
-			if count > len(r.b) {
+			if count < 0 || count+2 > len(r.b) {
 				return nil, errInvalidArguments
 			}
 
