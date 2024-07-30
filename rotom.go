@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"runtime"
 	"runtime/debug"
@@ -67,10 +66,10 @@ func InitDB(config *Config) (err error) {
 		// Load the initial data into memory by processing each stored command.
 		emptyWriter := NewWriter(WRITE_BUF_SIZE)
 		return db.aof.Read(func(args []RESP) {
-			command := args[0].ToString()
+			command := args[0].ToStringUnsafe()
 
-			cmd := lookupCommand(command)
-			if cmd != nil {
+			cmd, err := lookupCommand(command)
+			if err == nil {
 				cmd.processCommand(emptyWriter, args[1:])
 				emptyWriter.Reset()
 			}
@@ -154,23 +153,24 @@ func ProcessQueryBuf(client *Client) {
 		command := args[0].ToStringUnsafe()
 		args = args[1:]
 
-		cmd := lookupCommand(command)
-		if cmd != nil {
-			cmd.processCommand(client.replyWriter, args)
+		cmd, err := lookupCommand(command)
+		if err != nil {
+			client.replyWriter.WriteError(err)
+			log.Error().Msg(err.Error())
 
-			if server.outOfMemory {
+		} else {
+			// reject write request when OOM
+			if cmd.persist && server.outOfMemory {
 				client.replyWriter.WriteError(errOOM)
 				goto WRITE
 			}
 
-			if server.config.AppendOnly && cmd.persist {
+			cmd.processCommand(client.replyWriter, args)
+
+			// write aof file
+			if cmd.persist && server.config.AppendOnly {
 				db.aof.Write(queryBuf)
 			}
-
-		} else {
-			err := fmt.Errorf("%w '%s'", errUnknownCommand, command)
-			client.replyWriter.WriteError(err)
-			log.Error().Msg(err.Error())
 		}
 	}
 

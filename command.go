@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
@@ -16,8 +18,8 @@ type Command struct {
 	// handler is this command real database handler function.
 	handler func(writer *RESPWriter, args []RESP)
 
-	// arity represents the minimal number of arguments that command accepts.
-	arity int
+	// minArgsNum represents the minimal number of arguments that command accepts.
+	minArgsNum int
 
 	// persist indicates whether this command needs to be persisted.
 	// effective when `appendonly` is true.
@@ -49,33 +51,22 @@ var cmdTable []*Command = []*Command{
 	{"mset", todoCommand, 0, false},
 	{"zpopmin", todoCommand, 0, false},
 	{"xadd", todoCommand, 0, false},
+	// TODO: distribution
+	{"sync", todoCommand, 0, false},
+	{"log", todoCommand, 0, false},
 }
 
-func lookupCommand(command string) *Command {
+func lookupCommand(name string) (*Command, error) {
 	for _, c := range cmdTable {
-		if equalCommand(command, c.name) {
-			return c
+		if len(name) == len(c.name) && strings.EqualFold(name, c.name) {
+			return c, nil
 		}
 	}
-	return nil
-}
-
-func equalCommand(str, lowerText string) bool {
-	if len(str) != len(lowerText) {
-		return false
-	}
-	const s = 'a' - 'A'
-	for i, lt := range lowerText {
-		delta := lt - rune(str[i])
-		if delta != 0 && delta != s {
-			return false
-		}
-	}
-	return true
+	return nil, fmt.Errorf("%w '%s'", errUnknownCommand, name)
 }
 
 func (cmd *Command) processCommand(writer *RESPWriter, args []RESP) {
-	if len(args) < cmd.arity {
+	if len(args) < cmd.minArgsNum {
 		writer.WriteError(errInvalidArguments)
 		return
 	}

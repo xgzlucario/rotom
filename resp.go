@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"slices"
 	"strconv"
@@ -97,7 +96,7 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 		// command_inline format
 		before, after, ok := cutByCRLF(r.b)
 		if !ok {
-			return nil, fmt.Errorf("%w '%s'", errUnknownCommand, r.b)
+			return nil, errInvalidArguments
 		}
 		args = append(args, before)
 		r.b = after
