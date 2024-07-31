@@ -43,13 +43,13 @@ var cmdTable []*Command = []*Command{
 	{"srem", sremCommand, 2, true},
 	{"spop", spopCommand, 1, true},
 	{"zadd", zaddCommand, 3, true},
+	{"zpopmin", zpopminCommand, 1, true},
 	{"ping", pingCommand, 0, false},
 	{"hgetall", hgetallCommand, 1, false},
 	{"lrange", lrangeCommand, 3, false},
 	{"flushdb", flushdbCommand, 0, true},
 	// TODO
 	{"mset", todoCommand, 0, false},
-	{"zpopmin", todoCommand, 0, false},
 	{"xadd", todoCommand, 0, false},
 	// TODO: distribution
 	{"sync", todoCommand, 0, false},
@@ -398,11 +398,38 @@ func zaddCommand(writer *RESPWriter, args []RESP) {
 		}
 
 		key := args[i+1].ToString()
-		if zset.Set(key, int64(score)) {
+		if zset.Set(key, float64(score)) {
 			newFields++
 		}
 	}
 	writer.WriteInteger(newFields)
+}
+
+func zpopminCommand(writer *RESPWriter, args []RESP) {
+	key := args[0].ToString()
+	count := 1
+	var err error
+	if len(args) > 1 {
+		count, err = args[1].ToInt()
+		if err != nil {
+			writer.WriteError(err)
+			return
+		}
+	}
+
+	zset, err := fetchZSet(key, true)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+
+	size := min(zset.Len(), count)
+	writer.WriteArrayHead(size * 2)
+	for range size {
+		key, score := zset.PopMin()
+		writer.WriteBulk([]byte(key))
+		writer.WriteBulk([]byte(strconv.Itoa(int(score))))
+	}
 }
 
 func flushdbCommand(writer *RESPWriter, _ []RESP) {

@@ -1,75 +1,75 @@
 package zset
 
 import (
-	rbtree "github.com/sakeven/RbTree"
+	"cmp"
+
+	"github.com/chen3feng/stl4go"
+	"github.com/cockroachdb/swiss"
 )
 
+type node struct {
+	key   string
+	score float64
+}
+
+func nodeCompare(a, b node) int {
+	if a.score == b.score {
+		return cmp.Compare(a.key, b.key)
+	}
+	return cmp.Compare(a.score, b.score)
+}
+
 type ZSet struct {
-	m    map[string]int64
-	tree *rbtree.Tree[int64, string]
+	m   *swiss.Map[string, float64]
+	skl *stl4go.SkipList[node, struct{}]
 }
 
 func NewZSet() *ZSet {
 	return &ZSet{
-		m:    map[string]int64{},
-		tree: rbtree.NewTree[int64, string](),
+		m:   swiss.New[string, float64](8),
+		skl: stl4go.NewSkipListFunc[node, struct{}](nodeCompare),
 	}
 }
 
-func (z *ZSet) Get(key string) (int64, bool) {
-	s, ok := z.m[key]
-	return s, ok
+func (z *ZSet) Get(key string) (float64, bool) {
+	return z.m.Get(key)
 }
 
-func (z *ZSet) Set(key string, score int64) bool {
-	z.deleteNode(score, key)
-	_, ok := z.m[key]
-	z.m[key] = score
-	z.tree.Insert(score, key)
+func (z *ZSet) Set(key string, score float64) bool {
+	old, ok := z.m.Get(key)
+	if ok {
+		// same
+		if score == old {
+			return false
+		}
+		z.skl.Remove(node{key, old})
+	}
+	z.m.Put(key, score)
+	z.skl.Insert(node{key, score}, struct{}{})
 	return !ok
 }
 
-func (z *ZSet) deleteNode(score int64, key string) bool {
-	for it := z.tree.FindIt(score); it != nil; it = it.Next() {
-		if it.Value == key {
-			z.tree.Delete(it.Key)
-			return true
-		}
-		if it.Key != score {
-			return false
-		}
+func (z *ZSet) Delete(key string) (float64, bool) {
+	score, ok := z.m.Get(key)
+	if !ok {
+		return 0, false
 	}
-	return false
+	z.m.Delete(key)
+	z.skl.Remove(node{key, score})
+	return score, true
 }
 
-func (z *ZSet) Incr(key string, incr int64) int64 {
-	score, ok := z.m[key]
-	if ok {
-		z.deleteNode(score, key)
-	}
-	score += incr
-	z.m[key] = score
-	z.tree.Insert(score, key)
-	return score
-}
-
-func (z *ZSet) Delete(key string) (s int64, ok bool) {
-	score, ok := z.m[key]
-	if ok {
-		delete(z.m, key)
-		z.deleteNode(score, key)
-	}
-	return score, ok
+func (z *ZSet) PopMin() (key string, score float64) {
+	z.skl.ForEachIf(func(n node, s struct{}) bool {
+		key = n.key
+		score = n.score
+		return false
+	})
+	z.m.Delete(key)
+	z.skl.Remove(node{key, score})
+	return
 }
 
 func (z *ZSet) Len() int {
-	return len(z.m)
-}
-
-func (z *ZSet) Iter(f func(k string, s int64) bool) {
-	for it := z.tree.Iterator(); it != nil; it = it.Next() {
-		if f(it.Value, it.Key) {
-			return
-		}
-	}
+	return z.m.Len()
 }

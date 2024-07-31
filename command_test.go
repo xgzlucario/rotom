@@ -178,14 +178,23 @@ func TestCommand(t *testing.T) {
 	})
 
 	t.Run("zset", func(t *testing.T) {
-		n, _ := rdb.ZAdd(ctx, "zs1", redis.Z{Member: "a"}).Result()
+		n, _ := rdb.ZAdd(ctx, "zsRank", redis.Z{Member: "player1"}).Result()
 		assert.Equal(n, int64(1))
 
-		n, _ = rdb.ZAdd(ctx, "zs1",
-			redis.Z{Member: "a"},
-			redis.Z{Member: "b"},
-			redis.Z{Member: "c"}).Result()
+		n, _ = rdb.ZAdd(ctx, "zsRank",
+			redis.Z{Member: "player1", Score: 100},
+			redis.Z{Member: "player2", Score: 300},
+			redis.Z{Member: "player3", Score: 100}).Result()
 		assert.Equal(n, int64(2))
+
+		res, _ := rdb.ZPopMin(ctx, "zsRank", 2).Result()
+		assert.Equal(len(res), 2)
+		assert.Equal(res[0], redis.Z{Member: "player1", Score: 100})
+		assert.Equal(res[1], redis.Z{Member: "player3", Score: 100})
+
+		res, _ = rdb.ZPopMin(ctx, "zsRank").Result()
+		assert.Equal(len(res), 1)
+		assert.Equal(res[0], redis.Z{Member: "player2", Score: 300})
 	})
 
 	t.Run("flushdb", func(t *testing.T) {
