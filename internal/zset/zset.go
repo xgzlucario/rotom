@@ -70,6 +70,17 @@ func (z *ZSet) PopMin() (key string, score float64) {
 	return
 }
 
+func (z *ZSet) Range(start, stop int, fn func(key string, score float64)) {
+	var index int
+	z.skl.ForEachIf(func(n node, s struct{}) bool {
+		if index >= start && index < stop {
+			fn(n.key, n.score)
+		}
+		index++
+		return true
+	})
+}
+
 func (z *ZSet) Len() int {
 	return z.m.Len()
 }

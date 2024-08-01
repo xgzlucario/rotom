@@ -35,18 +35,19 @@ var cmdTable []*Command = []*Command{
 	{"hset", hsetCommand, 3, true},
 	{"hget", hgetCommand, 2, false},
 	{"hdel", hdelCommand, 2, true},
+	{"hgetall", hgetallCommand, 1, false},
 	{"rpush", rpushCommand, 2, true},
 	{"lpush", lpushCommand, 2, true},
 	{"rpop", rpopCommand, 1, true},
 	{"lpop", lpopCommand, 1, true},
+	{"lrange", lrangeCommand, 3, false},
 	{"sadd", saddCommand, 2, true},
 	{"srem", sremCommand, 2, true},
 	{"spop", spopCommand, 1, true},
 	{"zadd", zaddCommand, 3, true},
 	{"zpopmin", zpopminCommand, 1, true},
+	{"zrange", zrangeCommand, 3, false},
 	{"ping", pingCommand, 0, false},
-	{"hgetall", hgetallCommand, 1, false},
-	{"lrange", lrangeCommand, 3, false},
 	{"flushdb", flushdbCommand, 0, true},
 	// TODO
 	{"mset", todoCommand, 0, false},
@@ -405,6 +406,43 @@ func zaddCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(newFields)
 }
 
+func zrangeCommand(writer *RESPWriter, args []RESP) {
+	key := args[0].ToStringUnsafe()
+	start, err := args[1].ToInt()
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+	stop, err := args[2].ToInt()
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+	zset, err := fetchZSet(key)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+	if stop == -1 {
+		stop = zset.Len()
+	}
+
+	withScores := len(args) == 4 && strings.EqualFold(args[3].ToStringUnsafe(), "WITHSCORES")
+	if withScores {
+		writer.WriteArrayHead((stop - start) * 2)
+		zset.Range(start, stop, func(key string, score float64) {
+			writer.WriteBulkString(key)
+			writer.WriteBulkString(strconv.Itoa(int(score)))
+		})
+
+	} else {
+		writer.WriteArrayHead(stop - start)
+		zset.Range(start, stop, func(key string, _ float64) {
+			writer.WriteBulkString(key)
+		})
+	}
+}
+
 func zpopminCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 	count := 1
@@ -417,7 +455,7 @@ func zpopminCommand(writer *RESPWriter, args []RESP) {
 		}
 	}
 
-	zset, err := fetchZSet(key, true)
+	zset, err := fetchZSet(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
@@ -427,8 +465,8 @@ func zpopminCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteArrayHead(size * 2)
 	for range size {
 		key, score := zset.PopMin()
-		writer.WriteBulk([]byte(key))
-		writer.WriteBulk([]byte(strconv.Itoa(int(score))))
+		writer.WriteBulkString(key)
+		writer.WriteBulkString(strconv.Itoa(int(score)))
 	}
 }
 

@@ -178,23 +178,59 @@ func TestCommand(t *testing.T) {
 	})
 
 	t.Run("zset", func(t *testing.T) {
-		n, _ := rdb.ZAdd(ctx, "zsRank", redis.Z{Member: "player1"}).Result()
+		n, _ := rdb.ZAdd(ctx, "rank", redis.Z{Member: "player1"}).Result()
 		assert.Equal(n, int64(1))
 
-		n, _ = rdb.ZAdd(ctx, "zsRank",
+		n, _ = rdb.ZAdd(ctx, "rank",
 			redis.Z{Member: "player1", Score: 100},
 			redis.Z{Member: "player2", Score: 300},
 			redis.Z{Member: "player3", Score: 100}).Result()
 		assert.Equal(n, int64(2))
 
-		res, _ := rdb.ZPopMin(ctx, "zsRank", 2).Result()
-		assert.Equal(len(res), 2)
-		assert.Equal(res[0], redis.Z{Member: "player1", Score: 100})
-		assert.Equal(res[1], redis.Z{Member: "player3", Score: 100})
+		// zrange
+		{
+			members, _ := rdb.ZRange(ctx, "rank", 0, -1).Result()
+			assert.Equal(members, []string{"player1", "player3", "player2"})
 
-		res, _ = rdb.ZPopMin(ctx, "zsRank").Result()
-		assert.Equal(len(res), 1)
-		assert.Equal(res[0], redis.Z{Member: "player2", Score: 300})
+			members, _ = rdb.ZRange(ctx, "rank", 1, 3).Result()
+			assert.Equal(members, []string{"player3", "player2"})
+
+			members, _ = rdb.ZRange(ctx, "rank", 70, 60).Result()
+			assert.Nil(members)
+		}
+
+		// zrangeWithScores
+		{
+			res, _ := rdb.ZRangeWithScores(ctx, "rank", 0, -1).Result()
+			assert.Equal(res, []redis.Z{
+				{Member: "player1", Score: 100},
+				{Member: "player3", Score: 100},
+				{Member: "player2", Score: 300},
+			})
+
+			res, _ = rdb.ZRangeWithScores(ctx, "rank", 1, 3).Result()
+			assert.Equal(res, []redis.Z{
+				{Member: "player3", Score: 100},
+				{Member: "player2", Score: 300},
+			})
+
+			res, _ = rdb.ZRangeWithScores(ctx, "rank", 70, 60).Result()
+			assert.Nil(res)
+		}
+
+		// zpopmin
+		{
+			res, _ := rdb.ZPopMin(ctx, "rank", 2).Result()
+			assert.Equal(res, []redis.Z{
+				{Member: "player1", Score: 100},
+				{Member: "player3", Score: 100},
+			})
+
+			res, _ = rdb.ZPopMin(ctx, "rank").Result()
+			assert.Equal(res, []redis.Z{
+				{Member: "player2", Score: 300},
+			})
+		}
 	})
 
 	t.Run("flushdb", func(t *testing.T) {
