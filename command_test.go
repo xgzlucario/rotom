@@ -149,6 +149,10 @@ func TestCommand(t *testing.T) {
 		res, _ = rdb.LRange(ctx, "list", 1, 3).Result()
 		assert.Equal(res, []string{"b", "a"})
 
+		res, err := rdb.LRange(ctx, "list", 3, 2).Result()
+		assert.Equal(len(res), 0)
+		assert.Nil(err)
+
 		// lpop
 		val, _ := rdb.LPop(ctx, "list").Result()
 		assert.Equal(val, "c")
@@ -156,6 +160,16 @@ func TestCommand(t *testing.T) {
 		// rpop
 		val, _ = rdb.RPop(ctx, "list").Result()
 		assert.Equal(val, "f")
+
+		// pop nil
+		{
+			_, err := rdb.LPop(ctx, "list-empty").Result()
+			assert.Equal(err, redis.Nil)
+
+			_, err = rdb.RPop(ctx, "list-empty").Result()
+			assert.Equal(err, redis.Nil)
+		}
+
 	})
 
 	t.Run("set", func(t *testing.T) {
@@ -183,9 +197,24 @@ func TestCommand(t *testing.T) {
 
 		n, _ = rdb.ZAdd(ctx, "rank",
 			redis.Z{Member: "player1", Score: 100},
-			redis.Z{Member: "player2", Score: 300},
+			redis.Z{Member: "player2", Score: 300.5},
 			redis.Z{Member: "player3", Score: 100}).Result()
 		assert.Equal(n, int64(2))
+
+		// zrank
+		{
+			res, _ := rdb.ZRank(ctx, "rank", "player1").Result()
+			assert.Equal(res, int64(0))
+
+			res, _ = rdb.ZRank(ctx, "rank", "player2").Result()
+			assert.Equal(res, int64(2))
+
+			res, _ = rdb.ZRank(ctx, "rank", "player3").Result()
+			assert.Equal(res, int64(1))
+
+			_, err := rdb.ZRank(ctx, "rank", "player999").Result()
+			assert.Equal(err, redis.Nil)
+		}
 
 		// zrange
 		{
@@ -205,13 +234,13 @@ func TestCommand(t *testing.T) {
 			assert.Equal(res, []redis.Z{
 				{Member: "player1", Score: 100},
 				{Member: "player3", Score: 100},
-				{Member: "player2", Score: 300},
+				{Member: "player2", Score: 300.5},
 			})
 
 			res, _ = rdb.ZRangeWithScores(ctx, "rank", 1, 3).Result()
 			assert.Equal(res, []redis.Z{
 				{Member: "player3", Score: 100},
-				{Member: "player2", Score: 300},
+				{Member: "player2", Score: 300.5},
 			})
 
 			res, _ = rdb.ZRangeWithScores(ctx, "rank", 70, 60).Result()
@@ -228,7 +257,7 @@ func TestCommand(t *testing.T) {
 
 			res, _ = rdb.ZPopMin(ctx, "rank").Result()
 			assert.Equal(res, []redis.Z{
-				{Member: "player2", Score: 300},
+				{Member: "player2", Score: 300.5},
 			})
 		}
 	})

@@ -14,7 +14,7 @@ This is rotom, a tiny Redis Server written in Go. It replicates the core event l
 2. Compatible with the Redis RESP protocol, allowing any Redis client to connect to rotom.
 3. Implements data structures such as dict, list, map, zipmap, set, zipset, and zset.
 4. Supports AOF.
-5. Supports 18 commonly used commands.
+5. Supports 20+ commonly used commands.
 
 ## AELoop
 

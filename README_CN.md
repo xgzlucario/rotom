@@ -14,7 +14,7 @@
 2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
 3. 实现了 dict, list, map, zipmap, set, zipset, zset 数据结构
 4. AOF 支持
-5. 支持 18 种常用命令
+5. 支持 20 多种常用命令
 
 ## AELoop 事件循环
 

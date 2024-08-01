@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -45,6 +46,7 @@ var cmdTable []*Command = []*Command{
 	{"srem", sremCommand, 2, true},
 	{"spop", spopCommand, 1, true},
 	{"zadd", zaddCommand, 3, true},
+	{"zrank", zrankCommand, 2, false},
 	{"zpopmin", zpopminCommand, 1, true},
 	{"zrange", zrangeCommand, 3, false},
 	{"ping", pingCommand, 0, false},
@@ -299,29 +301,24 @@ func lrangeCommand(writer *RESPWriter, args []RESP) {
 		writer.WriteError(err)
 		return
 	}
-	end, err := args[2].ToInt()
+	stop, err := args[2].ToInt()
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-
 	ls, err := fetchList(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
 
-	// calculate list size
-	size := end - start
-	if end == -1 {
-		size = ls.Size()
+	if stop == -1 {
+		stop = ls.Size()
 	}
-	if size < 0 {
-		size = 0
-	}
+	start = min(start, stop)
 
-	writer.WriteArrayHead(size)
-	ls.Range(start, end, func(data []byte) {
+	writer.WriteArrayHead(stop - start)
+	ls.Range(start, stop, func(data []byte) {
 		writer.WriteBulk(data)
 	})
 }
@@ -336,13 +333,13 @@ func saddCommand(writer *RESPWriter, args []RESP) {
 		return
 	}
 
-	var newItems int
+	var count int
 	for i := 0; i < len(args); i++ {
 		if set.Add(args[i].ToString()) {
-			newItems++
+			count++
 		}
 	}
-	writer.WriteInteger(newItems)
+	writer.WriteInteger(count)
 }
 
 func sremCommand(writer *RESPWriter, args []RESP) {
@@ -390,20 +387,37 @@ func zaddCommand(writer *RESPWriter, args []RESP) {
 		return
 	}
 
-	var newFields int
+	var count int
 	for i := 0; i < len(args); i += 2 {
-		score, err := args[i].ToInt()
+		score, err := args[i].ToFloat()
 		if err != nil {
 			writer.WriteError(err)
 			return
 		}
-
 		key := args[i+1].ToString()
-		if zset.Set(key, float64(score)) {
-			newFields++
+		if zset.Set(key, score) {
+			count++
 		}
 	}
-	writer.WriteInteger(newFields)
+	writer.WriteInteger(count)
+}
+
+func zrankCommand(writer *RESPWriter, args []RESP) {
+	key := args[0].ToStringUnsafe()
+	member := args[1].ToStringUnsafe()
+
+	zset, err := fetchZSet(key)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+
+	rank, _ := zset.Rank(member)
+	if rank < 0 {
+		writer.WriteNull()
+	} else {
+		writer.WriteInteger(rank)
+	}
 }
 
 func zrangeCommand(writer *RESPWriter, args []RESP) {
@@ -427,12 +441,12 @@ func zrangeCommand(writer *RESPWriter, args []RESP) {
 		stop = zset.Len()
 	}
 
-	withScores := len(args) == 4 && strings.EqualFold(args[3].ToStringUnsafe(), "WITHSCORES")
+	withScores := len(args) == 4 && bytes.EqualFold(args[3], []byte("WITHSCORES"))
 	if withScores {
 		writer.WriteArrayHead((stop - start) * 2)
 		zset.Range(start, stop, func(key string, score float64) {
 			writer.WriteBulkString(key)
-			writer.WriteBulkString(strconv.Itoa(int(score)))
+			writer.WriteFloat(score)
 		})
 
 	} else {
@@ -466,7 +480,7 @@ func zpopminCommand(writer *RESPWriter, args []RESP) {
 	for range size {
 		key, score := zset.PopMin()
 		writer.WriteBulkString(key)
-		writer.WriteBulkString(strconv.Itoa(int(score)))
+		writer.WriteFloat(score)
 	}
 }
 

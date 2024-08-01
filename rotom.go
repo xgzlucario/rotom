@@ -181,7 +181,7 @@ WRITE:
 
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
-	sentbuf := client.replyWriter.b.Bytes()
+	sentbuf := client.replyWriter.b
 
 	n, err := Write(fd, sentbuf)
 	if err != nil {

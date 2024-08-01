@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,29 +15,35 @@ func TestWriter(t *testing.T) {
 
 	t.Run("string", func(t *testing.T) {
 		writer.WriteString("OK")
-		assert.Equal(writer.b.String(), "+OK\r\n")
+		assert.Equal(string(writer.b), "+OK\r\n")
 		writer.Reset()
 	})
 
 	t.Run("error", func(t *testing.T) {
 		writer.WriteError(errors.New("err message"))
-		assert.Equal(writer.b.String(), "-err message\r\n")
+		assert.Equal(string(writer.b), "-err message\r\n")
 		writer.Reset()
 	})
 
 	t.Run("bulk", func(t *testing.T) {
 		writer.WriteBulk([]byte("hello"))
-		assert.Equal(writer.b.String(), "$5\r\nhello\r\n")
+		assert.Equal(string(writer.b), "$5\r\nhello\r\n")
 		writer.Reset()
 
 		writer.WriteBulkString("world")
-		assert.Equal(writer.b.String(), "$5\r\nworld\r\n")
+		assert.Equal(string(writer.b), "$5\r\nworld\r\n")
 		writer.Reset()
 	})
 
 	t.Run("integer", func(t *testing.T) {
 		writer.WriteInteger(5)
-		assert.Equal(writer.b.String(), ":5\r\n")
+		assert.Equal(string(writer.b), ":5\r\n")
+		writer.Reset()
+	})
+
+	t.Run("float", func(t *testing.T) {
+		writer.WriteFloat(3.1415926)
+		assert.Equal(string(writer.b), "$9\r\n3.1415926\r\n")
 		writer.Reset()
 	})
 }
@@ -116,5 +124,22 @@ func TestReader(t *testing.T) {
 func FuzzRESPReader(f *testing.F) {
 	f.Fuzz(func(t *testing.T, b []byte) {
 		NewReader(b).ReadNextCommand(nil)
+	})
+}
+
+func BenchmarkWWW(b *testing.B) {
+	b.Run("1", func(b *testing.B) {
+		buf := bytes.NewBuffer(nil)
+		for i := 0; i < b.N; i++ {
+			buf.WriteString(strconv.FormatFloat(3.1415926, 'f', -1, 64))
+			buf.Reset()
+		}
+	})
+	b.Run("2", func(b *testing.B) {
+		var buf []byte
+		for i := 0; i < b.N; i++ {
+			buf = strconv.AppendFloat(buf, 3.1415926, 'f', -1, 64)
+			buf = buf[:0]
+		}
 	})
 }

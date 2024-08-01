@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"io"
 	"slices"
 	"strconv"
@@ -106,19 +105,19 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 
 // RESPWriter is a writer that helps construct RESP (Redis Serialization Protocol) messages.
 type RESPWriter struct {
-	b *bytes.Buffer
+	b []byte
 }
 
 // NewWriter initializes a new RESPWriter with a given capacity.
 func NewWriter(cap int) *RESPWriter {
-	return &RESPWriter{bytes.NewBuffer(make([]byte, 0, cap))}
+	return &RESPWriter{make([]byte, 0, cap)}
 }
 
 // WriteArrayHead writes the RESP array header with the given length.
 func (w *RESPWriter) WriteArrayHead(arrayLen int) {
-	w.b.WriteByte(ARRAY)
-	w.b.WriteString(strconv.Itoa(arrayLen))
-	w.b.Write(CRLF)
+	w.b = append(w.b, ARRAY)
+	w.b = strconv.AppendUint(w.b, uint64(arrayLen), 10)
+	w.b = append(w.b, CRLF...)
 }
 
 // WriteBulk writes a RESP bulk string from a byte slice.
@@ -127,43 +126,47 @@ func (w *RESPWriter) WriteBulk(bluk []byte) {
 }
 
 // WriteBulkString writes a RESP bulk string from a string.
-func (w *RESPWriter) WriteBulkString(bluk string) {
-	w.b.WriteByte(BULK)
-	w.b.WriteString(strconv.Itoa(len(bluk)))
-	w.b.Write(CRLF)
-	w.b.WriteString(bluk)
-	w.b.Write(CRLF)
+func (w *RESPWriter) WriteBulkString(bulk string) {
+	w.b = append(w.b, BULK)
+	w.b = strconv.AppendUint(w.b, uint64(len(bulk)), 10)
+	w.b = append(w.b, CRLF...)
+	w.b = append(w.b, bulk...)
+	w.b = append(w.b, CRLF...)
 }
 
 // WriteError writes a RESP error message.
 func (w *RESPWriter) WriteError(err error) {
-	w.b.WriteByte(ERROR)
-	w.b.WriteString(err.Error())
-	w.b.Write(CRLF)
+	w.b = append(w.b, ERROR)
+	w.b = append(w.b, err.Error()...)
+	w.b = append(w.b, CRLF...)
 }
 
 // WriteString writes a RESP simple string.
 func (w *RESPWriter) WriteString(str string) {
-	w.b.WriteByte(STRING)
-	w.b.WriteString(str)
-	w.b.Write(CRLF)
+	w.b = append(w.b, STRING)
+	w.b = append(w.b, str...)
+	w.b = append(w.b, CRLF...)
 }
 
 // WriteInteger writes a RESP integer.
 func (w *RESPWriter) WriteInteger(num int) {
-	w.b.WriteByte(INTEGER)
-	w.b.WriteString(strconv.Itoa(num))
-	w.b.Write(CRLF)
+	w.b = append(w.b, INTEGER)
+	w.b = strconv.AppendUint(w.b, uint64(num), 10)
+	w.b = append(w.b, CRLF...)
+}
+
+// WriteFloat writes a RESP bulk string from a float64.
+func (w *RESPWriter) WriteFloat(num float64) {
+	w.WriteBulkString(strconv.FormatFloat(num, 'f', -1, 64))
 }
 
 // WriteNull writes a RESP null bulk string.
 func (w *RESPWriter) WriteNull() {
-	w.b.WriteString("$-1")
-	w.b.Write(CRLF)
+	w.b = append(w.b, "$-1\r\n"...)
 }
 
 // Reset resets the internal buffer.
-func (w *RESPWriter) Reset() { w.b.Reset() }
+func (w *RESPWriter) Reset() { w.b = w.b[:0] }
 
 // RESP represents the RESP (Redis Serialization Protocol) message in byte slice format.
 type RESP []byte
@@ -173,6 +176,8 @@ func (r RESP) ToString() string { return string(r) }
 func (r RESP) ToStringUnsafe() string { return b2s(r) }
 
 func (r RESP) ToInt() (int, error) { return strconv.Atoi(b2s(r)) }
+
+func (r RESP) ToFloat() (float64, error) { return strconv.ParseFloat(b2s(r), 64) }
 
 func (r RESP) Clone() []byte { return slices.Clone(r) }
 

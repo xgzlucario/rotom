@@ -60,7 +60,7 @@ func (z *ZSet) Delete(key string) (float64, bool) {
 }
 
 func (z *ZSet) PopMin() (key string, score float64) {
-	z.skl.ForEachIf(func(n node, s struct{}) bool {
+	z.skl.ForEachIf(func(n node, _ struct{}) bool {
 		key = n.key
 		score = n.score
 		return false
@@ -70,9 +70,22 @@ func (z *ZSet) PopMin() (key string, score float64) {
 	return
 }
 
+func (z *ZSet) Rank(key string) (int, float64) {
+	score, ok := z.m.Get(key)
+	if !ok {
+		return -1, 0
+	}
+	index := -1
+	z.skl.ForEachIf(func(n node, _ struct{}) bool {
+		index++
+		return n.key != key
+	})
+	return index, score
+}
+
 func (z *ZSet) Range(start, stop int, fn func(key string, score float64)) {
 	var index int
-	z.skl.ForEachIf(func(n node, s struct{}) bool {
+	z.skl.ForEachIf(func(n node, _ struct{}) bool {
 		if index >= start && index < stop {
 			fn(n.key, n.score)
 		}
