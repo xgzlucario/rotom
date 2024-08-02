@@ -218,14 +218,15 @@ func TestCommand(t *testing.T) {
 
 		// zrange
 		{
-			members, _ := rdb.ZRange(ctx, "rank", 0, -1).Result()
-			assert.Equal(members, []string{"player1", "player3", "player2"})
+			res, _ := rdb.ZRange(ctx, "rank", 0, -1).Result()
+			assert.Equal(res, []string{"player1", "player3", "player2"})
 
-			members, _ = rdb.ZRange(ctx, "rank", 1, 3).Result()
-			assert.Equal(members, []string{"player3", "player2"})
+			res, _ = rdb.ZRange(ctx, "rank", 1, 3).Result()
+			assert.Equal(res, []string{"player3", "player2"})
 
-			members, _ = rdb.ZRange(ctx, "rank", 70, 60).Result()
-			assert.Nil(members)
+			res, err := rdb.ZRange(ctx, "rank", 70, 60).Result()
+			assert.Equal(len(res), 0)
+			assert.Nil(err)
 		}
 
 		// zrangeWithScores
@@ -243,8 +244,9 @@ func TestCommand(t *testing.T) {
 				{Member: "player2", Score: 300.5},
 			})
 
-			res, _ = rdb.ZRangeWithScores(ctx, "rank", 70, 60).Result()
-			assert.Nil(res)
+			res, err := rdb.ZRangeWithScores(ctx, "rank", 70, 60).Result()
+			assert.Equal(len(res), 0)
+			assert.Nil(err)
 		}
 
 		// zpopmin
@@ -260,6 +262,15 @@ func TestCommand(t *testing.T) {
 				{Member: "player2", Score: 300.5},
 			})
 		}
+
+		// zrem
+		rdb.ZAdd(ctx, "rank",
+			redis.Z{Member: "player1", Score: 100},
+			redis.Z{Member: "player2", Score: 300.5},
+			redis.Z{Member: "player3", Score: 100})
+
+		res, _ := rdb.ZRem(ctx, "rank", "player1", "player2", "player999").Result()
+		assert.Equal(res, int64(2))
 	})
 
 	t.Run("flushdb", func(t *testing.T) {

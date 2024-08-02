@@ -49,14 +49,14 @@ func (z *ZSet) Set(key string, score float64) bool {
 	return !ok
 }
 
-func (z *ZSet) Delete(key string) (float64, bool) {
+func (z *ZSet) Remove(key string) bool {
 	score, ok := z.m.Get(key)
 	if !ok {
-		return 0, false
+		return false
 	}
 	z.m.Delete(key)
 	z.skl.Remove(node{key, score})
-	return score, true
+	return true
 }
 
 func (z *ZSet) PopMin() (key string, score float64) {

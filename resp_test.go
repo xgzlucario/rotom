@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"errors"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -124,22 +122,5 @@ func TestReader(t *testing.T) {
 func FuzzRESPReader(f *testing.F) {
 	f.Fuzz(func(t *testing.T, b []byte) {
 		NewReader(b).ReadNextCommand(nil)
-	})
-}
-
-func BenchmarkWWW(b *testing.B) {
-	b.Run("1", func(b *testing.B) {
-		buf := bytes.NewBuffer(nil)
-		for i := 0; i < b.N; i++ {
-			buf.WriteString(strconv.FormatFloat(3.1415926, 'f', -1, 64))
-			buf.Reset()
-		}
-	})
-	b.Run("2", func(b *testing.B) {
-		var buf []byte
-		for i := 0; i < b.N; i++ {
-			buf = strconv.AppendFloat(buf, 3.1415926, 'f', -1, 64)
-			buf = buf[:0]
-		}
 	})
 }

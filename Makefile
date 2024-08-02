@@ -23,7 +23,11 @@ bench:
 	go test -bench . -benchmem
 
 build:
+	CGO_ENABLED=0 \
 	go build -o rotom -ldflags "-s -w -X main.buildTime=$(shell date +%y%m%d_%H%M%S%z)"
+
+upx:
+	upx -9 rotom
 
 build-docker:
 	docker build --build-arg BUILD_TIME=$(shell date +%y%m%d_%H%M%S%z) -t rotom .
