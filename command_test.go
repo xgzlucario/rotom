@@ -125,12 +125,27 @@ func TestCommand(t *testing.T) {
 		res, _ = rdb.HDel(ctx, "map", "k1", "k2", "k3", "k99").Result()
 		assert.Equal(res, int64(3))
 
-		// error
+		// error hset
 		_, err := rdb.HSet(ctx, "map").Result()
 		assert.Equal(err.Error(), errInvalidArguments.Error())
 
 		_, err = rdb.HSet(ctx, "map", "k1", "v1", "k2").Result()
 		assert.Equal(err.Error(), errInvalidArguments.Error())
+
+		// err wrong type
+		rdb.Set(ctx, "key", "value", 0)
+
+		_, err = rdb.HGet(ctx, "key", "field1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.HSet(ctx, "key", "field1", "value1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.HDel(ctx, "key", "field1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.HGetAll(ctx, "key").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
 	})
 
 	t.Run("list", func(t *testing.T) {
@@ -170,6 +185,23 @@ func TestCommand(t *testing.T) {
 			assert.Equal(err, redis.Nil)
 		}
 
+		// error wrong type
+		rdb.Set(ctx, "key", "value", 0)
+
+		_, err = rdb.LPush(ctx, "key", "1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.RPush(ctx, "key", "1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.LPop(ctx, "key").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.RPop(ctx, "key").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.LRange(ctx, "key", 0, -1).Result()
+		assert.Equal(err.Error(), errWrongType.Error())
 	})
 
 	t.Run("set", func(t *testing.T) {
@@ -303,9 +335,9 @@ func TestCommand(t *testing.T) {
 		wg.Wait()
 	})
 
-	t.Run("largeBody", func(t *testing.T) {
-		body := make([]byte, 1024*1024)
-		_, err := rdb.Set(ctx, "large", body, 0).Result()
+	t.Run("bigKey", func(t *testing.T) {
+		body := make([]byte, MAX_QUERY_DATA_LEN)
+		_, err := rdb.Set(ctx, "bigKey", body, 0).Result()
 		assert.NotNil(err)
 	})
 
@@ -339,4 +371,13 @@ func TestConfig(t *testing.T) {
 
 	_, err = LoadConfig("go.mod")
 	assert.NotNil(err)
+}
+
+func TestReadableSize(t *testing.T) {
+	assert := assert.New(t)
+
+	assert.Equal(readableSize(50), "50B")
+	assert.Equal(readableSize(50*KB), "50.0KB")
+	assert.Equal(readableSize(50*MB), "50.0MB")
+	assert.Equal(readableSize(50*GB), "50.0GB")
 }

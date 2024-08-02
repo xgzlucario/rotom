@@ -50,7 +50,7 @@ var cmdTable []*Command = []*Command{
 	{"srem", sremCommand, 2, true},
 	{"spop", spopCommand, 1, true},
 	{"zadd", zaddCommand, 3, true},
-	{"zrem", zremCommand, 1, true},
+	{"zrem", zremCommand, 2, true},
 	{"zrank", zrankCommand, 2, false},
 	{"zpopmin", zpopminCommand, 1, true},
 	{"zrange", zrangeCommand, 3, false},

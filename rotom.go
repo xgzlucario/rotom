@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"runtime"
 	"runtime/debug"
@@ -12,9 +13,10 @@ import (
 )
 
 const (
-	READ_BUF_SIZE   = 16 * KB
-	WRITE_BUF_SIZE  = 4 * KB
-	MAX_READER_SIZE = 4 * KB
+	QUERY_BUF_SIZE = 8 * KB
+	WRITE_BUF_SIZE = 8 * KB
+
+	MAX_QUERY_DATA_LEN = 128 * MB
 )
 
 type (
@@ -90,7 +92,7 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	client := &Client{
 		fd:          cfd,
 		replyWriter: NewWriter(WRITE_BUF_SIZE),
-		queryBuf:    make([]byte, READ_BUF_SIZE),
+		queryBuf:    make([]byte, QUERY_BUF_SIZE),
 		argsBuf:     make([]RESP, 8),
 	}
 
@@ -100,29 +102,36 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 
 func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
+	readSize := 0
 
-	// grow query buffer
-	if len(client.queryBuf)-client.queryLen < MAX_READER_SIZE {
-		client.queryBuf = append(client.queryBuf, make([]byte, MAX_READER_SIZE)...)
-	}
-
+READ:
 	n, err := Read(fd, client.queryBuf[client.queryLen:])
 	if err != nil {
 		log.Error().Msgf("client %v read err: %v", fd, err)
 		freeClient(client)
 		return
 	}
-	if n == MAX_READER_SIZE {
-		log.Error().Msgf("client %d read query too large, now free", fd)
-		freeClient(client)
-		return
-	}
-	if n == 0 {
+	readSize += n
+	client.queryLen += n
+
+	if readSize == 0 {
 		freeClient(client)
 		return
 	}
 
-	client.queryLen += n
+	if client.queryLen > MAX_QUERY_DATA_LEN {
+		log.Error().Msgf("client %d read query data too large, now free", fd)
+		freeClient(client)
+		return
+	}
+
+	// queryBuf need grow up
+	if client.queryLen == len(client.queryBuf) {
+		client.queryBuf = append(client.queryBuf, make([]byte, client.queryLen)...)
+		log.Warn().Msgf("client %d queryBuf grow up to size %s", fd, readableSize(len(client.queryBuf)))
+		goto READ
+	}
+
 	ProcessQueryBuf(client)
 }
 
@@ -230,9 +239,9 @@ func SysMonitor(loop *AeLoop, id int, extra interface{}) {
 	debug.ReadGCStats(&stat)
 
 	log.Info().
-		Uint64("gcsys", mem.GCSys).
-		Uint64("heapInuse", mem.HeapInuse).
-		Uint64("heapObjects", mem.HeapObjects).
+		Str("gcsys", readableSize(mem.GCSys)).
+		Str("heapInuse", readableSize(mem.HeapInuse)).
+		Str("heapObjects", fmt.Sprintf("%.1fk", float64(mem.HeapObjects)/1e3)).
 		Int64("gc", stat.NumGC).
 		Msgf("[SYS]")
 
@@ -244,4 +253,16 @@ func SysMonitor(loop *AeLoop, id int, extra interface{}) {
 		runtime.GC()
 	}
 	server.outOfMemory = int(mem.HeapAlloc) > server.config.MaxMemory
+}
+
+func readableSize[T int | uint64](sz T) string {
+	switch {
+	case sz >= GB:
+		return fmt.Sprintf("%.1fGB", float64(sz)/float64(GB))
+	case sz >= MB:
+		return fmt.Sprintf("%.1fMB", float64(sz)/float64(MB))
+	case sz >= KB:
+		return fmt.Sprintf("%.1fKB", float64(sz)/float64(KB))
+	}
+	return fmt.Sprintf("%dB", sz)
 }
