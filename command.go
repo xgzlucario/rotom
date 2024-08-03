@@ -165,7 +165,7 @@ func delCommand(writer *RESPWriter, args []RESP) {
 }
 
 func hsetCommand(writer *RESPWriter, args []RESP) {
-	hash := args[0].ToString()
+	hash := args[0].ToStringUnsafe()
 	args = args[1:]
 
 	if len(args)%2 == 1 {
@@ -228,13 +228,11 @@ func hdelCommand(writer *RESPWriter, args []RESP) {
 
 func hgetallCommand(writer *RESPWriter, args []RESP) {
 	hash := args[0].ToStringUnsafe()
-
 	hmap, err := fetchMap(hash)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-
 	writer.WriteArrayHead(hmap.Len() * 2)
 	hmap.Scan(func(key string, value []byte) {
 		writer.WriteBulkString(key)
@@ -243,7 +241,7 @@ func hgetallCommand(writer *RESPWriter, args []RESP) {
 }
 
 func lpushCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 	ls, err := fetchList(key, true)
 	if err != nil {
 		writer.WriteError(err)
@@ -256,7 +254,7 @@ func lpushCommand(writer *RESPWriter, args []RESP) {
 }
 
 func rpushCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 	ls, err := fetchList(key, true)
 	if err != nil {
 		writer.WriteError(err)
@@ -328,7 +326,7 @@ func lrangeCommand(writer *RESPWriter, args []RESP) {
 }
 
 func saddCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 	args = args[1:]
 
 	set, err := fetchSet(key, true)
@@ -382,7 +380,7 @@ func spopCommand(writer *RESPWriter, args []RESP) {
 }
 
 func zaddCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 	args = args[1:]
 
 	zset, err := fetchZSet(key, true)
@@ -564,7 +562,8 @@ func fetch[T any](key string, new func() T, setnx ...bool) (T, error) {
 
 	v := new()
 	if len(setnx) > 0 && setnx[0] {
-		db.dict.Set(key, v)
+		// make sure `key` is copy
+		db.dict.Set(strings.Clone(key), v)
 	}
 
 	return v, nil

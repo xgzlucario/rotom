@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	maxListPackSize = 8 * 1024
+	maxListPackSize = 16 * 1024
 )
 
 var (

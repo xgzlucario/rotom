@@ -10,6 +10,7 @@ import "math"
 // QuickList is double linked listpack, implement redis quicklist data structure,
 // based on listpack rather than ziplist to optimize cascade update.
 type QuickList struct {
+	size       int
 	head, tail *Node
 }
 
@@ -36,6 +37,7 @@ func (ls *QuickList) LPush(key string) {
 		ls.head.prev = n
 		ls.head = n
 	}
+	ls.size++
 	ls.head.LPush(key)
 }
 
@@ -47,6 +49,7 @@ func (ls *QuickList) RPush(key string) {
 		n.prev = ls.tail
 		ls.tail = n
 	}
+	ls.size++
 	ls.tail.RPush(key)
 }
 
@@ -54,6 +57,7 @@ func (ls *QuickList) RPush(key string) {
 func (ls *QuickList) LPop() (key string, ok bool) {
 	for lp := ls.head; lp != nil; lp = lp.next {
 		if lp.size > 0 {
+			ls.size--
 			return lp.LPop()
 		}
 		ls.free(lp)
@@ -65,6 +69,7 @@ func (ls *QuickList) LPop() (key string, ok bool) {
 func (ls *QuickList) RPop() (key string, ok bool) {
 	for lp := ls.tail; lp != nil; lp = lp.prev {
 		if lp.size > 0 {
+			ls.size--
 			return lp.RPop()
 		}
 		ls.free(lp)
@@ -82,11 +87,8 @@ func (ls *QuickList) free(n *Node) {
 	}
 }
 
-func (ls *QuickList) Size() (n int) {
-	for lp := ls.head; lp != nil; lp = lp.next {
-		n += lp.Size()
-	}
-	return
+func (ls *QuickList) Size() int {
+	return ls.size
 }
 
 func (ls *QuickList) Range(start, end int, f func(data []byte)) {

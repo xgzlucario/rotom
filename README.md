@@ -45,14 +45,9 @@ Rotom has made several optimizations in data structures:
 
 Notably, `zipmap` and `zipset` are space-efficient data structures based on `listpack`, which is a new compressed list proposed by Redis to replace `ziplist`, supporting both forward and reverse traversal and solving the cascading update issue in `ziplist`.
 
-## Roadmap
-
-- Support for LRU cache and memory eviction.
-- Support for gradual rehashing in dict.
-- Support for RDB and AOF Rewrite.
-- Compatibility with more commonly used commands.
-
 ## Benchmark
+
+![img](bench.jpg)
 
 The test will run rotom on the same machine with `appendonly` disabled, and use `redis-benchmark` tool to test the latency of different commands.
 
@@ -60,10 +55,27 @@ The test will run rotom on the same machine with `appendonly` disabled, and use 
 goos: linux
 goarch: amd64
 pkg: github.com/xgzlucario/rotom
-cpu: Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz
+cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ```
 
-![img](bench.jpg)
+```
+	redis	rotom	redis_P10	rotom_P10	redis_P50	rotom_P50
+SET	268817	268817	2222222	2173913	3448276	5263158
+GET	265957	259740	2702702	1818181	4347826	4545454
+INCR	271739	261780	2500000	2439024	4347826	7692307
+LPUSH	289017	282485	2083333	2272727	2941176	4347826
+RPUSH	283286	271739	2272727	2439024	3333333	7692307
+SADD	273972	269541	2439024	2631579	4000000	7142857
+HSET	282485	277777	2000000	2127659	3030303	3703703
+ZADD	273224	272479	1960784	2702702	2941176	6249999
+```
+
+## Roadmap
+
+- Support for LRU cache and memory eviction.
+- Support for gradual rehashing in dict.
+- Support for RDB and AOF Rewrite.
+- Compatibility with more commonly used commands.
 
 ## Usage
 
