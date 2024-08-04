@@ -1,8 +1,8 @@
 package main
 
 import (
+	"bytes"
 	"io"
-	"slices"
 	"strconv"
 	"unsafe"
 )
@@ -28,20 +28,23 @@ func NewReader(input []byte) *RESPReader {
 	return &RESPReader{b: input}
 }
 
-// cutByCRLF splits the buffer by the first occurrence of CRLF.
-func cutByCRLF(buf []byte) (before, after []byte, found bool) {
-	n := len(buf)
-	if n <= 2 {
-		return
-	}
-	for i, b := range buf[:n-1] {
-		if b == '\r' {
-			if buf[i+1] == '\n' {
-				return buf[:i], buf[i+2:], true
-			}
+// parseInt parse first integer from buf.
+// input "3\r\nHELLO" -> (3, "HELLO", nil).
+func parseInt(buf []byte) (n int, after []byte, err error) {
+	for i, b := range buf {
+		if b >= '0' && b <= '9' {
+			n = n*10 + int(b-'0')
+			continue
 		}
+		if b == '\r' {
+			if len(buf) > i+1 && buf[i+1] == '\n' {
+				return n, buf[i+2:], nil
+			}
+			break
+		}
+		return 0, nil, errParseInteger
 	}
-	return
+	return 0, nil, errCRLFNotFound
 }
 
 // ReadNextCommand reads the next RESP command from the RESPReader.
@@ -55,45 +58,37 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 	switch r.b[0] {
 	case ARRAY:
 		// command_bulk format
-		before, after, ok := cutByCRLF(r.b[1:])
-		if !ok {
-			return nil, errCRLFNotFound
-		}
-		count, err := strconv.Atoi(b2s(before))
+		num, after, err := parseInt(r.b[1:])
 		if err != nil {
 			return nil, err
 		}
 		r.b = after
 
 		// read bulk strings for range
-		for i := 0; i < count; i++ {
+		for i := 0; i < num; i++ {
 			if len(r.b) == 0 || r.b[0] != BULK {
 				return nil, errInvalidArguments
 			}
 
-			// read CRLF
-			before, after, ok := cutByCRLF(r.b[1:])
-			if !ok {
-				return nil, errCRLFNotFound
-			}
-			count, err := strconv.Atoi(b2s(before))
+			num, after, err := parseInt(r.b[1:])
 			if err != nil {
 				return nil, err
 			}
-			r.b = after
 
 			// bound check
-			if count < 0 || count+2 > len(r.b) {
+			if num < 0 || num+2 > len(after) {
 				return nil, errInvalidArguments
 			}
 
-			args = append(args, r.b[:count])
-			r.b = r.b[count+2:]
+			args = append(args, after[:num])
+
+			// skip CRLF
+			r.b = after[num+2:]
 		}
 
 	default:
 		// command_inline format
-		before, after, ok := cutByCRLF(r.b)
+		before, after, ok := bytes.Cut(r.b, CRLF)
 		if !ok {
 			return nil, errInvalidArguments
 		}
@@ -179,8 +174,6 @@ func (r RESP) ToInt() (int, error) { return strconv.Atoi(b2s(r)) }
 
 func (r RESP) ToFloat() (float64, error) { return strconv.ParseFloat(b2s(r), 64) }
 
-func (r RESP) Clone() []byte { return slices.Clone(r) }
+func (r RESP) Clone() []byte { return bytes.Clone(r) }
 
-func b2s(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
-}
+func b2s(b []byte) string { return *(*string)(unsafe.Pointer(&b)) }

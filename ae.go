@@ -37,6 +37,8 @@ type AeLoop struct {
 	fileEventFd     int
 	timeEventNextId int
 	stop            bool
+
+	_fevents []*AeFileEvent // fes cache
 }
 
 func (loop *AeLoop) AddRead(fd int, proc FileProc, extra interface{}) {
@@ -139,6 +141,7 @@ func AeLoopCreate() (*AeLoop, error) {
 		fileEventFd:     epollFd,
 		timeEventNextId: 1,
 		stop:            false,
+		_fevents:        make([]*AeFileEvent, 128), // pre alloc
 	}, nil
 }
 
@@ -171,7 +174,7 @@ retry:
 	}
 
 	// collect file events
-	fes = make([]*AeFileEvent, 0, n)
+	fes = loop._fevents[:0]
 	for _, ev := range events[:n] {
 		if ev.Events&unix.EPOLLIN != 0 {
 			fe := loop.FileEvents[int(ev.Fd)]

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
@@ -13,7 +12,7 @@ import (
 )
 
 var (
-	WITH_SCORES = []byte("WITHSCORES")
+	WITH_SCORES = "WITHSCORES"
 )
 
 type Command struct {
@@ -65,10 +64,6 @@ func equalFold(a, b string) bool {
 	return len(a) == len(b) && strings.EqualFold(a, b)
 }
 
-func equalFoldBytes(a, b []byte) bool {
-	return len(a) == len(b) && bytes.EqualFold(a, b)
-}
-
 func lookupCommand(name string) (*Command, error) {
 	for _, c := range cmdTable {
 		if equalFold(name, c.name) {
@@ -98,11 +93,11 @@ func setCommand(writer *RESPWriter, args []RESP) {
 }
 
 func incrCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 
 	object, ttl := db.dict.Get(key)
 	if ttl == dict.KEY_NOT_EXIST {
-		db.dict.Set(key, 1)
+		db.dict.Set(strings.Clone(key), 1)
 		writer.WriteInteger(1)
 		return
 	}
@@ -114,6 +109,7 @@ func incrCommand(writer *RESPWriter, args []RESP) {
 		writer.WriteInteger(num)
 
 	case dict.TypeString:
+		// conv to integer
 		bytes := object.Data().([]byte)
 		num, err := RESP(bytes).ToInt()
 		if err != nil {
@@ -345,14 +341,12 @@ func saddCommand(writer *RESPWriter, args []RESP) {
 }
 
 func sremCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
-
+	key := args[0].ToStringUnsafe()
 	set, err := fetchSet(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-
 	var count int
 	for _, arg := range args[1:] {
 		if set.Remove(arg.ToStringUnsafe()) {
@@ -363,17 +357,15 @@ func sremCommand(writer *RESPWriter, args []RESP) {
 }
 
 func spopCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
-
+	key := args[0].ToStringUnsafe()
 	set, err := fetchSet(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-
-	item, ok := set.Pop()
+	member, ok := set.Pop()
 	if ok {
-		writer.WriteBulkString(item)
+		writer.WriteBulkString(member)
 	} else {
 		writer.WriteNull()
 	}
@@ -461,7 +453,7 @@ func zrangeCommand(writer *RESPWriter, args []RESP) {
 	}
 	start = min(start, stop)
 
-	withScores := len(args) == 4 && equalFoldBytes(args[3], WITH_SCORES)
+	withScores := len(args) == 4 && equalFold(args[3].ToStringUnsafe(), WITH_SCORES)
 	if withScores {
 		writer.WriteArrayHead((stop - start) * 2)
 		zset.Range(start, stop, func(key string, score float64) {
@@ -478,7 +470,7 @@ func zrangeCommand(writer *RESPWriter, args []RESP) {
 }
 
 func zpopminCommand(writer *RESPWriter, args []RESP) {
-	key := args[0].ToString()
+	key := args[0].ToStringUnsafe()
 	count := 1
 	var err error
 	if len(args) > 1 {

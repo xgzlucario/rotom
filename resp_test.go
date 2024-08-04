@@ -61,26 +61,26 @@ func TestReader(t *testing.T) {
 		}
 	})
 
-	t.Run("cutByCRLF", func(t *testing.T) {
-		before, after, ok := cutByCRLF([]byte("123\r\n456"))
-		assert.Equal(string(before), "123")
-		assert.Equal(string(after), "456")
-		assert.True(ok)
+	t.Run("parseInt", func(t *testing.T) {
+		n, after, err := parseInt([]byte("3\r\nHELLO"))
+		assert.Equal(n, 3)
+		assert.Equal(after, []byte("HELLO"))
+		assert.Nil(err)
 
-		before, after, ok = cutByCRLF([]byte("1234\r\n5678"))
-		assert.Equal(string(before), "1234")
-		assert.Equal(string(after), "5678")
-		assert.True(ok)
+		n, after, err = parseInt([]byte("003\r\nHELLO"))
+		assert.Equal(n, 3)
+		assert.Equal(after, []byte("HELLO"))
+		assert.Nil(err)
 
-		// error cases
-		_, _, ok = cutByCRLF([]byte("A"))
-		assert.False(ok)
+		// errors
+		_, _, err = parseInt([]byte("ABC\r\nHELLO"))
+		assert.ErrorIs(err, errParseInteger)
 
-		_, _, ok = cutByCRLF([]byte("ABC"))
-		assert.False(ok)
+		_, _, err = parseInt([]byte("1234567\r"))
+		assert.ErrorIs(err, errCRLFNotFound)
 
-		_, _, ok = cutByCRLF([]byte("1234\r"))
-		assert.False(ok)
+		_, _, err = parseInt([]byte("1234567"))
+		assert.ErrorIs(err, errCRLFNotFound)
 	})
 
 	t.Run("command-bulk", func(t *testing.T) {
@@ -93,11 +93,11 @@ func TestReader(t *testing.T) {
 		// error
 		args, err = NewReader([]byte("*A\r\n$3\r\nGET\r\n$3\r\nfoo\r\n")).ReadNextCommand(nil)
 		assert.Equal(len(args), 0)
-		assert.NotNil(err)
+		assert.ErrorIs(err, errParseInteger)
 
 		args, err = NewReader([]byte("*3\r\n$A\r\nGET\r\n$3\r\nfoo\r\n")).ReadNextCommand(nil)
 		assert.Equal(len(args), 0)
-		assert.NotNil(err)
+		assert.ErrorIs(err, errParseInteger)
 
 		args, err = NewReader([]byte("*3\r\n+PING")).ReadNextCommand(nil)
 		assert.Equal(len(args), 0)

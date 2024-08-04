@@ -6,7 +6,7 @@ English | [中文](README_CN.md)
 
 ## Introduction
 
-This is rotom, a tiny Redis Server written in Go. It replicates the core event loop mechanism AeLoop in Redis based on I/O multiplexing.
+This is rotom, a high performance, low latency tiny Redis Server written in Go. It replicates the core event loop mechanism AeLoop in Redis based on I/O multiplexing.
 
 ## Features
 
