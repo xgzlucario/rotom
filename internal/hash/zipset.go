@@ -7,40 +7,36 @@ import (
 
 var _ SetI = (*ZipSet)(nil)
 
-// ZipSet store datas as [key1, key2, key3...] in listpack.
-type ZipSet struct {
-	data *list.ListPack
-}
-
-// zipsetEntry is data format in zipset.
+// ZipSet store datas as [entry1, entry2, entry3...] in listpack.
 /*
 	entry format:
 	+-----+--------------+
 	| key | hash(1 Byte) |
 	+-----+--------------+
 */
-type zipsetEntry struct{}
-
-func (zipsetEntry) encode(key string) []byte {
-	buf := make([]byte, len(key)+1)[:0]
-	buf = append(buf, key...)
-	buf = append(buf, byte(xxh3.HashString(key)))
-	return buf
-}
-
-func (zipsetEntry) decode(buf []byte) (key string) {
-	return b2s(buf[:len(buf)-1])
+type ZipSet struct {
+	data *list.ListPack
 }
 
 func NewZipSet() *ZipSet {
 	return &ZipSet{list.NewListPack()}
 }
 
+func (ZipSet) encode(key string) []byte {
+	buf := make([]byte, len(key)+1)[:0]
+	buf = append(buf, key...)
+	return append(buf, byte(xxh3.HashString(key)))
+}
+
+func (ZipSet) decode(src []byte) (key string) {
+	return b2s(src[:len(src)-1])
+}
+
 func (zs *ZipSet) Add(key string) (newField bool) {
 	if zs.Exist(key) {
 		return false
 	}
-	entry := zipsetEntry{}.encode(key)
+	entry := zs.encode(key)
 	zs.data.RPush(b2s(entry))
 	return true
 }
@@ -54,7 +50,7 @@ func (zs *ZipSet) Exist(key string) bool {
 		if entry[len(entry)-1] != hash {
 			continue
 		}
-		kb := zipsetEntry{}.decode(entry)
+		kb := zs.decode(entry)
 		if key == kb {
 			return true
 		}
@@ -71,7 +67,7 @@ func (zs *ZipSet) Remove(key string) bool {
 		if entry[len(entry)-1] != hash {
 			continue
 		}
-		kb := zipsetEntry{}.decode(entry)
+		kb := zs.decode(entry)
 		if key == kb {
 			it.RemoveNexts(1, nil)
 			return true
@@ -84,7 +80,7 @@ func (zs *ZipSet) Scan(fn func(string)) {
 	it := zs.data.Iterator().SeekLast()
 	for !it.IsFirst() {
 		entry := it.Prev()
-		key := zipsetEntry{}.decode(entry)
+		key := zs.decode(entry)
 		fn(key)
 	}
 }

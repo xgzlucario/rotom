@@ -202,6 +202,10 @@ func TestCommand(t *testing.T) {
 
 		_, err = rdb.LRange(ctx, "key", 0, -1).Result()
 		assert.Equal(err.Error(), errWrongType.Error())
+
+		rdb.RPush(ctx, "ls-test", "A")
+		_, err = rdb.Incr(ctx, "ls-test").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
 	})
 
 	t.Run("set", func(t *testing.T) {

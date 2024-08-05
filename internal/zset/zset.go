@@ -7,18 +7,6 @@ import (
 	"github.com/cockroachdb/swiss"
 )
 
-type ZSetI interface {
-	Set(key string, score float64) bool
-	Get(key string) (float64, bool)
-	Remove(key string) bool
-	Len() int
-	PopMin() (key string, score float64)
-	Rank(key string) (rank int, score float64)
-	Range(start, stop int, fn func(key string, score float64))
-}
-
-var _ ZSetI = (*ZSet)(nil)
-
 type node struct {
 	key   string
 	score float64

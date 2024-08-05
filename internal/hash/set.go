@@ -38,8 +38,6 @@ func (s Set) Scan(fn func(string)) {
 	})
 }
 
-func (s Set) Exist(key string) bool {
-	return s.Set.ContainsOne(key)
-}
+func (s Set) Exist(key string) bool { return s.Set.ContainsOne(key) }
 
 func (s Set) Len() int { return s.Cardinality() }
