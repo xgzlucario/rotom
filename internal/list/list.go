@@ -1,7 +1,5 @@
 package list
 
-import "math"
-
 //	 +------------------------------ QuickList -----------------------------+
 //	 |	     +-----------+     +-----------+             +-----------+      |
 //	head --- | listpack0 | <-> | listpack1 | <-> ... <-> | listpackN | --- tail
@@ -87,15 +85,10 @@ func (ls *QuickList) free(n *Node) {
 	}
 }
 
-func (ls *QuickList) Size() int {
-	return ls.size
-}
+func (ls *QuickList) Size() int { return ls.size }
 
-func (ls *QuickList) Range(start, end int, f func(data []byte)) {
-	if end == -1 {
-		end = math.MaxInt
-	}
-	count := end - start
+func (ls *QuickList) Range(start, stop int, f func(data []byte)) {
+	count := stop - start
 
 	lp := ls.head
 	for lp != nil && start > lp.Size() {
@@ -120,11 +113,8 @@ func (ls *QuickList) Range(start, end int, f func(data []byte)) {
 	}
 }
 
-func (ls *QuickList) RevRange(start, end int, f func(data []byte)) {
-	if end == -1 {
-		end = math.MaxInt
-	}
-	count := end - start
+func (ls *QuickList) RevRange(start, stop int, f func(data []byte)) {
+	count := stop - start
 
 	lp := ls.tail
 	for lp != nil && start > lp.Size() {

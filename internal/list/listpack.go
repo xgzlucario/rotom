@@ -4,16 +4,14 @@ import (
 	"encoding/binary"
 	"slices"
 
-	"github.com/xgzlucario/rotom/internal/utils"
+	"github.com/xgzlucario/rotom/internal/pool"
 )
 
 const (
 	maxListPackSize = 16 * 1024
 )
 
-var (
-	bpool = utils.NewBufferPool()
-)
+var bpool = pool.NewBufferPool()
 
 // ListPack is a lists of strings serialization format on Redis.
 /*
@@ -37,7 +35,7 @@ type ListPack struct {
 }
 
 func NewListPack() *ListPack {
-	return &ListPack{data: make([]byte, 0, 32)}
+	return &ListPack{data: bpool.Get(32)[:0]}
 }
 
 func (lp *ListPack) Size() int {

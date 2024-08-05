@@ -5,46 +5,57 @@ import (
 	"unsafe"
 
 	"github.com/xgzlucario/rotom/internal/list"
+	"github.com/zeebo/xxh3"
 )
 
 var _ MapI = (*ZipMap)(nil)
 
 // ZipMap store datas as [entry1, entry2, entry3...] in listpack.
 type ZipMap struct {
-	m *list.ListPack
+	data *list.ListPack
+}
+
+// zipmapEntry is data format in zipmap.
+/*
+	entry format:
+	+-----------------+-----+-----+--------------+
+	| val_len(varint) | val | key | hash(1 Byte) |
+	+-----------------+-----+-----+--------------+
+*/
+type zipmapEntry struct{}
+
+func (zipmapEntry) encode(key string, val []byte) []byte {
+	buf := make([]byte, len(key)+len(val)+2)[:0]
+	buf = binary.AppendUvarint(buf, uint64(len(val)))
+	buf = append(buf, val...)
+	buf = append(buf, key...)
+	buf = append(buf, byte(xxh3.HashString(key)))
+	return buf
+}
+
+func (zipmapEntry) decode(buf []byte) (key string, val []byte) {
+	vlen, n := binary.Uvarint(buf)
+	val = buf[n : n+int(vlen)]
+	key = b2s(buf[n+int(vlen) : len(buf)-1])
+	return
 }
 
 func NewZipMap() *ZipMap {
 	return &ZipMap{list.NewListPack()}
 }
 
-// encodeEntry encode data to [vlen, val, key].
-func encodeEntry(key string, val []byte) []byte {
-	buf := make([]byte, 0, len(key)+len(val)+1)
-	buf = binary.AppendUvarint(buf, uint64(len(val)))
-	buf = append(buf, val...)
-	return append(buf, key...)
-}
-
-func decodeEntry(buf []byte) (key string, val []byte) {
-	vlen, n := binary.Uvarint(buf)
-	val = buf[n : n+int(vlen)]
-	key = b2s(buf[n+int(vlen):])
-	return
-}
-
-func (zm *ZipMap) seek(key string) (*list.LpIterator, []byte) {
-	it := zm.m.Iterator().SeekLast()
-	b := key[len(key)-1]
+func (zm *ZipMap) find(key string) (it *list.LpIterator, val []byte) {
+	it = zm.data.Iterator().SeekLast()
+	hash := byte(xxh3.HashString(key))
 
 	for !it.IsFirst() {
 		entry := it.Prev()
-		// fast equal
-		if entry[len(entry)-1] != b {
+
+		if entry[len(entry)-1] != hash {
 			continue
 		}
 
-		kb, vb := decodeEntry(entry)
+		kb, vb := zipmapEntry{}.decode(entry)
 		if key == kb {
 			return it, vb
 		}
@@ -53,18 +64,18 @@ func (zm *ZipMap) seek(key string) (*list.LpIterator, []byte) {
 }
 
 func (zm *ZipMap) Set(key string, val []byte) (newField bool) {
-	entry := b2s(encodeEntry(key, val))
-	it, _ := zm.seek(key)
+	entry := zipmapEntry{}.encode(key, val)
+	it, _ := zm.find(key)
 	if it != nil {
-		it.ReplaceNext(entry)
+		it.ReplaceNext(b2s(entry))
 		return false
 	}
-	zm.m.RPush(entry)
+	zm.data.RPush(b2s(entry))
 	return true
 }
 
 func (zm *ZipMap) Get(key string) ([]byte, bool) {
-	_, val := zm.seek(key)
+	_, val := zm.find(key)
 	if val != nil {
 		return val, true
 	}
@@ -72,7 +83,7 @@ func (zm *ZipMap) Get(key string) ([]byte, bool) {
 }
 
 func (zm *ZipMap) Remove(key string) bool {
-	it, _ := zm.seek(key)
+	it, _ := zm.find(key)
 	if it != nil {
 		it.RemoveNexts(1, nil)
 		return true
@@ -81,9 +92,9 @@ func (zm *ZipMap) Remove(key string) bool {
 }
 
 func (zm *ZipMap) Scan(fn func(string, []byte)) {
-	it := zm.m.Iterator().SeekLast()
+	it := zm.data.Iterator().SeekLast()
 	for !it.IsFirst() {
-		kb, vb := decodeEntry(it.Prev())
+		kb, vb := zipmapEntry{}.decode(it.Prev())
 		fn(kb, vb)
 	}
 }
@@ -96,7 +107,7 @@ func (zm *ZipMap) ToMap() *Map {
 	return m
 }
 
-func (zm *ZipMap) Len() int { return zm.m.Size() }
+func (zm *ZipMap) Len() int { return zm.data.Size() }
 
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))

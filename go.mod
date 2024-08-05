@@ -11,7 +11,8 @@ require (
 	github.com/rs/zerolog v1.33.0
 	github.com/stretchr/testify v1.9.0
 	github.com/tidwall/mmap v0.3.0
-	golang.org/x/sys v0.22.0
+	github.com/zeebo/xxh3 v1.0.2
+	golang.org/x/sys v0.23.0
 )
 
 require (
@@ -20,6 +21,7 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

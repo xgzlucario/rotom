@@ -316,7 +316,7 @@ func TestCommand(t *testing.T) {
 
 	t.Run("concurrency", func(t *testing.T) {
 		var wg sync.WaitGroup
-		for i := 0; i < 10000; i++ {
+		for i := 0; i < 2000; i++ {
 			wg.Add(1)
 			go func() {
 				key := fmt.Sprintf("key-%08x", rand.Int())

@@ -7,16 +7,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func genList(start, end int) *QuickList {
+func genList(start, stop int) *QuickList {
 	lp := New()
-	for i := start; i < end; i++ {
+	for i := start; i < stop; i++ {
 		lp.RPush(genKey(i))
 	}
 	return lp
 }
 
 func list2slice(ls *QuickList) (res []string) {
-	ls.Range(0, -1, func(data []byte) {
+	ls.Range(0, ls.Size(), func(data []byte) {
 		res = append(res, string(data))
 	})
 	return
@@ -81,7 +81,7 @@ func TestList(t *testing.T) {
 	t.Run("range", func(t *testing.T) {
 		ls := genList(0, N)
 		i := 0
-		ls.Range(0, -1, func(data []byte) {
+		ls.Range(0, N, func(data []byte) {
 			assert.Equal(string(data), genKey(i))
 			i++
 		})
@@ -100,7 +100,7 @@ func TestList(t *testing.T) {
 	t.Run("revrange", func(t *testing.T) {
 		ls := genList(0, N)
 		i := 0
-		ls.RevRange(0, -1, func(data []byte) {
+		ls.RevRange(0, N, func(data []byte) {
 			assert.Equal(string(data), genKey(N-i-1))
 			i++
 		})
