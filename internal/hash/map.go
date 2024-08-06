@@ -1,7 +1,7 @@
 package hash
 
 import (
-	"github.com/cockroachdb/swiss"
+	"github.com/dolthub/swiss"
 )
 
 type MapI interface {
@@ -15,36 +15,34 @@ type MapI interface {
 var _ MapI = (*Map)(nil)
 
 type Map struct {
-	m *swiss.Map[string, []byte]
+	data *swiss.Map[string, []byte]
 }
 
 func NewMap() *Map {
-	return &Map{m: swiss.New[string, []byte](256)}
+	return &Map{swiss.NewMap[string, []byte](256)}
 }
 
 func (m *Map) Get(key string) ([]byte, bool) {
-	return m.m.Get(key)
+	return m.data.Get(key)
 }
 
 func (m *Map) Set(key string, val []byte) bool {
-	_, ok := m.m.Get(key)
-	m.m.Put(key, val)
+	_, ok := m.data.Get(key)
+	m.data.Put(key, val)
 	return !ok
 }
 
 func (m *Map) Remove(key string) bool {
-	_, ok := m.m.Get(key)
-	m.m.Delete(key)
-	return ok
+	return m.data.Delete(key)
 }
 
 func (m *Map) Len() int {
-	return m.m.Len()
+	return m.data.Count()
 }
 
 func (m *Map) Scan(fn func(key string, val []byte)) {
-	m.m.All(func(key string, val []byte) (next bool) {
+	m.data.Iter(func(key string, val []byte) (stop bool) {
 		fn(key, val)
-		return true
+		return false
 	})
 }

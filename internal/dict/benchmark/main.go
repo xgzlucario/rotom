@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/cockroachdb/swiss"
+	"github.com/dolthub/swiss"
 	"github.com/influxdata/tdigest"
 	"github.com/xgzlucario/rotom/internal/dict"
 )
@@ -62,7 +62,7 @@ func main() {
 		}
 
 	case "swiss":
-		m := swiss.New[string, any](8)
+		m := swiss.NewMap[string, any](8)
 		for i := 0; i < entries; i++ {
 			k, v := genKV(i)
 			start := time.Now()

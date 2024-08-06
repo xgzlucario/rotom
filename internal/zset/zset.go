@@ -4,7 +4,7 @@ import (
 	"cmp"
 
 	"github.com/chen3feng/stl4go"
-	"github.com/cockroachdb/swiss"
+	"github.com/dolthub/swiss"
 )
 
 type node struct {
@@ -26,7 +26,7 @@ type ZSet struct {
 
 func NewZSet() *ZSet {
 	return &ZSet{
-		m:   swiss.New[string, float64](8),
+		m:   swiss.NewMap[string, float64](8),
 		skl: stl4go.NewSkipListFunc[node, struct{}](nodeCompare),
 	}
 }
@@ -95,5 +95,5 @@ func (z *ZSet) Range(start, stop int, fn func(key string, score float64)) {
 }
 
 func (z *ZSet) Len() int {
-	return z.m.Len()
+	return z.m.Count()
 }

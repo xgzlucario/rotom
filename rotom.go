@@ -5,6 +5,7 @@ import (
 	"io"
 	"runtime"
 	"runtime/debug"
+	"time"
 
 	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
@@ -238,10 +239,16 @@ func SysMonitor(loop *AeLoop, id int, extra interface{}) {
 	runtime.ReadMemStats(&mem)
 	debug.ReadGCStats(&stat)
 
+	var pause time.Duration
+	if stat.NumGC > 0 {
+		pause = stat.PauseTotal / time.Duration(stat.NumGC)
+	}
+
 	log.Info().
 		Str("gcsys", readableSize(mem.GCSys)).
 		Str("heapInuse", readableSize(mem.HeapInuse)).
 		Str("heapObjects", fmt.Sprintf("%.1fk", float64(mem.HeapObjects)/1e3)).
+		Str("pause", fmt.Sprintf("%v", pause)).
 		Int64("gc", stat.NumGC).
 		Msgf("[SYS]")
 

@@ -40,7 +40,12 @@ func testMapI(m MapI, t *testing.T) {
 	var nilBytes []byte
 	assert.Equal(val, nilBytes)
 
-	// set(update)
+	// set(update great size val)
+	assert.False(m.Set("key1", []byte("newval7")))
+	assert.False(m.Set("key2", []byte("newval8")))
+	assert.False(m.Set("key3", []byte("newval9")))
+
+	// set(update equal size val)
 	assert.False(m.Set("key1", []byte("newval1")))
 	assert.False(m.Set("key2", []byte("newval2")))
 	assert.False(m.Set("key3", []byte("newval3")))

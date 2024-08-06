@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/swiss"
+	"github.com/dolthub/swiss"
 )
 
 const (
@@ -40,8 +40,8 @@ type Dict struct {
 
 func New() *Dict {
 	return &Dict{
-		data:   swiss.New[string, *Object](64),
-		expire: swiss.New[string, int64](64),
+		data:   swiss.NewMap[string, *Object](64),
+		expire: swiss.NewMap[string, int64](64),
 	}
 }
 
@@ -124,12 +124,12 @@ func (dict *Dict) SetTTL(key string, ttl int64) int {
 
 func (dict *Dict) EvictExpired() {
 	var count int
-	dict.expire.All(func(key string, nsec int64) bool {
+	dict.expire.Iter(func(key string, nsec int64) bool {
 		if _nsec.Load() > nsec {
 			dict.expire.Delete(key)
 			dict.data.Delete(key)
 		}
 		count++
-		return count <= 20
+		return count > 20
 	})
 }

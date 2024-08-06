@@ -57,12 +57,19 @@ func (zm *ZipMap) find(key string) (it *list.LpIterator, val []byte) {
 }
 
 func (zm *ZipMap) Set(key string, val []byte) (newField bool) {
+	it, oldVal := zm.find(key)
+	// update inplace
+	if it != nil && len(val) == len(oldVal) {
+		copy(oldVal, val)
+		return false
+	}
+	// replace
 	entry := zm.encode(key, val)
-	it, _ := zm.find(key)
 	if it != nil {
 		it.ReplaceNext(b2s(entry))
 		return false
 	}
+	// insert
 	zm.data.RPush(b2s(entry))
 	return true
 }
