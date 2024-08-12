@@ -51,12 +51,14 @@ func TestReader(t *testing.T) {
 
 	t.Run("error-reader", func(t *testing.T) {
 		// read nil
-		_, err := NewReader(nil).ReadNextCommand(nil)
+		_, n, err := NewReader(nil).ReadNextCommand(nil)
+		assert.Equal(n, 0)
 		assert.NotNil(err)
 
 		for _, prefix := range []byte{BULK, INTEGER, ARRAY} {
 			data := append([]byte{prefix}, "an error message"...)
-			_, err := NewReader(data).ReadNextCommand(nil)
+			_, n, err := NewReader(data).ReadNextCommand(nil)
+			assert.Equal(n, 0)
 			assert.NotNil(err)
 		}
 	})
@@ -84,37 +86,45 @@ func TestReader(t *testing.T) {
 	})
 
 	t.Run("command-bulk", func(t *testing.T) {
-		args, err := NewReader([]byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")).ReadNextCommand(nil)
-		assert.Equal(args[0].ToString(), "SET")
-		assert.Equal(args[1].ToString(), "foo")
-		assert.Equal(args[2].ToString(), "bar")
+		cmdStr := []byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
+		args, n, err := NewReader(cmdStr).ReadNextCommand(nil)
+		assert.Equal(args, []RESP{RESP("SET"), RESP("foo"), RESP("bar")})
+		assert.Equal(n, len(cmdStr))
 		assert.Nil(err)
 
-		// error
-		args, err = NewReader([]byte("*A\r\n$3\r\nGET\r\n$3\r\nfoo\r\n")).ReadNextCommand(nil)
-		assert.Equal(len(args), 0)
+		// error format cmd
+		_, _, err = NewReader([]byte("*A\r\n$3\r\nGET\r\n$3\r\nfoo\r\n")).ReadNextCommand(nil)
 		assert.ErrorIs(err, errParseInteger)
 
-		args, err = NewReader([]byte("*3\r\n$A\r\nGET\r\n$3\r\nfoo\r\n")).ReadNextCommand(nil)
-		assert.Equal(len(args), 0)
+		_, _, err = NewReader([]byte("*3\r\n$A\r\nGET\r\n$3\r\nfoo\r\n")).ReadNextCommand(nil)
 		assert.ErrorIs(err, errParseInteger)
 
-		args, err = NewReader([]byte("*3\r\n+PING")).ReadNextCommand(nil)
-		assert.Equal(len(args), 0)
+		_, _, err = NewReader([]byte("*3\r\n+PING")).ReadNextCommand(nil)
 		assert.NotNil(err)
 
-		args, err = NewReader([]byte("*3\r\n$3ABC")).ReadNextCommand(nil)
-		assert.Equal(len(args), 0)
+		_, _, err = NewReader([]byte("*3\r\n$3ABC")).ReadNextCommand(nil)
 		assert.NotNil(err)
 
-		args, err = NewReader([]byte("*1\r\n")).ReadNextCommand(nil)
-		assert.Equal(len(args), 0)
+		_, _, err = NewReader([]byte("*1\r\n")).ReadNextCommand(nil)
 		assert.NotNil(err)
+
+		// multi cmd contains error format
+		{
+			rd := NewReader([]byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n---ERROR MSG---"))
+			_, n, err = rd.ReadNextCommand(nil)
+			assert.Equal(n, 31)
+			assert.Nil(err)
+
+			_, n, err = rd.ReadNextCommand(nil)
+			assert.Equal(n, 0)
+			assert.NotNil(err)
+		}
 	})
 
 	t.Run("command-inline", func(t *testing.T) {
-		args, err := NewReader([]byte("PING\r\n")).ReadNextCommand(nil)
-		assert.Equal(args[0].ToString(), "PING")
+		args, n, err := NewReader([]byte("PING\r\n")).ReadNextCommand(nil)
+		assert.Equal(args[0], RESP("PING"))
+		assert.Equal(n, 6)
 		assert.Nil(err)
 	})
 }

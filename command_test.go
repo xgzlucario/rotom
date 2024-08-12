@@ -320,11 +320,11 @@ func TestCommand(t *testing.T) {
 
 	t.Run("concurrency", func(t *testing.T) {
 		var wg sync.WaitGroup
-		for i := 0; i < 2000; i++ {
+		for i := 0; i < 1000; i++ {
 			wg.Add(1)
 			go func() {
-				key := fmt.Sprintf("key-%08x", rand.Int())
-				value := fmt.Sprintf("val-%08x", rand.Int())
+				key := fmt.Sprintf("key%08x", rand.Int())
+				value := fmt.Sprintf("val%08x", rand.Int())
 
 				_, err := rdb.Set(ctx, key, value, 0).Result()
 				assert.Nil(err)

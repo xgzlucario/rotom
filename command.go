@@ -58,6 +58,7 @@ var cmdTable []*Command = []*Command{
 	// TODO
 	{"mset", todoCommand, 0, false},
 	{"xadd", todoCommand, 0, false},
+	{"client", todoCommand, 0, false},
 }
 
 func equalFold(a, b string) bool {

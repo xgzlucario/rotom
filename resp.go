@@ -49,9 +49,10 @@ func parseInt(buf []byte) (n int, after []byte, err error) {
 
 // ReadNextCommand reads the next RESP command from the RESPReader.
 // It parses both `COMMAND_BULK` and `COMMAND_INLINE` formats.
-func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
-	if len(r.b) == 0 {
-		return nil, io.EOF
+func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, n int, err error) {
+	srclen := len(r.b)
+	if srclen == 0 {
+		return nil, 0, io.EOF
 	}
 	args = argsBuf[:0]
 
@@ -60,24 +61,24 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 		// command_bulk format
 		num, after, err := parseInt(r.b[1:])
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		r.b = after
 
 		// read bulk strings for range
 		for i := 0; i < num; i++ {
 			if len(r.b) == 0 || r.b[0] != BULK {
-				return nil, errInvalidArguments
+				return nil, 0, errInvalidArguments
 			}
 
 			num, after, err := parseInt(r.b[1:])
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 
 			// bound check
 			if num < 0 || num+2 > len(after) {
-				return nil, errInvalidArguments
+				return nil, 0, errInvalidArguments
 			}
 
 			args = append(args, after[:num])
@@ -90,11 +91,13 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, err error) {
 		// command_inline format
 		before, after, ok := bytes.Cut(r.b, CRLF)
 		if !ok {
-			return nil, errInvalidArguments
+			return nil, 0, errInvalidArguments
 		}
 		args = append(args, before)
 		r.b = after
 	}
+
+	n = srclen - len(r.b)
 	return
 }
 

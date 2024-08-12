@@ -33,9 +33,12 @@ type DB struct {
 }
 
 type Client struct {
-	fd          int
-	queryLen    int
-	queryBuf    []byte
+	fd int
+
+	recvx    int
+	readx    int
+	queryBuf []byte
+
 	argsBuf     []RESP
 	replyWriter *RESPWriter
 }
@@ -106,29 +109,30 @@ func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
 	readSize := 0
 
 READ:
-	n, err := Read(fd, client.queryBuf[client.queryLen:])
+	n, err := Read(fd, client.queryBuf[client.recvx:])
 	if err != nil {
 		log.Error().Msgf("client %v read err: %v", fd, err)
 		freeClient(client)
 		return
 	}
 	readSize += n
-	client.queryLen += n
+	client.recvx += n
 
 	if readSize == 0 {
+		log.Warn().Msgf("client %d read query empty, now free", fd)
 		freeClient(client)
 		return
 	}
 
-	if client.queryLen > MAX_QUERY_DATA_LEN {
+	if client.recvx >= MAX_QUERY_DATA_LEN {
 		log.Error().Msgf("client %d read query data too large, now free", fd)
 		freeClient(client)
 		return
 	}
 
 	// queryBuf need grow up
-	if client.queryLen == len(client.queryBuf) {
-		client.queryBuf = append(client.queryBuf, make([]byte, client.queryLen)...)
+	if client.recvx == len(client.queryBuf) {
+		client.queryBuf = append(client.queryBuf, make([]byte, client.recvx)...)
 		log.Warn().Msgf("client %d queryBuf grow up to size %s", fd, readableSize(len(client.queryBuf)))
 		goto READ
 	}
@@ -137,7 +141,8 @@ READ:
 }
 
 func resetClient(client *Client) {
-	client.queryLen = 0
+	client.readx = 0
+	client.recvx = 0
 }
 
 func freeClient(client *Client) {
@@ -147,11 +152,11 @@ func freeClient(client *Client) {
 }
 
 func ProcessQueryBuf(client *Client) {
-	queryBuf := client.queryBuf[:client.queryLen]
+	queryBuf := client.queryBuf[client.readx:client.recvx]
 
 	reader := NewReader(queryBuf)
 	for {
-		args, err := reader.ReadNextCommand(client.argsBuf)
+		args, n, err := reader.ReadNextCommand(client.argsBuf)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -159,6 +164,7 @@ func ProcessQueryBuf(client *Client) {
 			log.Error().Msgf("read resp error: %v", err)
 			return
 		}
+		client.readx += n
 
 		command := args[0].ToStringUnsafe()
 		args = args[1:]

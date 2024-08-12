@@ -60,14 +60,14 @@ func (aof *Aof) Read(fn func(args []RESP)) error {
 	reader := NewReader(data)
 	argsBuf := make([]RESP, 8)
 	for {
-		values, err := reader.ReadNextCommand(argsBuf)
+		args, _, err := reader.ReadNextCommand(argsBuf)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			return err
 		}
-		fn(values)
+		fn(args)
 	}
 
 	return nil
