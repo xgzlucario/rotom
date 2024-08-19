@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
@@ -13,6 +14,9 @@ import (
 
 var (
 	WITH_SCORES = "WITHSCORES"
+	KEEP_TTL    = "KEEPTTL"
+	EX          = "EX"
+	PX          = "PX"
 )
 
 type Command struct {
@@ -89,7 +93,41 @@ func pingCommand(writer *RESPWriter, _ []RESP) {
 func setCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToString()
 	value := args[1].Clone()
-	db.dict.Set(key, value)
+	extra := args[2:]
+	var ttl int64
+
+	for len(extra) > 0 {
+		// EX
+		if equalFold(extra[0].ToStringUnsafe(), EX) && len(extra) >= 2 {
+			n, err := extra[1].ToInt()
+			if err != nil {
+				writer.WriteError(errParseInteger)
+				return
+			}
+			ttl = time.Now().Add(time.Second * time.Duration(n)).UnixNano()
+			extra = extra[2:]
+
+			// PX
+		} else if equalFold(extra[0].ToStringUnsafe(), PX) && len(extra) >= 2 {
+			n, err := extra[1].ToInt()
+			if err != nil {
+				writer.WriteError(errParseInteger)
+				return
+			}
+			ttl = time.Now().Add(time.Millisecond * time.Duration(n)).UnixNano()
+			extra = extra[2:]
+
+			// KEEPTTL
+		} else if equalFold(extra[0].ToStringUnsafe(), KEEP_TTL) {
+			ttl = -1
+
+		} else {
+			writer.WriteError(errSyntax)
+			return
+		}
+	}
+
+	db.dict.SetWithTTL(key, value, ttl)
 	writer.WriteString("OK")
 }
 
@@ -549,7 +587,6 @@ func fetch[T any](key string, new func() T, setnx ...bool) (T, error) {
 				object.SetData(zm.ToSet())
 			}
 		}
-
 		return v, nil
 	}
 

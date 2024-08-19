@@ -77,13 +77,16 @@ func (dict *Dict) Set(key string, data any) {
 }
 
 func (dict *Dict) SetWithTTL(key string, data any, ttl int64) {
-	dict.data.Put(key, &Object{
+	object := &Object{
 		typ:         typeOfData(data),
 		lastAccessd: _sec.Load(),
 		data:        data,
-		hasTTL:      true,
-	})
-	dict.expire.Put(key, ttl)
+	}
+	if ttl > 0 {
+		dict.expire.Put(key, ttl)
+		object.hasTTL = true
+	}
+	dict.data.Put(key, object)
 }
 
 func (dict *Dict) Delete(key string) bool {

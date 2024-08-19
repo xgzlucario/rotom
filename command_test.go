@@ -60,6 +60,32 @@ func TestCommand(t *testing.T) {
 		assert.Equal(n, int64(1))
 	})
 
+	t.Run("setex", func(t *testing.T) {
+		res, _ := rdb.Set(ctx, "foo", "bar", time.Second).Result()
+		assert.Equal(res, "OK")
+
+		res, _ = rdb.Get(ctx, "foo").Result()
+		assert.Equal(res, "bar")
+
+		time.Sleep(time.Second + time.Millisecond)
+
+		_, err := rdb.Get(ctx, "foo").Result()
+		assert.Equal(err, redis.Nil)
+	})
+
+	t.Run("setpx", func(t *testing.T) {
+		res, _ := rdb.Set(ctx, "foo", "bar", time.Millisecond*100).Result()
+		assert.Equal(res, "OK")
+
+		res, _ = rdb.Get(ctx, "foo").Result()
+		assert.Equal(res, "bar")
+
+		time.Sleep(time.Millisecond * 101)
+
+		_, err := rdb.Get(ctx, "foo").Result()
+		assert.Equal(err, redis.Nil)
+	})
+
 	t.Run("pipline", func(t *testing.T) {
 		pip := rdb.Pipeline()
 		pip.RPush(ctx, "ls-pip", "A", "B", "C")

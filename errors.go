@@ -11,5 +11,5 @@ var (
 	errInvalidArguments = errors.New("ERR invalid number of arguments")
 	errUnknownCommand   = errors.New("ERR unknown command")
 	errOOM              = errors.New("ERR command not allowed when out of memory")
-	// errSyntax           = errors.New("ERR syntax error")
+	errSyntax           = errors.New("ERR syntax error")
 )
