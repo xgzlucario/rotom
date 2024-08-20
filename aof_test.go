@@ -35,12 +35,17 @@ func TestAof(t *testing.T) {
 		defer aof.Close()
 	})
 
-	t.Run("read-error", func(t *testing.T) {
+	t.Run("empty-aof", func(t *testing.T) {
 		aof, _ := NewAof("not-exist.aof")
 		defer aof.Close()
 
 		aof.Read(func(args []RESP) {
 			panic("should not call")
 		})
+	})
+
+	t.Run("read-wrong-file", func(t *testing.T) {
+		_, err := NewAof("internal")
+		assert.NotNil(err)
 	})
 }

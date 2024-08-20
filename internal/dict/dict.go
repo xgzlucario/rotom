@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	TTL_DEFAULT   = -1
+	TTL_FOREVER   = -1
 	KEY_NOT_EXIST = -2
 )
 
@@ -34,70 +34,57 @@ func GetNanoTime() int64 {
 
 // Dict is the hashmap for Rotom.
 type Dict struct {
-	data   *swiss.Map[string, *Object]
+	data   *swiss.Map[string, any]
 	expire *swiss.Map[string, int64]
 }
 
 func New() *Dict {
 	return &Dict{
-		data:   swiss.NewMap[string, *Object](64),
+		data:   swiss.NewMap[string, any](64),
 		expire: swiss.NewMap[string, int64](64),
 	}
 }
 
-func (dict *Dict) Get(key string) (*Object, int) {
-	object, ok := dict.data.Get(key)
+func (dict *Dict) Get(key string) (any, int) {
+	data, ok := dict.data.Get(key)
 	if !ok {
 		// key not exist
 		return nil, KEY_NOT_EXIST
 	}
 
-	object.lastAccessd = _sec.Load()
-
-	if object.hasTTL {
-		nsec, _ := dict.expire.Get(key)
-		// key expired
-		if nsec < _nsec.Load() {
-			dict.data.Delete(key)
-			dict.expire.Delete(key)
-			return nil, KEY_NOT_EXIST
-		}
-		return object, nsec2duration(nsec)
+	nsec, ok := dict.expire.Get(key)
+	if !ok {
+		return data, TTL_FOREVER
 	}
 
-	return object, TTL_DEFAULT
+	// key expired
+	if nsec < _nsec.Load() {
+		dict.data.Delete(key)
+		dict.expire.Delete(key)
+		return nil, KEY_NOT_EXIST
+	}
+
+	return data, nsec2duration(nsec)
 }
 
 func (dict *Dict) Set(key string, data any) {
-	dict.data.Put(key, &Object{
-		typ:         typeOfData(data),
-		lastAccessd: _sec.Load(),
-		data:        data,
-	})
+	dict.data.Put(key, data)
 }
 
 func (dict *Dict) SetWithTTL(key string, data any, ttl int64) {
-	object := &Object{
-		typ:         typeOfData(data),
-		lastAccessd: _sec.Load(),
-		data:        data,
-	}
 	if ttl > 0 {
 		dict.expire.Put(key, ttl)
-		object.hasTTL = true
 	}
-	dict.data.Put(key, object)
+	dict.data.Put(key, data)
 }
 
 func (dict *Dict) Delete(key string) bool {
-	object, ok := dict.data.Get(key)
+	_, ok := dict.data.Get(key)
 	if !ok {
 		return false
 	}
 	dict.data.Delete(key)
-	if object.hasTTL {
-		dict.expire.Delete(key)
-	}
+	dict.expire.Delete(key)
 	return true
 }
 
@@ -105,22 +92,21 @@ func (dict *Dict) Delete(key string) bool {
 // return `0` if key not exist or expired.
 // return `1` if set successed.
 func (dict *Dict) SetTTL(key string, ttl int64) int {
-	object, ok := dict.data.Get(key)
+	_, ok := dict.data.Get(key)
 	if !ok {
 		// key not exist
 		return 0
 	}
-	if object.hasTTL {
-		nsec, _ := dict.expire.Get(key)
-		// key expired
-		if nsec < _nsec.Load() {
-			dict.data.Delete(key)
-			dict.expire.Delete(key)
-			return 0
-		}
+
+	// check key if already expired
+	nsec, ok := dict.expire.Get(key)
+	if ok && nsec < _nsec.Load() {
+		dict.data.Delete(key)
+		dict.expire.Delete(key)
+		return 0
 	}
+
 	// set ttl
-	object.hasTTL = true
 	dict.expire.Put(key, ttl)
 	return 1
 }
@@ -135,4 +121,8 @@ func (dict *Dict) EvictExpired() {
 		count++
 		return count > 20
 	})
+}
+
+func nsec2duration(nsec int64) (second int) {
+	return int(nsec-_nsec.Load()) / int(time.Second)
 }

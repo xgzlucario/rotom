@@ -60,6 +60,14 @@ func TestCommand(t *testing.T) {
 		assert.Equal(n, int64(1))
 	})
 
+	t.Run("error-get", func(t *testing.T) {
+		lskey := fmt.Sprintf("ls-%d", time.Now().UnixNano())
+		rdb.RPush(ctx, lskey, "1")
+
+		_, err := rdb.Get(ctx, lskey).Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+	})
+
 	t.Run("setex", func(t *testing.T) {
 		res, _ := rdb.Set(ctx, "foo", "bar", time.Second).Result()
 		assert.Equal(res, "OK")
@@ -251,6 +259,18 @@ func TestCommand(t *testing.T) {
 		rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
 		res, _ := rdb.SRem(ctx, "set", "k1", "k2", "k999").Result()
 		assert.Equal(res, int64(2))
+
+		// error wrong type
+		rdb.Set(ctx, "key", "value", 0)
+
+		_, err = rdb.SAdd(ctx, "key", "1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.SRem(ctx, "key", "1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.SPop(ctx, "key").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
 	})
 
 	t.Run("zset", func(t *testing.T) {
