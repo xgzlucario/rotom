@@ -5,7 +5,6 @@ import (
 	"unsafe"
 
 	"github.com/xgzlucario/rotom/internal/list"
-	"github.com/zeebo/xxh3"
 )
 
 var _ MapI = (*ZipMap)(nil)
@@ -13,9 +12,9 @@ var _ MapI = (*ZipMap)(nil)
 // ZipMap store datas as [entry1, entry2, entry3...] in listpack.
 /*
 	entry format:
-	+-----------------+-----+-----+--------------+
-	| val_len(varint) | val | key | hash(1 Byte) |
-	+-----------------+-----+-----+--------------+
+	+-----------------+-----+-----+
+	| val_len(varint) | val | key |
+	+-----------------+-----+-----+
 */
 type ZipMap struct {
 	data *list.ListPack
@@ -29,28 +28,23 @@ func (ZipMap) encode(key string, val []byte) []byte {
 	buf := make([]byte, len(key)+len(val)+2)[:0]
 	buf = binary.AppendUvarint(buf, uint64(len(val)))
 	buf = append(buf, val...)
-	buf = append(buf, key...)
-	return append(buf, byte(xxh3.HashString(key)))
+	return append(buf, key...)
 }
 
 func (ZipMap) decode(src []byte) (key string, val []byte) {
 	vlen, n := binary.Uvarint(src)
 	val = src[n : n+int(vlen)]
-	key = b2s(src[n+int(vlen) : len(src)-1])
+	key = b2s(src[n+int(vlen):])
 	return
 }
 
 func (zm *ZipMap) find(key string) (it *list.LpIterator, val []byte) {
 	it = zm.data.Iterator().SeekLast()
-	hash := byte(xxh3.HashString(key))
-
 	for !it.IsFirst() {
 		entry := it.Prev()
-		if entry[len(entry)-1] == hash {
-			kb, vb := zm.decode(entry)
-			if key == kb {
-				return it, vb
-			}
+		keyData, valData := zm.decode(entry)
+		if key == keyData {
+			return it, valData
 		}
 	}
 	return nil, nil
