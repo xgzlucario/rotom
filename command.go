@@ -104,7 +104,7 @@ func setCommand(writer *RESPWriter, args []RESP) {
 				writer.WriteError(errParseInteger)
 				return
 			}
-			ttl = time.Now().Add(time.Second * time.Duration(n)).UnixNano()
+			ttl = dict.GetNanoTime() + int64(time.Second)*int64(n)
 			extra = extra[2:]
 
 			// PX
@@ -114,7 +114,7 @@ func setCommand(writer *RESPWriter, args []RESP) {
 				writer.WriteError(errParseInteger)
 				return
 			}
-			ttl = time.Now().Add(time.Millisecond * time.Duration(n)).UnixNano()
+			ttl = dict.GetNanoTime() + int64(time.Millisecond)*int64(n)
 			extra = extra[2:]
 
 			// KEEPTTL

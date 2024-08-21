@@ -4,7 +4,6 @@ import (
 	"cmp"
 
 	"github.com/chen3feng/stl4go"
-	"github.com/dolthub/swiss"
 )
 
 type node struct {
@@ -20,23 +19,24 @@ func nodeCompare(a, b node) int {
 }
 
 type ZSet struct {
-	m   *swiss.Map[string, float64]
+	m   map[string]float64
 	skl *stl4go.SkipList[node, struct{}]
 }
 
 func NewZSet() *ZSet {
 	return &ZSet{
-		m:   swiss.NewMap[string, float64](8),
+		m:   make(map[string]float64),
 		skl: stl4go.NewSkipListFunc[node, struct{}](nodeCompare),
 	}
 }
 
 func (z *ZSet) Get(key string) (float64, bool) {
-	return z.m.Get(key)
+	val, ok := z.m[key]
+	return val, ok
 }
 
 func (z *ZSet) Set(key string, score float64) bool {
-	old, ok := z.m.Get(key)
+	old, ok := z.m[key]
 	if ok {
 		// same
 		if score == old {
@@ -44,17 +44,17 @@ func (z *ZSet) Set(key string, score float64) bool {
 		}
 		z.skl.Remove(node{key, old})
 	}
-	z.m.Put(key, score)
+	z.m[key] = score
 	z.skl.Insert(node{key, score}, struct{}{})
 	return !ok
 }
 
 func (z *ZSet) Remove(key string) bool {
-	score, ok := z.m.Get(key)
+	score, ok := z.m[key]
 	if !ok {
 		return false
 	}
-	z.m.Delete(key)
+	delete(z.m, key)
 	z.skl.Remove(node{key, score})
 	return true
 }
@@ -65,13 +65,13 @@ func (z *ZSet) PopMin() (key string, score float64) {
 		score = n.score
 		return false
 	})
-	z.m.Delete(key)
+	delete(z.m, key)
 	z.skl.Remove(node{key, score})
 	return
 }
 
 func (z *ZSet) Rank(key string) (int, float64) {
-	score, ok := z.m.Get(key)
+	score, ok := z.m[key]
 	if !ok {
 		return -1, 0
 	}
@@ -95,5 +95,5 @@ func (z *ZSet) Range(start, stop int, fn func(key string, score float64)) {
 }
 
 func (z *ZSet) Len() int {
-	return z.m.Count()
+	return len(z.m)
 }

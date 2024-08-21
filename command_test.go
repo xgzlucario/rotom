@@ -353,6 +353,18 @@ func TestCommand(t *testing.T) {
 
 		res, _ := rdb.ZRem(ctx, "rank", "player1", "player2", "player999").Result()
 		assert.Equal(res, int64(2))
+
+		// err wrong type
+		rdb.Set(ctx, "key", "value", 0)
+
+		_, err := rdb.ZAdd(ctx, "key", redis.Z{}).Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.ZRank(ctx, "key", "member1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.ZRem(ctx, "key", "member1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
 	})
 
 	t.Run("flushdb", func(t *testing.T) {

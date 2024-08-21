@@ -3,8 +3,6 @@ package dict
 import (
 	"sync/atomic"
 	"time"
-
-	"github.com/dolthub/swiss"
 )
 
 const (
@@ -34,33 +32,33 @@ func GetNanoTime() int64 {
 
 // Dict is the hashmap for Rotom.
 type Dict struct {
-	data   *swiss.Map[string, any]
-	expire *swiss.Map[string, int64]
+	data   map[string]any
+	expire map[string]int64
 }
 
 func New() *Dict {
 	return &Dict{
-		data:   swiss.NewMap[string, any](64),
-		expire: swiss.NewMap[string, int64](64),
+		data:   make(map[string]any, 64),
+		expire: make(map[string]int64, 64),
 	}
 }
 
 func (dict *Dict) Get(key string) (any, int) {
-	data, ok := dict.data.Get(key)
+	data, ok := dict.data[key]
 	if !ok {
 		// key not exist
 		return nil, KEY_NOT_EXIST
 	}
 
-	nsec, ok := dict.expire.Get(key)
+	nsec, ok := dict.expire[key]
 	if !ok {
 		return data, TTL_FOREVER
 	}
 
 	// key expired
 	if nsec < _nsec.Load() {
-		dict.data.Delete(key)
-		dict.expire.Delete(key)
+		delete(dict.data, key)
+		delete(dict.expire, key)
 		return nil, KEY_NOT_EXIST
 	}
 
@@ -68,23 +66,23 @@ func (dict *Dict) Get(key string) (any, int) {
 }
 
 func (dict *Dict) Set(key string, data any) {
-	dict.data.Put(key, data)
+	dict.data[key] = data
 }
 
 func (dict *Dict) SetWithTTL(key string, data any, ttl int64) {
 	if ttl > 0 {
-		dict.expire.Put(key, ttl)
+		dict.expire[key] = ttl
 	}
-	dict.data.Put(key, data)
+	dict.data[key] = data
 }
 
 func (dict *Dict) Delete(key string) bool {
-	_, ok := dict.data.Get(key)
+	_, ok := dict.data[key]
 	if !ok {
 		return false
 	}
-	dict.data.Delete(key)
-	dict.expire.Delete(key)
+	delete(dict.data, key)
+	delete(dict.expire, key)
 	return true
 }
 
@@ -92,35 +90,37 @@ func (dict *Dict) Delete(key string) bool {
 // return `0` if key not exist or expired.
 // return `1` if set successed.
 func (dict *Dict) SetTTL(key string, ttl int64) int {
-	_, ok := dict.data.Get(key)
+	_, ok := dict.data[key]
 	if !ok {
 		// key not exist
 		return 0
 	}
 
 	// check key if already expired
-	nsec, ok := dict.expire.Get(key)
+	nsec, ok := dict.expire[key]
 	if ok && nsec < _nsec.Load() {
-		dict.data.Delete(key)
-		dict.expire.Delete(key)
+		delete(dict.data, key)
+		delete(dict.expire, key)
 		return 0
 	}
 
 	// set ttl
-	dict.expire.Put(key, ttl)
+	dict.expire[key] = ttl
 	return 1
 }
 
 func (dict *Dict) EvictExpired() {
 	var count int
-	dict.expire.Iter(func(key string, nsec int64) bool {
+	for key, nsec := range dict.expire {
 		if _nsec.Load() > nsec {
-			dict.expire.Delete(key)
-			dict.data.Delete(key)
+			delete(dict.expire, key)
+			delete(dict.data, key)
 		}
 		count++
-		return count > 20
-	})
+		if count > 20 {
+			return
+		}
+	}
 }
 
 func nsec2duration(nsec int64) (second int) {

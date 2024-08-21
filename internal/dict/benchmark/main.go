@@ -7,7 +7,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/dolthub/swiss"
 	"github.com/influxdata/tdigest"
 	"github.com/xgzlucario/rotom/internal/dict"
 )
@@ -58,15 +57,6 @@ func main() {
 			k, v := genKV(i)
 			start := time.Now()
 			m[k] = v
-			td.Add(float64(time.Since(start)), 1)
-		}
-
-	case "swiss":
-		m := swiss.NewMap[string, any](8)
-		for i := 0; i < entries; i++ {
-			k, v := genKV(i)
-			start := time.Now()
-			m.Put(k, v)
 			td.Add(float64(time.Since(start)), 1)
 		}
 	}

@@ -1,9 +1,5 @@
 package hash
 
-import (
-	"github.com/dolthub/swiss"
-)
-
 type MapI interface {
 	Set(key string, val []byte) bool
 	Get(key string) ([]byte, bool)
@@ -15,34 +11,36 @@ type MapI interface {
 var _ MapI = (*Map)(nil)
 
 type Map struct {
-	data *swiss.Map[string, []byte]
+	data map[string][]byte
 }
 
 func NewMap() *Map {
-	return &Map{swiss.NewMap[string, []byte](256)}
+	return &Map{make(map[string][]byte, 256)}
 }
 
 func (m *Map) Get(key string) ([]byte, bool) {
-	return m.data.Get(key)
+	val, ok := m.data[key]
+	return val, ok
 }
 
 func (m *Map) Set(key string, val []byte) bool {
-	_, ok := m.data.Get(key)
-	m.data.Put(key, val)
+	_, ok := m.data[key]
+	m.data[key] = val
 	return !ok
 }
 
 func (m *Map) Remove(key string) bool {
-	return m.data.Delete(key)
+	_, ok := m.data[key]
+	delete(m.data, key)
+	return ok
 }
 
 func (m *Map) Len() int {
-	return m.data.Count()
+	return len(m.data)
 }
 
 func (m *Map) Scan(fn func(key string, val []byte)) {
-	m.data.Iter(func(key string, val []byte) (stop bool) {
+	for key, val := range m.data {
 		fn(key, val)
-		return false
-	})
+	}
 }
