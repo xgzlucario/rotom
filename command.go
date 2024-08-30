@@ -15,6 +15,7 @@ import (
 var (
 	WITH_SCORES = "WITHSCORES"
 	KEEP_TTL    = "KEEPTTL"
+	NX          = "NX"
 	EX          = "EX"
 	PX          = "PX"
 )
@@ -97,8 +98,10 @@ func setCommand(writer *RESPWriter, args []RESP) {
 	var ttl int64
 
 	for len(extra) > 0 {
+		arg := extra[0].ToStringUnsafe()
+
 		// EX
-		if equalFold(extra[0].ToStringUnsafe(), EX) && len(extra) >= 2 {
+		if equalFold(arg, EX) && len(extra) >= 2 {
 			n, err := extra[1].ToInt()
 			if err != nil {
 				writer.WriteError(errParseInteger)
@@ -108,7 +111,7 @@ func setCommand(writer *RESPWriter, args []RESP) {
 			extra = extra[2:]
 
 			// PX
-		} else if equalFold(extra[0].ToStringUnsafe(), PX) && len(extra) >= 2 {
+		} else if equalFold(arg, PX) && len(extra) >= 2 {
 			n, err := extra[1].ToInt()
 			if err != nil {
 				writer.WriteError(errParseInteger)
@@ -118,8 +121,17 @@ func setCommand(writer *RESPWriter, args []RESP) {
 			extra = extra[2:]
 
 			// KEEPTTL
-		} else if equalFold(extra[0].ToStringUnsafe(), KEEP_TTL) {
+		} else if equalFold(arg, KEEP_TTL) {
+			extra = extra[1:]
 			ttl = -1
+
+			// NX
+		} else if equalFold(arg, NX) {
+			if _, ttl := db.dict.Get(key); ttl != dict.KEY_NOT_EXIST {
+				writer.WriteNull()
+				return
+			}
+			extra = extra[1:]
 
 		} else {
 			writer.WriteError(errSyntax)

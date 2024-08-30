@@ -58,6 +58,15 @@ func TestCommand(t *testing.T) {
 
 		n, _ := rdb.Del(ctx, "foo", "none").Result()
 		assert.Equal(n, int64(1))
+
+		// setnx
+		ok, err := rdb.SetNX(ctx, "key-nx", "123", redis.KeepTTL).Result()
+		assert.Nil(err)
+		assert.True(ok)
+
+		ok, err = rdb.SetNX(ctx, "key-nx", "123", redis.KeepTTL).Result()
+		assert.Nil(err)
+		assert.False(ok)
 	})
 
 	t.Run("error-get", func(t *testing.T) {

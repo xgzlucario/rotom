@@ -119,7 +119,6 @@ READ:
 	client.recvx += n
 
 	if readSize == 0 {
-		log.Info().Msgf("client %d read query empty, now free", fd)
 		freeClient(client)
 		return
 	}
