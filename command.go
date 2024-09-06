@@ -10,6 +10,7 @@ import (
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/zset"
+	lua "github.com/yuin/gopher-lua"
 )
 
 var (
@@ -58,6 +59,7 @@ var cmdTable []*Command = []*Command{
 	{"zrank", zrankCommand, 2, false},
 	{"zpopmin", zpopminCommand, 1, true},
 	{"zrange", zrangeCommand, 3, false},
+	{"eval", evalCommand, 2, true},
 	{"ping", pingCommand, 0, false},
 	{"flushdb", flushdbCommand, 0, true},
 	// TODO
@@ -535,6 +537,39 @@ func zpopminCommand(writer *RESPWriter, args []RESP) {
 func flushdbCommand(writer *RESPWriter, _ []RESP) {
 	db.dict = dict.New()
 	writer.WriteString("OK")
+}
+
+func evalCommand(writer *RESPWriter, args []RESP) {
+	L := server.lua
+	script := args[0].ToString()
+
+	numKeys, err := args[1].ToInt()
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+
+	// set "KEYS" table
+	table := L.CreateTable(numKeys, 0)
+	for i := range numKeys {
+		table.Append(lua.LString(args[i+2]))
+	}
+	L.SetGlobal("KEYS", table)
+
+	if err := L.DoString(script); err != nil {
+		writer.WriteError(err)
+		return
+	}
+
+	ret := L.Get(-1)
+	switch ret.Type() {
+	case lua.LTString:
+		writer.WriteBulkString(ret.String())
+	case lua.LTNil:
+		writer.WriteNull()
+	default:
+		writer.WriteString("OK")
+	}
 }
 
 func todoCommand(writer *RESPWriter, _ []RESP) {

@@ -376,6 +376,22 @@ func TestCommand(t *testing.T) {
 		assert.Equal(err.Error(), errWrongType.Error())
 	})
 
+	t.Run("eval", func(t *testing.T) {
+		keys := []string{"evalKey", "qwer"}
+
+		// set
+		_, err := rdb.Eval(ctx, "call('set',KEYS[0],KEYS[1])", keys).Result()
+		assert.Equal(err, redis.Nil)
+
+		// set with return
+		res, _ := rdb.Eval(ctx, "return call('set',KEYS[0],KEYS[1])", keys).Result()
+		assert.Equal(res, "OK")
+
+		// get
+		res, _ = rdb.Eval(ctx, "return call('get',KEYS[0])", keys[:1]).Result()
+		assert.Equal(res, keys[1])
+	})
+
 	t.Run("flushdb", func(t *testing.T) {
 		rdb.Set(ctx, "test-flush", "1", 0)
 		res, _ := rdb.FlushDB(ctx).Result()

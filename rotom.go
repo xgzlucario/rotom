@@ -11,6 +11,7 @@ import (
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/zset"
+	lua "github.com/yuin/gopher-lua"
 )
 
 const (
@@ -33,22 +34,20 @@ type DB struct {
 }
 
 type Client struct {
-	fd int
-
-	recvx    int
-	readx    int
-	queryBuf []byte
-
+	fd          int
+	recvx       int
+	readx       int
+	queryBuf    []byte
 	argsBuf     []RESP
 	replyWriter *RESPWriter
 }
 
 type Server struct {
-	fd      int
-	config  *Config
-	aeLoop  *AeLoop
-	clients map[int]*Client
-
+	fd          int
+	config      *Config
+	aeLoop      *AeLoop
+	clients     map[int]*Client
+	lua         *lua.LState
 	outOfMemory bool
 }
 
@@ -215,15 +214,21 @@ func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 func initServer(config *Config) (err error) {
 	server.config = config
 	server.clients = make(map[int]*Client)
+	// init aeloop
 	server.aeLoop, err = AeLoopCreate()
 	if err != nil {
 		return err
 	}
+	// init tcp server
 	server.fd, err = TcpServer(config.Port)
 	if err != nil {
 		Close(server.fd)
 		return err
 	}
+	// init lua state
+	L := lua.NewState()
+	L.SetGlobal("call", L.NewFunction(luaCall))
+	server.lua = L
 	return nil
 }
 
