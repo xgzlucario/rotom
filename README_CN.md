@@ -15,6 +15,7 @@
 3. 实现了 dict, list, map, zipmap, set, zipset, zset 数据结构
 4. AOF 支持
 5. 支持 20 多种常用命令
+6. 支持执行 lua 脚本
 
 ## AELoop 事件循环
 

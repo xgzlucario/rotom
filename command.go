@@ -542,34 +542,60 @@ func flushdbCommand(writer *RESPWriter, _ []RESP) {
 func evalCommand(writer *RESPWriter, args []RESP) {
 	L := server.lua
 	script := args[0].ToString()
-
 	numKeys, err := args[1].ToInt()
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
+	numArgv := len(args) - 2 - numKeys
 
 	// set "KEYS" table
-	table := L.CreateTable(numKeys, 0)
-	for i := range numKeys {
-		table.Append(lua.LString(args[i+2]))
+	if numKeys > 0 {
+		keyTable := L.CreateTable(numKeys, 0)
+		for i := 2; i < numKeys+2; i++ {
+			keyTable.Append(lua.LString(args[i]))
+		}
+		L.SetGlobal("KEYS", keyTable)
 	}
-	L.SetGlobal("KEYS", table)
+
+	// set "ARGV" table
+	if numArgv > 0 {
+		argvTable := L.CreateTable(numArgv, 0)
+		for i := 2 + numKeys; i < len(args); i++ {
+			argvTable.Append(lua.LString(args[i]))
+		}
+		L.SetGlobal("ARGV", argvTable)
+	}
 
 	if err := L.DoString(script); err != nil {
 		writer.WriteError(err)
 		return
 	}
 
-	ret := L.Get(-1)
-	switch ret.Type() {
-	case lua.LTString:
-		writer.WriteBulkString(ret.String())
-	case lua.LTNil:
-		writer.WriteNull()
-	default:
-		writer.WriteString("OK")
+	var serialize func(isRoot bool, ret lua.LValue)
+	serialize = func(isRoot bool, ret lua.LValue) {
+		switch res := ret.(type) {
+		case lua.LString:
+			writer.WriteBulkString(res.String())
+
+		case lua.LNumber:
+			writer.WriteInteger(int(res)) // convert to integer
+
+		case *lua.LTable:
+			writer.WriteArrayHead(res.Len())
+			res.ForEach(func(index, value lua.LValue) {
+				serialize(false, value)
+			})
+
+		default:
+			writer.WriteNull()
+		}
+
+		if isRoot && ret.Type() != lua.LTNil {
+			L.Pop(1)
+		}
 	}
+	serialize(true, L.Get(-1))
 }
 
 func todoCommand(writer *RESPWriter, _ []RESP) {

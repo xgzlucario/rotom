@@ -15,6 +15,7 @@ This is rotom, a high performance, low latency tiny Redis Server written in Go. 
 3. Implements data structures such as dict, list, map, zipmap, set, zipset, and zset.
 4. Supports AOF.
 5. Supports 20+ commonly used commands.
+6. Supports execute lua scripts.
 
 ## AELoop
 

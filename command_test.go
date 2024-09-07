@@ -377,19 +377,44 @@ func TestCommand(t *testing.T) {
 	})
 
 	t.Run("eval", func(t *testing.T) {
-		keys := []string{"evalKey", "qwer"}
+		{
+			res, err := rdb.Eval(ctx,
+				"return {KEYS[1],KEYS[2],ARGV[1],ARGV[2]}",
+				[]string{"key1", "key2"},
+				[]any{"first", "second"},
+			).Result()
+			assert.Equal(res, []any{"key1", "key2", "first", "second"})
+			assert.Nil(err)
+		}
+		{
+			res, err := rdb.Eval(ctx, "return {1,2,3}", []string{}).Result()
+			assert.Equal(res, []any{int64(1), int64(2), int64(3)})
+			assert.Nil(err)
+		}
+		{
+			keys := []string{"evalKey", "qwer"}
 
-		// set
-		_, err := rdb.Eval(ctx, "call('set',KEYS[0],KEYS[1])", keys).Result()
-		assert.Equal(err, redis.Nil)
+			// set
+			_, err := rdb.Eval(ctx, "call('set',KEYS[0],KEYS[1])", keys).Result()
+			assert.Equal(err, redis.Nil)
 
-		// set with return
-		res, _ := rdb.Eval(ctx, "return call('set',KEYS[0],KEYS[1])", keys).Result()
-		assert.Equal(res, "OK")
+			// set with return
+			res, _ := rdb.Eval(ctx, "return call('set',KEYS[0],KEYS[1])", keys).Result()
+			assert.Equal(res, "OK")
 
-		// get
-		res, _ = rdb.Eval(ctx, "return call('get',KEYS[0])", keys[:1]).Result()
-		assert.Equal(res, keys[1])
+			// get
+			res, _ = rdb.Eval(ctx, "return call('get',KEYS[0])", keys[:1]).Result()
+			assert.Equal(res, keys[1])
+
+			// get nil
+			_, err = rdb.Eval(ctx, "return call('get',KEYS[0])", []string{"notExistKey"}).Result()
+			assert.Equal(err, redis.Nil)
+		}
+		{
+			// unknown function
+			_, err := rdb.Eval(ctx, "call('wwwww','aaa')", []string{}).Result()
+			assert.NotNil(err) // TODO
+		}
 	})
 
 	t.Run("flushdb", func(t *testing.T) {
