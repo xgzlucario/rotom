@@ -83,7 +83,7 @@ func lookupCommand(name string) (*Command, error) {
 
 func (cmd *Command) processCommand(writer *RESPWriter, args []RESP) {
 	if len(args) < cmd.minArgsNum {
-		writer.WriteError(errInvalidArguments)
+		writer.WriteError(errWrongArguments)
 		return
 	}
 	cmd.handler(writer, args)
@@ -209,7 +209,7 @@ func hsetCommand(writer *RESPWriter, args []RESP) {
 	args = args[1:]
 
 	if len(args)%2 == 1 {
-		writer.WriteError(errInvalidArguments)
+		writer.WriteError(errWrongArguments)
 		return
 	}
 
@@ -353,6 +353,8 @@ func lrangeCommand(writer *RESPWriter, args []RESP) {
 
 	if stop == -1 {
 		stop = ls.Size()
+	} else if stop < ls.Size() {
+		stop++ // range 1 3 means range[1,3]
 	}
 	start = min(start, stop)
 
@@ -542,30 +544,6 @@ func flushdbCommand(writer *RESPWriter, _ []RESP) {
 func evalCommand(writer *RESPWriter, args []RESP) {
 	L := server.lua
 	script := args[0].ToString()
-	numKeys, err := args[1].ToInt()
-	if err != nil {
-		writer.WriteError(err)
-		return
-	}
-	numArgv := len(args) - 2 - numKeys
-
-	// set "KEYS" table
-	if numKeys > 0 {
-		keyTable := L.CreateTable(numKeys, 0)
-		for i := 2; i < numKeys+2; i++ {
-			keyTable.Append(lua.LString(args[i]))
-		}
-		L.SetGlobal("KEYS", keyTable)
-	}
-
-	// set "ARGV" table
-	if numArgv > 0 {
-		argvTable := L.CreateTable(numArgv, 0)
-		for i := 2 + numKeys; i < len(args); i++ {
-			argvTable.Append(lua.LString(args[i]))
-		}
-		L.SetGlobal("ARGV", argvTable)
-	}
 
 	if err := L.DoString(script); err != nil {
 		writer.WriteError(err)

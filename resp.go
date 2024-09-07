@@ -68,7 +68,7 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, n int, err er
 		// read bulk strings for range
 		for i := 0; i < num; i++ {
 			if len(r.b) == 0 || r.b[0] != BULK {
-				return nil, 0, errInvalidArguments
+				return nil, 0, errWrongArguments
 			}
 
 			num, after, err := parseInt(r.b[1:])
@@ -78,7 +78,7 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, n int, err er
 
 			// bound check
 			if num < 0 || num+2 > len(after) {
-				return nil, 0, errInvalidArguments
+				return nil, 0, errWrongArguments
 			}
 
 			args = append(args, after[:num])
@@ -91,7 +91,7 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, n int, err er
 		// command_inline format
 		before, after, ok := bytes.Cut(r.b, CRLF)
 		if !ok {
-			return nil, 0, errInvalidArguments
+			return nil, 0, errWrongArguments
 		}
 		args = append(args, before)
 		r.b = after

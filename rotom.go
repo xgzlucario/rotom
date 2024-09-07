@@ -227,8 +227,11 @@ func initServer(config *Config) (err error) {
 	}
 	// init lua state
 	L := lua.NewState()
-	L.SetGlobal("call", L.NewFunction(luaCall))
+	L.Push(L.NewFunction(OpenRedis))
+	L.Push(lua.LString("redis"))
+	L.Call(1, 0)
 	server.lua = L
+
 	return nil
 }
 

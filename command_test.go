@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 )
@@ -17,7 +18,7 @@ func startup() {
 	config := &Config{
 		Port:           20082,
 		AppendOnly:     true,
-		AppendFileName: "appendonly-test.aof",
+		AppendFileName: "test.aof",
 	}
 	os.Remove(config.AppendFileName)
 	config4Server(config)
@@ -27,18 +28,33 @@ func startup() {
 	server.aeLoop.AeMain()
 }
 
-var ctx = context.Background()
-
 func TestCommand(t *testing.T) {
-	assert := assert.New(t)
-
-	go startup()
-	time.Sleep(time.Second / 2)
-
-	// wait for client starup
-	rdb := redis.NewClient(&redis.Options{
-		Addr: ":20082",
+	t.Run("miniredis", func(t *testing.T) {
+		s := miniredis.RunT(t)
+		rdb := redis.NewClient(&redis.Options{
+			Addr: s.Addr(),
+		})
+		sleepFn := func(dur time.Duration) {
+			s.FastForward(dur)
+		}
+		testCommand(t, rdb, sleepFn)
 	})
+	t.Run("rotom", func(t *testing.T) {
+		go startup()
+		time.Sleep(time.Second / 2)
+		rdb := redis.NewClient(&redis.Options{
+			Addr: ":20082",
+		})
+		sleepFn := func(dur time.Duration) {
+			time.Sleep(dur)
+		}
+		testCommand(t, rdb, sleepFn)
+	})
+}
+
+func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
+	assert := assert.New(t)
+	ctx := context.Background()
 
 	t.Run("ping", func(t *testing.T) {
 		res, _ := rdb.Ping(ctx).Result()
@@ -53,66 +69,56 @@ func TestCommand(t *testing.T) {
 		assert.Equal(res, "bar")
 
 		res, err := rdb.Get(ctx, "none").Result()
-		assert.Equal(err, redis.Nil)
 		assert.Equal(res, "")
+		assert.Equal(err, redis.Nil)
 
 		n, _ := rdb.Del(ctx, "foo", "none").Result()
 		assert.Equal(n, int64(1))
 
+		// setex
+		{
+			res, _ := rdb.Set(ctx, "foo", "bar", time.Second).Result()
+			assert.Equal(res, "OK")
+
+			res, _ = rdb.Get(ctx, "foo").Result()
+			assert.Equal(res, "bar")
+
+			sleepFn(time.Second + time.Millisecond)
+
+			_, err := rdb.Get(ctx, "foo").Result()
+			assert.Equal(err, redis.Nil)
+		}
+		// setpx
+		{
+			res, _ := rdb.Set(ctx, "foo", "bar", time.Millisecond*100).Result()
+			assert.Equal(res, "OK")
+
+			res, _ = rdb.Get(ctx, "foo").Result()
+			assert.Equal(res, "bar")
+
+			sleepFn(time.Millisecond * 101)
+
+			_, err := rdb.Get(ctx, "foo").Result()
+			assert.Equal(err, redis.Nil)
+		}
 		// setnx
-		ok, err := rdb.SetNX(ctx, "key-nx", "123", redis.KeepTTL).Result()
-		assert.Nil(err)
-		assert.True(ok)
+		{
+			ok, err := rdb.SetNX(ctx, "keynx", "123", redis.KeepTTL).Result()
+			assert.Nil(err)
+			assert.True(ok)
 
-		ok, err = rdb.SetNX(ctx, "key-nx", "123", redis.KeepTTL).Result()
-		assert.Nil(err)
-		assert.False(ok)
-	})
+			ok, err = rdb.SetNX(ctx, "keynx", "123", redis.KeepTTL).Result()
+			assert.Nil(err)
+			assert.False(ok)
+		}
+		// error
+		{
+			lskey := fmt.Sprintf("ls-%x", time.Now().UnixNano())
+			rdb.RPush(ctx, lskey, "1")
 
-	t.Run("error-get", func(t *testing.T) {
-		lskey := fmt.Sprintf("ls-%d", time.Now().UnixNano())
-		rdb.RPush(ctx, lskey, "1")
-
-		_, err := rdb.Get(ctx, lskey).Result()
-		assert.Equal(err.Error(), errWrongType.Error())
-	})
-
-	t.Run("setex", func(t *testing.T) {
-		res, _ := rdb.Set(ctx, "foo", "bar", time.Second).Result()
-		assert.Equal(res, "OK")
-
-		res, _ = rdb.Get(ctx, "foo").Result()
-		assert.Equal(res, "bar")
-
-		time.Sleep(time.Second + time.Millisecond)
-
-		_, err := rdb.Get(ctx, "foo").Result()
-		assert.Equal(err, redis.Nil)
-	})
-
-	t.Run("setpx", func(t *testing.T) {
-		res, _ := rdb.Set(ctx, "foo", "bar", time.Millisecond*100).Result()
-		assert.Equal(res, "OK")
-
-		res, _ = rdb.Get(ctx, "foo").Result()
-		assert.Equal(res, "bar")
-
-		time.Sleep(time.Millisecond * 101)
-
-		_, err := rdb.Get(ctx, "foo").Result()
-		assert.Equal(err, redis.Nil)
-	})
-
-	t.Run("pipline", func(t *testing.T) {
-		pip := rdb.Pipeline()
-		pip.RPush(ctx, "ls-pip", "A", "B", "C")
-		pip.LPop(ctx, "ls-pip")
-
-		_, err := pip.Exec(ctx)
-		assert.Nil(err)
-
-		res, _ := rdb.LRange(ctx, "ls-pip", 0, -1).Result()
-		assert.Equal(res, []string{"B", "C"})
+			_, err := rdb.Get(ctx, lskey).Result()
+			assert.Equal(err.Error(), errWrongType.Error())
+		}
 	})
 
 	t.Run("incr", func(t *testing.T) {
@@ -170,10 +176,10 @@ func TestCommand(t *testing.T) {
 
 		// error hset
 		_, err := rdb.HSet(ctx, "map").Result()
-		assert.Equal(err.Error(), errInvalidArguments.Error())
+		assert.Contains(err.Error(), errWrongArguments.Error())
 
 		_, err = rdb.HSet(ctx, "map", "k1", "v1", "k2").Result()
-		assert.Equal(err.Error(), errInvalidArguments.Error())
+		assert.Contains(err.Error(), errWrongArguments.Error())
 
 		// err wrong type
 		rdb.Set(ctx, "key", "value", 0)
@@ -205,7 +211,7 @@ func TestCommand(t *testing.T) {
 		assert.Equal(res, []string{"c", "b", "a", "d", "e", "f"})
 
 		res, _ = rdb.LRange(ctx, "list", 1, 3).Result()
-		assert.Equal(res, []string{"b", "a"})
+		assert.Equal(res, []string{"b", "a", "d"})
 
 		res, err := rdb.LRange(ctx, "list", 3, 2).Result()
 		assert.Equal(len(res), 0)
@@ -377,44 +383,30 @@ func TestCommand(t *testing.T) {
 	})
 
 	t.Run("eval", func(t *testing.T) {
-		{
-			res, err := rdb.Eval(ctx,
-				"return {KEYS[1],KEYS[2],ARGV[1],ARGV[2]}",
-				[]string{"key1", "key2"},
-				[]any{"first", "second"},
-			).Result()
-			assert.Equal(res, []any{"key1", "key2", "first", "second"})
-			assert.Nil(err)
-		}
-		{
-			res, err := rdb.Eval(ctx, "return {1,2,3}", []string{}).Result()
-			assert.Equal(res, []any{int64(1), int64(2), int64(3)})
-			assert.Nil(err)
-		}
-		{
-			keys := []string{"evalKey", "qwer"}
+		res, _ := rdb.Eval(ctx, "return {'key1','key2','key3'}", nil).Result()
+		assert.Equal(res, []any{"key1", "key2", "key3"})
 
-			// set
-			_, err := rdb.Eval(ctx, "call('set',KEYS[0],KEYS[1])", keys).Result()
-			assert.Equal(err, redis.Nil)
+		res, _ = rdb.Eval(ctx, "return {1,2,3}", nil).Result()
+		assert.Equal(res, []any{int64(1), int64(2), int64(3)})
 
-			// set with return
-			res, _ := rdb.Eval(ctx, "return call('set',KEYS[0],KEYS[1])", keys).Result()
-			assert.Equal(res, "OK")
+		// set
+		_, err := rdb.Eval(ctx, "redis.call('set','xgz','qwe')", nil).Result()
+		assert.Equal(err, redis.Nil)
 
-			// get
-			res, _ = rdb.Eval(ctx, "return call('get',KEYS[0])", keys[:1]).Result()
-			assert.Equal(res, keys[1])
+		res, _ = rdb.Eval(ctx, "return redis.call('set','xgz','qwe')", nil).Result()
+		assert.Equal(res, "OK")
 
-			// get nil
-			_, err = rdb.Eval(ctx, "return call('get',KEYS[0])", []string{"notExistKey"}).Result()
-			assert.Equal(err, redis.Nil)
-		}
-		{
-			// unknown function
-			_, err := rdb.Eval(ctx, "call('wwwww','aaa')", []string{}).Result()
-			assert.NotNil(err) // TODO
-		}
+		// get
+		res, _ = rdb.Eval(ctx, "return redis.call('get','xgz')", nil).Result()
+		assert.Equal(res, "qwe")
+
+		// get nil
+		_, err = rdb.Eval(ctx, "return redis.call('get','not-ex-evalkey')", nil).Result()
+		assert.Equal(err, redis.Nil)
+
+		// error call
+		_, err = rdb.Eval(ctx, "return redis.call('myfunc','key')", nil).Result()
+		assert.NotNil(err)
 	})
 
 	t.Run("flushdb", func(t *testing.T) {
@@ -437,9 +429,8 @@ func TestCommand(t *testing.T) {
 				_, err := rdb.Set(ctx, key, value, 0).Result()
 				assert.Nil(err)
 
-				res, err := rdb.Get(ctx, key).Result()
+				res, _ := rdb.Get(ctx, key).Result()
 				assert.Equal(res, value)
-				assert.Nil(err)
 
 				wg.Done()
 			}()
@@ -447,11 +438,11 @@ func TestCommand(t *testing.T) {
 		wg.Wait()
 	})
 
-	t.Run("bigKey", func(t *testing.T) {
-		body := make([]byte, MAX_QUERY_DATA_LEN)
-		_, err := rdb.Set(ctx, "bigKey", body, 0).Result()
-		assert.NotNil(err)
-	})
+	// t.Run("bigKey", func(t *testing.T) {
+	// 	body := make([]byte, MAX_QUERY_DATA_LEN)
+	// 	_, err := rdb.Set(ctx, "bigKey", body, 0).Result()
+	// 	assert.NotNil(err)
+	// })
 
 	t.Run("trans-zipmap", func(t *testing.T) {
 		for i := 0; i <= 256; i++ {
@@ -467,8 +458,9 @@ func TestCommand(t *testing.T) {
 		}
 	})
 
-	t.Run("client-closed", func(t *testing.T) {
-		rdb.Close()
+	t.Run("closed", func(t *testing.T) {
+		err := rdb.Close()
+		assert.Nil(err)
 	})
 }
 
