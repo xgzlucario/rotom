@@ -38,11 +38,4 @@ func BenchmarkList(b *testing.B) {
 			ls.Range(0, -1, func([]byte) {})
 		}
 	})
-	b.Run("revrange", func(b *testing.B) {
-		ls := genList(0, 100)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			ls.RevRange(0, -1, func([]byte) {})
-		}
-	})
 }

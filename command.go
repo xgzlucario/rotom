@@ -350,15 +350,7 @@ func lrangeCommand(writer *RESPWriter, args []RESP) {
 		writer.WriteError(err)
 		return
 	}
-
-	if stop == -1 {
-		stop = ls.Size()
-	} else if stop < ls.Size() {
-		stop++ // range 1 3 means range[1,3]
-	}
-	start = min(start, stop)
-
-	writer.WriteArrayHead(stop - start)
+	writer.WriteArrayHead(ls.RangeCount(start, stop))
 	ls.Range(start, stop, func(data []byte) {
 		writer.WriteBulk(data)
 	})

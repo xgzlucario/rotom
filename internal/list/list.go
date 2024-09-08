@@ -87,15 +87,36 @@ func (ls *QuickList) free(n *Node) {
 
 func (ls *QuickList) Size() int { return ls.size }
 
-func (ls *QuickList) Range(start, stop int, f func(data []byte)) {
-	count := stop - start
+func (ls *QuickList) RangeCount(start, stop int) int {
+	if start < 0 {
+		start += ls.Size()
+	}
+	if stop < 0 {
+		stop += ls.Size()
+	}
+	start = max(0, start)
+	stop = min(ls.Size(), stop)
+
+	if start <= stop {
+		return min(ls.Size(), stop-start+1)
+	}
+	return 0
+}
+
+func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
+	count := ls.RangeCount(start, stop)
+	if count == 0 {
+		return
+	}
+	if start < 0 {
+		start += ls.Size()
+	}
 
 	lp := ls.head
 	for lp != nil && start > lp.Size() {
 		start -= lp.Size()
 		lp = lp.next
 	}
-
 	it := lp.Iterator().SeekFirst()
 	for range start {
 		it.Next()
@@ -109,32 +130,6 @@ func (ls *QuickList) Range(start, stop int, f func(data []byte)) {
 			lp = lp.next
 			it = lp.Iterator().SeekFirst()
 		}
-		f(it.Next())
-	}
-}
-
-func (ls *QuickList) RevRange(start, stop int, f func(data []byte)) {
-	count := stop - start
-
-	lp := ls.tail
-	for lp != nil && start > lp.Size() {
-		start -= lp.Size()
-		lp = lp.prev
-	}
-
-	it := lp.Iterator().SeekLast()
-	for range start {
-		it.Prev()
-	}
-
-	for range count {
-		if it.IsFirst() {
-			if lp.prev == nil {
-				return
-			}
-			lp = lp.prev
-			it = lp.Iterator().SeekLast()
-		}
-		f(it.Prev())
+		fn(it.Next())
 	}
 }

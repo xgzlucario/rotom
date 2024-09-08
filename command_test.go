@@ -199,31 +199,45 @@ func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
 
 	t.Run("list", func(t *testing.T) {
 		// lpush
-		n, _ := rdb.LPush(ctx, "list", "a", "b", "c").Result()
+		n, _ := rdb.LPush(ctx, "list", "3", "2", "1").Result()
 		assert.Equal(n, int64(3))
 
 		// rpush
-		n, _ = rdb.RPush(ctx, "list", "d", "e", "f").Result()
+		n, _ = rdb.RPush(ctx, "list", "4", "5", "6").Result()
 		assert.Equal(n, int64(6))
 
+		// list: [1,2,3,4,5,6]
 		// lrange
 		res, _ := rdb.LRange(ctx, "list", 0, -1).Result()
-		assert.Equal(res, []string{"c", "b", "a", "d", "e", "f"})
-
+		assert.Equal(res, []string{"1", "2", "3", "4", "5", "6"})
+		res, _ = rdb.LRange(ctx, "list", -100, 100).Result()
+		assert.Equal(res, []string{"1", "2", "3", "4", "5", "6"})
 		res, _ = rdb.LRange(ctx, "list", 1, 3).Result()
-		assert.Equal(res, []string{"b", "a", "d"})
+		assert.Equal(res, []string{"2", "3", "4"})
+		res, _ = rdb.LRange(ctx, "list", 3, 3).Result()
+		assert.Equal(res, []string{"4"})
+		res, _ = rdb.LRange(ctx, "list", -5, 2).Result()
+		assert.Equal(res, []string{"2", "3"})
 
-		res, err := rdb.LRange(ctx, "list", 3, 2).Result()
-		assert.Equal(len(res), 0)
-		assert.Nil(err)
+		// revrange not support
+		res, _ = rdb.LRange(ctx, "list", -1, -3).Result()
+		assert.Equal(res, []string{})
+		res, _ = rdb.LRange(ctx, "list", -1, 2).Result()
+		assert.Equal(res, []string{})
+		res, _ = rdb.LRange(ctx, "list", 3, 2).Result()
+		assert.Equal(res, []string{})
+		res, _ = rdb.LRange(ctx, "list", 99, 100).Result()
+		assert.Equal(res, []string{})
+		res, _ = rdb.LRange(ctx, "list", -100, -99).Result()
+		assert.Equal(res, []string{})
 
 		// lpop
 		val, _ := rdb.LPop(ctx, "list").Result()
-		assert.Equal(val, "c")
+		assert.Equal(val, "1")
 
 		// rpop
 		val, _ = rdb.RPop(ctx, "list").Result()
-		assert.Equal(val, "f")
+		assert.Equal(val, "6")
 
 		// pop nil
 		{
@@ -237,7 +251,7 @@ func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
 		// error wrong type
 		rdb.Set(ctx, "key", "value", 0)
 
-		_, err = rdb.LPush(ctx, "key", "1").Result()
+		_, err := rdb.LPush(ctx, "key", "1").Result()
 		assert.Equal(err.Error(), errWrongType.Error())
 
 		_, err = rdb.RPush(ctx, "key", "1").Result()
@@ -379,6 +393,9 @@ func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
 		assert.Equal(err.Error(), errWrongType.Error())
 
 		_, err = rdb.ZRem(ctx, "key", "member1").Result()
+		assert.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.ZPopMin(ctx, "key").Result()
 		assert.Equal(err.Error(), errWrongType.Error())
 	})
 

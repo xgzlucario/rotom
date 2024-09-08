@@ -2,6 +2,7 @@ package list
 
 import (
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -79,6 +80,36 @@ func TestList(t *testing.T) {
 	})
 
 	t.Run("range", func(t *testing.T) {
+		ls := New()
+		// [0, 1, 2, 3, 4]
+		for i := range 5 {
+			ls.RPush(strconv.Itoa(i))
+		}
+
+		rangeFn := func(start, stop int) (res []string) {
+			ls.Range(start, stop, func(data []byte) {
+				res = append(res, string(data))
+			})
+			assert.Equal(len(res), ls.RangeCount(start, stop))
+			return
+		}
+
+		assert.Equal(rangeFn(0, -1), []string{"0", "1", "2", "3", "4"})
+		assert.Equal(rangeFn(-100, 100), []string{"0", "1", "2", "3", "4"})
+		assert.Equal(rangeFn(1, 3), []string{"1", "2", "3"})
+		assert.Equal(rangeFn(-3, -1), []string{"2", "3", "4"})
+		assert.Equal(rangeFn(3, 3), []string{"3"})
+		assert.Equal(rangeFn(-3, 2), []string{"2"})
+
+		// empty
+		var nilStrings []string
+		assert.Equal(rangeFn(99, 100), nilStrings)
+		assert.Equal(rangeFn(-100, -99), nilStrings)
+		assert.Equal(rangeFn(-1, -3), nilStrings)
+		assert.Equal(rangeFn(3, 2), nilStrings)
+	})
+
+	t.Run("range2", func(t *testing.T) {
 		ls := genList(0, N)
 		i := 0
 		ls.Range(0, N, func(data []byte) {
@@ -93,26 +124,7 @@ func TestList(t *testing.T) {
 				assert.Equal(string(data), genKey(start+i))
 				i++
 			})
-			assert.Equal(i, 100)
-		}
-	})
-
-	t.Run("revrange", func(t *testing.T) {
-		ls := genList(0, N)
-		i := 0
-		ls.RevRange(0, N, func(data []byte) {
-			assert.Equal(string(data), genKey(N-i-1))
-			i++
-		})
-		assert.Equal(i, N)
-
-		for _, start := range []int{100, 1000, 5000} {
-			i = 0
-			ls.RevRange(start, start+100, func(data []byte) {
-				assert.Equal(string(data), genKey(N-start-i-1))
-				i++
-			})
-			assert.Equal(i, 100)
+			assert.Equal(i, 101)
 		}
 	})
 }
