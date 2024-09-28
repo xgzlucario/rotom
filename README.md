@@ -38,7 +38,7 @@ In rotom, the AeLoop event loop mechanism in Redis is replicated, specifically:
 
 Rotom has made several optimizations in data structures:
 
-- dict: Rotom uses `swissmap` as the db hash table, which has better performance and memory efficiency than `stdmap`.
+- dict: Rotom uses `stdmap` as the db hash table, with built-in progressive rehashing.
 - hash: Uses `zipmap` when the hash is small and `hashmap` when it is large.
 - set: Uses `zipset` when the set is small and `mapset` when it is large.
 - list: Uses a `quicklist` based on `listpack` for a doubly linked list.

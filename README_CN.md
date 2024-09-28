@@ -38,7 +38,7 @@ AeLoop(Async Event Loop) 是 Redis 的核心异步事件驱动机制，主要有
 
 rotom 在数据结构上做了许多优化：
 
-- dict：rotom 使用 `swissmap` 作为 db 的哈希表，它的性能和内存使用效率都比 `stdmap` 更好
+- dict：rotom 使用 `stdmap` 作为 db 的哈希表，自带渐进式 rehash 功能
 - hash：当 hash 较小时使用 `zipmap`，较大时使用 `hashmap`
 - set：当 set 较小时使用 `zipset`，较大时使用 `mapset`
 - list：使用基于 `listpack` 的双向链表 `quicklist`

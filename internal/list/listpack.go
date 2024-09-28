@@ -22,10 +22,9 @@ var bpool = pool.NewBufferPool()
 	    |
 	  entry0 content:
 	+------------+--------------+---------------------+
-	|  data_len  |     data     |      entry_len      |
+	|  data_len  |     data     |       data_len      |
 	+------------+--------------+---------------------+
 	|<- varint ->|<- data_len ->|<- varint(reverse) ->|
-	|<------- entry_len ------->|
 
 	Using this structure, it is fast to iterate from both sides.
 */
@@ -97,15 +96,15 @@ func (it *LpIterator) IsLast() bool { return it.index == len(it.data) }
 
 func (it *LpIterator) Next() []byte {
 	//
-	//    index     dataStartPos    dataEndPos            indexNext
-	//      |            |              |                     |
-	//      +------------+--------------+---------------------+-----+
-	//  --> |  data_len  |     data     |      entry_len      | ... |
-	//      +------------+--------------+---------------------+-----+
-	//      |<--- n ---->|<- data_len ->|<-- size_entry_len ->|
+	//    index     dataStartPos    dataEndPos   indexNext
+	//      |            |              |            |
+	//      +------------+--------------+------------+
+	//  --> |  data_len  |     data     |  data_len  |
+	//      +------------+--------------+------------+
+	//      |<--- n ---->|<- data_len ->|<---- n --->|
 	//
 	dataLen, n := binary.Uvarint(it.data[it.index:])
-	indexNext := it.index + n + int(dataLen) + SizeUvarint(dataLen+uint64(n))
+	indexNext := it.index + n + int(dataLen) + n
 
 	dataStartPos := it.index + n
 	dataEndPos := dataStartPos + int(dataLen)
@@ -118,18 +117,16 @@ func (it *LpIterator) Next() []byte {
 
 func (it *LpIterator) Prev() []byte {
 	//
-	//    indexNext  dataStartPos    dataEndPos               index
-	//        |            |              |                     |
-	//  +-----+------------+--------------+---------------------+
-	//  | ... |  data_len  |     data     |      entry_len      | <--
-	//  +-----+------------+--------------+---------------------+
-	//        |<--- n ---->|<- data_len ->|<-- size_entry_len ->|
-	//        |<------ entry_len -------->|
+	//    indexNext  dataStartPos    dataEndPos      index
+	//        |            |              |            |
+	//  +-----+------------+--------------+------------+
+	//  | ... |  data_len  |     data     |  data_len  | <--
+	//  +-----+------------+--------------+------------+
+	//        |<--- n ---->|<- data_len ->|<---- n --->|
 	//
-	entryLen, sizeEntryLen := uvarintReverse(it.data[:it.index])
-	indexNext := it.index - int(entryLen) - sizeEntryLen
+	dataLen, n := uvarintReverse(it.data[:it.index])
+	indexNext := it.index - n - int(dataLen) - n
 
-	dataLen, n := binary.Uvarint(it.data[indexNext:])
 	dataStartPos := indexNext + n
 	dataEndPos := dataStartPos + int(dataLen)
 
@@ -196,8 +193,7 @@ func appendEntry(dst []byte, data string) []byte {
 		sz := len(data) + 2*SizeUvarint(uint64(len(data)))
 		dst = bpool.Get(sz)[:0]
 	}
-	before := len(dst)
 	dst = appendUvarint(dst, len(data), false)
 	dst = append(dst, data...)
-	return appendUvarint(dst, len(dst)-before, true)
+	return appendUvarint(dst, len(data), true)
 }

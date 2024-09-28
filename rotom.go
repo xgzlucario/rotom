@@ -3,9 +3,6 @@ package main
 import (
 	"fmt"
 	"io"
-	"runtime"
-	"runtime/debug"
-	"time"
 
 	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
@@ -235,44 +232,14 @@ func initServer(config *Config) (err error) {
 	return nil
 }
 
-func SyncAOF(loop *AeLoop, id int, extra interface{}) {
+func CronSyncAOF(loop *AeLoop, id int, extra interface{}) {
 	if err := db.aof.Flush(); err != nil {
 		log.Error().Msgf("sync aof error: %v", err)
 	}
 }
 
-func EvictExpired(loop *AeLoop, id int, extra interface{}) {
+func CronEvictExpired(loop *AeLoop, id int, extra interface{}) {
 	db.dict.EvictExpired()
-}
-
-func SysMonitor(loop *AeLoop, id int, extra interface{}) {
-	var mem runtime.MemStats
-	var stat debug.GCStats
-
-	runtime.ReadMemStats(&mem)
-	debug.ReadGCStats(&stat)
-
-	var pause time.Duration
-	if stat.NumGC > 0 {
-		pause = stat.PauseTotal / time.Duration(stat.NumGC)
-	}
-
-	log.Info().
-		Str("gcsys", readableSize(mem.GCSys)).
-		Str("heapInuse", readableSize(mem.HeapInuse)).
-		Str("heapObjects", fmt.Sprintf("%.1fk", float64(mem.HeapObjects)/1e3)).
-		Str("pause", fmt.Sprintf("%v", pause)).
-		Int64("gc", stat.NumGC).
-		Msgf("[SYS]")
-
-	// check outOfMemory
-	if server.config.MaxMemory == 0 {
-		return
-	}
-	if server.outOfMemory {
-		runtime.GC()
-	}
-	server.outOfMemory = int(mem.HeapAlloc) > server.config.MaxMemory
 }
 
 func readableSize[T int | uint64](sz T) string {

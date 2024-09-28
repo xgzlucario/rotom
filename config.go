@@ -9,7 +9,6 @@ type Config struct {
 	Port           int    `json:"port"`
 	AppendOnly     bool   `json:"appendonly"`
 	AppendFileName string `json:"appendfilename"`
-	MaxMemory      int    `json:"maxMemory"`
 }
 
 func LoadConfig(path string) (config *Config, err error) {

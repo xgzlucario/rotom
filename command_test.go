@@ -24,7 +24,9 @@ func startup() {
 	config4Server(config)
 	printBanner(config)
 	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
-	server.aeLoop.AddTimeEvent(AE_NORMAL, 1000, SysMonitor, nil)
+	// custom
+	server.aeLoop.AddTimeEvent(AE_ONCE, 300, func(loop *AeLoop, id int, extra interface{}) {}, nil)
+	server.aeLoop.AddTimeEvent(AE_NORMAL, 1000, CronSyncAOF, nil)
 	server.aeLoop.AeMain()
 }
 
