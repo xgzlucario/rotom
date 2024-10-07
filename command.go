@@ -37,7 +37,7 @@ type Command struct {
 }
 
 // cmdTable is the list of all available commands.
-var cmdTable []*Command = []*Command{
+var cmdTable = []*Command{
 	{"set", setCommand, 2, true},
 	{"get", getCommand, 1, false},
 	{"del", delCommand, 1, true},
@@ -62,10 +62,6 @@ var cmdTable []*Command = []*Command{
 	{"eval", evalCommand, 2, true},
 	{"ping", pingCommand, 0, false},
 	{"flushdb", flushdbCommand, 0, true},
-	// TODO
-	{"mset", todoCommand, 0, false},
-	{"xadd", todoCommand, 0, false},
-	{"client", todoCommand, 0, false},
 }
 
 func equalFold(a, b string) bool {
@@ -566,10 +562,6 @@ func evalCommand(writer *RESPWriter, args []RESP) {
 		}
 	}
 	serialize(true, L.Get(-1))
-}
-
-func todoCommand(writer *RESPWriter, _ []RESP) {
-	writer.WriteString("OK")
 }
 
 func fetchMap(key []byte, setnx ...bool) (Map, error) {

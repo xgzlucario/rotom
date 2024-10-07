@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"github.com/xgzlucario/rotom/internal/dict"
 	"golang.org/x/sys/unix"
 )
@@ -38,7 +39,7 @@ type AeLoop struct {
 	timeEventNextId int
 	stop            bool
 
-	_fevents []*AeFileEvent // fes cache
+	events []*AeFileEvent // file events cache
 }
 
 func (loop *AeLoop) AddRead(fd int, proc FileProc, extra interface{}) {
@@ -141,12 +142,12 @@ func AeLoopCreate() (*AeLoop, error) {
 		fileEventFd:     epollFd,
 		timeEventNextId: 1,
 		stop:            false,
-		_fevents:        make([]*AeFileEvent, 128), // pre alloc
+		events:          make([]*AeFileEvent, 128), // pre alloc
 	}, nil
 }
 
 func (loop *AeLoop) nearestTime() int64 {
-	var nearest int64 = GetMsTime() + 1000
+	var nearest = GetMsTime() + 1000
 	p := loop.TimeEvents
 	for p != nil {
 		nearest = min(nearest, p.when)
@@ -166,7 +167,7 @@ retry:
 	n, err := unix.EpollWait(loop.fileEventFd, events[:], int(timeout))
 	if err != nil {
 		// interrupted system call
-		if err == unix.EINTR {
+		if errors.Is(err, unix.EINTR) {
 			goto retry
 		}
 		log.Error().Msgf("epoll wait error: %v", err)
@@ -174,7 +175,7 @@ retry:
 	}
 
 	// collect file events
-	fes = loop._fevents[:0]
+	fes = loop.events[:0]
 	for _, ev := range events[:n] {
 		if ev.Events&unix.EPOLLIN != 0 {
 			fe := loop.FileEvents[int(ev.Fd)]

@@ -20,13 +20,12 @@ func startup() {
 		AppendOnly:     true,
 		AppendFileName: "test.aof",
 	}
-	os.Remove(config.AppendFileName)
+	_ = os.Remove(config.AppendFileName)
 	config4Server(config)
 	printBanner(config)
-	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
+	RegisterAeLoop(&server)
 	// custom
 	server.aeLoop.AddTimeEvent(AE_ONCE, 300, func(loop *AeLoop, id int, extra interface{}) {}, nil)
-	server.aeLoop.AddTimeEvent(AE_NORMAL, 1000, CronSyncAOF, nil)
 	server.aeLoop.AeMain()
 }
 
@@ -79,20 +78,20 @@ func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
 
 		// setex
 		{
-			res, _ := rdb.Set(ctx, "foo", "bar", time.Second).Result()
+			res, _ = rdb.Set(ctx, "foo", "bar", time.Second).Result()
 			assert.Equal(res, "OK")
 
 			res, _ = rdb.Get(ctx, "foo").Result()
 			assert.Equal(res, "bar")
 
-			sleepFn(time.Second + time.Millisecond)
+			sleepFn(time.Second + 10*time.Millisecond)
 
 			_, err := rdb.Get(ctx, "foo").Result()
 			assert.Equal(err, redis.Nil)
 		}
 		// setpx
 		{
-			res, _ := rdb.Set(ctx, "foo", "bar", time.Millisecond*100).Result()
+			res, _ = rdb.Set(ctx, "foo", "bar", time.Millisecond*100).Result()
 			assert.Equal(res, "OK")
 
 			res, _ = rdb.Get(ctx, "foo").Result()

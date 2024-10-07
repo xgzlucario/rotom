@@ -39,3 +39,22 @@ func BenchmarkList(b *testing.B) {
 		}
 	})
 }
+
+func BenchmarkListPack(b *testing.B) {
+	b.Run("next", func(b *testing.B) {
+		lp := genListPack(0, 100)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for it := lp.Iterator(); !it.IsLast(); it.Next() {
+			}
+		}
+	})
+	b.Run("prev", func(b *testing.B) {
+		lp := genListPack(0, 100)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for it := lp.Iterator().SeekLast(); !it.IsFirst(); it.Prev() {
+			}
+		}
+	})
+}

@@ -16,6 +16,14 @@ func genList(start, stop int) *QuickList {
 	return lp
 }
 
+func genListPack(start, stop int) *ListPack {
+	lp := NewListPack()
+	for i := start; i < stop; i++ {
+		lp.RPush(genKey(i))
+	}
+	return lp
+}
+
 func list2slice(ls *QuickList) (res []string) {
 	ls.Range(0, ls.Size(), func(data []byte) {
 		res = append(res, string(data))

@@ -1,5 +1,5 @@
 coverage.*
 *.aof
-
+.idea/
 redis
 rotom

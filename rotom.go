@@ -100,7 +100,7 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	loop.AddRead(cfd, ReadQueryFromClient, client)
 }
 
-func ReadQueryFromClient(loop *AeLoop, fd int, extra interface{}) {
+func ReadQueryFromClient(_ *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
 	readSize := 0
 
@@ -211,7 +211,7 @@ func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 func initServer(config *Config) (err error) {
 	server.config = config
 	server.clients = make(map[int]*Client)
-	// init aeloop
+	// init aeLoop
 	server.aeLoop, err = AeLoopCreate()
 	if err != nil {
 		return err
@@ -219,7 +219,7 @@ func initServer(config *Config) (err error) {
 	// init tcp server
 	server.fd, err = TcpServer(config.Port)
 	if err != nil {
-		Close(server.fd)
+		_ = Close(server.fd)
 		return err
 	}
 	// init lua state

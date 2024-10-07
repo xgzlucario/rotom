@@ -20,9 +20,7 @@ func appendUvarint(b []byte, n int, reverse bool) []byte {
 }
 
 // uvarintReverse is the reverse version from binary.Uvarint.
-func uvarintReverse(buf []byte) (uint64, int) {
-	var x uint64
-	var s uint
+func uvarintReverse(buf []byte) (x uint64, s int) {
 	for i := range buf {
 		b := buf[len(buf)-1-i]
 		if b < 0x80 {
