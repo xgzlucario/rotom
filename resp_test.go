@@ -8,40 +8,40 @@ import (
 )
 
 func TestWriter(t *testing.T) {
-	assert := assert.New(t)
+	ast := assert.New(t)
 	writer := NewWriter(16)
 
 	t.Run("string", func(t *testing.T) {
 		writer.WriteString("OK")
-		assert.Equal(string(writer.b), "+OK\r\n")
+		ast.Equal(string(writer.b), "+OK\r\n")
 		writer.Reset()
 	})
 
 	t.Run("error", func(t *testing.T) {
 		writer.WriteError(errors.New("err message"))
-		assert.Equal(string(writer.b), "-err message\r\n")
+		ast.Equal(string(writer.b), "-err message\r\n")
 		writer.Reset()
 	})
 
 	t.Run("bulk", func(t *testing.T) {
 		writer.WriteBulk([]byte("hello"))
-		assert.Equal(string(writer.b), "$5\r\nhello\r\n")
+		ast.Equal(string(writer.b), "$5\r\nhello\r\n")
 		writer.Reset()
 
 		writer.WriteBulkString("world")
-		assert.Equal(string(writer.b), "$5\r\nworld\r\n")
+		ast.Equal(string(writer.b), "$5\r\nworld\r\n")
 		writer.Reset()
 	})
 
 	t.Run("integer", func(t *testing.T) {
 		writer.WriteInteger(5)
-		assert.Equal(string(writer.b), ":5\r\n")
+		ast.Equal(string(writer.b), ":5\r\n")
 		writer.Reset()
 	})
 
 	t.Run("float", func(t *testing.T) {
 		writer.WriteFloat(3.1415926)
-		assert.Equal(string(writer.b), "$9\r\n3.1415926\r\n")
+		ast.Equal(string(writer.b), "$9\r\n3.1415926\r\n")
 		writer.Reset()
 	})
 }

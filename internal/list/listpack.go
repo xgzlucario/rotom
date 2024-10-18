@@ -64,10 +64,10 @@ func (lp *ListPack) RPop() (val string, ok bool) {
 		return "", false
 	}
 	it := lp.Iterator().SeekLast()
-	it.Prev()
-	it.RemoveNexts(1, func(b []byte) {
-		val, ok = string(b), true
-	})
+	before := it.index
+	val, ok = string(it.Prev()), true
+	it.data = slices.Delete(it.data, it.index, before)
+	it.size--
 	return
 }
 
@@ -78,11 +78,6 @@ type LpIterator struct {
 
 func (lp *ListPack) Iterator() *LpIterator {
 	return &LpIterator{ListPack: lp}
-}
-
-func (it *LpIterator) SeekFirst() *LpIterator {
-	it.index = 0
-	return it
 }
 
 func (it *LpIterator) SeekLast() *LpIterator {
@@ -157,7 +152,6 @@ func (it *LpIterator) Insert(datas ...string) {
 
 func (it *LpIterator) RemoveNexts(num int, onDelete func([]byte)) {
 	before := it.index
-
 	for i := 0; i < num; i++ {
 		if it.IsLast() {
 			break
@@ -168,7 +162,6 @@ func (it *LpIterator) RemoveNexts(num int, onDelete func([]byte)) {
 		}
 		it.size--
 	}
-
 	after := it.index
 	it.data = slices.Delete(it.data, before, after)
 	it.index = before

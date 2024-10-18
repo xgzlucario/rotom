@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	QUERY_BUF_SIZE = 8 * KB
-	WRITE_BUF_SIZE = 8 * KB
+	QueryBufSize = 8 * KB
+	WriteBufSize = 8 * KB
 
-	MAX_QUERY_DATA_LEN = 128 * MB
+	MaxQueryDataLen = 128 * MB
 )
 
 type (
@@ -53,7 +53,7 @@ var (
 	server Server
 )
 
-// InitDB initializes database and redo appendonly files if nedded.
+// InitDB initializes database and redo appendonly files if needed.
 func InitDB(config *Config) (err error) {
 	db.dict = dict.New()
 
@@ -66,7 +66,7 @@ func InitDB(config *Config) (err error) {
 		log.Debug().Msg("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
-		emptyWriter := NewWriter(WRITE_BUF_SIZE)
+		emptyWriter := NewWriter(WriteBufSize)
 		return db.aof.Read(func(args []RESP) {
 			command := args[0].ToStringUnsafe()
 
@@ -91,8 +91,8 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	// create client
 	client := &Client{
 		fd:          cfd,
-		replyWriter: NewWriter(WRITE_BUF_SIZE),
-		queryBuf:    make([]byte, QUERY_BUF_SIZE),
+		replyWriter: NewWriter(WriteBufSize),
+		queryBuf:    make([]byte, QueryBufSize),
 		argsBuf:     make([]RESP, 8),
 	}
 
@@ -119,7 +119,7 @@ READ:
 		return
 	}
 
-	if client.recvx >= MAX_QUERY_DATA_LEN {
+	if client.recvx >= MaxQueryDataLen {
 		log.Error().Msgf("client %d read query data too large, now free", fd)
 		freeClient(client)
 		return

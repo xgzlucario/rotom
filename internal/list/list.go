@@ -117,7 +117,7 @@ func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
 		start -= lp.Size()
 		lp = lp.next
 	}
-	it := lp.Iterator().SeekFirst()
+	it := lp.Iterator()
 	for range start {
 		it.Next()
 	}
@@ -128,7 +128,7 @@ func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
 				return
 			}
 			lp = lp.next
-			it = lp.Iterator().SeekFirst()
+			it = lp.Iterator()
 		}
 		fn(it.Next())
 	}

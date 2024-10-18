@@ -1,7 +1,6 @@
 package hash
 
 import (
-	"encoding/binary"
 	"unsafe"
 
 	"github.com/xgzlucario/rotom/internal/list"
@@ -9,13 +8,7 @@ import (
 
 var _ MapI = (*ZipMap)(nil)
 
-// ZipMap store datas as [entry1, entry2, entry3...] in listpack.
-/*
-	entry format:
-	+-----------------+-----+-----+
-	| val_len(varint) | val | key |
-	+-----------------+-----+-----+
-*/
+// ZipMap store data as [val1, key1, val2, key2...] in listpack.
 type ZipMap struct {
 	data *list.ListPack
 }
@@ -24,26 +17,12 @@ func NewZipMap() *ZipMap {
 	return &ZipMap{list.NewListPack()}
 }
 
-func (ZipMap) encode(key string, val []byte) []byte {
-	buf := make([]byte, len(key)+len(val)+2)[:0]
-	buf = binary.AppendUvarint(buf, uint64(len(val)))
-	buf = append(buf, val...)
-	return append(buf, key...)
-}
-
-func (ZipMap) decode(src []byte) (key string, val []byte) {
-	vlen, n := binary.Uvarint(src)
-	val = src[n : n+int(vlen)]
-	key = b2s(src[n+int(vlen):])
-	return
-}
-
 func (zm *ZipMap) find(key string) (it *list.LpIterator, val []byte) {
 	it = zm.data.Iterator().SeekLast()
 	for !it.IsFirst() {
-		entry := it.Prev()
-		keyData, valData := zm.decode(entry)
-		if key == keyData {
+		keyData := it.Prev()
+		valData := it.Prev()
+		if key == b2s(keyData) {
 			return it, valData
 		}
 	}
@@ -52,19 +31,17 @@ func (zm *ZipMap) find(key string) (it *list.LpIterator, val []byte) {
 
 func (zm *ZipMap) Set(key string, val []byte) (newField bool) {
 	it, oldVal := zm.find(key)
-	// update inplace
-	if it != nil && len(val) == len(oldVal) {
-		copy(oldVal, val)
-		return false
-	}
-	// replace
-	entry := zm.encode(key, val)
+	// update
 	if it != nil {
-		it.ReplaceNext(b2s(entry))
+		if len(val) == len(oldVal) {
+			copy(oldVal, val)
+		} else {
+			it.ReplaceNext(b2s(val))
+		}
 		return false
 	}
 	// insert
-	zm.data.RPush(b2s(entry))
+	zm.data.RPush(b2s(val), key)
 	return true
 }
 
@@ -79,7 +56,7 @@ func (zm *ZipMap) Get(key string) ([]byte, bool) {
 func (zm *ZipMap) Remove(key string) bool {
 	it, _ := zm.find(key)
 	if it != nil {
-		it.RemoveNexts(1, nil)
+		it.RemoveNexts(2, nil)
 		return true
 	}
 	return false
@@ -88,8 +65,9 @@ func (zm *ZipMap) Remove(key string) bool {
 func (zm *ZipMap) Scan(fn func(string, []byte)) {
 	it := zm.data.Iterator().SeekLast()
 	for !it.IsFirst() {
-		kb, vb := zm.decode(it.Prev())
-		fn(kb, vb)
+		key := it.Prev()
+		val := it.Prev()
+		fn(b2s(key), val)
 	}
 }
 
@@ -101,7 +79,7 @@ func (zm *ZipMap) ToMap() *Map {
 	return m
 }
 
-func (zm *ZipMap) Len() int { return zm.data.Size() }
+func (zm *ZipMap) Len() int { return zm.data.Size() / 2 }
 
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
