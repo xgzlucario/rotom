@@ -23,7 +23,6 @@ func TestAof(t *testing.T) {
 	t.Run("read", func(t *testing.T) {
 		aof, err := NewAof("test.aof")
 		ast.Nil(err)
-
 		_ = aof.Read(func(args []RESP) {
 			// SET foo bar
 			ast.Equal(len(args), 3)
@@ -31,8 +30,13 @@ func TestAof(t *testing.T) {
 			ast.Equal(args[1].ToString(), "foo")
 			ast.Equal(args[2].ToString(), "bar")
 		})
-
 		defer aof.Close()
+	})
+
+	t.Run("read-err-content", func(t *testing.T) {
+		aof, _ := NewAof("LICENSE")
+		err := aof.Read(func(args []RESP) {})
+		ast.NotNil(err)
 	})
 
 	t.Run("empty-aof", func(t *testing.T) {
@@ -44,7 +48,7 @@ func TestAof(t *testing.T) {
 		})
 	})
 
-	t.Run("read-wrong-file", func(t *testing.T) {
+	t.Run("read-err-fileType", func(t *testing.T) {
 		_, err := NewAof("internal")
 		ast.NotNil(err)
 	})

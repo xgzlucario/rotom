@@ -1,11 +1,18 @@
 package hash
 
+import (
+	"github.com/bytedance/sonic"
+	"io"
+)
+
 type MapI interface {
 	Set(key string, val []byte) bool
 	Get(key string) ([]byte, bool)
 	Remove(key string) bool
 	Len() int
 	Scan(fn func(key string, val []byte))
+	Encode(writer io.Writer) error
+	Decode([]byte) error
 }
 
 var _ MapI = (*Map)(nil)
@@ -43,4 +50,12 @@ func (m *Map) Scan(fn func(key string, val []byte)) {
 	for key, val := range m.data {
 		fn(key, val)
 	}
+}
+
+func (m *Map) Encode(writer io.Writer) error {
+	return sonic.ConfigDefault.NewEncoder(writer).Encode(m.data)
+}
+
+func (m *Map) Decode(src []byte) error {
+	return sonic.Unmarshal(src, &m.data)
 }

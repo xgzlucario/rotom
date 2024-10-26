@@ -77,7 +77,7 @@ func lookupCommand(name string) (*Command, error) {
 	return nil, fmt.Errorf("%w '%s'", errUnknownCommand, name)
 }
 
-func (cmd *Command) processCommand(writer *RESPWriter, args []RESP) {
+func (cmd *Command) process(writer *RESPWriter, args []RESP) {
 	if len(args) < cmd.minArgsNum {
 		writer.WriteError(errWrongArguments)
 		return

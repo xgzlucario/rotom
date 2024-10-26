@@ -2,9 +2,10 @@ package list
 
 import (
 	"encoding/binary"
-	"slices"
-
+	"errors"
 	"github.com/xgzlucario/rotom/internal/pool"
+	"io"
+	"slices"
 )
 
 const (
@@ -78,6 +79,29 @@ type LpIterator struct {
 
 func (lp *ListPack) Iterator() *LpIterator {
 	return &LpIterator{ListPack: lp}
+}
+
+func (lp *ListPack) Encode(writer io.Writer) error {
+	sizeBytes := binary.AppendUvarint(nil, uint64(lp.size))
+	_, err := writer.Write(sizeBytes)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(lp.data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (lp *ListPack) Decode(src []byte) error {
+	size, n := binary.Uvarint(src)
+	if n == 0 {
+		return errors.New("invalid listpack data format")
+	}
+	lp.size = uint32(size)
+	lp.data = src[n:]
+	return nil
 }
 
 func (it *LpIterator) SeekLast() *LpIterator {

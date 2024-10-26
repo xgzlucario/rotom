@@ -29,8 +29,13 @@ func startup() {
 	server.aeLoop.AeMain()
 }
 
+const (
+	testTypeRotom     = "rotom"
+	testTypeMiniRedis = "miniredis"
+)
+
 func TestCommand(t *testing.T) {
-	t.Run("miniredis", func(t *testing.T) {
+	t.Run(testTypeMiniRedis, func(t *testing.T) {
 		s := miniredis.RunT(t)
 		rdb := redis.NewClient(&redis.Options{
 			Addr: s.Addr(),
@@ -38,9 +43,9 @@ func TestCommand(t *testing.T) {
 		sleepFn := func(dur time.Duration) {
 			s.FastForward(dur)
 		}
-		testCommand(t, rdb, sleepFn)
+		testCommand(t, testTypeRotom, rdb, sleepFn)
 	})
-	t.Run("rotom", func(t *testing.T) {
+	t.Run(testTypeRotom, func(t *testing.T) {
 		go startup()
 		time.Sleep(time.Second / 2)
 		rdb := redis.NewClient(&redis.Options{
@@ -49,11 +54,11 @@ func TestCommand(t *testing.T) {
 		sleepFn := func(dur time.Duration) {
 			time.Sleep(dur)
 		}
-		testCommand(t, rdb, sleepFn)
+		testCommand(t, testTypeRotom, rdb, sleepFn)
 	})
 }
 
-func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
+func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(time.Duration)) {
 	ast := assert.New(t)
 	ctx := context.Background()
 
@@ -456,50 +461,52 @@ func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
 		wg.Wait()
 	})
 
-	// t.Run("bigKey", func(t *testing.T) {
-	// 	body := make([]byte, MAX_QUERY_DATA_LEN)
-	// 	_, err := rdb.Set(ctx, "bigKey", body, 0).Result()
-	// 	ast.NotNil(err)
-	// })
-
-	t.Run("trans-zipmap", func(t *testing.T) {
-		for i := 0; i <= 256; i++ {
-			k := fmt.Sprintf("%06x", i)
-			rdb.HSet(ctx, "zipmap", k, k)
-		}
-	})
-
-	t.Run("trans-zipset", func(t *testing.T) {
-		for i := 0; i <= 512; i++ {
-			k := fmt.Sprintf("%06x", i)
-			rdb.SAdd(ctx, "zipset", k)
-		}
-	})
-
 	t.Run("closed", func(t *testing.T) {
 		err := rdb.Close()
 		ast.Nil(err)
 	})
+
+	if testType == testTypeRotom {
+		t.Run("bigKey", func(t *testing.T) {
+			body := make([]byte, MaxQueryDataLen)
+			_, err := rdb.Set(ctx, "bigKey", body, 0).Result()
+			ast.NotNil(err)
+		})
+
+		t.Run("trans-zipmap", func(t *testing.T) {
+			for i := 0; i <= 256; i++ {
+				k := fmt.Sprintf("%06x", i)
+				rdb.HSet(ctx, "zipmap", k, k)
+			}
+		})
+
+		t.Run("trans-zipset", func(t *testing.T) {
+			for i := 0; i <= 512; i++ {
+				k := fmt.Sprintf("%06x", i)
+				rdb.SAdd(ctx, "zipset", k)
+			}
+		})
+	}
 }
 
 func TestConfig(t *testing.T) {
-	assert := assert.New(t)
+	ast := assert.New(t)
 
 	cfg, _ := LoadConfig("config.json")
-	assert.Equal(cfg.Port, 6379)
+	ast.Equal(cfg.Port, 6379)
 
 	_, err := LoadConfig("not-exist.json")
-	assert.NotNil(err)
+	ast.NotNil(err)
 
 	_, err = LoadConfig("go.mod")
-	assert.NotNil(err)
+	ast.NotNil(err)
 }
 
 func TestReadableSize(t *testing.T) {
-	assert := assert.New(t)
+	ast := assert.New(t)
 
-	assert.Equal(readableSize(50), "50B")
-	assert.Equal(readableSize(50*KB), "50.0KB")
-	assert.Equal(readableSize(50*MB), "50.0MB")
-	assert.Equal(readableSize(50*GB), "50.0GB")
+	ast.Equal(readableSize(50), "50B")
+	ast.Equal(readableSize(50*KB), "50.0KB")
+	ast.Equal(readableSize(50*MB), "50.0MB")
+	ast.Equal(readableSize(50*GB), "50.0GB")
 }

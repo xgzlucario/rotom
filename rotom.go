@@ -40,12 +40,11 @@ type Client struct {
 }
 
 type Server struct {
-	fd          int
-	config      *Config
-	aeLoop      *AeLoop
-	clients     map[int]*Client
-	lua         *lua.LState
-	outOfMemory bool
+	fd      int
+	config  *Config
+	aeLoop  *AeLoop
+	clients map[int]*Client
+	lua     *lua.LState
 }
 
 var (
@@ -72,7 +71,7 @@ func InitDB(config *Config) (err error) {
 
 			cmd, err := lookupCommand(command)
 			if err == nil {
-				cmd.processCommand(emptyWriter, args[1:])
+				cmd.process(emptyWriter, args[1:])
 				emptyWriter.Reset()
 			}
 		})
@@ -143,7 +142,7 @@ func resetClient(client *Client) {
 func freeClient(client *Client) {
 	delete(server.clients, client.fd)
 	server.aeLoop.ModDetach(client.fd)
-	Close(client.fd)
+	_ = Close(client.fd)
 }
 
 func ProcessQueryBuf(client *Client) {
@@ -170,24 +169,16 @@ func ProcessQueryBuf(client *Client) {
 			log.Error().Msg(err.Error())
 
 		} else {
-			// reject write request when OOM
-			if cmd.persist && server.outOfMemory {
-				client.replyWriter.WriteError(errOOM)
-				goto WRITE
-			}
-
-			cmd.processCommand(client.replyWriter, args)
-
+			cmd.process(client.replyWriter, args)
 			// write aof file
 			if cmd.persist && server.config.AppendOnly {
-				db.aof.Write(queryBuf)
+				_, _ = db.aof.Write(queryBuf)
 			}
 		}
-	}
 
-WRITE:
-	resetClient(client)
-	server.aeLoop.ModWrite(client.fd, SendReplyToClient, client)
+		resetClient(client)
+		server.aeLoop.ModWrite(client.fd, SendReplyToClient, client)
+	}
 }
 
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
@@ -219,7 +210,6 @@ func initServer(config *Config) (err error) {
 	// init tcp server
 	server.fd, err = TcpServer(config.Port)
 	if err != nil {
-		_ = Close(server.fd)
 		return err
 	}
 	// init lua state

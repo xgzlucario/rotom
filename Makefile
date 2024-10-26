@@ -1,6 +1,3 @@
-run:
-	go run .
-
 run-gc:
 	GODEBUG=gctrace=1 go run .
 
@@ -19,6 +16,10 @@ pprof:
 
 heap:
 	go tool pprof http://192.168.1.6:6060/debug/pprof/heap
+
+clean:
+	rm -f coverage.*
+	rm -f *.aof
 
 bench:
 	go test -bench . -benchmem

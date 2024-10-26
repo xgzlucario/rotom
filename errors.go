@@ -10,6 +10,5 @@ var (
 	errCRLFNotFound   = errors.New("ERR CRLF not found in line")
 	errWrongArguments = errors.New("ERR wrong number of arguments")
 	errUnknownCommand = errors.New("ERR unknown command")
-	errOOM            = errors.New("ERR command not allowed when out of memory")
 	errSyntax         = errors.New("ERR syntax error")
 )

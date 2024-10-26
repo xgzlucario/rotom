@@ -1,6 +1,7 @@
 package hash
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
@@ -10,6 +11,8 @@ import (
 func TestMap(t *testing.T) {
 	testMapI(NewMap(), t)
 	testMapI(NewZipMap(), t)
+	testEncodeI(NewMap(), t)
+	testEncodeI(NewZipMap(), t)
 }
 
 func testMapI(m MapI, t *testing.T) {
@@ -124,4 +127,24 @@ func TestToMap(t *testing.T) {
 		count++
 	})
 	ast.Equal(count, 3)
+}
+
+func testEncodeI(m MapI, t *testing.T) {
+	ast := assert.New(t)
+	for i := 0; i < 100; i++ {
+		key := fmt.Sprintf("%d", i)
+		m.Set(key, []byte("val"+key))
+	}
+	// encode
+	buf := bytes.NewBuffer(nil)
+	ast.Nil(m.Encode(buf))
+	// decode
+	_ = m.Decode(buf.Bytes())
+	// scan
+	count := 0
+	m.Scan(func(key string, val []byte) {
+		ast.Equal("val"+key, string(val))
+		count++
+	})
+	ast.Equal(count, 100)
 }

@@ -16,9 +16,8 @@ const (
 
 // Aof manages an append-only file system for storing data.
 type Aof struct {
-	filePath string
-	file     *os.File
-	buf      *bytes.Buffer
+	file *os.File
+	buf  *bytes.Buffer
 }
 
 func NewAof(path string) (*Aof, error) {
@@ -27,9 +26,8 @@ func NewAof(path string) (*Aof, error) {
 		return nil, err
 	}
 	return &Aof{
-		file:     fd,
-		filePath: path,
-		buf:      bytes.NewBuffer(make([]byte, 0, KB)),
+		file: fd,
+		buf:  bytes.NewBuffer(make([]byte, 0, KB)),
 	}, nil
 }
 
@@ -42,13 +40,13 @@ func (aof *Aof) Write(buf []byte) (int, error) {
 }
 
 func (aof *Aof) Flush() error {
-	aof.buf.WriteTo(aof.file)
+	_, _ = aof.buf.WriteTo(aof.file)
 	return aof.file.Sync()
 }
 
 func (aof *Aof) Read(fn func(args []RESP)) error {
 	// Read file data by mmap.
-	data, err := mmap.Open(aof.filePath, false)
+	data, err := mmap.MapFile(aof.file, false)
 	if len(data) == 0 {
 		return nil
 	}
