@@ -27,7 +27,6 @@ func newNode() *Node {
 	return &Node{ListPack: NewListPack()}
 }
 
-// LPush
 func (ls *QuickList) LPush(key string) {
 	if len(ls.head.data)+len(key) >= maxListPackSize {
 		n := newNode()
@@ -39,7 +38,6 @@ func (ls *QuickList) LPush(key string) {
 	ls.head.LPush(key)
 }
 
-// RPush
 func (ls *QuickList) RPush(key string) {
 	if len(ls.tail.data)+len(key) >= maxListPackSize {
 		n := newNode()
@@ -51,7 +49,6 @@ func (ls *QuickList) RPush(key string) {
 	ls.tail.RPush(key)
 }
 
-// LPop
 func (ls *QuickList) LPop() (key string, ok bool) {
 	for lp := ls.head; lp != nil; lp = lp.next {
 		if lp.size > 0 {
@@ -63,7 +60,6 @@ func (ls *QuickList) LPop() (key string, ok bool) {
 	return
 }
 
-// RPop
 func (ls *QuickList) RPop() (key string, ok bool) {
 	for lp := ls.tail; lp != nil; lp = lp.prev {
 		if lp.size > 0 {
@@ -117,6 +113,9 @@ func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
 		start -= lp.Size()
 		lp = lp.next
 	}
+	if lp == nil {
+		return
+	}
 	it := lp.Iterator()
 	for range start {
 		it.Next()
@@ -124,9 +123,6 @@ func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
 
 	for range count {
 		if it.IsLast() {
-			if lp.next == nil {
-				return
-			}
 			lp = lp.next
 			it = lp.Iterator()
 		}

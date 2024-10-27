@@ -1,7 +1,13 @@
 package hash
 
 import (
+	"github.com/bytedance/sonic"
 	mapset "github.com/deckarep/golang-set/v2"
+	"io"
+)
+
+const (
+	defaultSetSize = 512
 )
 
 type SetI interface {
@@ -11,6 +17,8 @@ type SetI interface {
 	Pop() (key string, ok bool)
 	Scan(fn func(key string))
 	Len() int
+	Encode(writer io.Writer) error
+	Decode([]byte) error
 }
 
 var _ SetI = (*Set)(nil)
@@ -20,7 +28,7 @@ type Set struct {
 }
 
 func NewSet() *Set {
-	return &Set{mapset.NewThreadUnsafeSetWithSize[string](512)}
+	return &Set{mapset.NewThreadUnsafeSetWithSize[string](defaultSetSize)}
 }
 
 func (s Set) Remove(key string) bool {
@@ -41,3 +49,19 @@ func (s Set) Scan(fn func(string)) {
 func (s Set) Exist(key string) bool { return s.Set.ContainsOne(key) }
 
 func (s Set) Len() int { return s.Cardinality() }
+
+func (s Set) Encode(writer io.Writer) error {
+	items := s.Set.ToSlice()
+	return sonic.ConfigDefault.NewEncoder(writer).Encode(items)
+}
+
+func (s Set) Decode(src []byte) error {
+	var items []string
+	err := sonic.Unmarshal(src, &items)
+	if err != nil {
+		return err
+	}
+	s.Set = mapset.NewThreadUnsafeSetWithSize[string](defaultSetSize)
+	s.Set.Append(items...)
+	return nil
+}

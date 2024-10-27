@@ -82,8 +82,8 @@ func (lp *ListPack) Iterator() *LpIterator {
 }
 
 func (lp *ListPack) Encode(writer io.Writer) error {
-	sizeBytes := binary.AppendUvarint(nil, uint64(lp.size))
-	_, err := writer.Write(sizeBytes)
+	size := binary.AppendUvarint(nil, uint64(lp.size))
+	_, err := writer.Write(size)
 	if err != nil {
 		return err
 	}
