@@ -1,5 +1,10 @@
 package list
 
+import (
+	"github.com/bytedance/sonic"
+	"io"
+)
+
 //	 +------------------------------ QuickList -----------------------------+
 //	 |	     +-----------+     +-----------+             +-----------+      |
 //	head --- | listpack0 | <-> | listpack1 | <-> ... <-> | listpackN | --- tail
@@ -128,4 +133,43 @@ func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
 		}
 		fn(it.Next())
 	}
+}
+
+type ListPackData struct {
+	Data []byte
+	Size uint32
+}
+
+func (ls *QuickList) Encode(writer io.Writer) error {
+	var data []ListPackData
+	for p := ls.head; p != nil; p = p.next {
+		data = append(data, ListPackData{Data: p.data, Size: p.size})
+	}
+	return sonic.ConfigDefault.NewEncoder(writer).Encode(data)
+}
+
+func (ls *QuickList) Decode(src []byte) error {
+	var datas []ListPackData
+	if err := sonic.Unmarshal(src, &datas); err != nil {
+		return err
+	}
+
+	// head node
+	n := newNode()
+	n.size = datas[0].Size
+	n.data = datas[0].Data
+	ls.head = n
+	ls.tail = n
+	cur := n
+
+	for _, data := range datas[1:] {
+		n := newNode()
+		n.size = data.Size
+		n.data = data.Data
+		cur.next = n
+		n.prev = cur
+		ls.tail = n
+		cur = n
+	}
+	return nil
 }

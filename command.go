@@ -62,6 +62,7 @@ var cmdTable = []*Command{
 	{"eval", evalCommand, 2, true},
 	{"ping", pingCommand, 0, false},
 	{"flushdb", flushdbCommand, 0, true},
+	{"save", saveCommand, 2, false},
 }
 
 func equalFold(a, b string) bool {
@@ -100,22 +101,22 @@ func setCommand(writer *RESPWriter, args []RESP) {
 
 		// EX
 		if equalFold(arg, EX) && len(extra) >= 2 {
-			n, err := extra[1].ToInt()
+			n, err := extra[1].ToDuration()
 			if err != nil {
 				writer.WriteError(errParseInteger)
 				return
 			}
-			ttl = dict.GetNanoTime() + int64(time.Second)*int64(n)
+			ttl = time.Now().Add(n * time.Second).UnixNano()
 			extra = extra[2:]
 
 			// PX
 		} else if equalFold(arg, PX) && len(extra) >= 2 {
-			n, err := extra[1].ToInt()
+			n, err := extra[1].ToDuration()
 			if err != nil {
 				writer.WriteError(errParseInteger)
 				return
 			}
-			ttl = dict.GetNanoTime() + int64(time.Millisecond)*int64(n)
+			ttl = time.Now().Add(n * time.Millisecond).UnixNano()
 			extra = extra[2:]
 
 			// KEEPTTL
@@ -527,6 +528,9 @@ func zpopminCommand(writer *RESPWriter, args []RESP) {
 func flushdbCommand(writer *RESPWriter, _ []RESP) {
 	db.dict = dict.New()
 	writer.WriteString("OK")
+}
+
+func saveCommand(writer *RESPWriter, _ []RESP) {
 }
 
 func evalCommand(writer *RESPWriter, args []RESP) {

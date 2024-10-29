@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"strconv"
+	"time"
 	"unsafe"
 )
 
@@ -119,8 +120,8 @@ func (w *RESPWriter) WriteArrayHead(arrayLen int) {
 }
 
 // WriteBulk writes a RESP bulk string from a byte slice.
-func (w *RESPWriter) WriteBulk(bluk []byte) {
-	w.WriteBulkString(b2s(bluk))
+func (w *RESPWriter) WriteBulk(bulk []byte) {
+	w.WriteBulkString(b2s(bulk))
 }
 
 // WriteBulkString writes a RESP bulk string from a string.
@@ -174,6 +175,11 @@ func (r RESP) ToString() string { return string(r) }
 func (r RESP) ToStringUnsafe() string { return b2s(r) }
 
 func (r RESP) ToInt() (int, error) { return strconv.Atoi(b2s(r)) }
+
+func (r RESP) ToDuration() (time.Duration, error) {
+	n, err := strconv.Atoi(b2s(r))
+	return time.Duration(n), err
+}
 
 func (r RESP) ToFloat() (float64, error) { return strconv.ParseFloat(b2s(r), 64) }
 
