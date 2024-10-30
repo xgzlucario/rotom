@@ -2,6 +2,7 @@ package list
 
 import (
 	"github.com/bytedance/sonic"
+	"github.com/zyedidia/generic/list"
 	"io"
 )
 
@@ -13,77 +14,61 @@ import (
 // QuickList is double linked listpack, implement redis quicklist data structure,
 // based on listpack rather than ziplist to optimize cascade update.
 type QuickList struct {
-	size       int
-	head, tail *Node
-}
-
-type Node struct {
-	*ListPack
-	prev, next *Node
+	size int
+	ls   *list.List[*ListPack] // linked-list
 }
 
 // New create a quicklist instance.
 func New() *QuickList {
-	n := newNode()
-	return &QuickList{head: n, tail: n}
+	ls := list.New[*ListPack]()
+	ls.PushFront(NewListPack())
+	return &QuickList{ls: ls}
 }
 
-func newNode() *Node {
-	return &Node{ListPack: NewListPack()}
+func (ls *QuickList) head() *ListPack {
+	return ls.ls.Front.Value
+}
+
+func (ls *QuickList) tail() *ListPack {
+	return ls.ls.Back.Value
 }
 
 func (ls *QuickList) LPush(key string) {
-	if len(ls.head.data)+len(key) >= maxListPackSize {
-		n := newNode()
-		n.next = ls.head
-		ls.head.prev = n
-		ls.head = n
+	if len(ls.head().data)+len(key) >= maxListPackSize {
+		ls.ls.PushFront(NewListPack())
 	}
 	ls.size++
-	ls.head.LPush(key)
+	ls.head().LPush(key)
 }
 
 func (ls *QuickList) RPush(key string) {
-	if len(ls.tail.data)+len(key) >= maxListPackSize {
-		n := newNode()
-		ls.tail.next = n
-		n.prev = ls.tail
-		ls.tail = n
+	if len(ls.tail().data)+len(key) >= maxListPackSize {
+		ls.ls.PushBack(NewListPack())
 	}
 	ls.size++
-	ls.tail.RPush(key)
+	ls.tail().RPush(key)
 }
 
 func (ls *QuickList) LPop() (key string, ok bool) {
-	for lp := ls.head; lp != nil; lp = lp.next {
-		if lp.size > 0 {
-			ls.size--
-			return lp.LPop()
-		}
-		ls.free(lp)
+	if ls.Size() == 0 {
+		return
 	}
-	return
+	for n := ls.ls.Front; n != nil && n.Value.size == 0; n = n.Next {
+		ls.ls.Remove(n)
+	}
+	ls.size--
+	return ls.head().LPop()
 }
 
 func (ls *QuickList) RPop() (key string, ok bool) {
-	for lp := ls.tail; lp != nil; lp = lp.prev {
-		if lp.size > 0 {
-			ls.size--
-			return lp.RPop()
-		}
-		ls.free(lp)
+	if ls.Size() == 0 {
+		return
 	}
-	return
-}
-
-// free release empty list node.
-func (ls *QuickList) free(n *Node) {
-	if n.prev != nil && n.next != nil {
-		n.prev.next = n.next
-		n.next.prev = n.prev
-		bpool.Put(n.data)
-		n = nil
+	for n := ls.ls.Back; n != nil && n.Value.size == 0; n = n.Prev {
+		ls.ls.Remove(n)
 	}
+	ls.size--
+	return ls.tail().RPop()
 }
 
 func (ls *QuickList) Size() int { return ls.size }
@@ -113,23 +98,23 @@ func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
 		start += ls.Size()
 	}
 
-	lp := ls.head
-	for lp != nil && start > lp.Size() {
-		start -= lp.Size()
-		lp = lp.next
+	lp := ls.ls.Front
+	for lp != nil && start > lp.Value.Size() {
+		start -= lp.Value.Size()
+		lp = lp.Next
 	}
 	if lp == nil {
 		return
 	}
-	it := lp.Iterator()
+
+	it := lp.Value.Iterator()
 	for range start {
 		it.Next()
 	}
-
 	for range count {
 		if it.IsLast() {
-			lp = lp.next
-			it = lp.Iterator()
+			lp = lp.Next
+			it = lp.Value.Iterator()
 		}
 		fn(it.Next())
 	}
@@ -142,8 +127,11 @@ type ListPackData struct {
 
 func (ls *QuickList) Encode(writer io.Writer) error {
 	var data []ListPackData
-	for p := ls.head; p != nil; p = p.next {
-		data = append(data, ListPackData{Data: p.data, Size: p.size})
+	for n := ls.ls.Front; n != nil; n = n.Next {
+		data = append(data, ListPackData{
+			Data: n.Value.data,
+			Size: n.Value.size,
+		})
 	}
 	return sonic.ConfigDefault.NewEncoder(writer).Encode(data)
 }
@@ -153,23 +141,17 @@ func (ls *QuickList) Decode(src []byte) error {
 	if err := sonic.Unmarshal(src, &datas); err != nil {
 		return err
 	}
+	// init
+	ls.size = 0
+	ls.ls = list.New[*ListPack]()
 
-	// head node
-	n := newNode()
-	n.size = datas[0].Size
-	n.data = datas[0].Data
-	ls.head = n
-	ls.tail = n
-	cur := n
-
-	for _, data := range datas[1:] {
-		n := newNode()
+	for _, data := range datas {
+		n := NewListPack()
 		n.size = data.Size
 		n.data = data.Data
-		cur.next = n
-		n.prev = cur
-		ls.tail = n
-		cur = n
+
+		ls.size += int(data.Size)
+		ls.ls.PushBack(n)
 	}
 	return nil
 }

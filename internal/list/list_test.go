@@ -1,6 +1,7 @@
 package list
 
 import (
+	"bytes"
 	"slices"
 	"strconv"
 	"testing"
@@ -134,5 +135,22 @@ func TestList(t *testing.T) {
 			})
 			assert.Equal(i, 101)
 		}
+	})
+
+	t.Run("encode", func(t *testing.T) {
+		ls := genList(0, N)
+		buf := bytes.NewBuffer(nil)
+		err := ls.Encode(buf)
+		assert.Nil(err)
+
+		ls2 := New()
+		err = ls2.Decode(buf.Bytes())
+		assert.Nil(err)
+
+		i := 0
+		ls.Range(0, N, func(data []byte) {
+			assert.Equal(string(data), genKey(i))
+			i++
+		})
 	})
 }

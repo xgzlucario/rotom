@@ -13,6 +13,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/tidwall/mmap v0.3.0
 	github.com/yuin/gopher-lua v1.1.1
+	github.com/zyedidia/generic v1.2.1
 	golang.org/x/sys v0.26.0
 )
 
