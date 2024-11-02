@@ -3,11 +3,14 @@ package hash
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/exp/maps"
 	"testing"
 )
 
+const MAX = 10000
+
 func FuzzTestMap(f *testing.F) {
-	stdmap := make(map[string][]byte)
+	stdmap := make(map[string][]byte, MAX)
 	hashmap := NewMap()
 	zipmap := NewZipMap()
 
@@ -15,6 +18,9 @@ func FuzzTestMap(f *testing.F) {
 		ast := assert.New(t)
 		switch op % 10 {
 		case 0, 1, 2: // Set
+			if len(stdmap) > MAX {
+				break
+			}
 			_, ok := stdmap[key]
 			stdmap[key] = []byte(val)
 			ast.Equal(!ok, hashmap.Set(key, []byte(val)))
@@ -36,12 +42,7 @@ func FuzzTestMap(f *testing.F) {
 			ast.Equal(ok, hashmap.Remove(key))
 			ast.Equal(ok, zipmap.Remove(key))
 
-		case 8: // Len
-			n := len(stdmap)
-			ast.Equal(n, hashmap.Len())
-			ast.Equal(n, zipmap.Len())
-
-		case 9: // Scan
+		case 8: // Scan
 			n := len(stdmap)
 			kv1 := make([]string, 0, n)
 			kv2 := make([]string, 0, n)
@@ -59,12 +60,25 @@ func FuzzTestMap(f *testing.F) {
 			})
 			ast.ElementsMatch(kv1, kv2)
 			ast.ElementsMatch(kv1, kv3)
+
+		case 9: // Marshal
+			data, _ := hashmap.Marshal()
+			hashmap = NewMap()
+			ast.Nil(hashmap.Unmarshal(data))
+
+			data, _ = zipmap.Marshal()
+			zipmap = NewZipMap()
+			ast.Nil(zipmap.Unmarshal(data))
+
+			n := len(stdmap)
+			ast.Equal(n, hashmap.Len())
+			ast.Equal(n, zipmap.Len())
 		}
 	})
 }
 
 func FuzzTestSet(f *testing.F) {
-	stdset := make(map[string]struct{})
+	stdset := make(map[string]struct{}, MAX)
 	hashset := NewSet()
 	zipset := NewZipSet()
 
@@ -72,6 +86,9 @@ func FuzzTestSet(f *testing.F) {
 		ast := assert.New(t)
 		switch op % 10 {
 		case 0, 1, 2: // Add
+			if len(stdset) > MAX {
+				break
+			}
 			_, ok := stdset[key]
 			stdset[key] = struct{}{}
 			ast.Equal(!ok, hashset.Add(key))
@@ -79,11 +96,8 @@ func FuzzTestSet(f *testing.F) {
 
 		case 3, 4, 5: // Exist
 			_, ok1 := stdset[key]
-			ok2 := hashset.Exist(key)
-			ok3 := zipset.Exist(key)
-
-			ast.Equal(ok1, ok2)
-			ast.Equal(ok1, ok3)
+			ast.Equal(ok1, hashset.Exist(key))
+			ast.Equal(ok1, zipset.Exist(key))
 
 		case 6, 7: // Remove
 			_, ok := stdset[key]
@@ -91,19 +105,11 @@ func FuzzTestSet(f *testing.F) {
 			ast.Equal(ok, hashset.Remove(key))
 			ast.Equal(ok, zipset.Remove(key))
 
-		case 8: // Len
+		case 8: // Scan
 			n := len(stdset)
-			ast.Equal(n, hashset.Len())
-			ast.Equal(n, zipset.Len())
-
-		case 9: // Scan
-			n := len(stdset)
-			keys1 := make([]string, 0, n)
+			keys1 := maps.Keys(stdset)
 			keys2 := make([]string, 0, n)
 			keys3 := make([]string, 0, n)
-			for k := range stdset {
-				keys1 = append(keys1, k)
-			}
 			hashset.Scan(func(k string) {
 				keys2 = append(keys2, k)
 			})
@@ -114,6 +120,19 @@ func FuzzTestSet(f *testing.F) {
 			})
 			ast.ElementsMatch(keys1, keys2)
 			ast.ElementsMatch(keys1, keys3)
+
+		case 9: // Marshal
+			data, _ := hashset.Marshal()
+			hashset = NewSet()
+			ast.Nil(hashset.Unmarshal(data))
+
+			data, _ = zipset.Marshal()
+			zipset = NewZipSet()
+			ast.Nil(zipset.Unmarshal(data))
+
+			n := len(stdset)
+			ast.Equal(n, hashset.Len())
+			ast.Equal(n, zipset.Len())
 		}
 	})
 }

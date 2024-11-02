@@ -1,6 +1,7 @@
 package hash
 
 import (
+	"github.com/bytedance/sonic"
 	mapset "github.com/deckarep/golang-set/v2"
 )
 
@@ -49,9 +50,15 @@ func (s Set) Exist(key string) bool { return s.Set.ContainsOne(key) }
 func (s Set) Len() int { return s.Cardinality() }
 
 func (s Set) Marshal() ([]byte, error) {
-	return s.MarshalJSON()
+	return sonic.Marshal(s.Set.ToSlice())
 }
 
 func (s Set) Unmarshal(src []byte) error {
-	return s.UnmarshalJSON(src)
+	var items []string
+	err := sonic.Unmarshal(src, &items)
+	if err != nil {
+		return err
+	}
+	s.Set.Append(items...)
+	return nil
 }
