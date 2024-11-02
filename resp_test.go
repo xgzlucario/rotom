@@ -134,3 +134,12 @@ func FuzzRESPReader(f *testing.F) {
 		NewReader(b).ReadNextCommand(nil)
 	})
 }
+
+func BenchmarkReader(b *testing.B) {
+	cmdStr := []byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
+	b.Run("v1", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			NewReader(cmdStr).ReadNextCommand(nil)
+		}
+	})
+}

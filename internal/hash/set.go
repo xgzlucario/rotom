@@ -1,9 +1,7 @@
 package hash
 
 import (
-	"github.com/bytedance/sonic"
 	mapset "github.com/deckarep/golang-set/v2"
-	"io"
 )
 
 const (
@@ -17,7 +15,7 @@ type SetI interface {
 	Pop() (key string, ok bool)
 	Scan(fn func(key string))
 	Len() int
-	Encode(writer io.Writer) error
+	Encode() ([]byte, error)
 	Decode([]byte) error
 }
 
@@ -50,18 +48,10 @@ func (s Set) Exist(key string) bool { return s.Set.ContainsOne(key) }
 
 func (s Set) Len() int { return s.Cardinality() }
 
-func (s Set) Encode(writer io.Writer) error {
-	items := s.Set.ToSlice()
-	return sonic.ConfigDefault.NewEncoder(writer).Encode(items)
+func (s Set) Encode() ([]byte, error) {
+	return s.MarshalJSON()
 }
 
 func (s Set) Decode(src []byte) error {
-	var items []string
-	err := sonic.Unmarshal(src, &items)
-	if err != nil {
-		return err
-	}
-	s.Set = mapset.NewThreadUnsafeSetWithSize[string](defaultSetSize)
-	s.Set.Append(items...)
-	return nil
+	return s.UnmarshalJSON(src)
 }

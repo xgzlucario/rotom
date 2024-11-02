@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"github.com/xgzlucario/rotom/internal/pool"
-	"io"
 	"slices"
 )
 
@@ -81,17 +80,10 @@ func (lp *ListPack) Iterator() *LpIterator {
 	return &LpIterator{ListPack: lp}
 }
 
-func (lp *ListPack) Encode(writer io.Writer) error {
-	size := binary.AppendUvarint(nil, uint64(lp.size))
-	_, err := writer.Write(size)
-	if err != nil {
-		return err
-	}
-	_, err = writer.Write(lp.data)
-	if err != nil {
-		return err
-	}
-	return nil
+func (lp *ListPack) Encode() ([]byte, error) {
+	buf := make([]byte, 0, len(lp.data)+4)
+	buf = binary.AppendUvarint(buf, uint64(lp.size))
+	return append(buf, lp.data...), nil
 }
 
 func (lp *ListPack) Decode(src []byte) error {
@@ -171,7 +163,6 @@ func (it *LpIterator) Insert(datas ...string) {
 		it.size++
 	}
 	it.data = slices.Insert(it.data, it.index, alloc...)
-	bpool.Put(alloc)
 }
 
 func (it *LpIterator) RemoveNexts(num int, onDelete func([]byte)) {

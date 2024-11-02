@@ -1,7 +1,6 @@
 package hash
 
 import (
-	"bytes"
 	"fmt"
 	"testing"
 
@@ -136,10 +135,9 @@ func testEncodeI(m MapI, t *testing.T) {
 		m.Set(key, []byte("val"+key))
 	}
 	// encode
-	buf := bytes.NewBuffer(nil)
-	ast.Nil(m.Encode(buf))
+	buf, _ := m.Encode()
 	// decode
-	_ = m.Decode(buf.Bytes())
+	_ = m.Decode(buf)
 	// scan
 	count := 0
 	m.Scan(func(key string, val []byte) {

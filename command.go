@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -62,7 +63,7 @@ var cmdTable = []*Command{
 	{"eval", evalCommand, 2, true},
 	{"ping", pingCommand, 0, false},
 	{"flushdb", flushdbCommand, 0, true},
-	{"save", saveCommand, 2, false},
+	{"save", saveCommand, 0, false},
 }
 
 func equalFold(a, b string) bool {
@@ -281,9 +282,11 @@ func lpushCommand(writer *RESPWriter, args []RESP) {
 		writer.WriteError(err)
 		return
 	}
+	keys := make([]string, 0, len(args)-1)
 	for _, arg := range args[1:] {
-		ls.LPush(arg.ToStringUnsafe())
+		keys = append(keys, arg.ToStringUnsafe())
 	}
+	ls.LPush(keys...)
 	writer.WriteInteger(ls.Size())
 }
 
@@ -294,9 +297,11 @@ func rpushCommand(writer *RESPWriter, args []RESP) {
 		writer.WriteError(err)
 		return
 	}
+	keys := make([]string, 0, len(args)-1)
 	for _, arg := range args[1:] {
-		ls.RPush(arg.ToStringUnsafe())
+		keys = append(keys, arg.ToStringUnsafe())
 	}
+	ls.RPush(keys...)
 	writer.WriteInteger(ls.Size())
 }
 
@@ -531,6 +536,28 @@ func flushdbCommand(writer *RESPWriter, _ []RESP) {
 }
 
 func saveCommand(writer *RESPWriter, _ []RESP) {
+	dbWriter := NewWriter(1024)
+	err := db.dict.EncodeTo(dbWriter)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+	fs, err := os.Create("rdb.test")
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+	_, err = dbWriter.FlushTo(fs)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+	err = fs.Close()
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+	writer.WriteBulkString("OK")
 }
 
 func evalCommand(writer *RESPWriter, args []RESP) {

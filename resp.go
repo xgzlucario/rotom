@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"os"
 	"strconv"
 	"time"
 	"unsafe"
@@ -59,35 +61,17 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, n int, err er
 
 	switch r.b[0] {
 	case ARRAY:
-		// command_bulk format
-		num, after, err := parseInt(r.b[1:])
+		arrayHead, err := r.ReadArrayHead()
 		if err != nil {
 			return nil, 0, err
 		}
-		r.b = after
-
-		// read bulk strings for range
-		for i := 0; i < num; i++ {
-			if len(r.b) == 0 || r.b[0] != BULK {
-				return nil, 0, errWrongArguments
-			}
-
-			num, after, err := parseInt(r.b[1:])
+		for range arrayHead {
+			res, err := r.ReadBulk()
 			if err != nil {
 				return nil, 0, err
 			}
-
-			// bound check
-			if num < 0 || num+2 > len(after) {
-				return nil, 0, errWrongArguments
-			}
-
-			args = append(args, after[:num])
-
-			// skip CRLF
-			r.b = after[num+2:]
+			args = append(args, res)
 		}
-
 	default:
 		// command_inline format
 		before, after, ok := bytes.Cut(r.b, CRLF)
@@ -102,12 +86,41 @@ func (r *RESPReader) ReadNextCommand(argsBuf []RESP) (args []RESP, n int, err er
 	return
 }
 
+func (r *RESPReader) ReadArrayHead() (int, error) {
+	if len(r.b) == 0 || r.b[0] != ARRAY {
+		return 0, errors.New("command is not begin with ARRAY")
+	}
+	num, after, err := parseInt(r.b[1:])
+	if err != nil {
+		return 0, err
+	}
+	r.b = after
+	return num, nil
+}
+
+func (r *RESPReader) ReadBulk() ([]byte, error) {
+	if len(r.b) == 0 || r.b[0] != BULK {
+		return nil, errors.New("command is not begin with BULK")
+	}
+	num, after, err := parseInt(r.b[1:])
+	if err != nil {
+		return nil, err
+	}
+	// bound check
+	if num < 0 || num+2 > len(after) {
+		return nil, errWrongArguments
+	}
+	// skip CRLF
+	r.b = after[num+2:]
+
+	return after[:num], nil
+}
+
 // RESPWriter is a writer that helps construct RESP (Redis Serialization Protocol) messages.
 type RESPWriter struct {
 	b []byte
 }
 
-// NewWriter initializes a new RESPWriter with a given capacity.
 func NewWriter(cap int) *RESPWriter {
 	return &RESPWriter{make([]byte, 0, cap)}
 }
@@ -164,7 +177,17 @@ func (w *RESPWriter) WriteNull() {
 	w.b = append(w.b, "$-1\r\n"...)
 }
 
-// Reset resets the internal buffer.
+func (w *RESPWriter) Size() int { return len(w.b) }
+
+func (w *RESPWriter) FlushTo(fs *os.File) (int64, error) {
+	n, err := fs.Write(w.b)
+	if err != nil {
+		return 0, err
+	}
+	w.Reset()
+	return int64(n), nil
+}
+
 func (w *RESPWriter) Reset() { w.b = w.b[:0] }
 
 // RESP represents the RESP (Redis Serialization Protocol) message in byte slice format.

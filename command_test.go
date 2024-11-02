@@ -43,7 +43,7 @@ func TestCommand(t *testing.T) {
 		sleepFn := func(dur time.Duration) {
 			s.FastForward(dur)
 		}
-		testCommand(t, testTypeRotom, rdb, sleepFn)
+		testCommand(t, testTypeMiniRedis, rdb, sleepFn)
 	})
 	t.Run(testTypeRotom, func(t *testing.T) {
 		go startup()
@@ -461,12 +461,13 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		wg.Wait()
 	})
 
-	t.Run("closed", func(t *testing.T) {
-		err := rdb.Close()
-		ast.Nil(err)
-	})
-
 	if testType == testTypeRotom {
+		t.Run("save", func(t *testing.T) {
+			res, err := rdb.Save(context.Background()).Result()
+			ast.Nil(err)
+			ast.Equal(res, "OK")
+		})
+
 		t.Run("bigKey", func(t *testing.T) {
 			body := make([]byte, MaxQueryDataLen)
 			_, err := rdb.Set(ctx, "bigKey", body, 0).Result()
@@ -487,6 +488,11 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			}
 		})
 	}
+
+	t.Run("closed", func(t *testing.T) {
+		err := rdb.Close()
+		ast.Nil(err)
+	})
 }
 
 func TestConfig(t *testing.T) {

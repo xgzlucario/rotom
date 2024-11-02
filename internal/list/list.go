@@ -3,7 +3,6 @@ package list
 import (
 	"github.com/bytedance/sonic"
 	"github.com/zyedidia/generic/list"
-	"io"
 )
 
 //	 +------------------------------ QuickList -----------------------------+
@@ -33,20 +32,20 @@ func (ls *QuickList) tail() *ListPack {
 	return ls.ls.Back.Value
 }
 
-func (ls *QuickList) LPush(key string) {
-	if len(ls.head().data)+len(key) >= maxListPackSize {
+func (ls *QuickList) LPush(keys ...string) {
+	if len(ls.head().data) >= maxListPackSize {
 		ls.ls.PushFront(NewListPack())
 	}
-	ls.size++
-	ls.head().LPush(key)
+	ls.head().LPush(keys...)
+	ls.size += len(keys)
 }
 
-func (ls *QuickList) RPush(key string) {
-	if len(ls.tail().data)+len(key) >= maxListPackSize {
+func (ls *QuickList) RPush(keys ...string) {
+	if len(ls.tail().data) >= maxListPackSize {
 		ls.ls.PushBack(NewListPack())
 	}
-	ls.size++
-	ls.tail().RPush(key)
+	ls.tail().RPush(keys...)
+	ls.size += len(keys)
 }
 
 func (ls *QuickList) LPop() (key string, ok bool) {
@@ -125,7 +124,7 @@ type ListPackData struct {
 	Size uint32
 }
 
-func (ls *QuickList) Encode(writer io.Writer) error {
+func (ls *QuickList) Encode() ([]byte, error) {
 	var data []ListPackData
 	for n := ls.ls.Front; n != nil; n = n.Next {
 		data = append(data, ListPackData{
@@ -133,7 +132,7 @@ func (ls *QuickList) Encode(writer io.Writer) error {
 			Size: n.Value.size,
 		})
 	}
-	return sonic.ConfigDefault.NewEncoder(writer).Encode(data)
+	return sonic.Marshal(data)
 }
 
 func (ls *QuickList) Decode(src []byte) error {

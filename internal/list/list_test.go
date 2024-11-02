@@ -1,7 +1,6 @@
 package list
 
 import (
-	"bytes"
 	"slices"
 	"strconv"
 	"testing"
@@ -139,12 +138,11 @@ func TestList(t *testing.T) {
 
 	t.Run("encode", func(t *testing.T) {
 		ls := genList(0, N)
-		buf := bytes.NewBuffer(nil)
-		err := ls.Encode(buf)
+		buf, err := ls.Encode()
 		assert.Nil(err)
 
 		ls2 := New()
-		err = ls2.Decode(buf.Bytes())
+		err = ls2.Decode(buf)
 		assert.Nil(err)
 
 		i := 0

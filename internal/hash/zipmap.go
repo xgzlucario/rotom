@@ -1,7 +1,6 @@
 package hash
 
 import (
-	"io"
 	"unsafe"
 
 	"github.com/xgzlucario/rotom/internal/list"
@@ -82,8 +81,8 @@ func (zm *ZipMap) ToMap() *Map {
 
 func (zm *ZipMap) Len() int { return zm.data.Size() / 2 }
 
-func (zm *ZipMap) Encode(writer io.Writer) error {
-	return zm.data.Encode(writer)
+func (zm *ZipMap) Encode() ([]byte, error) {
+	return zm.data.Encode()
 }
 
 func (zm *ZipMap) Decode(src []byte) error {

@@ -2,7 +2,6 @@ package hash
 
 import (
 	"github.com/xgzlucario/rotom/internal/list"
-	"io"
 )
 
 var _ SetI = (*ZipSet)(nil)
@@ -71,8 +70,8 @@ func (zs *ZipSet) ToSet() *Set {
 	return s
 }
 
-func (zs *ZipSet) Encode(writer io.Writer) error {
-	return zs.data.Encode(writer)
+func (zs *ZipSet) Encode() ([]byte, error) {
+	return zs.data.Encode()
 }
 
 func (zs *ZipSet) Decode(src []byte) error {
