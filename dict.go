@@ -1,33 +1,7 @@
-package dict
+package main
 
 import (
-	"github.com/bytedance/sonic"
-	"strconv"
 	"time"
-)
-
-type Object interface {
-	GetType() ObjectType
-	Encode() ([]byte, error)
-	Decode([]byte) error
-}
-
-type ObjectType byte
-
-const (
-	TypeString ObjectType = iota + 1
-	TypeInteger
-	TypeMap
-	TypeZipMap
-	TypeSet
-	TypeZipSet
-	TypeList
-	TypeZSet
-)
-
-const (
-	TTL_FOREVER   = -1
-	KEY_NOT_EXIST = -2
 )
 
 // Dict is the hashmap for rotom.
@@ -123,57 +97,4 @@ func (dict *Dict) EvictExpired() {
 			return
 		}
 	}
-}
-
-type KVEntry struct {
-	ObjectType ObjectType `json:"p"`
-	Key        string     `json:"k"`
-	Ttl        int64      `json:"t"`
-	Data       []byte     `json:"v"`
-}
-
-type RESPWriter interface {
-	WriteArrayHead(int)
-	WriteBulk([]byte)
-}
-
-type RESPReader interface {
-	ReadArrayHead(int)
-	ReadBulk([]byte)
-}
-
-func (dict *Dict) EncodeTo(writer RESPWriter) error {
-	writer.WriteArrayHead(len(dict.data))
-	var entry KVEntry
-
-	for k, v := range dict.data {
-		ttl, ok := dict.expire[k]
-		if !ok {
-			ttl = TTL_FOREVER
-		}
-		entry.Key = k
-		entry.Ttl = ttl
-
-		switch vtype := v.(type) {
-		case string:
-			entry.ObjectType = TypeString
-			entry.Data = []byte(vtype)
-		case []byte:
-			entry.ObjectType = TypeString
-			entry.Data = vtype
-		case int:
-			entry.ObjectType = TypeInteger
-			entry.Data = []byte(strconv.Itoa(vtype))
-		case Object:
-			entry.ObjectType = vtype.GetType()
-			data, err := vtype.Encode()
-			if err != nil {
-				return err
-			}
-			entry.Data = data
-		}
-		entryBytes, _ := sonic.Marshal(entry)
-		writer.WriteBulk(entryBytes)
-	}
-	return nil
 }

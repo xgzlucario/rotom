@@ -124,7 +124,7 @@ type ListPackData struct {
 	Size uint32
 }
 
-func (ls *QuickList) Encode() ([]byte, error) {
+func (ls *QuickList) Marshal() ([]byte, error) {
 	var data []ListPackData
 	for n := ls.ls.Front; n != nil; n = n.Next {
 		data = append(data, ListPackData{
@@ -135,7 +135,7 @@ func (ls *QuickList) Encode() ([]byte, error) {
 	return sonic.Marshal(data)
 }
 
-func (ls *QuickList) Decode(src []byte) error {
+func (ls *QuickList) Unmarshal(src []byte) error {
 	var datas []ListPackData
 	if err := sonic.Unmarshal(src, &datas); err != nil {
 		return err

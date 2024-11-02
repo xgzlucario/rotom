@@ -15,8 +15,8 @@ type SetI interface {
 	Pop() (key string, ok bool)
 	Scan(fn func(key string))
 	Len() int
-	Encode() ([]byte, error)
-	Decode([]byte) error
+	Marshal() ([]byte, error)
+	Unmarshal([]byte) error
 }
 
 var _ SetI = (*Set)(nil)
@@ -48,10 +48,10 @@ func (s Set) Exist(key string) bool { return s.Set.ContainsOne(key) }
 
 func (s Set) Len() int { return s.Cardinality() }
 
-func (s Set) Encode() ([]byte, error) {
+func (s Set) Marshal() ([]byte, error) {
 	return s.MarshalJSON()
 }
 
-func (s Set) Decode(src []byte) error {
+func (s Set) Unmarshal(src []byte) error {
 	return s.UnmarshalJSON(src)
 }

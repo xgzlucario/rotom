@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/xgzlucario/rotom/internal/dict"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -35,7 +34,7 @@ func libSet(L *lua.LState) int {
 func libGet(L *lua.LState) int {
 	key := L.ToString(2)
 	value, ttl := db.dict.Get(key)
-	if ttl != dict.KEY_NOT_EXIST {
+	if ttl != KEY_NOT_EXIST {
 		L.Push(lua.LString(value.([]byte)))
 	} else {
 		L.Push(lua.LNil)

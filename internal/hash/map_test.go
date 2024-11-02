@@ -134,10 +134,8 @@ func testEncodeI(m MapI, t *testing.T) {
 		key := fmt.Sprintf("%d", i)
 		m.Set(key, []byte("val"+key))
 	}
-	// encode
-	buf, _ := m.Encode()
-	// decode
-	_ = m.Decode(buf)
+	buf, _ := m.Marshal()
+	_ = m.Unmarshal(buf)
 	// scan
 	count := 0
 	m.Scan(func(key string, val []byte) {

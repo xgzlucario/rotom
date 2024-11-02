@@ -80,13 +80,13 @@ func (lp *ListPack) Iterator() *LpIterator {
 	return &LpIterator{ListPack: lp}
 }
 
-func (lp *ListPack) Encode() ([]byte, error) {
+func (lp *ListPack) Marshal() ([]byte, error) {
 	buf := make([]byte, 0, len(lp.data)+4)
 	buf = binary.AppendUvarint(buf, uint64(lp.size))
 	return append(buf, lp.data...), nil
 }
 
-func (lp *ListPack) Decode(src []byte) error {
+func (lp *ListPack) Unmarshal(src []byte) error {
 	size, n := binary.Uvarint(src)
 	if n == 0 {
 		return errors.New("invalid listpack data format")

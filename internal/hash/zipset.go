@@ -70,10 +70,10 @@ func (zs *ZipSet) ToSet() *Set {
 	return s
 }
 
-func (zs *ZipSet) Encode() ([]byte, error) {
-	return zs.data.Encode()
+func (zs *ZipSet) Marshal() ([]byte, error) {
+	return zs.data.Marshal()
 }
 
-func (zs *ZipSet) Decode(src []byte) error {
-	return zs.data.Decode(src)
+func (zs *ZipSet) Unmarshal(src []byte) error {
+	return zs.data.Unmarshal(src)
 }

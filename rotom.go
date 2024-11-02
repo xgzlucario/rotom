@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/zset"
@@ -26,7 +25,7 @@ type (
 )
 
 type DB struct {
-	dict *dict.Dict
+	dict *Dict
 	aof  *Aof
 }
 
@@ -54,7 +53,7 @@ var (
 
 // InitDB initializes database and redo appendonly files if needed.
 func InitDB(config *Config) (err error) {
-	db.dict = dict.New()
+	db.dict = New()
 
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)

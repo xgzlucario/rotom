@@ -10,8 +10,8 @@ type MapI interface {
 	Remove(key string) bool
 	Len() int
 	Scan(fn func(key string, val []byte))
-	Encode() ([]byte, error)
-	Decode([]byte) error
+	Marshal() ([]byte, error)
+	Unmarshal([]byte) error
 }
 
 var _ MapI = (*Map)(nil)
@@ -51,10 +51,10 @@ func (m *Map) Scan(fn func(key string, val []byte)) {
 	}
 }
 
-func (m *Map) Encode() ([]byte, error) {
+func (m *Map) Marshal() ([]byte, error) {
 	return sonic.Marshal(m.data)
 }
 
-func (m *Map) Decode(src []byte) error {
+func (m *Map) Unmarshal(src []byte) error {
 	return sonic.Unmarshal(src, &m.data)
 }

@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
+	"github.com/bytedance/sonic"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/zset"
@@ -127,7 +127,7 @@ func setCommand(writer *RESPWriter, args []RESP) {
 
 			// NX
 		} else if equalFold(arg, NX) {
-			if _, ttl := db.dict.Get(key); ttl != dict.KEY_NOT_EXIST {
+			if _, ttl := db.dict.Get(key); ttl != KEY_NOT_EXIST {
 				writer.WriteNull()
 				return
 			}
@@ -147,7 +147,7 @@ func incrCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToStringUnsafe()
 
 	object, ttl := db.dict.Get(key)
-	if ttl == dict.KEY_NOT_EXIST {
+	if ttl == KEY_NOT_EXIST {
 		db.dict.Set(strings.Clone(key), 1)
 		writer.WriteInteger(1)
 		return
@@ -178,7 +178,7 @@ func incrCommand(writer *RESPWriter, args []RESP) {
 func getCommand(writer *RESPWriter, args []RESP) {
 	key := args[0].ToStringUnsafe()
 	object, ttl := db.dict.Get(key)
-	if ttl == dict.KEY_NOT_EXIST {
+	if ttl == KEY_NOT_EXIST {
 		writer.WriteNull()
 		return
 	}
@@ -515,48 +515,67 @@ func zpopminCommand(writer *RESPWriter, args []RESP) {
 		}
 	}
 
-	zset, err := fetchZSet(key)
+	zs, err := fetchZSet(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
 
-	size := min(zset.Len(), count)
+	size := min(zs.Len(), count)
 	writer.WriteArrayHead(size * 2)
 	for range size {
-		key, score := zset.PopMin()
+		key, score := zs.PopMin()
 		writer.WriteBulkString(key)
 		writer.WriteFloat(score)
 	}
 }
 
 func flushdbCommand(writer *RESPWriter, _ []RESP) {
-	db.dict = dict.New()
+	db.dict = New()
 	writer.WriteString("OK")
+}
+
+type KVEntry struct {
+	Type ObjectType `json:"o"`
+	Key  string     `json:"k"`
+	Ttl  int64      `json:"t,omitempty"`
+	Data any        `json:"v"`
 }
 
 func saveCommand(writer *RESPWriter, _ []RESP) {
 	dbWriter := NewWriter(1024)
-	err := db.dict.EncodeTo(dbWriter)
-	if err != nil {
-		writer.WriteError(err)
-		return
-	}
 	fs, err := os.Create("rdb.test")
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
+
+	batchSize := 100
+	dbWriter.WriteArrayHead(len(db.dict.data)/batchSize + 1)
+
+	var entries []KVEntry
+	for k, v := range db.dict.data {
+		entries = append(entries, KVEntry{
+			Type: getObjectType(v),
+			Key:  k,
+			Ttl:  db.dict.expire[k],
+			Data: v,
+		})
+		if len(entries) == batchSize {
+			bytes, _ := sonic.Marshal(entries)
+			dbWriter.WriteBulk(bytes)
+			entries = entries[:0]
+		}
+	}
+	bytes, _ := sonic.Marshal(entries)
+	dbWriter.WriteBulk(bytes)
+
 	_, err = dbWriter.FlushTo(fs)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-	err = fs.Close()
-	if err != nil {
-		writer.WriteError(err)
-		return
-	}
+	_ = fs.Close()
 	writer.WriteBulkString("OK")
 }
 
@@ -613,8 +632,7 @@ func fetchZSet(key []byte, setnx ...bool) (ZSet, error) {
 
 func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {
 	object, ttl := db.dict.Get(b2s(key))
-
-	if ttl != dict.KEY_NOT_EXIST {
+	if ttl != KEY_NOT_EXIST {
 		v, ok := object.(T)
 		if !ok {
 			return v, errWrongType
@@ -645,4 +663,24 @@ func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {
 	}
 
 	return v, nil
+}
+
+func getObjectType(object any) ObjectType {
+	switch object.(type) {
+	case string, []byte:
+		return TypeString
+	case int:
+		return TypeInteger
+	case *hash.Map:
+		return TypeMap
+	case *hash.ZipMap:
+		return TypeZipMap
+	case *hash.Set:
+		return TypeSet
+	case *hash.ZipSet:
+		return TypeZipSet
+	case *list.QuickList:
+		return TypeList
+	}
+	return TypeUnknown
 }

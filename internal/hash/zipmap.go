@@ -81,12 +81,12 @@ func (zm *ZipMap) ToMap() *Map {
 
 func (zm *ZipMap) Len() int { return zm.data.Size() / 2 }
 
-func (zm *ZipMap) Encode() ([]byte, error) {
-	return zm.data.Encode()
+func (zm *ZipMap) Marshal() ([]byte, error) {
+	return zm.data.Marshal()
 }
 
-func (zm *ZipMap) Decode(src []byte) error {
-	return zm.data.Decode(src)
+func (zm *ZipMap) Unmarshal(src []byte) error {
+	return zm.data.Unmarshal(src)
 }
 
 func b2s(b []byte) string {

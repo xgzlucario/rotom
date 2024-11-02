@@ -136,13 +136,13 @@ func TestList(t *testing.T) {
 		}
 	})
 
-	t.Run("encode", func(t *testing.T) {
+	t.Run("marshal", func(t *testing.T) {
 		ls := genList(0, N)
-		buf, err := ls.Encode()
+		buf, err := ls.Marshal()
 		assert.Nil(err)
 
 		ls2 := New()
-		err = ls2.Decode(buf)
+		err = ls2.Unmarshal(buf)
 		assert.Nil(err)
 
 		i := 0
