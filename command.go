@@ -352,9 +352,16 @@ func lrangeCommand(writer *RESPWriter, args []RESP) {
 		writer.WriteError(err)
 		return
 	}
-	writer.WriteArrayHead(ls.RangeCount(start, stop))
-	ls.Range(start, stop, func(data []byte) {
+
+	count := ls.RangeCount(start, stop)
+	writer.WriteArrayHead(count)
+	ls.Range(start, func(data []byte) (stop bool) {
+		if count == 0 {
+			return true
+		}
+		count--
 		writer.WriteBulk(data)
+		return false
 	})
 }
 

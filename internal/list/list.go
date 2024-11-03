@@ -81,18 +81,13 @@ func (ls *QuickList) RangeCount(start, stop int) int {
 	}
 	start = max(0, start)
 	stop = min(ls.Size(), stop)
-
 	if start <= stop {
 		return min(ls.Size(), stop-start+1)
 	}
 	return 0
 }
 
-func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
-	count := ls.RangeCount(start, stop)
-	if count == 0 {
-		return
-	}
+func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 	if start < 0 {
 		start += ls.Size()
 	}
@@ -110,12 +105,17 @@ func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
 	for range start {
 		it.Next()
 	}
-	for range count {
+	for {
 		if it.IsLast() {
 			lp = lp.Next
+			if lp == nil || lp.Value.Size() == 0 {
+				return
+			}
 			it = lp.Value.Iterator()
 		}
-		fn(it.Next())
+		if fn(it.Next()) {
+			return
+		}
 	}
 }
 
