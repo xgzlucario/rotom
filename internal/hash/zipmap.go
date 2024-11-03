@@ -17,20 +17,20 @@ func NewZipMap() *ZipMap {
 	return &ZipMap{list.NewListPack()}
 }
 
-func (zm *ZipMap) find(key string) (it *list.LpIterator, val []byte) {
+func (zm *ZipMap) seekTo(key string) (it *list.LpIterator, val []byte) {
 	it = zm.data.Iterator().SeekLast()
 	for !it.IsFirst() {
-		keyData := it.Prev()
-		valData := it.Prev()
-		if key == b2s(keyData) {
-			return it, valData
+		kBytes := it.Prev()
+		vBytes := it.Prev()
+		if key == b2s(kBytes) {
+			return it, vBytes
 		}
 	}
 	return nil, nil
 }
 
 func (zm *ZipMap) Set(key string, val []byte) (newField bool) {
-	it, oldVal := zm.find(key)
+	it, oldVal := zm.seekTo(key)
 	// update
 	if it != nil {
 		if len(val) == len(oldVal) {
@@ -46,7 +46,7 @@ func (zm *ZipMap) Set(key string, val []byte) (newField bool) {
 }
 
 func (zm *ZipMap) Get(key string) ([]byte, bool) {
-	_, val := zm.find(key)
+	_, val := zm.seekTo(key)
 	if val != nil {
 		return val, true
 	}
@@ -54,7 +54,7 @@ func (zm *ZipMap) Get(key string) ([]byte, bool) {
 }
 
 func (zm *ZipMap) Remove(key string) bool {
-	it, _ := zm.find(key)
+	it, _ := zm.seekTo(key)
 	if it != nil {
 		it.RemoveNexts(2, nil)
 		return true

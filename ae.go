@@ -9,8 +9,8 @@ import (
 type TeType int
 
 const (
-	AE_NORMAL TeType = iota + 1
-	AE_ONCE
+	AeNormal TeType = iota + 1
+	AeOnce
 )
 
 type FileProc func(loop *AeLoop, fd int, extra interface{})
@@ -206,7 +206,7 @@ retry:
 func (loop *AeLoop) AeProcess(tes []*AeTimeEvent, fes []*AeFileEvent) {
 	for _, te := range tes {
 		te.proc(loop, te.id, te.extra)
-		if te.mask == AE_ONCE {
+		if te.mask == AeOnce {
 			loop.RemoveTimeEvent(te.id)
 		} else {
 			te.when = GetMsTime() + te.interval

@@ -1,5 +1,7 @@
 {
     "port": 6379,
     "appendonly": false,
-    "appendfilename": "appendonly.aof"
+    "appendfilename": "appendonly.aof",
+    "save": false,
+    "savefilename": "dump.rdb"
 }

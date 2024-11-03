@@ -2,11 +2,10 @@ run-gc:
 	GODEBUG=gctrace=1 go run .
 
 test-cover:
-	rm -f *.aof
+	make clean
 	go test ./... -race -coverprofile=coverage.txt -covermode=atomic
 	go tool cover -html=coverage.txt -o coverage.html
-	rm coverage.txt
-	rm -f *.aof
+	make clean
 
 fuzz-test:
 	go test -fuzz=FuzzRESPReader
@@ -18,8 +17,7 @@ heap:
 	go tool pprof http://192.168.1.6:6060/debug/pprof/heap
 
 clean:
-	rm -f coverage.*
-	rm -f *.aof
+	rm -f coverage.* *.aof *.rdb
 
 bench:
 	go test -bench . -benchmem

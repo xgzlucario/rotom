@@ -9,6 +9,8 @@ type Config struct {
 	Port           int    `json:"port"`
 	AppendOnly     bool   `json:"appendonly"`
 	AppendFileName string `json:"appendfilename"`
+	Save           bool   `json:"save"`
+	SaveFileName   string `json:"savefilename"`
 }
 
 func LoadConfig(path string) (config *Config, err error) {

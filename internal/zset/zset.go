@@ -2,6 +2,7 @@ package zset
 
 import (
 	"cmp"
+	"github.com/bytedance/sonic"
 
 	"github.com/chen3feng/stl4go"
 )
@@ -96,4 +97,19 @@ func (z *ZSet) Range(start, stop int, fn func(key string, score float64)) {
 
 func (z *ZSet) Len() int {
 	return len(z.m)
+}
+
+func (z *ZSet) Marshal() ([]byte, error) {
+	return sonic.Marshal(z.m)
+}
+
+func (z *ZSet) Unmarshal(src []byte) error {
+	err := sonic.Unmarshal(src, &z.m)
+	if err != nil {
+		return err
+	}
+	for k, v := range z.m {
+		z.skl.Insert(node{k, v}, struct{}{})
+	}
+	return nil
 }

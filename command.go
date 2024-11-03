@@ -15,11 +15,11 @@ import (
 )
 
 var (
-	WITH_SCORES = "WITHSCORES"
-	KEEP_TTL    = "KEEPTTL"
-	NX          = "NX"
-	EX          = "EX"
-	PX          = "PX"
+	WithScores = "WITHSCORES"
+	KeepTtl    = "KEEPTTL"
+	NX         = "NX"
+	EX         = "EX"
+	PX         = "PX"
 )
 
 type Command struct {
@@ -121,7 +121,7 @@ func setCommand(writer *RESPWriter, args []RESP) {
 			extra = extra[2:]
 
 			// KEEPTTL
-		} else if equalFold(arg, KEEP_TTL) {
+		} else if equalFold(arg, KeepTtl) {
 			extra = extra[1:]
 			ttl = -1
 
@@ -487,7 +487,7 @@ func zrangeCommand(writer *RESPWriter, args []RESP) {
 	}
 	start = min(start, stop)
 
-	withScores := len(args) == 4 && equalFold(args[3].ToStringUnsafe(), WITH_SCORES)
+	withScores := len(args) == 4 && equalFold(args[3].ToStringUnsafe(), WithScores)
 	if withScores {
 		writer.WriteArrayHead((stop - start) * 2)
 		zset.Range(start, stop, func(key string, score float64) {
@@ -544,7 +544,7 @@ type KVEntry struct {
 
 func saveCommand(writer *RESPWriter, _ []RESP) {
 	dbWriter := NewWriter(1024)
-	fs, err := os.Create("rdb.test")
+	fs, err := os.Create(server.config.SaveFileName)
 	if err != nil {
 		writer.WriteError(err)
 		return
@@ -681,6 +681,8 @@ func getObjectType(object any) ObjectType {
 		return TypeZipSet
 	case *list.QuickList:
 		return TypeList
+	case *zset.ZSet:
+		return TypeZSet
 	}
 	return TypeUnknown
 }

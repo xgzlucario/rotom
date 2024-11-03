@@ -19,13 +19,15 @@ func startup() {
 		Port:           20082,
 		AppendOnly:     true,
 		AppendFileName: "test.aof",
+		Save:           true,
+		SaveFileName:   "dump.rdb",
 	}
 	_ = os.Remove(config.AppendFileName)
 	config4Server(config)
 	printBanner(config)
 	RegisterAeLoop(&server)
 	// custom
-	server.aeLoop.AddTimeEvent(AE_ONCE, 300, func(loop *AeLoop, id int, extra interface{}) {}, nil)
+	server.aeLoop.AddTimeEvent(AeOnce, 300, func(loop *AeLoop, id int, extra interface{}) {}, nil)
 	server.aeLoop.AeMain()
 }
 

@@ -4,4 +4,4 @@ coverage.*
 redis
 rotom
 bench/
-rdb.test
+*.rdb

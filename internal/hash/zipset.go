@@ -25,7 +25,6 @@ func (zs *ZipSet) Add(key string) (newField bool) {
 
 func (zs *ZipSet) Exist(key string) bool {
 	it := zs.data.Iterator().SeekLast()
-
 	for !it.IsFirst() {
 		entry := it.Prev()
 		if key == b2s(entry) {
@@ -37,7 +36,6 @@ func (zs *ZipSet) Exist(key string) bool {
 
 func (zs *ZipSet) Remove(key string) bool {
 	it := zs.data.Iterator().SeekLast()
-
 	for !it.IsFirst() {
 		entry := it.Prev()
 		if key == b2s(entry) {
