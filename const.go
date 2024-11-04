@@ -1,11 +1,5 @@
 package main
 
-type Object interface {
-	GetType() ObjectType
-	Marshal() ([]byte, error)
-	Unmarshal([]byte) error
-}
-
 type ObjectType byte
 
 const (
@@ -24,3 +18,9 @@ const (
 	TTL_FOREVER   = -1
 	KEY_NOT_EXIST = -2
 )
+
+type Object interface {
+	GetType() ObjectType
+	Marshal() ([]byte, error)
+	Unmarshal([]byte) error
+}

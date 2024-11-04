@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/bytedance/sonic"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -542,47 +540,17 @@ func flushdbCommand(writer *RESPWriter, _ []RESP) {
 	writer.WriteString("OK")
 }
 
-type KVEntry struct {
-	Type ObjectType `json:"o"`
-	Key  string     `json:"k"`
-	Ttl  int64      `json:"t,omitempty"`
-	Data any        `json:"v"`
-}
-
 func saveCommand(writer *RESPWriter, _ []RESP) {
-	dbWriter := NewWriter(1024)
-	fs, err := os.Create(server.config.SaveFileName)
+	rdb, err := NewRdb(server.config.SaveFileName)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-
-	batchSize := 100
-	dbWriter.WriteArrayHead(len(db.dict.data)/batchSize + 1)
-
-	var entries []KVEntry
-	for k, v := range db.dict.data {
-		entries = append(entries, KVEntry{
-			Type: getObjectType(v),
-			Key:  k,
-			Ttl:  db.dict.expire[k],
-			Data: v,
-		})
-		if len(entries) == batchSize {
-			bytes, _ := sonic.Marshal(entries)
-			dbWriter.WriteBulk(bytes)
-			entries = entries[:0]
-		}
-	}
-	bytes, _ := sonic.Marshal(entries)
-	dbWriter.WriteBulk(bytes)
-
-	_, err = dbWriter.FlushTo(fs)
+	err = rdb.SaveDB()
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-	_ = fs.Close()
 	writer.WriteBulkString("OK")
 }
 

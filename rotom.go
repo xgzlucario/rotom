@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/bytedance/sonic"
 	"io"
+	"os"
 
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
@@ -46,6 +48,14 @@ type Server struct {
 	lua     *lua.LState
 }
 
+type Config struct {
+	Port           int    `json:"port"`
+	AppendOnly     bool   `json:"appendonly"`
+	AppendFileName string `json:"appendfilename"`
+	Save           bool   `json:"save"`
+	SaveFileName   string `json:"savefilename"`
+}
+
 var (
 	db     DB
 	server Server
@@ -77,6 +87,18 @@ func InitDB(config *Config) (err error) {
 	}
 
 	return nil
+}
+
+func LoadConfig(path string) (config *Config, err error) {
+	jsonStr, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	config = &Config{}
+	if err = sonic.Unmarshal(jsonStr, config); err != nil {
+		return nil, err
+	}
+	return
 }
 
 // AcceptHandler is the main file event of aeloop.

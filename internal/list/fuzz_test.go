@@ -98,6 +98,13 @@ func FuzzTestList(f *testing.F) {
 			ast.ElementsMatch(keys1, keys3)
 
 		case 7: // Marshal
+			data, _ := ls.Marshal()
+			ls = New()
+			ast.Nil(ls.Unmarshal(data))
+
+			data, _ = lp.Marshal()
+			lp = NewListPack()
+			ast.Nil(lp.Unmarshal(data))
 		}
 	})
 }
