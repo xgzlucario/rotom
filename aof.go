@@ -31,22 +31,22 @@ func NewAof(path string) (*Aof, error) {
 	}, nil
 }
 
-func (aof *Aof) Close() error {
-	return aof.file.Close()
+func (a *Aof) Close() error {
+	return a.file.Close()
 }
 
-func (aof *Aof) Write(buf []byte) (int, error) {
-	return aof.buf.Write(buf)
+func (a *Aof) Write(buf []byte) (int, error) {
+	return a.buf.Write(buf)
 }
 
-func (aof *Aof) Flush() error {
-	_, _ = aof.buf.WriteTo(aof.file)
-	return aof.file.Sync()
+func (a *Aof) Flush() error {
+	_, _ = a.buf.WriteTo(a.file)
+	return a.file.Sync()
 }
 
-func (aof *Aof) Read(fn func(args []RESP)) error {
+func (a *Aof) Read(fn func(args []RESP)) error {
 	// Read file data by mmap.
-	data, err := mmap.MapFile(aof.file, false)
+	data, err := mmap.MapFile(a.file, false)
 	if len(data) == 0 {
 		return nil
 	}

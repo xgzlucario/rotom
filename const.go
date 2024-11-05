@@ -3,8 +3,7 @@ package main
 type ObjectType byte
 
 const (
-	TypeUnknown ObjectType = iota
-	TypeString
+	TypeString ObjectType = iota
 	TypeInteger
 	TypeMap
 	TypeZipMap
