@@ -42,7 +42,7 @@ func main() {
 
 	switch c {
 	case "zset":
-		m := zset.NewZSet()
+		m := zset.New()
 		for i := 0; i < entries; i++ {
 			key := genKey(i)
 			start := time.Now()

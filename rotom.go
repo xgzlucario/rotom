@@ -29,6 +29,7 @@ type (
 type DB struct {
 	dict *Dict
 	aof  *Aof
+	rdb  *Rdb
 }
 
 type Client struct {
@@ -65,12 +66,22 @@ var (
 func InitDB(config *Config) (err error) {
 	db.dict = New()
 
+	if config.Save {
+		db.rdb, err = NewRdb(config.SaveFileName)
+		if err != nil {
+			return
+		}
+		log.Debug().Msg("start loading rdb file...")
+
+		if err = db.rdb.LoadDB(); err != nil {
+			return err
+		}
+	}
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)
 		if err != nil {
 			return
 		}
-
 		log.Debug().Msg("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
@@ -243,13 +254,13 @@ func initServer(config *Config) (err error) {
 	return nil
 }
 
-func CronSyncAOF(loop *AeLoop, id int, extra interface{}) {
+func CronSyncAOF(_ *AeLoop, _ int, _ interface{}) {
 	if err := db.aof.Flush(); err != nil {
 		log.Error().Msgf("sync aof error: %v", err)
 	}
 }
 
-func CronEvictExpired(loop *AeLoop, id int, extra interface{}) {
+func CronEvictExpired(_ *AeLoop, _ int, _ interface{}) {
 	db.dict.EvictExpired()
 }
 

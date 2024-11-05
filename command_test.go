@@ -27,7 +27,7 @@ func startup() {
 	printBanner(config)
 	RegisterAeLoop(&server)
 	// custom
-	server.aeLoop.AddTimeEvent(AeOnce, 300, func(loop *AeLoop, id int, extra interface{}) {}, nil)
+	server.aeLoop.AddTimeEvent(AeOnce, 300, func(_ *AeLoop, _ int, _ interface{}) {}, nil)
 	server.aeLoop.AeMain()
 }
 

@@ -11,15 +11,10 @@ const (
 	TypeZipSet
 	TypeList
 	TypeZSet
+	TypeUnknown = 255
 )
 
 const (
 	TTL_FOREVER   = -1
 	KEY_NOT_EXIST = -2
 )
-
-type Object interface {
-	GetType() ObjectType
-	Marshal() ([]byte, error)
-	Unmarshal([]byte) error
-}

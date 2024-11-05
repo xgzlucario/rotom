@@ -66,6 +66,13 @@ func benchMapI(name string, newf func() MapI, b *testing.B) {
 			m.Scan(func(string, []byte) {})
 		}
 	})
+	b.Run(name+"/marshal", func(b *testing.B) {
+		m := genMap(newf(), N)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = m.Marshal()
+		}
+	})
 }
 
 func benchSetI(name string, newf func() SetI, b *testing.B) {
@@ -96,6 +103,13 @@ func benchSetI(name string, newf func() SetI, b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			m.Scan(func(string) {})
+		}
+	})
+	b.Run(name+"/marshal", func(b *testing.B) {
+		m := genSet(newf(), N)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_, _ = m.Marshal()
 		}
 	})
 }

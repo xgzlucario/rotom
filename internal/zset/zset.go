@@ -24,7 +24,7 @@ type ZSet struct {
 	skl *stl4go.SkipList[node, struct{}]
 }
 
-func NewZSet() *ZSet {
+func New() *ZSet {
 	return &ZSet{
 		m:   make(map[string]float64),
 		skl: stl4go.NewSkipListFunc[node, struct{}](nodeCompare),

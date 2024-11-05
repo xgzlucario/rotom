@@ -602,7 +602,7 @@ func fetchSet(key []byte, setnx ...bool) (Set, error) {
 }
 
 func fetchZSet(key []byte, setnx ...bool) (ZSet, error) {
-	return fetch(key, func() ZSet { return zset.NewZSet() }, setnx...)
+	return fetch(key, func() ZSet { return zset.New() }, setnx...)
 }
 
 func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {

@@ -1,11 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"errors"
+	"fmt"
 	"github.com/bytedance/sonic"
 	"github.com/tidwall/mmap"
-	hash2 "github.com/xgzlucario/rotom/internal/hash"
+	"github.com/xgzlucario/rotom/internal/hash"
+	"github.com/xgzlucario/rotom/internal/list"
+	"github.com/xgzlucario/rotom/internal/zset"
 	"os"
 	"time"
 )
@@ -15,20 +17,16 @@ const (
 )
 
 type Rdb struct {
-	file   *os.File
-	writer *RESPWriter
+	path string
 }
 
 func NewRdb(path string) (*Rdb, error) {
-	fd, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
-	if err != nil {
-		return nil, err
-	}
 	return &Rdb{
-		file:   fd,
-		writer: NewWriter(MB),
+		path: path,
 	}, nil
 }
+
+type rdbBatch []rdbEntry
 
 type rdbEntry struct {
 	Type  ObjectType `json:"o,omitempty"`
@@ -38,43 +36,62 @@ type rdbEntry struct {
 }
 
 func (r *Rdb) SaveDB() error {
-	buf := bytes.NewBuffer(nil)
-	r.writer.WriteArrayHead(len(db.dict.data)/saveBatchSize + 1)
+	// create tmp file
+	fname := fmt.Sprintf("%s.rdb", time.Now().Format(time.RFC3339))
+	fs, err := os.Create(fname)
+	if err != nil {
+		return err
+	}
 
-	var entries []rdbEntry
+	writer := NewWriter(MB)
+	writer.WriteArrayHead(len(db.dict.data)/saveBatchSize + 1)
+	var batch rdbBatch
 	for k, v := range db.dict.data {
-		entries = append(entries, rdbEntry{
+		batch = append(batch, rdbEntry{
 			Type:  getObjectType(v),
 			Ttl:   db.dict.expire[k],
 			Key:   k,
 			Value: v,
 		})
-		if len(entries) == saveBatchSize {
-			err := sonic.ConfigDefault.NewEncoder(buf).Encode(entries)
+		if len(batch) == saveBatchSize {
+			err = r.dumps(batch, writer, fs)
 			if err != nil {
 				return err
 			}
-			r.writer.WriteBulk(buf.Bytes())
-			buf.Reset()
-			entries = entries[:0]
+			batch = batch[:0]
 		}
 	}
-	err := sonic.ConfigDefault.NewEncoder(buf).Encode(entries)
+	err = r.dumps(batch, writer, fs)
 	if err != nil {
 		return err
 	}
-	r.writer.WriteBulk(buf.Bytes())
+	err = fs.Close()
+	if err != nil {
+		return err
+	}
+	return os.Rename(fname, r.path)
+}
 
-	_, err = r.writer.FlushTo(r.file)
+func (r *Rdb) dumps(batch rdbBatch, writer *RESPWriter, fs *os.File) error {
+	src, err := sonic.Marshal(batch)
 	if err != nil {
 		return err
 	}
-	return r.file.Sync()
+	writer.WriteBulk(src)
+	_, err = writer.FlushTo(fs)
+	return err
 }
 
 func (r *Rdb) LoadDB() error {
+	fs, err := os.OpenFile(r.path, os.O_RDWR, 0644)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
 	// Read file data by mmap.
-	data, err := mmap.MapFile(r.file, false)
+	data, err := mmap.MapFile(fs, false)
 	if len(data) == 0 {
 		return nil
 	}
@@ -83,12 +100,12 @@ func (r *Rdb) LoadDB() error {
 	}
 
 	reader := NewReader(data)
-	batchCount, err := reader.ReadArrayHead()
+	batches, err := reader.ReadArrayHead()
 	if err != nil {
 		return err
 	}
 	var entries []rdbEntry
-	for range batchCount {
+	for range batches {
 		src, err := reader.ReadBulk()
 		if err != nil {
 			return err
@@ -121,18 +138,51 @@ func (r *Rdb) loadEntry(e rdbEntry) error {
 		db.dict.data[e.Key] = src
 		db.dict.expire[e.Key] = e.Ttl
 
+	case TypeInteger:
+
 	case TypeMap:
-		hash := hash2.NewMap()
-		if err := hash.Unmarshal(src); err != nil {
+		hm := hash.NewMap()
+		if err := hm.Unmarshal(src); err != nil {
 			return err
 		}
-		db.dict.data[e.Key] = hash
+		db.dict.data[e.Key] = hm
+
+	case TypeZipMap:
+		zm := hash.NewZipMap()
+		if err := zm.Unmarshal(src); err != nil {
+			return err
+		}
+		db.dict.data[e.Key] = zm
+
+	case TypeSet:
+		hs := hash.NewSet()
+		if err := hs.Unmarshal(src); err != nil {
+			return err
+		}
+		db.dict.data[e.Key] = hs
+
+	case TypeZipSet:
+		zs := hash.NewZipSet()
+		if err := zs.Unmarshal(src); err != nil {
+			return err
+		}
+		db.dict.data[e.Key] = zs
+
+	case TypeList:
+		ls := list.New()
+		if err := ls.Unmarshal(src); err != nil {
+			return err
+		}
+		db.dict.data[e.Key] = ls
+
+	case TypeZSet:
+		zs := zset.New()
+		if err := zs.Unmarshal(src); err != nil {
+			return err
+		}
+		db.dict.data[e.Key] = zs
 
 	default:
 	}
-	return errors.New("[rdb] error objectType")
-}
-
-func (r *Rdb) Close() error {
-	return r.file.Close()
+	return errors.New("rdb read error objectType")
 }

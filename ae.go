@@ -37,7 +37,6 @@ type AeLoop struct {
 	TimeEvents      *AeTimeEvent
 	fileEventFd     int
 	timeEventNextId int
-	stop            bool
 
 	events []*AeFileEvent // file events cache
 }
@@ -141,7 +140,6 @@ func AeLoopCreate() (*AeLoop, error) {
 		FileEvents:      make(map[int]*AeFileEvent),
 		fileEventFd:     epollFd,
 		timeEventNextId: 1,
-		stop:            false,
 		events:          make([]*AeFileEvent, 128), // pre alloc
 	}, nil
 }
@@ -218,7 +216,7 @@ func (loop *AeLoop) AeProcess(tes []*AeTimeEvent, fes []*AeFileEvent) {
 }
 
 func (loop *AeLoop) AeMain() {
-	for !loop.stop {
+	for {
 		loop.AeProcess(loop.AeWait())
 	}
 }

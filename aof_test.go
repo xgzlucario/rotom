@@ -8,7 +8,7 @@ import (
 
 func TestAof(t *testing.T) {
 	ast := assert.New(t)
-	setCommand := []byte("*3\r\n$3\r\nset\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
+	cmdStr := []byte("*3\r\n$3\r\nset\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
 
 	t.Run("write", func(t *testing.T) {
 		aof, err := NewAof("test.aof")
@@ -16,7 +16,7 @@ func TestAof(t *testing.T) {
 		defer aof.Close()
 
 		_ = aof.Flush()
-		_, _ = aof.Write(setCommand)
+		_, _ = aof.Write(cmdStr)
 		_ = aof.Flush()
 	})
 
