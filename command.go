@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"github.com/xgzlucario/rotom/internal/resp"
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
@@ -25,7 +27,7 @@ type Command struct {
 	name string
 
 	// handler is this command real database handler function.
-	handler func(writer *RESPWriter, args []RESP)
+	handler func(writer *resp.Writer, args []resp.RESP)
 
 	// minArgsNum represents the minimal number of arguments that command accepts.
 	minArgsNum int
@@ -77,7 +79,7 @@ func lookupCommand(name string) (*Command, error) {
 	return nil, fmt.Errorf("%w '%s'", errUnknownCommand, name)
 }
 
-func (cmd *Command) process(writer *RESPWriter, args []RESP) {
+func (cmd *Command) process(writer *resp.Writer, args []resp.RESP) {
 	if len(args) < cmd.minArgsNum {
 		writer.WriteError(errWrongArguments)
 		return
@@ -85,11 +87,11 @@ func (cmd *Command) process(writer *RESPWriter, args []RESP) {
 	cmd.handler(writer, args)
 }
 
-func pingCommand(writer *RESPWriter, _ []RESP) {
-	writer.WriteString("PONG")
+func pingCommand(writer *resp.Writer, _ []resp.RESP) {
+	writer.WriteSString("PONG")
 }
 
-func setCommand(writer *RESPWriter, args []RESP) {
+func setCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0].ToString()
 	value := args[1].Clone()
 	extra := args[2:]
@@ -138,10 +140,10 @@ func setCommand(writer *RESPWriter, args []RESP) {
 	}
 
 	db.dict.SetWithTTL(key, value, ttl)
-	writer.WriteString("OK")
+	writer.WriteSString("OK")
 }
 
-func incrCommand(writer *RESPWriter, args []RESP) {
+func incrCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0].ToStringUnsafe()
 
 	object, ttl := db.dict.Get(key)
@@ -159,7 +161,7 @@ func incrCommand(writer *RESPWriter, args []RESP) {
 
 	case []byte:
 		// conv to integer
-		num, err := RESP(v).ToInt()
+		num, err := resp.RESP(v).ToInt()
 		if err != nil {
 			writer.WriteError(errParseInteger)
 			return
@@ -173,7 +175,7 @@ func incrCommand(writer *RESPWriter, args []RESP) {
 	}
 }
 
-func getCommand(writer *RESPWriter, args []RESP) {
+func getCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0].ToStringUnsafe()
 	object, ttl := db.dict.Get(key)
 	if ttl == KEY_NOT_EXIST {
@@ -190,7 +192,7 @@ func getCommand(writer *RESPWriter, args []RESP) {
 	}
 }
 
-func delCommand(writer *RESPWriter, args []RESP) {
+func delCommand(writer *resp.Writer, args []resp.RESP) {
 	var count int
 	for _, arg := range args {
 		if db.dict.Delete(arg.ToStringUnsafe()) {
@@ -200,7 +202,7 @@ func delCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(count)
 }
 
-func hsetCommand(writer *RESPWriter, args []RESP) {
+func hsetCommand(writer *resp.Writer, args []resp.RESP) {
 	hash := args[0]
 	args = args[1:]
 
@@ -226,7 +228,7 @@ func hsetCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(count)
 }
 
-func hgetCommand(writer *RESPWriter, args []RESP) {
+func hgetCommand(writer *resp.Writer, args []resp.RESP) {
 	hash := args[0]
 	key := args[1].ToStringUnsafe()
 	hmap, err := fetchMap(hash)
@@ -242,7 +244,7 @@ func hgetCommand(writer *RESPWriter, args []RESP) {
 	}
 }
 
-func hdelCommand(writer *RESPWriter, args []RESP) {
+func hdelCommand(writer *resp.Writer, args []resp.RESP) {
 	hash := args[0]
 	keys := args[1:]
 	hmap, err := fetchMap(hash)
@@ -259,7 +261,7 @@ func hdelCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(count)
 }
 
-func hgetallCommand(writer *RESPWriter, args []RESP) {
+func hgetallCommand(writer *resp.Writer, args []resp.RESP) {
 	hash := args[0]
 	hmap, err := fetchMap(hash)
 	if err != nil {
@@ -273,7 +275,7 @@ func hgetallCommand(writer *RESPWriter, args []RESP) {
 	})
 }
 
-func lpushCommand(writer *RESPWriter, args []RESP) {
+func lpushCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	ls, err := fetchList(key, true)
 	if err != nil {
@@ -288,7 +290,7 @@ func lpushCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(ls.Size())
 }
 
-func rpushCommand(writer *RESPWriter, args []RESP) {
+func rpushCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	ls, err := fetchList(key, true)
 	if err != nil {
@@ -303,7 +305,7 @@ func rpushCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(ls.Size())
 }
 
-func lpopCommand(writer *RESPWriter, args []RESP) {
+func lpopCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	ls, err := fetchList(key)
 	if err != nil {
@@ -318,7 +320,7 @@ func lpopCommand(writer *RESPWriter, args []RESP) {
 	}
 }
 
-func rpopCommand(writer *RESPWriter, args []RESP) {
+func rpopCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	ls, err := fetchList(key)
 	if err != nil {
@@ -333,7 +335,7 @@ func rpopCommand(writer *RESPWriter, args []RESP) {
 	}
 }
 
-func lrangeCommand(writer *RESPWriter, args []RESP) {
+func lrangeCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	start, err := args[1].ToInt()
 	if err != nil {
@@ -363,7 +365,7 @@ func lrangeCommand(writer *RESPWriter, args []RESP) {
 	})
 }
 
-func saddCommand(writer *RESPWriter, args []RESP) {
+func saddCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	set, err := fetchSet(key, true)
 	if err != nil {
@@ -379,7 +381,7 @@ func saddCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(count)
 }
 
-func sremCommand(writer *RESPWriter, args []RESP) {
+func sremCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	set, err := fetchSet(key)
 	if err != nil {
@@ -395,7 +397,7 @@ func sremCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(count)
 }
 
-func spopCommand(writer *RESPWriter, args []RESP) {
+func spopCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	set, err := fetchSet(key)
 	if err != nil {
@@ -410,7 +412,7 @@ func spopCommand(writer *RESPWriter, args []RESP) {
 	}
 }
 
-func zaddCommand(writer *RESPWriter, args []RESP) {
+func zaddCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	args = args[1:]
 
@@ -435,7 +437,7 @@ func zaddCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(count)
 }
 
-func zrankCommand(writer *RESPWriter, args []RESP) {
+func zrankCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	member := args[1].ToStringUnsafe()
 
@@ -453,7 +455,7 @@ func zrankCommand(writer *RESPWriter, args []RESP) {
 	}
 }
 
-func zremCommand(writer *RESPWriter, args []RESP) {
+func zremCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	zset, err := fetchZSet(key)
 	if err != nil {
@@ -469,7 +471,7 @@ func zremCommand(writer *RESPWriter, args []RESP) {
 	writer.WriteInteger(count)
 }
 
-func zrangeCommand(writer *RESPWriter, args []RESP) {
+func zrangeCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	start, err := args[1].ToInt()
 	if err != nil {
@@ -508,7 +510,7 @@ func zrangeCommand(writer *RESPWriter, args []RESP) {
 	}
 }
 
-func zpopminCommand(writer *RESPWriter, args []RESP) {
+func zpopminCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	count := 1
 	var err error
@@ -535,12 +537,12 @@ func zpopminCommand(writer *RESPWriter, args []RESP) {
 	}
 }
 
-func flushdbCommand(writer *RESPWriter, _ []RESP) {
+func flushdbCommand(writer *resp.Writer, _ []resp.RESP) {
 	db.dict = New()
-	writer.WriteString("OK")
+	writer.WriteSString("OK")
 }
 
-func saveCommand(writer *RESPWriter, _ []RESP) {
+func saveCommand(writer *resp.Writer, _ []resp.RESP) {
 	rdb, err := NewRdb(server.config.SaveFileName)
 	if err != nil {
 		writer.WriteError(err)
@@ -554,7 +556,7 @@ func saveCommand(writer *RESPWriter, _ []RESP) {
 	writer.WriteBulkString("OK")
 }
 
-func evalCommand(writer *RESPWriter, args []RESP) {
+func evalCommand(writer *resp.Writer, args []resp.RESP) {
 	L := server.lua
 	script := args[0].ToString()
 
@@ -639,6 +641,8 @@ func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {
 
 	return v, nil
 }
+
+func b2s(b []byte) string { return *(*string)(unsafe.Pointer(&b)) }
 
 func getObjectType(object any) ObjectType {
 	switch object.(type) {

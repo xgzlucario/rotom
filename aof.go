@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"github.com/xgzlucario/rotom/internal/resp"
 	"io"
 	"os"
 
@@ -44,7 +45,7 @@ func (a *Aof) Flush() error {
 	return a.file.Sync()
 }
 
-func (a *Aof) Read(fn func(args []RESP)) error {
+func (a *Aof) Read(fn func(args []resp.RESP)) error {
 	// Read file data by mmap.
 	data, err := mmap.MapFile(a.file, false)
 	if len(data) == 0 {
@@ -55,8 +56,8 @@ func (a *Aof) Read(fn func(args []RESP)) error {
 	}
 
 	// Iterate over the records in the file, applying the function to each.
-	reader := NewReader(data)
-	argsBuf := make([]RESP, 8)
+	reader := resp.NewReader(data)
+	argsBuf := make([]resp.RESP, 8)
 	for {
 		args, _, err := reader.ReadNextCommand(argsBuf)
 		if err != nil {

@@ -1,8 +1,9 @@
 package hash
 
 import (
-	"github.com/bytedance/sonic"
 	mapset "github.com/deckarep/golang-set/v2"
+	"github.com/xgzlucario/rotom/internal/iface"
+	"github.com/xgzlucario/rotom/internal/resp"
 )
 
 const (
@@ -10,14 +11,13 @@ const (
 )
 
 type SetI interface {
+	iface.Encoder
 	Add(key string) bool
 	Exist(key string) bool
 	Remove(key string) bool
 	Pop() (key string, ok bool)
 	Scan(fn func(key string))
 	Len() int
-	Marshal() ([]byte, error)
-	Unmarshal([]byte) error
 }
 
 var _ SetI = (*Set)(nil)
@@ -49,16 +49,25 @@ func (s Set) Exist(key string) bool { return s.Set.ContainsOne(key) }
 
 func (s Set) Len() int { return s.Cardinality() }
 
-func (s Set) Marshal() ([]byte, error) {
-	return sonic.Marshal(s.Set.ToSlice())
+func (s Set) Encode(writer *resp.Writer) error {
+	writer.WriteArrayHead(s.Len())
+	s.Scan(func(key string) {
+		writer.WriteBulkString(key)
+	})
+	return nil
 }
 
-func (s Set) Unmarshal(src []byte) error {
-	var items []string
-	err := sonic.Unmarshal(src, &items)
+func (s Set) Decode(reader *resp.Reader) error {
+	n, err := reader.ReadArrayHead()
 	if err != nil {
 		return err
 	}
-	s.Set.Append(items...)
+	for range n {
+		key, err := reader.ReadBulk()
+		if err != nil {
+			return err
+		}
+		s.Add(string(key))
+	}
 	return nil
 }

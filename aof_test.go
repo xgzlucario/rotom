@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/xgzlucario/rotom/internal/resp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,7 +24,7 @@ func TestAof(t *testing.T) {
 	t.Run("read", func(t *testing.T) {
 		aof, err := NewAof("test.aof")
 		ast.Nil(err)
-		_ = aof.Read(func(args []RESP) {
+		_ = aof.Read(func(args []resp.RESP) {
 			// SET foo bar
 			ast.Equal(len(args), 3)
 			ast.Equal(args[0].ToString(), "set")
@@ -35,7 +36,7 @@ func TestAof(t *testing.T) {
 
 	t.Run("read-err-content", func(t *testing.T) {
 		aof, _ := NewAof("LICENSE")
-		err := aof.Read(func(args []RESP) {})
+		err := aof.Read(func(args []resp.RESP) {})
 		ast.NotNil(err)
 	})
 
@@ -43,7 +44,7 @@ func TestAof(t *testing.T) {
 		aof, _ := NewAof("not-exist.aof")
 		defer aof.Close()
 
-		_ = aof.Read(func(args []RESP) {
+		_ = aof.Read(func(args []resp.RESP) {
 			panic("should not call")
 		})
 	})

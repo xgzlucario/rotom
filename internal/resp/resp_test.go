@@ -1,4 +1,4 @@
-package main
+package resp
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ func TestWriter(t *testing.T) {
 	writer := NewWriter(16)
 
 	t.Run("string", func(t *testing.T) {
-		writer.WriteString("OK")
+		writer.WriteSString("OK")
 		ast.Equal(string(writer.b), "+OK\r\n")
 		writer.Reset()
 	})
@@ -132,14 +132,5 @@ func TestReader(t *testing.T) {
 func FuzzRESPReader(f *testing.F) {
 	f.Fuzz(func(t *testing.T, b []byte) {
 		NewReader(b).ReadNextCommand(nil)
-	})
-}
-
-func BenchmarkReader(b *testing.B) {
-	cmdStr := []byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
-	b.Run("v1", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			NewReader(cmdStr).ReadNextCommand(nil)
-		}
 	})
 }

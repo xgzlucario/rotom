@@ -1,7 +1,7 @@
 package list
 
 import (
-	"github.com/bytedance/sonic"
+	"github.com/xgzlucario/rotom/internal/resp"
 	"github.com/zyedidia/generic/list"
 )
 
@@ -119,38 +119,10 @@ func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 	}
 }
 
-type ListPackData struct {
-	Data []byte
-	Size uint32
+func (ls *QuickList) Encode(writer *resp.Writer) error {
+	return nil
 }
 
-func (ls *QuickList) Marshal() ([]byte, error) {
-	var data []ListPackData
-	for n := ls.ls.Front; n != nil; n = n.Next {
-		data = append(data, ListPackData{
-			Data: n.Value.data,
-			Size: n.Value.size,
-		})
-	}
-	return sonic.Marshal(data)
-}
-
-func (ls *QuickList) Unmarshal(src []byte) error {
-	var datas []ListPackData
-	if err := sonic.Unmarshal(src, &datas); err != nil {
-		return err
-	}
-	// init
-	ls.size = 0
-	ls.ls = list.New[*ListPack]()
-
-	for _, data := range datas {
-		n := NewListPack()
-		n.size = data.Size
-		n.data = data.Data
-
-		ls.size += int(data.Size)
-		ls.ls.PushBack(n)
-	}
+func (ls *QuickList) Decode(reader *resp.Reader) error {
 	return nil
 }

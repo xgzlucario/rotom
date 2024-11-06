@@ -3,6 +3,7 @@ package hash
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/xgzlucario/rotom/internal/resp"
 	"golang.org/x/exp/maps"
 	"testing"
 )
@@ -61,14 +62,17 @@ func FuzzTestMap(f *testing.F) {
 			ast.ElementsMatch(kv1, kv2)
 			ast.ElementsMatch(kv1, kv3)
 
-		case 9: // Marshal
-			data, _ := hashmap.Marshal()
-			hashmap = NewMap()
-			ast.Nil(hashmap.Unmarshal(data))
+		case 9: // Encode
+			w := resp.NewWriter(0)
 
-			data, _ = zipmap.Marshal()
+			ast.Nil(hashmap.Encode(w))
+			hashmap = NewMap()
+			ast.Nil(hashmap.Decode(resp.NewReader(w.Bytes())))
+
+			w.Reset()
+			ast.Nil(zipmap.Encode(w))
 			zipmap = NewZipMap()
-			ast.Nil(zipmap.Unmarshal(data))
+			ast.Nil(zipmap.Decode(resp.NewReader(w.Bytes())))
 
 			n := len(stdmap)
 			ast.Equal(n, hashmap.Len())
@@ -121,14 +125,17 @@ func FuzzTestSet(f *testing.F) {
 			ast.ElementsMatch(keys1, keys2)
 			ast.ElementsMatch(keys1, keys3)
 
-		case 9: // Marshal
-			data, _ := hashset.Marshal()
-			hashset = NewSet()
-			ast.Nil(hashset.Unmarshal(data))
+		case 9: // Encode
+			w := resp.NewWriter(0)
 
-			data, _ = zipset.Marshal()
+			ast.Nil(hashset.Encode(w))
+			hashset = NewSet()
+			ast.Nil(hashset.Decode(resp.NewReader(w.Bytes())))
+
+			w.Reset()
+			ast.Nil(zipset.Encode(w))
 			zipset = NewZipSet()
-			ast.Nil(zipset.Unmarshal(data))
+			ast.Nil(zipset.Decode(resp.NewReader(w.Bytes())))
 
 			n := len(stdset)
 			ast.Equal(n, hashset.Len())

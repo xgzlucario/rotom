@@ -464,12 +464,6 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 	})
 
 	if testType == testTypeRotom {
-		t.Run("save", func(t *testing.T) {
-			res, err := rdb.Save(context.Background()).Result()
-			ast.Nil(err)
-			ast.Equal(res, "OK")
-		})
-
 		t.Run("bigKey", func(t *testing.T) {
 			body := make([]byte, MaxQueryDataLen)
 			_, err := rdb.Set(ctx, "bigKey", body, 0).Result()
@@ -488,6 +482,24 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 				k := fmt.Sprintf("%06x", i)
 				rdb.SAdd(ctx, "zipset", k)
 			}
+		})
+
+		t.Run("save", func(t *testing.T) {
+			rdb.FlushDB(ctx)
+
+			// set key
+			rdb.Set(ctx, "rdb-key1", 123, 0)
+			rdb.Set(ctx, "rdb-key2", 123, time.Minute)
+			rdb.HSet(ctx, "rdb-hash1", "k1", "v1", "k2", "v2")
+			rdb.SAdd(ctx, "rdb-set1", "k1", "k2")
+			//rdb.LPush(ctx, "rdb-list1", "k1", "k2")
+
+			res, err := rdb.Save(context.Background()).Result()
+			ast.Nil(err)
+			ast.Equal(res, "OK")
+
+			err = db.rdb.LoadDB()
+			ast.Nil(err)
 		})
 	}
 

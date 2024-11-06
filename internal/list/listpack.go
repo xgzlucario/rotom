@@ -2,8 +2,8 @@ package list
 
 import (
 	"encoding/binary"
-	"errors"
 	"github.com/xgzlucario/rotom/internal/pool"
+	"github.com/xgzlucario/rotom/internal/resp"
 	"slices"
 )
 
@@ -80,19 +80,23 @@ func (lp *ListPack) Iterator() *LpIterator {
 	return &LpIterator{ListPack: lp}
 }
 
-func (lp *ListPack) Marshal() ([]byte, error) {
-	buf := make([]byte, 0, len(lp.data)+4)
-	buf = binary.AppendUvarint(buf, uint64(lp.size))
-	return append(buf, lp.data...), nil
+func (lp *ListPack) Encode(writer *resp.Writer) error {
+	writer.WriteArrayHead(int(lp.size))
+	writer.WriteBulk(lp.data)
+	return nil
 }
 
-func (lp *ListPack) Unmarshal(src []byte) error {
-	size, n := binary.Uvarint(src)
-	if n == 0 {
-		return errors.New("invalid listpack data format")
+func (lp *ListPack) Decode(reader *resp.Reader) error {
+	n, err := reader.ReadArrayHead()
+	if err != nil {
+		return err
 	}
-	lp.size = uint32(size)
-	lp.data = src[n:]
+	data, err := reader.ReadBulk()
+	if err != nil {
+		return err
+	}
+	lp.size = uint32(n)
+	lp.data = data
 	return nil
 }
 

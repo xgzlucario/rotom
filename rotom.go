@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/bytedance/sonic"
+	"github.com/xgzlucario/rotom/internal/resp"
 	"io"
 	"os"
 
@@ -37,8 +38,8 @@ type Client struct {
 	recvx       int
 	readx       int
 	queryBuf    []byte
-	argsBuf     []RESP
-	replyWriter *RESPWriter
+	argsBuf     []resp.RESP
+	replyWriter *resp.Writer
 }
 
 type Server struct {
@@ -85,8 +86,8 @@ func InitDB(config *Config) (err error) {
 		log.Debug().Msg("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
-		emptyWriter := NewWriter(WriteBufSize)
-		return db.aof.Read(func(args []RESP) {
+		emptyWriter := resp.NewWriter(WriteBufSize)
+		return db.aof.Read(func(args []resp.RESP) {
 			command := args[0].ToStringUnsafe()
 
 			cmd, err := lookupCommand(command)
@@ -122,9 +123,9 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	// create client
 	client := &Client{
 		fd:          cfd,
-		replyWriter: NewWriter(WriteBufSize),
+		replyWriter: resp.NewWriter(WriteBufSize),
 		queryBuf:    make([]byte, QueryBufSize),
-		argsBuf:     make([]RESP, 8),
+		argsBuf:     make([]resp.RESP, 8),
 	}
 
 	server.clients[cfd] = client
@@ -180,7 +181,7 @@ func freeClient(client *Client) {
 func ProcessQueryBuf(client *Client) {
 	queryBuf := client.queryBuf[client.readx:client.recvx]
 
-	reader := NewReader(queryBuf)
+	reader := resp.NewReader(queryBuf)
 	for {
 		args, n, err := reader.ReadNextCommand(client.argsBuf)
 		if err != nil {
@@ -215,7 +216,7 @@ func ProcessQueryBuf(client *Client) {
 
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
-	sentbuf := client.replyWriter.b
+	sentbuf := client.replyWriter.Bytes()
 
 	n, err := Write(fd, sentbuf)
 	if err != nil {
