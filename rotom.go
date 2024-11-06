@@ -73,7 +73,6 @@ func InitDB(config *Config) (err error) {
 			return
 		}
 		log.Debug().Msg("start loading rdb file...")
-
 		if err = db.rdb.LoadDB(); err != nil {
 			return err
 		}
