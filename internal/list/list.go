@@ -14,21 +14,27 @@ import (
 // based on listpack rather than ziplist to optimize cascade update.
 type QuickList struct {
 	size int
-	ls   *list.List[*ListPack] // linked-list
+	ls   *list.List[*ListPack]
 }
 
 // New create a quicklist instance.
 func New() *QuickList {
-	ls := list.New[*ListPack]()
-	ls.PushFront(NewListPack())
-	return &QuickList{ls: ls}
+	return &QuickList{
+		ls: list.New[*ListPack](),
+	}
 }
 
 func (ls *QuickList) head() *ListPack {
+	if ls.ls.Front == nil {
+		ls.ls.PushFront(NewListPack())
+	}
 	return ls.ls.Front.Value
 }
 
 func (ls *QuickList) tail() *ListPack {
+	if ls.ls.Back == nil {
+		ls.ls.PushBack(NewListPack())
+	}
 	return ls.ls.Back.Value
 }
 
@@ -120,9 +126,31 @@ func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 }
 
 func (ls *QuickList) Encode(writer *resp.Writer) error {
+	num := 0
+	for n := ls.ls.Front; n != nil; n = n.Next {
+		num++
+	}
+	writer.WriteArrayHead(num)
+	for n := ls.ls.Front; n != nil; n = n.Next {
+		if err := n.Value.Encode(writer); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (ls *QuickList) Decode(reader *resp.Reader) error {
+	n, err := reader.ReadArrayHead()
+	if err != nil {
+		return err
+	}
+	for range n {
+		lp := NewListPack()
+		if err = lp.Decode(reader); err != nil {
+			return err
+		}
+		ls.ls.PushBack(lp)
+		ls.size += lp.Size()
+	}
 	return nil
 }

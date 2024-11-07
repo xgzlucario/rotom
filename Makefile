@@ -3,7 +3,7 @@ run-gc:
 
 test-cover:
 	make clean
-	go test ./... -race -coverprofile=coverage.txt -covermode=atomic
+	go test . -race -coverprofile=coverage.txt -covermode=atomic
 	go tool cover -html=coverage.txt -o coverage.html
 
 fuzz-test:

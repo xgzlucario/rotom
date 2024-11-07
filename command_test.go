@@ -37,10 +37,6 @@ const (
 )
 
 func TestCommand(t *testing.T) {
-	go func() {
-
-	}()
-
 	t.Run(testTypeMiniRedis, func(t *testing.T) {
 		s := miniredis.RunT(t)
 		rdb := redis.NewClient(&redis.Options{
@@ -287,6 +283,10 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		n, _ := rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
 		ast.Equal(n, int64(3))
 
+		// smembers
+		mems, _ := rdb.SMembers(ctx, "set").Result()
+		ast.ElementsMatch(mems, []string{"k1", "k2", "k3"})
+
 		// spop
 		for i := 0; i < 3; i++ {
 			val, _ := rdb.SPop(ctx, "set").Result()
@@ -490,20 +490,25 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 
 		t.Run("save", func(t *testing.T) {
 			rdb.FlushDB(ctx)
-
 			// set key
 			rdb.Set(ctx, "rdb-key1", 123, 0)
 			rdb.Set(ctx, "rdb-key2", 123, time.Minute)
+			rdb.Incr(ctx, "key-incr")
 			rdb.HSet(ctx, "rdb-hash1", "k1", "v1", "k2", "v2")
 			rdb.SAdd(ctx, "rdb-set1", "k1", "k2")
-			//rdb.LPush(ctx, "rdb-list1", "k1", "k2")
+			for i := 0; i < 1024; i++ {
+				key := fmt.Sprintf("%d", i)
+				rdb.HSet(ctx, "rdb-hash2", key, key)
+				rdb.SAdd(ctx, "rdb-set2", key)
+			}
+			rdb.RPush(ctx, "rdb-list1", "k1", "k2", "k3")
 
 			res, err := rdb.Save(context.Background()).Result()
 			ast.Nil(err)
 			ast.Equal(res, "OK")
 
-			//err = db.rdb.LoadDB()
-			//ast.Nil(err)
+			_, err = rdb.Do(ctx, "load").Result()
+			ast.Nil(err)
 		})
 	}
 

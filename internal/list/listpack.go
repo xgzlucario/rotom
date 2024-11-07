@@ -1,6 +1,7 @@
 package list
 
 import (
+	"bytes"
 	"encoding/binary"
 	"github.com/xgzlucario/rotom/internal/pool"
 	"github.com/xgzlucario/rotom/internal/resp"
@@ -81,13 +82,13 @@ func (lp *ListPack) Iterator() *LpIterator {
 }
 
 func (lp *ListPack) Encode(writer *resp.Writer) error {
-	writer.WriteArrayHead(int(lp.size))
+	writer.WriteInteger(int(lp.size))
 	writer.WriteBulk(lp.data)
 	return nil
 }
 
 func (lp *ListPack) Decode(reader *resp.Reader) error {
-	n, err := reader.ReadArrayHead()
+	n, err := reader.ReadInteger()
 	if err != nil {
 		return err
 	}
@@ -96,7 +97,7 @@ func (lp *ListPack) Decode(reader *resp.Reader) error {
 		return err
 	}
 	lp.size = uint32(n)
-	lp.data = data
+	lp.data = bytes.Clone(data)
 	return nil
 }
 

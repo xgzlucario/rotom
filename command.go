@@ -55,6 +55,7 @@ var cmdTable = []*Command{
 	{"sadd", saddCommand, 2, true},
 	{"srem", sremCommand, 2, true},
 	{"spop", spopCommand, 1, true},
+	{"smembers", smembersCommand, 1, false},
 	{"zadd", zaddCommand, 3, true},
 	{"zrem", zremCommand, 2, true},
 	{"zrank", zrankCommand, 2, false},
@@ -63,6 +64,7 @@ var cmdTable = []*Command{
 	{"eval", evalCommand, 2, true},
 	{"ping", pingCommand, 0, false},
 	{"flushdb", flushdbCommand, 0, true},
+	{"load", loadCommand, 0, false},
 	{"save", saveCommand, 0, false},
 }
 
@@ -144,11 +146,11 @@ func setCommand(writer *resp.Writer, args []resp.RESP) {
 }
 
 func incrCommand(writer *resp.Writer, args []resp.RESP) {
-	key := args[0].ToStringUnsafe()
+	key := args[0].ToString()
 
 	object, ttl := db.dict.Get(key)
 	if ttl == KEY_NOT_EXIST {
-		db.dict.Set(strings.Clone(key), 1)
+		db.dict.Set(key, 1)
 		writer.WriteInteger(1)
 		return
 	}
@@ -157,7 +159,7 @@ func incrCommand(writer *resp.Writer, args []resp.RESP) {
 	case int:
 		num := v + 1
 		writer.WriteInteger(num)
-		db.dict.Set(strings.Clone(key), num)
+		db.dict.Set(key, num)
 
 	case []byte:
 		// conv to integer
@@ -203,25 +205,22 @@ func delCommand(writer *resp.Writer, args []resp.RESP) {
 }
 
 func hsetCommand(writer *resp.Writer, args []resp.RESP) {
-	hash := args[0]
+	key := args[0]
 	args = args[1:]
-
 	if len(args)%2 == 1 {
 		writer.WriteError(errWrongArguments)
 		return
 	}
-
-	hmap, err := fetchMap(hash, true)
+	hmap, err := fetchMap(key, true)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-
 	var count int
 	for i := 0; i < len(args); i += 2 {
-		key := args[i].ToString()
+		field := args[i].ToString()
 		value := args[i+1].Clone()
-		if hmap.Set(key, value) {
+		if hmap.Set(field, value) {
 			count++
 		}
 	}
@@ -229,14 +228,14 @@ func hsetCommand(writer *resp.Writer, args []resp.RESP) {
 }
 
 func hgetCommand(writer *resp.Writer, args []resp.RESP) {
-	hash := args[0]
-	key := args[1].ToStringUnsafe()
-	hmap, err := fetchMap(hash)
+	key := args[0]
+	field := args[1].ToStringUnsafe()
+	hmap, err := fetchMap(key)
 	if err != nil {
 		writer.WriteError(errWrongType)
 		return
 	}
-	value, ok := hmap.Get(key)
+	value, ok := hmap.Get(field)
 	if ok {
 		writer.WriteBulk(value)
 	} else {
@@ -245,16 +244,16 @@ func hgetCommand(writer *resp.Writer, args []resp.RESP) {
 }
 
 func hdelCommand(writer *resp.Writer, args []resp.RESP) {
-	hash := args[0]
-	keys := args[1:]
-	hmap, err := fetchMap(hash)
+	key := args[0]
+	fields := args[1:]
+	hmap, err := fetchMap(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
 	var count int
-	for _, v := range keys {
-		if hmap.Remove(v.ToStringUnsafe()) {
+	for _, field := range fields {
+		if hmap.Remove(field.ToStringUnsafe()) {
 			count++
 		}
 	}
@@ -262,8 +261,8 @@ func hdelCommand(writer *resp.Writer, args []resp.RESP) {
 }
 
 func hgetallCommand(writer *resp.Writer, args []resp.RESP) {
-	hash := args[0]
-	hmap, err := fetchMap(hash)
+	key := args[0]
+	hmap, err := fetchMap(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
@@ -397,6 +396,19 @@ func sremCommand(writer *resp.Writer, args []resp.RESP) {
 	writer.WriteInteger(count)
 }
 
+func smembersCommand(writer *resp.Writer, args []resp.RESP) {
+	key := args[0]
+	set, err := fetchSet(key)
+	if err != nil {
+		writer.WriteError(err)
+		return
+	}
+	writer.WriteArrayHead(set.Len())
+	set.Scan(func(key string) {
+		writer.WriteBulkString(key)
+	})
+}
+
 func spopCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	set, err := fetchSet(key)
@@ -415,13 +427,11 @@ func spopCommand(writer *resp.Writer, args []resp.RESP) {
 func zaddCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	args = args[1:]
-
 	zset, err := fetchZSet(key, true)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-
 	var count int
 	for i := 0; i < len(args); i += 2 {
 		score, err := args[i].ToFloat()
@@ -440,13 +450,11 @@ func zaddCommand(writer *resp.Writer, args []resp.RESP) {
 func zrankCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	member := args[1].ToStringUnsafe()
-
 	zset, err := fetchZSet(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-
 	rank, _ := zset.Rank(member)
 	if rank < 0 {
 		writer.WriteNull()
@@ -542,14 +550,17 @@ func flushdbCommand(writer *resp.Writer, _ []resp.RESP) {
 	writer.WriteSString("OK")
 }
 
-func saveCommand(writer *resp.Writer, _ []resp.RESP) {
-	rdb, err := NewRdb(server.config.SaveFileName)
-	if err != nil {
+func loadCommand(writer *resp.Writer, _ []resp.RESP) {
+	db.dict = New()
+	if err := db.rdb.LoadDB(); err != nil {
 		writer.WriteError(err)
 		return
 	}
-	err = rdb.SaveDB()
-	if err != nil {
+	writer.WriteBulkString("OK")
+}
+
+func saveCommand(writer *resp.Writer, _ []resp.RESP) {
+	if err := db.rdb.SaveDB(); err != nil {
 		writer.WriteError(err)
 		return
 	}
@@ -646,7 +657,7 @@ func b2s(b []byte) string { return *(*string)(unsafe.Pointer(&b)) }
 
 func getObjectType(object any) ObjectType {
 	switch object.(type) {
-	case string, []byte:
+	case []byte:
 		return TypeString
 	case int:
 		return TypeInteger

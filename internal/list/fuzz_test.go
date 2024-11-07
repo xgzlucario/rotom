@@ -1,6 +1,7 @@
 package list
 
 import (
+	"github.com/xgzlucario/rotom/internal/resp"
 	"math/rand/v2"
 	"testing"
 
@@ -98,6 +99,21 @@ func FuzzTestList(f *testing.F) {
 			ast.ElementsMatch(keys1, keys3)
 
 		case 7: // Marshal
+			if len(slice) == 0 {
+				return
+			}
+			writer := resp.NewWriter(0)
+
+			// listpack
+			ast.Nil(lp.Encode(writer))
+			lp = NewListPack()
+			ast.Nil(lp.Decode(resp.NewReader(writer.Bytes())))
+			writer.Reset()
+
+			// list
+			ast.Nil(ls.Encode(writer))
+			ls = New()
+			ast.Nil(ls.Decode(resp.NewReader(writer.Bytes())))
 		}
 	})
 }

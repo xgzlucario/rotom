@@ -10,10 +10,6 @@ import (
 	"time"
 )
 
-const (
-	saveBatchSize = 100
-)
-
 type Rdb struct {
 	path string
 }
