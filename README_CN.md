@@ -13,7 +13,7 @@
 1. 基于 epoll 网络模型，还原了 Redis 中的 AeLoop 单线程事件循环
 2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
 3. 实现了 dict, list, map, zipmap, set, zipset, zset 数据结构
-4. AOF 支持
+4. RDB 和 AOF 持久化支持
 5. 支持 20 多种常用命令
 6. 支持执行 lua 脚本
 
@@ -109,7 +109,7 @@ $ go run .
 
 ```
 REPOSITORY       TAG           IMAGE ID       CREATED         SIZE
-rotom            latest        22f42ce9ae0e   8 seconds ago   20.5MB
+rotom            latest        e93cf2060e5f   13 seconds ago  40.2MB
 ```
 
 然后启动容器：
