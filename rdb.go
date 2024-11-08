@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"github.com/tidwall/mmap"
 	"github.com/xgzlucario/rotom/internal/iface"
@@ -40,23 +39,11 @@ func (r *Rdb) SaveDB() error {
 
 		switch objectType {
 		case TypeString:
-			raw, ok := v.([]byte)
-			if !ok {
-				return errors.New("invalid data typeString")
-			}
-			writer.WriteBulk(raw)
+			writer.WriteBulk(v.([]byte))
 		case TypeInteger:
-			raw, ok := v.(int)
-			if !ok {
-				return errors.New("invalid data typeInteger")
-			}
-			writer.WriteInteger(raw)
+			writer.WriteInteger(v.(int))
 		default:
-			val, ok := v.(iface.Encoder)
-			if !ok {
-				return errors.New("invalid data type")
-			}
-			if err := val.Encode(writer); err != nil {
+			if err = v.(iface.Encoder).Encode(writer); err != nil {
 				return err
 			}
 		}
@@ -75,15 +62,8 @@ func (r *Rdb) SaveDB() error {
 }
 
 func (r *Rdb) LoadDB() error {
-	fs, err := os.OpenFile(r.path, os.O_RDWR, 0644)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
 	// Read file data by mmap.
-	data, err := mmap.MapFile(fs, false)
+	data, err := mmap.Open(r.path, false)
 	if len(data) == 0 {
 		return nil
 	}
@@ -92,12 +72,12 @@ func (r *Rdb) LoadDB() error {
 	}
 
 	reader := resp.NewReader(data)
-	count, err := reader.ReadArrayHead()
+	n, err := reader.ReadArrayHead()
 	if err != nil {
 		return err
 	}
 
-	for range count {
+	for range n {
 		// format: {objectType,ttl,key,value}
 		objectType, err := reader.ReadInteger()
 		if err != nil {
@@ -129,10 +109,7 @@ func (r *Rdb) LoadDB() error {
 
 		default:
 			val := type2c[ObjectType(objectType)]()
-			if val == nil {
-				return errors.New("invalid data type")
-			}
-			if err := val.Decode(reader); err != nil {
+			if err = val.Decode(reader); err != nil {
 				return err
 			}
 			db.dict.Set(string(key), val)

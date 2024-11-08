@@ -556,7 +556,7 @@ func loadCommand(writer *resp.Writer, _ []resp.RESP) {
 		writer.WriteError(err)
 		return
 	}
-	writer.WriteBulkString("OK")
+	writer.WriteSString("OK")
 }
 
 func saveCommand(writer *resp.Writer, _ []resp.RESP) {
@@ -564,7 +564,7 @@ func saveCommand(writer *resp.Writer, _ []resp.RESP) {
 		writer.WriteError(err)
 		return
 	}
-	writer.WriteBulkString("OK")
+	writer.WriteSString("OK")
 }
 
 func evalCommand(writer *resp.Writer, args []resp.RESP) {

@@ -115,6 +115,14 @@ func (r *Reader) ReadInteger() (int, error) {
 	return r.readInteger()
 }
 
+func (r *Reader) ReadFloat() (float64, error) {
+	buf, err := r.ReadBulk()
+	if err != nil {
+		return 0, nil
+	}
+	return strconv.ParseFloat(b2s(buf), 64)
+}
+
 func (r *Reader) ReadBulk() ([]byte, error) {
 	if len(r.b) == 0 || r.b[0] != BULK {
 		return nil, errors.New("command is not begin with BULK")

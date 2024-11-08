@@ -116,14 +116,13 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 		log.Error().Msgf("accept err: %v", err)
 		return
 	}
-	// create client
+	log.Info().Msgf("accept new client fd: %d", fd)
 	client := &Client{
 		fd:          cfd,
 		replyWriter: resp.NewWriter(WriteBufSize),
 		queryBuf:    make([]byte, QueryBufSize),
 		argsBuf:     make([]resp.RESP, 8),
 	}
-
 	server.clients[cfd] = client
 	loop.AddRead(cfd, ReadQueryFromClient, client)
 }

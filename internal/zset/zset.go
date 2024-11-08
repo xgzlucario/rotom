@@ -2,9 +2,14 @@ package zset
 
 import (
 	"cmp"
-	"github.com/bytedance/sonic"
+	"github.com/xgzlucario/rotom/internal/iface"
+	"github.com/xgzlucario/rotom/internal/resp"
 
 	"github.com/chen3feng/stl4go"
+)
+
+var (
+	_ iface.Encoder = (*ZSet)(nil)
 )
 
 type node struct {
@@ -99,17 +104,32 @@ func (z *ZSet) Len() int {
 	return len(z.m)
 }
 
-func (z *ZSet) Marshal() ([]byte, error) {
-	return sonic.Marshal(z.m)
+func (z *ZSet) Encode(writer *resp.Writer) error {
+	writer.WriteArrayHead(z.Len())
+	for k, s := range z.m {
+		writer.WriteBulkString(k)
+		writer.WriteFloat(s)
+	}
+	return nil
 }
 
-func (z *ZSet) Unmarshal(src []byte) error {
-	err := sonic.Unmarshal(src, &z.m)
+func (z *ZSet) Decode(reader *resp.Reader) error {
+	n, err := reader.ReadArrayHead()
 	if err != nil {
 		return err
 	}
-	for k, v := range z.m {
-		z.skl.Insert(node{k, v}, struct{}{})
+	for range n {
+		buf, err := reader.ReadBulk()
+		if err != nil {
+			return err
+		}
+		score, err := reader.ReadFloat()
+		if err != nil {
+			return err
+		}
+		key := string(buf)
+		z.skl.Insert(node{key, score}, struct{}{})
+		z.m[key] = score
 	}
 	return nil
 }

@@ -488,11 +488,12 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			}
 		})
 
-		t.Run("save", func(t *testing.T) {
+		t.Run("save-load", func(t *testing.T) {
 			rdb.FlushDB(ctx)
 			// set key
-			rdb.Set(ctx, "rdb-key1", 123, 0)
-			rdb.Set(ctx, "rdb-key2", 123, time.Minute)
+			rdb.Set(ctx, "rdb-key1", "123", 0)
+			rdb.Set(ctx, "rdb-key2", "234", time.Minute)
+			rdb.Set(ctx, "rdb-key3", "345", 1)
 			rdb.Incr(ctx, "key-incr")
 			rdb.HSet(ctx, "rdb-hash1", "k1", "v1", "k2", "v2")
 			rdb.SAdd(ctx, "rdb-set1", "k1", "k2")
@@ -502,38 +503,61 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 				rdb.SAdd(ctx, "rdb-set2", key)
 			}
 			rdb.RPush(ctx, "rdb-list1", "k1", "k2", "k3")
+			rdb.ZAdd(ctx, "rdb-zset1",
+				redis.Z{Score: 200, Member: "k2"},
+				redis.Z{Score: 100, Member: "k1"},
+				redis.Z{Score: 300, Member: "k3"})
 
-			res, err := rdb.Save(context.Background()).Result()
-			ast.Nil(err)
+			res, _ := rdb.Save(context.Background()).Result()
 			ast.Equal(res, "OK")
 
-			_, err = rdb.Do(ctx, "load").Result()
+			_, err := rdb.Do(ctx, "load").Result()
 			ast.Nil(err)
+
+			// valid
+			res, _ = rdb.Get(ctx, "rdb-key1").Result()
+			ast.Equal(res, "123")
+			res, _ = rdb.Get(ctx, "rdb-key2").Result()
+			ast.Equal(res, "234")
+			_, err = rdb.Get(ctx, "rdb-key3").Result()
+			ast.Equal(err, redis.Nil)
+
+			res, _ = rdb.Get(ctx, "key-incr").Result()
+			ast.Equal(res, "1")
+
+			resm, _ := rdb.HGetAll(ctx, "rdb-hash1").Result()
+			ast.Equal(resm, map[string]string{"k1": "v1", "k2": "v2"})
+
+			ress, _ := rdb.SMembers(ctx, "rdb-set1").Result()
+			ast.ElementsMatch(ress, []string{"k1", "k2"})
+
+			ress, _ = rdb.LRange(ctx, "rdb-list1", 0, -1).Result()
+			ast.Equal(ress, []string{"k1", "k2", "k3"})
+
+			resz, _ := rdb.ZPopMin(ctx, "rdb-zset1").Result()
+			ast.Equal(resz, []redis.Z{{
+				Member: "k1", Score: 100,
+			}})
 		})
 	}
 
-	t.Run("closed", func(t *testing.T) {
-		err := rdb.Close()
-		ast.Nil(err)
+	t.Run("close", func(t *testing.T) {
+		ast.Nil(rdb.Close())
 	})
 }
 
 func TestConfig(t *testing.T) {
 	ast := assert.New(t)
-
 	cfg, _ := LoadConfig("config.json")
 	ast.Equal(cfg.Port, 6379)
-
 	_, err := LoadConfig("not-exist.json")
 	ast.NotNil(err)
-
 	_, err = LoadConfig("go.mod")
 	ast.NotNil(err)
 }
 
 func TestReadableSize(t *testing.T) {
 	ast := assert.New(t)
-
 	ast.Equal(readableSize(50), "50B")
 	ast.Equal(readableSize(50*KB), "50.0KB")
 	ast.Equal(readableSize(50*MB), "50.0MB")

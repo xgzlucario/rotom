@@ -1,8 +1,14 @@
 package list
 
 import (
+	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/resp"
 	"github.com/zyedidia/generic/list"
+)
+
+var (
+	_ iface.Encoder = (*ListPack)(nil)
+	_ iface.Encoder = (*QuickList)(nil)
 )
 
 //	 +------------------------------ QuickList -----------------------------+
