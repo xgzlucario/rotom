@@ -1,4 +1,4 @@
-package main
+package resp
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ func TestWriter(t *testing.T) {
 	writer := NewWriter(16)
 
 	t.Run("string", func(t *testing.T) {
-		writer.WriteString("OK")
+		writer.WriteSString("OK")
 		ast.Equal(string(writer.b), "+OK\r\n")
 		writer.Reset()
 	})

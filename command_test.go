@@ -19,18 +19,25 @@ func startup() {
 		Port:           20082,
 		AppendOnly:     true,
 		AppendFileName: "test.aof",
+		Save:           true,
+		SaveFileName:   "dump.rdb",
 	}
 	_ = os.Remove(config.AppendFileName)
 	config4Server(config)
 	printBanner(config)
 	RegisterAeLoop(&server)
 	// custom
-	server.aeLoop.AddTimeEvent(AE_ONCE, 300, func(loop *AeLoop, id int, extra interface{}) {}, nil)
+	server.aeLoop.AddTimeEvent(AeOnce, 300, func(_ *AeLoop, _ int, _ interface{}) {}, nil)
 	server.aeLoop.AeMain()
 }
 
+const (
+	testTypeRotom     = "rotom"
+	testTypeMiniRedis = "miniredis"
+)
+
 func TestCommand(t *testing.T) {
-	t.Run("miniredis", func(t *testing.T) {
+	t.Run(testTypeMiniRedis, func(t *testing.T) {
 		s := miniredis.RunT(t)
 		rdb := redis.NewClient(&redis.Options{
 			Addr: s.Addr(),
@@ -38,9 +45,9 @@ func TestCommand(t *testing.T) {
 		sleepFn := func(dur time.Duration) {
 			s.FastForward(dur)
 		}
-		testCommand(t, rdb, sleepFn)
+		testCommand(t, testTypeMiniRedis, rdb, sleepFn)
 	})
-	t.Run("rotom", func(t *testing.T) {
+	t.Run(testTypeRotom, func(t *testing.T) {
 		go startup()
 		time.Sleep(time.Second / 2)
 		rdb := redis.NewClient(&redis.Options{
@@ -49,11 +56,11 @@ func TestCommand(t *testing.T) {
 		sleepFn := func(dur time.Duration) {
 			time.Sleep(dur)
 		}
-		testCommand(t, rdb, sleepFn)
+		testCommand(t, testTypeRotom, rdb, sleepFn)
 	})
 }
 
-func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
+func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(time.Duration)) {
 	ast := assert.New(t)
 	ctx := context.Background()
 
@@ -276,6 +283,10 @@ func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
 		n, _ := rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
 		ast.Equal(n, int64(3))
 
+		// smembers
+		mems, _ := rdb.SMembers(ctx, "set").Result()
+		ast.ElementsMatch(mems, []string{"k1", "k2", "k3"})
+
 		// spop
 		for i := 0; i < 3; i++ {
 			val, _ := rdb.SPop(ctx, "set").Result()
@@ -456,25 +467,50 @@ func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
 		wg.Wait()
 	})
 
-	// t.Run("bigKey", func(t *testing.T) {
-	// 	body := make([]byte, MAX_QUERY_DATA_LEN)
-	// 	_, err := rdb.Set(ctx, "bigKey", body, 0).Result()
-	// 	ast.NotNil(err)
-	// })
+	if testType == testTypeRotom {
+		t.Run("bigKey", func(t *testing.T) {
+			body := make([]byte, MaxQueryDataLen)
+			_, err := rdb.Set(ctx, "bigKey", body, 0).Result()
+			ast.NotNil(err)
+		})
 
-	t.Run("trans-zipmap", func(t *testing.T) {
-		for i := 0; i <= 256; i++ {
-			k := fmt.Sprintf("%06x", i)
-			rdb.HSet(ctx, "zipmap", k, k)
-		}
-	})
+		t.Run("trans-zipmap", func(t *testing.T) {
+			for i := 0; i <= 256; i++ {
+				k := fmt.Sprintf("%06x", i)
+				rdb.HSet(ctx, "zipmap", k, k)
+			}
+		})
 
-	t.Run("trans-zipset", func(t *testing.T) {
-		for i := 0; i <= 512; i++ {
-			k := fmt.Sprintf("%06x", i)
-			rdb.SAdd(ctx, "zipset", k)
-		}
-	})
+		t.Run("trans-zipset", func(t *testing.T) {
+			for i := 0; i <= 512; i++ {
+				k := fmt.Sprintf("%06x", i)
+				rdb.SAdd(ctx, "zipset", k)
+			}
+		})
+
+		t.Run("save", func(t *testing.T) {
+			rdb.FlushDB(ctx)
+			// set key
+			rdb.Set(ctx, "rdb-key1", 123, 0)
+			rdb.Set(ctx, "rdb-key2", 123, time.Minute)
+			rdb.Incr(ctx, "key-incr")
+			rdb.HSet(ctx, "rdb-hash1", "k1", "v1", "k2", "v2")
+			rdb.SAdd(ctx, "rdb-set1", "k1", "k2")
+			for i := 0; i < 1024; i++ {
+				key := fmt.Sprintf("%d", i)
+				rdb.HSet(ctx, "rdb-hash2", key, key)
+				rdb.SAdd(ctx, "rdb-set2", key)
+			}
+			rdb.RPush(ctx, "rdb-list1", "k1", "k2", "k3")
+
+			res, err := rdb.Save(context.Background()).Result()
+			ast.Nil(err)
+			ast.Equal(res, "OK")
+
+			_, err = rdb.Do(ctx, "load").Result()
+			ast.Nil(err)
+		})
+	}
 
 	t.Run("closed", func(t *testing.T) {
 		err := rdb.Close()
@@ -483,23 +519,23 @@ func testCommand(t *testing.T, rdb *redis.Client, sleepFn func(time.Duration)) {
 }
 
 func TestConfig(t *testing.T) {
-	assert := assert.New(t)
+	ast := assert.New(t)
 
 	cfg, _ := LoadConfig("config.json")
-	assert.Equal(cfg.Port, 6379)
+	ast.Equal(cfg.Port, 6379)
 
 	_, err := LoadConfig("not-exist.json")
-	assert.NotNil(err)
+	ast.NotNil(err)
 
 	_, err = LoadConfig("go.mod")
-	assert.NotNil(err)
+	ast.NotNil(err)
 }
 
 func TestReadableSize(t *testing.T) {
-	assert := assert.New(t)
+	ast := assert.New(t)
 
-	assert.Equal(readableSize(50), "50B")
-	assert.Equal(readableSize(50*KB), "50.0KB")
-	assert.Equal(readableSize(50*MB), "50.0MB")
-	assert.Equal(readableSize(50*GB), "50.0GB")
+	ast.Equal(readableSize(50), "50B")
+	ast.Equal(readableSize(50*KB), "50.0KB")
+	ast.Equal(readableSize(50*MB), "50.0MB")
+	ast.Equal(readableSize(50*GB), "50.0GB")
 }

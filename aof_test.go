@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/xgzlucario/rotom/internal/resp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,7 +9,7 @@ import (
 
 func TestAof(t *testing.T) {
 	ast := assert.New(t)
-	setCommand := []byte("*3\r\n$3\r\nset\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
+	cmdStr := []byte("*3\r\n$3\r\nset\r\n$3\r\nfoo\r\n$3\r\nbar\r\n")
 
 	t.Run("write", func(t *testing.T) {
 		aof, err := NewAof("test.aof")
@@ -16,35 +17,39 @@ func TestAof(t *testing.T) {
 		defer aof.Close()
 
 		_ = aof.Flush()
-		_, _ = aof.Write(setCommand)
+		_, _ = aof.Write(cmdStr)
 		_ = aof.Flush()
 	})
 
 	t.Run("read", func(t *testing.T) {
 		aof, err := NewAof("test.aof")
 		ast.Nil(err)
-
-		_ = aof.Read(func(args []RESP) {
+		_ = aof.Read(func(args []resp.RESP) {
 			// SET foo bar
 			ast.Equal(len(args), 3)
 			ast.Equal(args[0].ToString(), "set")
 			ast.Equal(args[1].ToString(), "foo")
 			ast.Equal(args[2].ToString(), "bar")
 		})
-
 		defer aof.Close()
+	})
+
+	t.Run("read-err-content", func(t *testing.T) {
+		aof, _ := NewAof("LICENSE")
+		err := aof.Read(func(args []resp.RESP) {})
+		ast.NotNil(err)
 	})
 
 	t.Run("empty-aof", func(t *testing.T) {
 		aof, _ := NewAof("not-exist.aof")
 		defer aof.Close()
 
-		_ = aof.Read(func(args []RESP) {
+		_ = aof.Read(func(args []resp.RESP) {
 			panic("should not call")
 		})
 	})
 
-	t.Run("read-wrong-file", func(t *testing.T) {
+	t.Run("read-err-fileType", func(t *testing.T) {
 		_, err := NewAof("internal")
 		ast.NotNil(err)
 	})

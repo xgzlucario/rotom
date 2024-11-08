@@ -1,5 +1,10 @@
 package list
 
+import (
+	"github.com/xgzlucario/rotom/internal/resp"
+	"github.com/zyedidia/generic/list"
+)
+
 //	 +------------------------------ QuickList -----------------------------+
 //	 |	     +-----------+     +-----------+             +-----------+      |
 //	head --- | listpack0 | <-> | listpack1 | <-> ... <-> | listpackN | --- tail
@@ -8,81 +13,67 @@ package list
 // QuickList is double linked listpack, implement redis quicklist data structure,
 // based on listpack rather than ziplist to optimize cascade update.
 type QuickList struct {
-	size       int
-	head, tail *Node
-}
-
-type Node struct {
-	*ListPack
-	prev, next *Node
+	size int
+	ls   *list.List[*ListPack]
 }
 
 // New create a quicklist instance.
 func New() *QuickList {
-	n := newNode()
-	return &QuickList{head: n, tail: n}
-}
-
-func newNode() *Node {
-	return &Node{ListPack: NewListPack()}
-}
-
-// LPush
-func (ls *QuickList) LPush(key string) {
-	if len(ls.head.data)+len(key) >= maxListPackSize {
-		n := newNode()
-		n.next = ls.head
-		ls.head.prev = n
-		ls.head = n
+	return &QuickList{
+		ls: list.New[*ListPack](),
 	}
-	ls.size++
-	ls.head.LPush(key)
 }
 
-// RPush
-func (ls *QuickList) RPush(key string) {
-	if len(ls.tail.data)+len(key) >= maxListPackSize {
-		n := newNode()
-		ls.tail.next = n
-		n.prev = ls.tail
-		ls.tail = n
+func (ls *QuickList) head() *ListPack {
+	if ls.ls.Front == nil {
+		ls.ls.PushFront(NewListPack())
 	}
-	ls.size++
-	ls.tail.RPush(key)
+	return ls.ls.Front.Value
 }
 
-// LPop
+func (ls *QuickList) tail() *ListPack {
+	if ls.ls.Back == nil {
+		ls.ls.PushBack(NewListPack())
+	}
+	return ls.ls.Back.Value
+}
+
+func (ls *QuickList) LPush(keys ...string) {
+	if len(ls.head().data) >= maxListPackSize {
+		ls.ls.PushFront(NewListPack())
+	}
+	ls.head().LPush(keys...)
+	ls.size += len(keys)
+}
+
+func (ls *QuickList) RPush(keys ...string) {
+	if len(ls.tail().data) >= maxListPackSize {
+		ls.ls.PushBack(NewListPack())
+	}
+	ls.tail().RPush(keys...)
+	ls.size += len(keys)
+}
+
 func (ls *QuickList) LPop() (key string, ok bool) {
-	for lp := ls.head; lp != nil; lp = lp.next {
-		if lp.size > 0 {
-			ls.size--
-			return lp.LPop()
-		}
-		ls.free(lp)
+	if ls.Size() == 0 {
+		return
 	}
-	return
+	for n := ls.ls.Front; n != nil && n.Value.size == 0; n = n.Next {
+		ls.ls.Remove(n)
+	}
+	ls.size--
+	return ls.head().LPop()
 }
 
-// RPop
 func (ls *QuickList) RPop() (key string, ok bool) {
-	for lp := ls.tail; lp != nil; lp = lp.prev {
-		if lp.size > 0 {
-			ls.size--
-			return lp.RPop()
-		}
-		ls.free(lp)
+	if ls.Size() == 0 {
+		return
 	}
-	return
-}
-
-// free release empty list node.
-func (ls *QuickList) free(n *Node) {
-	if n.prev != nil && n.next != nil {
-		n.prev.next = n.next
-		n.next.prev = n.prev
-		bpool.Put(n.data)
-		n = nil
+	for n := ls.ls.Back; n != nil && n.Value.size == 0; n = n.Prev {
+		ls.ls.Remove(n)
 	}
+	ls.size--
+	return ls.tail().RPop()
 }
 
 func (ls *QuickList) Size() int { return ls.size }
@@ -96,40 +87,70 @@ func (ls *QuickList) RangeCount(start, stop int) int {
 	}
 	start = max(0, start)
 	stop = min(ls.Size(), stop)
-
 	if start <= stop {
 		return min(ls.Size(), stop-start+1)
 	}
 	return 0
 }
 
-func (ls *QuickList) Range(start, stop int, fn func(data []byte)) {
-	count := ls.RangeCount(start, stop)
-	if count == 0 {
-		return
-	}
+func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 	if start < 0 {
 		start += ls.Size()
 	}
 
-	lp := ls.head
-	for lp != nil && start > lp.Size() {
-		start -= lp.Size()
-		lp = lp.next
+	lp := ls.ls.Front
+	for lp != nil && start > lp.Value.Size() {
+		start -= lp.Value.Size()
+		lp = lp.Next
 	}
-	it := lp.Iterator()
+	if lp == nil {
+		return
+	}
+
+	it := lp.Value.Iterator()
 	for range start {
 		it.Next()
 	}
-
-	for range count {
+	for {
 		if it.IsLast() {
-			if lp.next == nil {
+			lp = lp.Next
+			if lp == nil || lp.Value.Size() == 0 {
 				return
 			}
-			lp = lp.next
-			it = lp.Iterator()
+			it = lp.Value.Iterator()
 		}
-		fn(it.Next())
+		if fn(it.Next()) {
+			return
+		}
 	}
+}
+
+func (ls *QuickList) Encode(writer *resp.Writer) error {
+	num := 0
+	for n := ls.ls.Front; n != nil; n = n.Next {
+		num++
+	}
+	writer.WriteArrayHead(num)
+	for n := ls.ls.Front; n != nil; n = n.Next {
+		if err := n.Value.Encode(writer); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ls *QuickList) Decode(reader *resp.Reader) error {
+	n, err := reader.ReadArrayHead()
+	if err != nil {
+		return err
+	}
+	for range n {
+		lp := NewListPack()
+		if err = lp.Decode(reader); err != nil {
+			return err
+		}
+		ls.ls.PushBack(lp)
+		ls.size += lp.Size()
+	}
+	return nil
 }

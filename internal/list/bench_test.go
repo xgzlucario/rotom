@@ -1,8 +1,29 @@
 package list
 
 import (
+	"fmt"
 	"testing"
 )
+
+func genKey(i int) string {
+	return fmt.Sprintf("%08x", i)
+}
+
+func genList(start, stop int) *QuickList {
+	lp := New()
+	for i := start; i < stop; i++ {
+		lp.RPush(genKey(i))
+	}
+	return lp
+}
+
+func genListPack(start, stop int) *ListPack {
+	lp := NewListPack()
+	for i := start; i < stop; i++ {
+		lp.RPush(genKey(i))
+	}
+	return lp
+}
 
 func BenchmarkList(b *testing.B) {
 	b.Run("lpush", func(b *testing.B) {
@@ -35,7 +56,9 @@ func BenchmarkList(b *testing.B) {
 		ls := genList(0, 100)
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			ls.Range(0, -1, func([]byte) {})
+			ls.Range(0, func([]byte) bool {
+				return false
+			})
 		}
 	})
 }

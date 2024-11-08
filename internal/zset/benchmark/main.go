@@ -7,7 +7,6 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/influxdata/tdigest"
 	"github.com/xgzlucario/rotom/internal/zset"
 )
 
@@ -38,16 +37,13 @@ func main() {
 
 	debug.SetGCPercent(10)
 	start := time.Now()
-	td := tdigest.New()
 
 	switch c {
 	case "zset":
-		m := zset.NewZSet()
+		m := zset.New()
 		for i := 0; i < entries; i++ {
 			key := genKey(i)
-			start := time.Now()
 			m.Set(key, float64(i))
-			td.Add(float64(time.Since(start)), 1)
 		}
 	}
 	cost := time.Since(start)
@@ -64,6 +60,4 @@ func main() {
 	fmt.Println("gc:", stat.NumGC)
 	fmt.Println("pause:", gcPause())
 	fmt.Println("cost:", cost)
-	// Compute Quantiles
-	fmt.Println("999th:", time.Duration(td.Quantile(0.999)))
 }

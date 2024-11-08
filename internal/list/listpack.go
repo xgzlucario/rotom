@@ -1,10 +1,11 @@
 package list
 
 import (
+	"bytes"
 	"encoding/binary"
-	"slices"
-
 	"github.com/xgzlucario/rotom/internal/pool"
+	"github.com/xgzlucario/rotom/internal/resp"
+	"slices"
 )
 
 const (
@@ -80,6 +81,26 @@ func (lp *ListPack) Iterator() *LpIterator {
 	return &LpIterator{ListPack: lp}
 }
 
+func (lp *ListPack) Encode(writer *resp.Writer) error {
+	writer.WriteInteger(int(lp.size))
+	writer.WriteBulk(lp.data)
+	return nil
+}
+
+func (lp *ListPack) Decode(reader *resp.Reader) error {
+	n, err := reader.ReadInteger()
+	if err != nil {
+		return err
+	}
+	data, err := reader.ReadBulk()
+	if err != nil {
+		return err
+	}
+	lp.size = uint32(n)
+	lp.data = bytes.Clone(data)
+	return nil
+}
+
 func (it *LpIterator) SeekLast() *LpIterator {
 	it.index = len(it.data)
 	return it
@@ -147,7 +168,6 @@ func (it *LpIterator) Insert(datas ...string) {
 		it.size++
 	}
 	it.data = slices.Insert(it.data, it.index, alloc...)
-	bpool.Put(alloc)
 }
 
 func (it *LpIterator) RemoveNexts(num int, onDelete func([]byte)) {

@@ -51,9 +51,12 @@ _  _, _// /_/ / /_ / /_/ /  / / / / /  Build: %s
 // RegisterAeLoop register main aeLoop event.
 func RegisterAeLoop(server *Server) {
 	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
-	server.aeLoop.AddTimeEvent(AE_NORMAL, 100, CronEvictExpired, nil)
+	server.aeLoop.AddTimeEvent(AeNormal, 100, CronEvictExpired, nil)
 	if server.config.AppendOnly {
-		server.aeLoop.AddTimeEvent(AE_NORMAL, 1000, CronSyncAOF, nil)
+		server.aeLoop.AddTimeEvent(AeNormal, 1000, CronSyncAOF, nil)
+	}
+	if server.config.Save {
+		// TODO: rdb
 	}
 }
 

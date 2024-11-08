@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"github.com/bytedance/sonic"
+	"github.com/xgzlucario/rotom/internal/resp"
 	"io"
+	"os"
 
-	"github.com/xgzlucario/rotom/internal/dict"
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/zset"
@@ -26,8 +28,9 @@ type (
 )
 
 type DB struct {
-	dict *dict.Dict
+	dict *Dict
 	aof  *Aof
+	rdb  *Rdb
 }
 
 type Client struct {
@@ -35,17 +38,24 @@ type Client struct {
 	recvx       int
 	readx       int
 	queryBuf    []byte
-	argsBuf     []RESP
-	replyWriter *RESPWriter
+	argsBuf     []resp.RESP
+	replyWriter *resp.Writer
 }
 
 type Server struct {
-	fd          int
-	config      *Config
-	aeLoop      *AeLoop
-	clients     map[int]*Client
-	lua         *lua.LState
-	outOfMemory bool
+	fd      int
+	config  *Config
+	aeLoop  *AeLoop
+	clients map[int]*Client
+	lua     *lua.LState
+}
+
+type Config struct {
+	Port           int    `json:"port"`
+	AppendOnly     bool   `json:"appendonly"`
+	AppendFileName string `json:"appendfilename"`
+	Save           bool   `json:"save"`
+	SaveFileName   string `json:"savefilename"`
 }
 
 var (
@@ -55,30 +65,48 @@ var (
 
 // InitDB initializes database and redo appendonly files if needed.
 func InitDB(config *Config) (err error) {
-	db.dict = dict.New()
+	db.dict = New()
 
+	if config.Save {
+		db.rdb = NewRdb(config.SaveFileName)
+		log.Debug().Msg("start loading rdb file...")
+		if err = db.rdb.LoadDB(); err != nil {
+			return err
+		}
+	}
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)
 		if err != nil {
 			return
 		}
-
 		log.Debug().Msg("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
-		emptyWriter := NewWriter(WriteBufSize)
-		return db.aof.Read(func(args []RESP) {
+		emptyWriter := resp.NewWriter(WriteBufSize)
+		return db.aof.Read(func(args []resp.RESP) {
 			command := args[0].ToStringUnsafe()
 
 			cmd, err := lookupCommand(command)
 			if err == nil {
-				cmd.processCommand(emptyWriter, args[1:])
+				cmd.process(emptyWriter, args[1:])
 				emptyWriter.Reset()
 			}
 		})
 	}
 
 	return nil
+}
+
+func LoadConfig(path string) (config *Config, err error) {
+	jsonStr, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	config = &Config{}
+	if err = sonic.Unmarshal(jsonStr, config); err != nil {
+		return nil, err
+	}
+	return
 }
 
 // AcceptHandler is the main file event of aeloop.
@@ -91,9 +119,9 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 	// create client
 	client := &Client{
 		fd:          cfd,
-		replyWriter: NewWriter(WriteBufSize),
+		replyWriter: resp.NewWriter(WriteBufSize),
 		queryBuf:    make([]byte, QueryBufSize),
-		argsBuf:     make([]RESP, 8),
+		argsBuf:     make([]resp.RESP, 8),
 	}
 
 	server.clients[cfd] = client
@@ -143,13 +171,13 @@ func resetClient(client *Client) {
 func freeClient(client *Client) {
 	delete(server.clients, client.fd)
 	server.aeLoop.ModDetach(client.fd)
-	Close(client.fd)
+	_ = Close(client.fd)
 }
 
 func ProcessQueryBuf(client *Client) {
 	queryBuf := client.queryBuf[client.readx:client.recvx]
 
-	reader := NewReader(queryBuf)
+	reader := resp.NewReader(queryBuf)
 	for {
 		args, n, err := reader.ReadNextCommand(client.argsBuf)
 		if err != nil {
@@ -170,29 +198,21 @@ func ProcessQueryBuf(client *Client) {
 			log.Error().Msg(err.Error())
 
 		} else {
-			// reject write request when OOM
-			if cmd.persist && server.outOfMemory {
-				client.replyWriter.WriteError(errOOM)
-				goto WRITE
-			}
-
-			cmd.processCommand(client.replyWriter, args)
-
+			cmd.process(client.replyWriter, args)
 			// write aof file
 			if cmd.persist && server.config.AppendOnly {
-				db.aof.Write(queryBuf)
+				_, _ = db.aof.Write(queryBuf)
 			}
 		}
-	}
 
-WRITE:
-	resetClient(client)
-	server.aeLoop.ModWrite(client.fd, SendReplyToClient, client)
+		resetClient(client)
+		server.aeLoop.ModWrite(client.fd, SendReplyToClient, client)
+	}
 }
 
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
-	sentbuf := client.replyWriter.b
+	sentbuf := client.replyWriter.Bytes()
 
 	n, err := Write(fd, sentbuf)
 	if err != nil {
@@ -219,7 +239,6 @@ func initServer(config *Config) (err error) {
 	// init tcp server
 	server.fd, err = TcpServer(config.Port)
 	if err != nil {
-		_ = Close(server.fd)
 		return err
 	}
 	// init lua state
@@ -232,13 +251,13 @@ func initServer(config *Config) (err error) {
 	return nil
 }
 
-func CronSyncAOF(loop *AeLoop, id int, extra interface{}) {
+func CronSyncAOF(_ *AeLoop, _ int, _ interface{}) {
 	if err := db.aof.Flush(); err != nil {
 		log.Error().Msgf("sync aof error: %v", err)
 	}
 }
 
-func CronEvictExpired(loop *AeLoop, id int, extra interface{}) {
+func CronEvictExpired(_ *AeLoop, _ int, _ interface{}) {
 	db.dict.EvictExpired()
 }
 

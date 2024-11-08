@@ -2,15 +2,15 @@ package main
 
 import (
 	"errors"
-	"github.com/xgzlucario/rotom/internal/dict"
 	"golang.org/x/sys/unix"
+	"time"
 )
 
 type TeType int
 
 const (
-	AE_NORMAL TeType = iota + 1
-	AE_ONCE
+	AeNormal TeType = iota + 1
+	AeOnce
 )
 
 type FileProc func(loop *AeLoop, fd int, extra interface{})
@@ -37,7 +37,6 @@ type AeLoop struct {
 	TimeEvents      *AeTimeEvent
 	fileEventFd     int
 	timeEventNextId int
-	stop            bool
 
 	events []*AeFileEvent // file events cache
 }
@@ -95,7 +94,7 @@ func (loop *AeLoop) ModDetach(fd int) {
 }
 
 func GetMsTime() int64 {
-	return dict.GetNanoTime() / 1e6
+	return time.Now().UnixMilli()
 }
 
 func (loop *AeLoop) AddTimeEvent(mask TeType, interval int64, proc TimeProc, extra interface{}) int {
@@ -141,7 +140,6 @@ func AeLoopCreate() (*AeLoop, error) {
 		FileEvents:      make(map[int]*AeFileEvent),
 		fileEventFd:     epollFd,
 		timeEventNextId: 1,
-		stop:            false,
 		events:          make([]*AeFileEvent, 128), // pre alloc
 	}, nil
 }
@@ -206,7 +204,7 @@ retry:
 func (loop *AeLoop) AeProcess(tes []*AeTimeEvent, fes []*AeFileEvent) {
 	for _, te := range tes {
 		te.proc(loop, te.id, te.extra)
-		if te.mask == AE_ONCE {
+		if te.mask == AeOnce {
 			loop.RemoveTimeEvent(te.id)
 		} else {
 			te.when = GetMsTime() + te.interval
@@ -218,7 +216,7 @@ func (loop *AeLoop) AeProcess(tes []*AeTimeEvent, fes []*AeFileEvent) {
 }
 
 func (loop *AeLoop) AeMain() {
-	for !loop.stop {
+	for {
 		loop.AeProcess(loop.AeWait())
 	}
 }

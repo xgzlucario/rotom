@@ -1,36 +1,10 @@
-package dict
+package main
 
 import (
-	"sync/atomic"
 	"time"
 )
 
-const (
-	TTL_FOREVER   = -1
-	KEY_NOT_EXIST = -2
-)
-
-var (
-	_sec  atomic.Uint32
-	_nsec atomic.Int64
-)
-
-func init() {
-	// init backend ticker
-	tk := time.NewTicker(time.Millisecond / 10)
-	go func() {
-		for t := range tk.C {
-			_sec.Store(uint32(t.Unix()))
-			_nsec.Store(t.UnixNano())
-		}
-	}()
-}
-
-func GetNanoTime() int64 {
-	return _nsec.Load()
-}
-
-// Dict is the hashmap for Rotom.
+// Dict is the hashmap for rotom.
 type Dict struct {
 	data   map[string]any
 	expire map[string]int64
@@ -50,19 +24,20 @@ func (dict *Dict) Get(key string) (any, int) {
 		return nil, KEY_NOT_EXIST
 	}
 
-	nsec, ok := dict.expire[key]
+	ts, ok := dict.expire[key]
 	if !ok {
 		return data, TTL_FOREVER
 	}
 
 	// key expired
-	if nsec < _nsec.Load() {
+	now := time.Now().UnixNano()
+	if ts < now {
 		delete(dict.data, key)
 		delete(dict.expire, key)
 		return nil, KEY_NOT_EXIST
 	}
 
-	return data, nsec2duration(nsec)
+	return data, int(ts-now) / int(time.Second)
 }
 
 func (dict *Dict) Set(key string, data any) {
@@ -88,7 +63,7 @@ func (dict *Dict) Delete(key string) bool {
 
 // SetTTL set expire time for key.
 // return `0` if key not exist or expired.
-// return `1` if set successed.
+// return `1` if set success.
 func (dict *Dict) SetTTL(key string, ttl int64) int {
 	_, ok := dict.data[key]
 	if !ok {
@@ -97,8 +72,8 @@ func (dict *Dict) SetTTL(key string, ttl int64) int {
 	}
 
 	// check key if already expired
-	nsec, ok := dict.expire[key]
-	if ok && nsec < _nsec.Load() {
+	ts, ok := dict.expire[key]
+	if ok && ts < time.Now().UnixNano() {
 		delete(dict.data, key)
 		delete(dict.expire, key)
 		return 0
@@ -111,8 +86,9 @@ func (dict *Dict) SetTTL(key string, ttl int64) int {
 
 func (dict *Dict) EvictExpired() {
 	var count int
-	for key, nsec := range dict.expire {
-		if _nsec.Load() > nsec {
+	now := time.Now().UnixNano()
+	for key, ts := range dict.expire {
+		if now > ts {
 			delete(dict.expire, key)
 			delete(dict.data, key)
 		}
@@ -121,8 +97,4 @@ func (dict *Dict) EvictExpired() {
 			return
 		}
 	}
-}
-
-func nsec2duration(nsec int64) (second int) {
-	return int(nsec-_nsec.Load()) / int(time.Second)
 }

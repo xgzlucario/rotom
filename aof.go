@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"github.com/xgzlucario/rotom/internal/resp"
 	"io"
 	"os"
 
@@ -16,9 +17,8 @@ const (
 
 // Aof manages an append-only file system for storing data.
 type Aof struct {
-	filePath string
-	file     *os.File
-	buf      *bytes.Buffer
+	file *os.File
+	buf  *bytes.Buffer
 }
 
 func NewAof(path string) (*Aof, error) {
@@ -27,28 +27,27 @@ func NewAof(path string) (*Aof, error) {
 		return nil, err
 	}
 	return &Aof{
-		file:     fd,
-		filePath: path,
-		buf:      bytes.NewBuffer(make([]byte, 0, KB)),
+		file: fd,
+		buf:  bytes.NewBuffer(make([]byte, 0, KB)),
 	}, nil
 }
 
-func (aof *Aof) Close() error {
-	return aof.file.Close()
+func (a *Aof) Close() error {
+	return a.file.Close()
 }
 
-func (aof *Aof) Write(buf []byte) (int, error) {
-	return aof.buf.Write(buf)
+func (a *Aof) Write(buf []byte) (int, error) {
+	return a.buf.Write(buf)
 }
 
-func (aof *Aof) Flush() error {
-	aof.buf.WriteTo(aof.file)
-	return aof.file.Sync()
+func (a *Aof) Flush() error {
+	_, _ = a.buf.WriteTo(a.file)
+	return a.file.Sync()
 }
 
-func (aof *Aof) Read(fn func(args []RESP)) error {
+func (a *Aof) Read(fn func(args []resp.RESP)) error {
 	// Read file data by mmap.
-	data, err := mmap.Open(aof.filePath, false)
+	data, err := mmap.MapFile(a.file, false)
 	if len(data) == 0 {
 		return nil
 	}
@@ -57,8 +56,8 @@ func (aof *Aof) Read(fn func(args []RESP)) error {
 	}
 
 	// Iterate over the records in the file, applying the function to each.
-	reader := NewReader(data)
-	argsBuf := make([]RESP, 8)
+	reader := resp.NewReader(data)
+	argsBuf := make([]resp.RESP, 8)
 	for {
 		args, _, err := reader.ReadNextCommand(argsBuf)
 		if err != nil {

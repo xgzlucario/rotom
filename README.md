@@ -13,7 +13,7 @@ This is rotom, a high performance, low latency tiny Redis Server written in Go. 
 1. Implements the AeLoop single-threaded event loop from Redis using the epoll network model.
 2. Compatible with the Redis RESP protocol, allowing any Redis client to connect to rotom.
 3. Implements data structures such as dict, list, map, zipmap, set, zipset, and zset.
-4. Supports AOF.
+4. Supports RDB & AOF.
 5. Supports 20+ commonly used commands.
 6. Supports execute lua scripts.
 
@@ -109,7 +109,7 @@ Alternatively, you can run it in a container. First, build the Docker image by r
 
 ```
 REPOSITORY       TAG           IMAGE ID       CREATED         SIZE
-rotom            latest        22f42ce9ae0e   8 seconds ago   20.5MB
+rotom            latest        e93cf2060e5f   13 seconds ago  40.2MB
 ```
 
 Then, start the container:

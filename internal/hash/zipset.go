@@ -2,6 +2,7 @@ package hash
 
 import (
 	"github.com/xgzlucario/rotom/internal/list"
+	"github.com/xgzlucario/rotom/internal/resp"
 )
 
 var _ SetI = (*ZipSet)(nil)
@@ -25,7 +26,6 @@ func (zs *ZipSet) Add(key string) (newField bool) {
 
 func (zs *ZipSet) Exist(key string) bool {
 	it := zs.data.Iterator().SeekLast()
-
 	for !it.IsFirst() {
 		entry := it.Prev()
 		if key == b2s(entry) {
@@ -37,7 +37,6 @@ func (zs *ZipSet) Exist(key string) bool {
 
 func (zs *ZipSet) Remove(key string) bool {
 	it := zs.data.Iterator().SeekLast()
-
 	for !it.IsFirst() {
 		entry := it.Prev()
 		if key == b2s(entry) {
@@ -68,4 +67,12 @@ func (zs *ZipSet) ToSet() *Set {
 		s.Add(key)
 	})
 	return s
+}
+
+func (zs *ZipSet) Encode(writer *resp.Writer) error {
+	return zs.data.Encode(writer)
+}
+
+func (zs *ZipSet) Decode(reader *resp.Reader) error {
+	return zs.data.Decode(reader)
 }
