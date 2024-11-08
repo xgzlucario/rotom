@@ -68,10 +68,7 @@ func InitDB(config *Config) (err error) {
 	db.dict = New()
 
 	if config.Save {
-		db.rdb, err = NewRdb(config.SaveFileName)
-		if err != nil {
-			return
-		}
+		db.rdb = NewRdb(config.SaveFileName)
 		log.Debug().Msg("start loading rdb file...")
 		if err = db.rdb.LoadDB(); err != nil {
 			return err

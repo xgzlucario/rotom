@@ -14,10 +14,10 @@ type Rdb struct {
 	path string
 }
 
-func NewRdb(path string) (*Rdb, error) {
+func NewRdb(path string) *Rdb {
 	return &Rdb{
 		path: path,
-	}, nil
+	}
 }
 
 func (r *Rdb) SaveDB() error {
