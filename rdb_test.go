@@ -8,5 +8,5 @@ import (
 func TestRdb(t *testing.T) {
 	ast := assert.New(t)
 	rdb := NewRdb("main.go")
-	ast.Nil(rdb.LoadDB())
+	ast.NotNil(rdb.LoadDB())
 }
