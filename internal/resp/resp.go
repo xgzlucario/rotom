@@ -138,8 +138,8 @@ type Writer struct {
 	b []byte
 }
 
-func NewWriter(cap int) *Writer {
-	return &Writer{make([]byte, 0, cap)}
+func NewWriter(capacity int) *Writer {
+	return &Writer{make([]byte, 0, capacity)}
 }
 
 func (w *Writer) Bytes() []byte {
