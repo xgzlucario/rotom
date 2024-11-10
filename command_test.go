@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 )
@@ -33,19 +32,21 @@ func startup() {
 
 const (
 	testTypeRotom     = "rotom"
-	testTypeMiniRedis = "miniredis"
+	testTypeRealRedis = "realRedis"
 )
 
 func TestCommand(t *testing.T) {
-	t.Run(testTypeMiniRedis, func(t *testing.T) {
-		s := miniredis.RunT(t)
+	t.Run(testTypeRealRedis, func(t *testing.T) {
+		// NOTES: run redis first!
 		rdb := redis.NewClient(&redis.Options{
-			Addr: s.Addr(),
+			Addr: ":6379",
 		})
 		sleepFn := func(dur time.Duration) {
-			s.FastForward(dur)
+			time.Sleep(dur)
 		}
-		testCommand(t, testTypeMiniRedis, rdb, sleepFn)
+		rdb.FlushDB(context.Background())
+		testCommand(t, testTypeRealRedis, rdb, sleepFn)
+		rdb.FlushDB(context.Background())
 	})
 	t.Run(testTypeRotom, func(t *testing.T) {
 		go startup()

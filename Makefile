@@ -27,3 +27,6 @@ build:
 
 build-docker:
 	docker build --build-arg BUILD_TIME=$(shell date +%y%m%d_%H%M%S%z) -t rotom .
+
+run-redis:
+	docker run --rm -p 6379:6379 --name redis-test redis
