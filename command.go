@@ -147,20 +147,15 @@ func setCommand(writer *resp.Writer, args []resp.RESP) {
 
 func incrCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0].ToString()
-
 	object, ttl := db.dict.Get(key)
 	if ttl == KEY_NOT_EXIST {
-		db.dict.Set(key, 1)
-		writer.WriteInteger(1)
-		return
+		object = 0
 	}
-
 	switch v := object.(type) {
 	case int:
 		num := v + 1
 		writer.WriteInteger(num)
 		db.dict.Set(key, num)
-
 	case []byte:
 		// conv to integer
 		num, err := resp.RESP(v).ToInt()
@@ -171,7 +166,6 @@ func incrCommand(writer *resp.Writer, args []resp.RESP) {
 		num++
 		strconv.AppendInt(v[:0], int64(num), 10)
 		writer.WriteInteger(num)
-
 	default:
 		writer.WriteError(errWrongType)
 	}
@@ -630,16 +624,14 @@ func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {
 		if len(setnx) > 0 && setnx[0] {
 			switch data := object.(type) {
 			case *hash.ZipMap:
-				if data.Len() < 256 {
-					break
+				if data.Len() >= 256 {
+					db.dict.Set(string(key), data.ToMap())
 				}
-				db.dict.Set(string(key), data.ToMap())
 
 			case *hash.ZipSet:
-				if data.Len() < 512 {
-					break
+				if data.Len() >= 512 {
+					db.dict.Set(string(key), data.ToSet())
 				}
-				db.dict.Set(string(key), data.ToSet())
 			}
 		}
 		return v, nil

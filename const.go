@@ -26,6 +26,12 @@ const (
 	KEY_NOT_EXIST = -2
 )
 
+const (
+	KB = 1024
+	MB = 1024 * KB
+	GB = 1024 * MB
+)
+
 // type2c is objectType to new encoder.
 var type2c = map[ObjectType]func() iface.Encoder{
 	TypeMap:    func() iface.Encoder { return hash.NewMap() },

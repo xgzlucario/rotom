@@ -100,7 +100,7 @@ func GetMsTime() int64 {
 func (loop *AeLoop) AddTimeEvent(mask TeType, interval int64, proc TimeProc, extra interface{}) int {
 	id := loop.timeEventNextId
 	loop.timeEventNextId++
-	te := AeTimeEvent{
+	loop.TimeEvents = &AeTimeEvent{
 		id:       id,
 		mask:     mask,
 		interval: interval,
@@ -109,7 +109,6 @@ func (loop *AeLoop) AddTimeEvent(mask TeType, interval int64, proc TimeProc, ext
 		extra:    extra,
 		next:     loop.TimeEvents,
 	}
-	loop.TimeEvents = &te
 	return id
 }
 

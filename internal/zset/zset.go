@@ -2,6 +2,7 @@ package zset
 
 import (
 	"cmp"
+	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/resp"
 
@@ -25,24 +26,23 @@ func nodeCompare(a, b node) int {
 }
 
 type ZSet struct {
-	m   map[string]float64
+	m   *swiss.Map[string, float64]
 	skl *stl4go.SkipList[node, struct{}]
 }
 
 func New() *ZSet {
 	return &ZSet{
-		m:   make(map[string]float64),
+		m:   swiss.New[string, float64](8),
 		skl: stl4go.NewSkipListFunc[node, struct{}](nodeCompare),
 	}
 }
 
 func (z *ZSet) Get(key string) (float64, bool) {
-	val, ok := z.m[key]
-	return val, ok
+	return z.m.Get(key)
 }
 
 func (z *ZSet) Set(key string, score float64) bool {
-	old, ok := z.m[key]
+	old, ok := z.m.Get(key)
 	if ok {
 		// same
 		if score == old {
@@ -50,17 +50,17 @@ func (z *ZSet) Set(key string, score float64) bool {
 		}
 		z.skl.Remove(node{key, old})
 	}
-	z.m[key] = score
+	z.m.Put(key, score)
 	z.skl.Insert(node{key, score}, struct{}{})
 	return !ok
 }
 
 func (z *ZSet) Remove(key string) bool {
-	score, ok := z.m[key]
+	score, ok := z.m.Get(key)
 	if !ok {
 		return false
 	}
-	delete(z.m, key)
+	z.m.Delete(key)
 	z.skl.Remove(node{key, score})
 	return true
 }
@@ -71,13 +71,13 @@ func (z *ZSet) PopMin() (key string, score float64) {
 		score = n.score
 		return false
 	})
-	delete(z.m, key)
+	z.m.Delete(key)
 	z.skl.Remove(node{key, score})
 	return
 }
 
 func (z *ZSet) Rank(key string) (int, float64) {
-	score, ok := z.m[key]
+	score, ok := z.m.Get(key)
 	if !ok {
 		return -1, 0
 	}
@@ -101,15 +101,16 @@ func (z *ZSet) Range(start, stop int, fn func(key string, score float64)) {
 }
 
 func (z *ZSet) Len() int {
-	return len(z.m)
+	return z.m.Len()
 }
 
 func (z *ZSet) Encode(writer *resp.Writer) error {
 	writer.WriteArrayHead(z.Len())
-	for k, s := range z.m {
+	z.m.All(func(k string, s float64) bool {
 		writer.WriteBulkString(k)
 		writer.WriteFloat(s)
-	}
+		return true
+	})
 	return nil
 }
 
@@ -129,7 +130,7 @@ func (z *ZSet) Decode(reader *resp.Reader) error {
 		}
 		key := string(buf)
 		z.skl.Insert(node{key, score}, struct{}{})
-		z.m[key] = score
+		z.m.Put(key, score)
 	}
 	return nil
 }

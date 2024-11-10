@@ -116,7 +116,7 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 		log.Error().Msgf("accept err: %v", err)
 		return
 	}
-	log.Info().Msgf("accept new client fd: %d", fd)
+	log.Info().Msgf("accept new client fd: %d", cfd)
 	client := &Client{
 		fd:          cfd,
 		replyWriter: resp.NewWriter(WriteBufSize),

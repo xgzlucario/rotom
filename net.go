@@ -4,7 +4,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const BACKLOG int = 511
+const BACKLOG int = 64
 
 func Accept(fd int) (int, error) {
 	nfd, _, err := unix.Accept(fd)

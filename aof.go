@@ -9,12 +9,6 @@ import (
 	"github.com/tidwall/mmap"
 )
 
-const (
-	KB = 1024
-	MB = 1024 * KB
-	GB = 1024 * MB
-)
-
 // Aof manages an append-only file system for storing data.
 type Aof struct {
 	file *os.File
