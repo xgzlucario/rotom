@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/alicebob/miniredis/v2"
 	"math/rand/v2"
 	"os"
 	"sync"
@@ -32,22 +33,33 @@ func startup() {
 
 const (
 	testTypeRotom     = "rotom"
+	testTypeMiniRedis = "miniRedis"
 	testTypeRealRedis = "realRedis"
 )
 
 func TestCommand(t *testing.T) {
-	t.Run(testTypeRealRedis, func(t *testing.T) {
-		// NOTES: run redis first!
+	t.Run(testTypeMiniRedis, func(t *testing.T) {
+		s := miniredis.RunT(t)
 		rdb := redis.NewClient(&redis.Options{
-			Addr: ":6379",
+			Addr: s.Addr(),
 		})
 		sleepFn := func(dur time.Duration) {
-			time.Sleep(dur)
+			s.FastForward(dur)
 		}
-		rdb.FlushDB(context.Background())
-		testCommand(t, testTypeRealRedis, rdb, sleepFn)
-		rdb.FlushDB(context.Background())
+		testCommand(t, testTypeMiniRedis, rdb, sleepFn)
 	})
+	//t.Run(testTypeRealRedis, func(t *testing.T) {
+	//	// NOTES: run redis first!
+	//	rdb := redis.NewClient(&redis.Options{
+	//		Addr: ":6379",
+	//	})
+	//	sleepFn := func(dur time.Duration) {
+	//		time.Sleep(dur)
+	//	}
+	//	rdb.FlushDB(context.Background())
+	//	testCommand(t, testTypeRealRedis, rdb, sleepFn)
+	//	rdb.FlushDB(context.Background())
+	//})
 	t.Run(testTypeRotom, func(t *testing.T) {
 		go startup()
 		time.Sleep(time.Second / 2)
