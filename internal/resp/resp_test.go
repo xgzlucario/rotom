@@ -130,7 +130,10 @@ func TestReader(t *testing.T) {
 }
 
 func FuzzRESPReader(f *testing.F) {
-	f.Fuzz(func(t *testing.T, b []byte) {
-		NewReader(b).ReadNextCommand(nil)
+	f.Fuzz(func(t *testing.T, i uint8, buf string) {
+		reader := NewReader([]byte(buf))
+		for range i {
+			reader.ReadNextCommand(nil)
+		}
 	})
 }

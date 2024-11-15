@@ -3,6 +3,7 @@ module github.com/xgzlucario/rotom
 go 1.23
 
 require (
+	github.com/alicebob/miniredis/v2 v2.33.0
 	github.com/bytedance/sonic v1.12.4
 	github.com/chen3feng/stl4go v0.1.1
 	github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964
@@ -19,7 +20,6 @@ require (
 
 require (
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect
-	github.com/alicebob/miniredis/v2 v2.33.0 // indirect
 	github.com/bytedance/sonic/loader v0.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect

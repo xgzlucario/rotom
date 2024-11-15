@@ -14,12 +14,10 @@ type Rdb struct {
 }
 
 func NewRdb(path string) *Rdb {
-	return &Rdb{
-		path: path,
-	}
+	return &Rdb{path: path}
 }
 
-func (r *Rdb) SaveDB() error {
+func (r *Rdb) SaveDB() (err error) {
 	// create tmp file
 	fname := fmt.Sprintf("%s.rdb", time.Now().Format(time.RFC3339))
 	fs, err := os.Create(fname)
@@ -28,13 +26,14 @@ func (r *Rdb) SaveDB() error {
 	}
 
 	writer := resp.NewWriter(MB)
-	writer.WriteArrayHead(len(db.dict.data))
+	writer.WriteArrayHead(db.dict.data.Len())
 
-	for k, v := range db.dict.data {
+	db.dict.data.All(func(k string, v any) bool {
 		// format: {objectType,ttl,key,value}
 		objectType := getObjectType(v)
 		writer.WriteInteger(int(objectType))
-		writer.WriteInteger(int(db.dict.expire[k]))
+		ttl, _ := db.dict.expire.Get(k)
+		writer.WriteInteger(int(ttl))
 		writer.WriteBulkString(k)
 
 		switch objectType {
@@ -44,10 +43,12 @@ func (r *Rdb) SaveDB() error {
 			writer.WriteInteger(v.(int))
 		default:
 			if err = v.(iface.Encoder).Encode(writer); err != nil {
-				return err
+				log.Error().Msgf("[rdb] encode error: %v, %v", objectType, err)
+				return false
 			}
 		}
-	}
+		return true
+	})
 
 	// flush
 	_, err = writer.FlushTo(fs)

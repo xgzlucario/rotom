@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/xgzlucario/rotom/internal/resp"
+	"github.com/xgzlucario/rotom/internal/timer"
 	"strconv"
 	"strings"
 	"time"
@@ -109,7 +110,7 @@ func setCommand(writer *resp.Writer, args []resp.RESP) {
 				writer.WriteError(errParseInteger)
 				return
 			}
-			ttl = time.Now().Add(n * time.Second).UnixNano()
+			ttl = timer.GetNanoTime() + int64(n*time.Second)
 			extra = extra[2:]
 
 			// PX
@@ -119,7 +120,7 @@ func setCommand(writer *resp.Writer, args []resp.RESP) {
 				writer.WriteError(errParseInteger)
 				return
 			}
-			ttl = time.Now().Add(n * time.Millisecond).UnixNano()
+			ttl = timer.GetNanoTime() + int64(n*time.Millisecond)
 			extra = extra[2:]
 
 			// KEEPTTL

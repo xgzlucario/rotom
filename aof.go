@@ -62,6 +62,5 @@ func (a *Aof) Read(fn func(args []resp.RESP)) error {
 		}
 		fn(args)
 	}
-
 	return nil
 }
