@@ -1,11 +1,12 @@
 package hash
 
 import (
+	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/resp"
 )
 
-var _ SetI = (*ZipSet)(nil)
+var _ iface.SetI = (*ZipSet)(nil)
 
 // ZipSet store data as [key1, key2, key3...] in listpack.
 type ZipSet struct {

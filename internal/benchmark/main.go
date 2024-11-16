@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/xgzlucario/rotom/internal/zset"
 	"runtime"
 	"runtime/debug"
 	"time"
@@ -26,6 +27,10 @@ func genKV(id int) (string, []byte) {
 	return k, []byte(k)
 }
 
+func genK(id int) string {
+	return fmt.Sprintf("%08x", id)
+}
+
 func main() {
 	c := ""
 	flag.StringVar(&c, "obj", "hashmap", "object to bench.")
@@ -45,7 +50,6 @@ func main() {
 			}
 			m[i] = hm
 		}
-
 	case "zipmap":
 		for i := 0; i < 10000; i++ {
 			hm := hash.NewZipMap()
@@ -55,9 +59,25 @@ func main() {
 			}
 			m[i] = hm
 		}
+	case "zset":
+		for i := 0; i < 10000; i++ {
+			zs := zset.New()
+			for i := 0; i < 512; i++ {
+				zs.Set(genK(i), float64(i))
+			}
+			m[i] = zs
+		}
+	case "zipzset":
+		for i := 0; i < 10000; i++ {
+			zs := zset.NewZipZSet()
+			for i := 0; i < 512; i++ {
+				zs.Set(genK(i), float64(i))
+			}
+			m[i] = zs
+		}
 	}
-	cost := time.Since(start)
 
+	cost := time.Since(start)
 	var mem runtime.MemStats
 	var stat debug.GCStats
 

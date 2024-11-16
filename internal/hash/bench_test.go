@@ -2,26 +2,27 @@ package hash
 
 import (
 	"fmt"
+	"github.com/xgzlucario/rotom/internal/iface"
 	"testing"
 )
 
 const N = 512
 
 func BenchmarkMap(b *testing.B) {
-	benchMapI("map", func() MapI { return NewMap() }, b)
-	benchMapI("zipmap", func() MapI { return NewZipMap() }, b)
+	benchMapI("map", func() iface.MapI { return NewMap() }, b)
+	benchMapI("zipmap", func() iface.MapI { return NewZipMap() }, b)
 }
 
 func BenchmarkSet(b *testing.B) {
-	benchSetI("set", func() SetI { return NewSet() }, b)
-	benchSetI("zipset", func() SetI { return NewZipSet() }, b)
+	benchSetI("set", func() iface.SetI { return NewSet() }, b)
+	benchSetI("zipset", func() iface.SetI { return NewZipSet() }, b)
 }
 
 func genKey(i int) string {
 	return fmt.Sprintf("%08x", i)
 }
 
-func genMap(m MapI, n int) MapI {
+func genMap(m iface.MapI, n int) iface.MapI {
 	for i := 0; i < n; i++ {
 		k := genKey(i)
 		m.Set(k, []byte(k))
@@ -29,14 +30,14 @@ func genMap(m MapI, n int) MapI {
 	return m
 }
 
-func genSet(s SetI, n int) SetI {
+func genSet(s iface.SetI, n int) iface.SetI {
 	for i := 0; i < n; i++ {
 		s.Add(genKey(i))
 	}
 	return s
 }
 
-func benchMapI(name string, newf func() MapI, b *testing.B) {
+func benchMapI(name string, newf func() iface.MapI, b *testing.B) {
 	b.Run(name+"/get", func(b *testing.B) {
 		m := genMap(newf(), N)
 		b.ResetTimer()
@@ -68,7 +69,7 @@ func benchMapI(name string, newf func() MapI, b *testing.B) {
 	})
 }
 
-func benchSetI(name string, newf func() SetI, b *testing.B) {
+func benchSetI(name string, newf func() iface.SetI, b *testing.B) {
 	b.Run(name+"/add", func(b *testing.B) {
 		m := newf()
 		for i := 0; i < b.N; i++ {

@@ -10,17 +10,7 @@ const (
 	defaultSetSize = 512
 )
 
-type SetI interface {
-	iface.Encoder
-	Add(key string) bool
-	Exist(key string) bool
-	Remove(key string) bool
-	Pop() (key string, ok bool)
-	Scan(fn func(key string))
-	Len() int
-}
-
-var _ SetI = (*Set)(nil)
+var _ iface.SetI = (*Set)(nil)
 
 type Set struct {
 	mapset.Set[string]

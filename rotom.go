@@ -3,11 +3,12 @@ package main
 import (
 	"fmt"
 	"github.com/bytedance/sonic"
+	"github.com/xgzlucario/rotom/internal/iface"
+	"github.com/xgzlucario/rotom/internal/net"
 	"github.com/xgzlucario/rotom/internal/resp"
 	"io"
 	"os"
 
-	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/zset"
 	lua "github.com/yuin/gopher-lua"
@@ -21,8 +22,8 @@ const (
 )
 
 type (
-	Map  = hash.MapI
-	Set  = hash.SetI
+	Map  = iface.MapI
+	Set  = iface.SetI
 	List = *list.QuickList
 	ZSet = *zset.ZSet
 )
@@ -111,7 +112,7 @@ func LoadConfig(path string) (config *Config, err error) {
 
 // AcceptHandler is the main file event of aeloop.
 func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
-	cfd, err := Accept(fd)
+	cfd, err := net.Accept(fd)
 	if err != nil {
 		log.Error().Msgf("accept err: %v", err)
 		return
@@ -132,7 +133,7 @@ func ReadQueryFromClient(_ *AeLoop, fd int, extra interface{}) {
 	readSize := 0
 
 READ:
-	n, err := Read(fd, client.queryBuf[client.recvx:])
+	n, err := net.Read(fd, client.queryBuf[client.recvx:])
 	if err != nil {
 		log.Error().Msgf("client %v read err: %v", fd, err)
 		freeClient(client)
@@ -170,7 +171,7 @@ func resetClient(client *Client) {
 func freeClient(client *Client) {
 	delete(server.clients, client.fd)
 	server.aeLoop.ModDetach(client.fd)
-	_ = Close(client.fd)
+	_ = net.Close(client.fd)
 }
 
 func ProcessQueryBuf(client *Client) {
@@ -213,7 +214,7 @@ func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
 	sentbuf := client.replyWriter.Bytes()
 
-	n, err := Write(fd, sentbuf)
+	n, err := net.Write(fd, sentbuf)
 	if err != nil {
 		log.Error().Msgf("send reply err: %v", err)
 		freeClient(client)
@@ -236,7 +237,7 @@ func initServer(config *Config) (err error) {
 		return err
 	}
 	// init tcp server
-	server.fd, err = TcpServer(config.Port)
+	server.fd, err = net.TcpServer(config.Port)
 	if err != nil {
 		return err
 	}

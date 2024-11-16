@@ -7,16 +7,7 @@ import (
 	"github.com/xgzlucario/rotom/internal/resp"
 )
 
-type MapI interface {
-	iface.Encoder
-	Set(key string, val []byte) bool
-	Get(key string) ([]byte, bool)
-	Remove(key string) bool
-	Len() int
-	Scan(fn func(key string, val []byte))
-}
-
-var _ MapI = (*Map)(nil)
+var _ iface.MapI = (*Map)(nil)
 
 type Map struct {
 	data *swiss.Map[string, []byte]

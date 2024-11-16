@@ -1,13 +1,14 @@
 package hash
 
 import (
+	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/resp"
 	"unsafe"
 
 	"github.com/xgzlucario/rotom/internal/list"
 )
 
-var _ MapI = (*ZipMap)(nil)
+var _ iface.MapI = (*ZipMap)(nil)
 
 // ZipMap store data as [val1, key1, val2, key2...] in listpack.
 type ZipMap struct {
@@ -18,7 +19,7 @@ func NewZipMap() *ZipMap {
 	return &ZipMap{list.NewListPack()}
 }
 
-func (zm *ZipMap) seekTo(key string) (it *list.LpIterator, val []byte) {
+func (zm *ZipMap) seek(key string) (it *list.LpIterator, val []byte) {
 	it = zm.data.Iterator().SeekLast()
 	for !it.IsFirst() {
 		kBytes := it.Prev()
@@ -31,7 +32,7 @@ func (zm *ZipMap) seekTo(key string) (it *list.LpIterator, val []byte) {
 }
 
 func (zm *ZipMap) Set(key string, val []byte) (newField bool) {
-	it, oldVal := zm.seekTo(key)
+	it, oldVal := zm.seek(key)
 	// update
 	if it != nil {
 		if len(val) == len(oldVal) {
@@ -47,7 +48,7 @@ func (zm *ZipMap) Set(key string, val []byte) (newField bool) {
 }
 
 func (zm *ZipMap) Get(key string) ([]byte, bool) {
-	_, val := zm.seekTo(key)
+	_, val := zm.seek(key)
 	if val != nil {
 		return val, true
 	}
@@ -55,7 +56,7 @@ func (zm *ZipMap) Get(key string) ([]byte, bool) {
 }
 
 func (zm *ZipMap) Remove(key string) bool {
-	it, _ := zm.seekTo(key)
+	it, _ := zm.seek(key)
 	if it != nil {
 		it.RemoveNexts(2, nil)
 		return true
