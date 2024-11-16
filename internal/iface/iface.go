@@ -34,5 +34,9 @@ type ZSetI interface {
 	Encoder
 	Get(key string) (score float64, ok bool)
 	Set(key string, score float64) bool
+	Remove(key string) bool
 	Len() int
+	PopMin() (key string, score float64)
+	Rank(key string) int
+	Scan(fn func(key string, score float64))
 }

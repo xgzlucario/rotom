@@ -54,10 +54,10 @@ func (lp *ListPack) RPush(data ...string) {
 }
 
 func (lp *ListPack) LPop() (val string, ok bool) {
-	lp.Iterator().RemoveNexts(1, func(b []byte) {
-		val, ok = string(b), true
-	})
-	return
+	if lp.Size() == 0 {
+		return
+	}
+	return lp.Iterator().RemoveNext(), true
 }
 
 func (lp *ListPack) RPop() (val string, ok bool) {
@@ -170,21 +170,13 @@ func (it *LpIterator) Insert(datas ...string) {
 	it.data = slices.Insert(it.data, it.index, alloc...)
 }
 
-func (it *LpIterator) RemoveNexts(num int, onDelete func([]byte)) {
+func (it *LpIterator) RemoveNext() string {
 	before := it.index
-	for i := 0; i < num; i++ {
-		if it.IsLast() {
-			break
-		}
-		next := it.Next()
-		if onDelete != nil {
-			onDelete(next)
-		}
-		it.size--
-	}
-	after := it.index
-	it.data = slices.Delete(it.data, before, after)
+	res := string(it.Next())
+	it.size--
+	it.data = slices.Delete(it.data, before, it.index)
 	it.index = before
+	return res
 }
 
 func (it *LpIterator) ReplaceNext(key string) {
@@ -193,10 +185,8 @@ func (it *LpIterator) ReplaceNext(key string) {
 	}
 	before := it.index
 	it.Next()
-	after := it.index
-
 	alloc := appendEntry(nil, key)
-	it.data = slices.Replace(it.data, before, after, alloc...)
+	it.data = slices.Replace(it.data, before, it.index, alloc...)
 	it.index = before
 	bpool.Put(alloc)
 }

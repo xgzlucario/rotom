@@ -10,7 +10,6 @@ import (
 	"os"
 
 	"github.com/xgzlucario/rotom/internal/list"
-	"github.com/xgzlucario/rotom/internal/zset"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -25,7 +24,7 @@ type (
 	Map  = iface.MapI
 	Set  = iface.SetI
 	List = *list.QuickList
-	ZSet = *zset.ZSet
+	ZSet = iface.ZSetI
 )
 
 type DB struct {

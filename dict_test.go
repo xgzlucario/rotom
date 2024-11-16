@@ -15,7 +15,7 @@ func TestDict(t *testing.T) {
 		dict.Set("key", []byte("hello"))
 
 		data, ttl := dict.Get("key")
-		assert.Equal(ttl, TTL_FOREVER)
+		assert.Equal(ttl, KeepTTL)
 		assert.Equal(data, []byte("hello"))
 
 		data, ttl = dict.Get("none")
@@ -36,7 +36,7 @@ func TestDict(t *testing.T) {
 		res := dict.SetTTL("key", time.Now().Add(-time.Second).UnixNano())
 		assert.Equal(res, 1)
 
-		res = dict.SetTTL("not-exist", TTL_FOREVER)
+		res = dict.SetTTL("not-exist", KeepTTL)
 		assert.Equal(res, 0)
 
 		// get expired

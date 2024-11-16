@@ -422,7 +422,7 @@ func spopCommand(writer *resp.Writer, args []resp.RESP) {
 func zaddCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	args = args[1:]
-	zset, err := fetchZSet(key, true)
+	zs, err := fetchZSet(key, true)
 	if err != nil {
 		writer.WriteError(err)
 		return
@@ -435,7 +435,7 @@ func zaddCommand(writer *resp.Writer, args []resp.RESP) {
 			return
 		}
 		key := args[i+1].ToString()
-		if zset.Set(key, score) {
+		if zs.Set(key, score) {
 			count++
 		}
 	}
@@ -445,12 +445,12 @@ func zaddCommand(writer *resp.Writer, args []resp.RESP) {
 func zrankCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
 	member := args[1].ToStringUnsafe()
-	zset, err := fetchZSet(key)
+	zs, err := fetchZSet(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-	rank, _ := zset.Rank(member)
+	rank := zs.Rank(member)
 	if rank < 0 {
 		writer.WriteNull()
 	} else {
@@ -460,14 +460,14 @@ func zrankCommand(writer *resp.Writer, args []resp.RESP) {
 
 func zremCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0]
-	zset, err := fetchZSet(key)
+	zs, err := fetchZSet(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
 	var count int
 	for _, arg := range args[1:] {
-		if zset.Remove(arg.ToStringUnsafe()) {
+		if zs.Remove(arg.ToStringUnsafe()) {
 			count++
 		}
 	}
@@ -486,29 +486,37 @@ func zrangeCommand(writer *resp.Writer, args []resp.RESP) {
 		writer.WriteError(err)
 		return
 	}
-	zset, err := fetchZSet(key)
+	zs, err := fetchZSet(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
 
 	if stop == -1 {
-		stop = zset.Len()
+		stop = zs.Len()
 	}
 	start = min(start, stop)
 
 	withScores := len(args) == 4 && equalFold(args[3].ToStringUnsafe(), WithScores)
 	if withScores {
 		writer.WriteArrayHead((stop - start) * 2)
-		zset.Range(start, stop, func(key string, score float64) {
-			writer.WriteBulkString(key)
-			writer.WriteFloat(score)
+		zs.Scan(func(key string, score float64) {
+			if start <= 0 && stop >= 0 {
+				writer.WriteBulkString(key)
+				writer.WriteFloat(score)
+			}
+			start--
+			stop--
 		})
 
 	} else {
 		writer.WriteArrayHead(stop - start)
-		zset.Range(start, stop, func(key string, _ float64) {
-			writer.WriteBulkString(key)
+		zs.Scan(func(key string, _ float64) {
+			if start <= 0 && stop >= 0 {
+				writer.WriteBulkString(key)
+			}
+			start--
+			stop--
 		})
 	}
 }
@@ -524,13 +532,11 @@ func zpopminCommand(writer *resp.Writer, args []resp.RESP) {
 			return
 		}
 	}
-
 	zs, err := fetchZSet(key)
 	if err != nil {
 		writer.WriteError(err)
 		return
 	}
-
 	size := min(zs.Len(), count)
 	writer.WriteArrayHead(size * 2)
 	for range size {
@@ -578,7 +584,7 @@ func evalCommand(writer *resp.Writer, args []resp.RESP) {
 			writer.WriteBulkString(res.String())
 
 		case lua.LNumber:
-			writer.WriteInteger(int(res)) // convert to integer
+			writer.WriteInteger(int(res))
 
 		case *lua.LTable:
 			writer.WriteArrayHead(res.Len())
@@ -610,7 +616,7 @@ func fetchSet(key []byte, setnx ...bool) (Set, error) {
 }
 
 func fetchZSet(key []byte, setnx ...bool) (ZSet, error) {
-	return fetch(key, func() ZSet { return zset.New() }, setnx...)
+	return fetch(key, func() ZSet { return zset.NewZipZSet() }, setnx...)
 }
 
 func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {
@@ -628,10 +634,13 @@ func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {
 				if data.Len() >= 256 {
 					db.dict.Set(string(key), data.ToMap())
 				}
-
 			case *hash.ZipSet:
 				if data.Len() >= 512 {
 					db.dict.Set(string(key), data.ToSet())
+				}
+			case *zset.ZipZSet:
+				if data.Len() >= 256 {
+					db.dict.Set(string(key), data.ToZSet())
 				}
 			}
 		}
@@ -666,6 +675,10 @@ func getObjectType(object any) ObjectType {
 		return TypeList
 	case *zset.ZSet:
 		return TypeZSet
+	case *zset.ZipZSet:
+		return TypeZipZSet
+	default:
+		panic("unknown type")
 	}
 	return TypeUnknown
 }

@@ -32,7 +32,7 @@ func (dict *Dict) Get(key string) (any, int) {
 
 	ts, ok := dict.expire.Get(key)
 	if !ok {
-		return data, TTL_FOREVER
+		return data, KeepTTL
 	}
 
 	// key expired

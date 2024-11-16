@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	_ iface.Encoder = (*ZSet)(nil)
+	_ iface.ZSetI = (*ZSet)(nil)
 )
 
 type node struct {
@@ -76,26 +76,22 @@ func (z *ZSet) PopMin() (key string, score float64) {
 	return
 }
 
-func (z *ZSet) Rank(key string) (int, float64) {
-	score, ok := z.m.Get(key)
+func (z *ZSet) Rank(key string) (index int) {
+	index = -1
+	_, ok := z.m.Get(key)
 	if !ok {
-		return -1, 0
+		return
 	}
-	index := -1
 	z.skl.ForEachIf(func(n node, _ struct{}) bool {
 		index++
 		return n.key != key
 	})
-	return index, score
+	return
 }
 
-func (z *ZSet) Range(start, stop int, fn func(key string, score float64)) {
-	var index int
+func (z *ZSet) Scan(fn func(key string, score float64)) {
 	z.skl.ForEachIf(func(n node, _ struct{}) bool {
-		if index >= start && index < stop {
-			fn(n.key, n.score)
-		}
-		index++
+		fn(n.key, n.score)
 		return true
 	})
 }

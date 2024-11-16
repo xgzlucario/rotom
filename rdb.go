@@ -100,14 +100,12 @@ func (r *Rdb) LoadDB() error {
 				return err
 			}
 			db.dict.SetWithTTL(string(key), val, int64(ttl))
-
 		case TypeInteger:
 			n, err := reader.ReadInteger()
 			if err != nil {
 				return err
 			}
 			db.dict.SetWithTTL(string(key), n, int64(ttl))
-
 		default:
 			val := type2c[ObjectType(objectType)]()
 			if err = val.Decode(reader); err != nil {
