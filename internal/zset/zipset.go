@@ -12,7 +12,7 @@ import (
 var (
 	_ iface.ZSetI = (*ZipZSet)(nil)
 
-	order = binary.BigEndian
+	order = binary.LittleEndian
 )
 
 // ZipZSet store data as [score1, key1, score2, key2...] in listpack.
@@ -37,9 +37,9 @@ func (*ZipZSet) decode(entry []byte) (string, float64) {
 }
 
 func (zs *ZipZSet) Get(key string) (float64, bool) {
-	it, _, val := zs.seek(key)
+	it, _, score := zs.rank(key)
 	if it != nil {
-		return b2f(val), true
+		return score, true
 	}
 	return 0, false
 }
@@ -51,35 +51,39 @@ func (zs *ZipZSet) Set(key string, score float64) bool {
 }
 
 func (zs *ZipZSet) Remove(key string) bool {
-	it, _, _ := zs.seek(key)
+	it, _, _ := zs.rank(key)
 	if it != nil {
 		it.RemoveNext()
 	}
 	return it != nil
 }
 
-func (zs *ZipZSet) seek(key string) (it *list.LpIterator, index int, entry []byte) {
-	it = zs.data.Iterator().SeekLast()
-	index = -1
+func (zs *ZipZSet) rank(key string) (*list.LpIterator, int, float64) {
+	it := zs.data.Iterator().SeekLast()
+	index := -1
 	for !it.IsFirst() {
-		entry = it.Prev()
+		prevKey, prevScore := zs.decode(it.Prev())
 		index++
-		if key == b2s(entry[8:]) {
-			return it, index, entry
+		if key == prevKey {
+			return it, index, prevScore
 		}
 	}
-	return nil, -1, nil
+	return nil, -1, 0
 }
 
 func (zs *ZipZSet) insert(key string, score float64) {
 	it := zs.data.Iterator().SeekLast()
 	for !it.IsFirst() {
-		ek, es := zs.decode(it.Prev())
-		if es < score || (es == score && ek < key) {
-			continue
-		} else {
+		prevKey, prevScore := zs.decode(it.Prev())
+		if score < prevScore {
 			it.Next()
 			goto DO
+		}
+		if score == prevScore {
+			if key < prevKey {
+				it.Next()
+				goto DO
+			}
 		}
 	}
 DO:
@@ -89,13 +93,13 @@ DO:
 func (zs *ZipZSet) PopMin() (string, float64) {
 	entry, ok := zs.data.RPop()
 	if ok {
-		return zs.decode([]byte(entry))
+		return zs.decode(s2b(entry))
 	}
 	return "", 0
 }
 
 func (zs *ZipZSet) Rank(key string) int {
-	_, index, _ := zs.seek(key)
+	_, index, _ := zs.rank(key)
 	return index
 }
 
@@ -130,6 +134,10 @@ func (zs *ZipZSet) Decode(reader *resp.Reader) error {
 
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
+}
+
+func s2b(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&s))
 }
 
 func b2f(b []byte) float64 {

@@ -39,12 +39,11 @@ func benchZSetI(name string, newf func() iface.ZSetI, b *testing.B) {
 			m.Set(genKey(i%N), float64(i%N))
 		}
 	})
-	b.Run(name+"/remove", func(b *testing.B) {
-		m := genZSet(newf(), N)
+	b.Run(name+"/popmin", func(b *testing.B) {
+		m := genZSet(newf(), b.N)
 		b.ResetTimer()
-		for i := 0; i < N; i++ {
-			k := genKey(i)
-			m.Remove(k)
+		for i := 0; i < b.N; i++ {
+			m.PopMin()
 		}
 	})
 	b.Run(name+"/scan", func(b *testing.B) {
