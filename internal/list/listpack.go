@@ -62,14 +62,11 @@ func (lp *ListPack) LPop() (val string, ok bool) {
 
 func (lp *ListPack) RPop() (val string, ok bool) {
 	if lp.Size() == 0 {
-		return "", false
+		return
 	}
 	it := lp.Iterator().SeekLast()
-	before := it.index
-	val, ok = string(it.Prev()), true
-	it.data = slices.Delete(it.data, it.index, before)
-	it.size--
-	return
+	it.Prev()
+	return it.RemoveNext(), true
 }
 
 type LpIterator struct {

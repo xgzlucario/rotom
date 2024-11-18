@@ -5,3 +5,4 @@ redis
 rotom
 bench/
 *.rdb
+output/

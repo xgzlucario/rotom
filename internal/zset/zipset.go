@@ -60,12 +60,10 @@ func (zs *ZipZSet) Remove(key string) bool {
 
 func (zs *ZipZSet) rank(key string) (*list.LpIterator, int, float64) {
 	it := zs.data.Iterator().SeekLast()
-	index := -1
-	for !it.IsFirst() {
+	for i := 0; !it.IsFirst(); i++ {
 		prevKey, prevScore := zs.decode(it.Prev())
-		index++
 		if key == prevKey {
-			return it, index, prevScore
+			return it, i, prevScore
 		}
 	}
 	return nil, -1, 0
