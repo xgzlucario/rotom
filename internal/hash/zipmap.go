@@ -1,10 +1,10 @@
 package hash
 
 import (
-	"bytes"
 	"encoding/binary"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/resp"
+	"github.com/zeebo/xxh3"
 	"unsafe"
 
 	"github.com/xgzlucario/rotom/internal/list"
@@ -21,53 +21,55 @@ func NewZipMap() *ZipMap {
 	return &ZipMap{data: list.NewListPack()}
 }
 
-func (zm *ZipMap) buildKey(key string) []byte {
-	entry := make([]byte, 0, 16)
-	entry = binary.AppendUvarint(entry, uint64(len(key)))
-	return append(entry, key...)
-}
-
-// entry store as [keyLen, key, val].
-func (zm *ZipMap) encode(key string, val []byte) []byte {
-	return append(zm.buildKey(key), val...)
+// entry store as [hash(1), vLen(varint), val, key].
+func (zm *ZipMap) encode(key string, val []byte) string {
+	entry := make([]byte, 0, 2+len(key)+len(val))
+	entry = append(entry, byte(xxh3.HashString(key)))
+	entry = binary.AppendUvarint(entry, uint64(len(val)))
+	entry = append(entry, val...)
+	entry = append(entry, key...)
+	return b2s(entry)
 }
 
 func (*ZipMap) decode(entry []byte) (string, []byte) {
-	klen, n := binary.Uvarint(entry)
-	key := entry[n : klen+uint64(n)]
-	val := entry[klen+uint64(n):]
+	entry = entry[1:]
+	vlen, n := binary.Uvarint(entry)
+	val := entry[n : vlen+uint64(n)]
+	key := entry[vlen+uint64(n):]
 	return b2s(key), val
 }
 
-func (zm *ZipMap) seek(key string) (it *list.LpIterator, entry []byte) {
-	it = zm.data.Iterator().SeekLast()
-	prefix := zm.buildKey(key)
-	for !it.IsFirst() {
-		entry = it.Prev()
-		if bytes.HasPrefix(entry, prefix) {
-			return it, entry
+func (zm *ZipMap) seek(key string) (*list.LpIterator, []byte) {
+	hash := byte(xxh3.HashString(key))
+	for it := zm.data.Iterator().SeekLast(); !it.IsFirst(); {
+		entry := it.Prev()
+		if hash == entry[0] {
+			preKey, preVal := zm.decode(entry)
+			if key == preKey {
+				return it, preVal
+			}
 		}
 	}
 	return nil, nil
 }
 
 func (zm *ZipMap) Set(key string, val []byte) bool {
-	it, _ := zm.seek(key)
-	entry := b2s(zm.encode(key, val))
-	// update
+	it, oldVal := zm.seek(key)
 	if it != nil {
-		it.ReplaceNext(entry)
+		if len(oldVal) == len(val) {
+			copy(oldVal, val)
+			return false
+		}
+		it.ReplaceNext(zm.encode(key, val))
 		return false
 	}
-	// insert
-	zm.data.RPush(entry)
+	zm.data.RPush(zm.encode(key, val))
 	return true
 }
 
 func (zm *ZipMap) Get(key string) ([]byte, bool) {
-	it, entry := zm.seek(key)
+	it, val := zm.seek(key)
 	if it != nil {
-		_, val := zm.decode(entry)
 		return val, true
 	}
 	return nil, false
@@ -83,8 +85,7 @@ func (zm *ZipMap) Remove(key string) bool {
 }
 
 func (zm *ZipMap) Scan(fn func(string, []byte)) {
-	it := zm.data.Iterator().SeekLast()
-	for !it.IsFirst() {
+	for it := zm.data.Iterator().SeekLast(); !it.IsFirst(); {
 		key, val := zm.decode(it.Prev())
 		fn(key, val)
 	}
