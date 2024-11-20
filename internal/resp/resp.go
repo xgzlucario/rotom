@@ -16,7 +16,7 @@ const (
 	INTEGER = ':'
 	BULK    = '$'
 	ARRAY   = '*'
-	MAP     = '%' // TODO: https://redis.io/docs/latest/develop/reference/protocol-spec/#maps
+	MAP     = '%'
 )
 
 var (
@@ -157,6 +157,12 @@ func (w *Writer) Bytes() []byte {
 // WriteArrayHead writes the RESP array header with the given length.
 func (w *Writer) WriteArrayHead(n int) {
 	w.b = append(w.b, ARRAY)
+	w.b = strconv.AppendUint(w.b, uint64(n), 10)
+	w.b = append(w.b, CRLF...)
+}
+
+func (w *Writer) WriteMapHead(n int) {
+	w.b = append(w.b, MAP)
 	w.b = strconv.AppendUint(w.b, uint64(n), 10)
 	w.b = append(w.b, CRLF...)
 }

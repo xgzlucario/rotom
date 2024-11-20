@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/cockroachdb/swiss"
-	"github.com/xgzlucario/rotom/internal/timer"
 	"time"
 )
 
@@ -10,10 +9,6 @@ import (
 type Dict struct {
 	data   *swiss.Map[string, any]
 	expire *swiss.Map[string, int64]
-}
-
-func init() {
-	timer.Init()
 }
 
 func New() *Dict {
@@ -36,7 +31,7 @@ func (dict *Dict) Get(key string) (any, int) {
 	}
 
 	// key expired
-	now := timer.GetNanoTime()
+	now := time.Now().UnixNano()
 	if ts < now {
 		dict.delete(key)
 		return nil, KEY_NOT_EXIST
@@ -82,7 +77,7 @@ func (dict *Dict) SetTTL(key string, ttl int64) int {
 
 	// check key if already expired
 	ts, ok := dict.expire.Get(key)
-	if ok && ts < timer.GetNanoTime() {
+	if ok && ts < time.Now().UnixNano() {
 		dict.delete(key)
 		return 0
 	}
@@ -94,8 +89,9 @@ func (dict *Dict) SetTTL(key string, ttl int64) int {
 
 func (dict *Dict) EvictExpired() {
 	var count int
+	now := time.Now().UnixNano()
 	dict.expire.All(func(key string, ts int64) bool {
-		if timer.GetNanoTime() > ts {
+		if now > ts {
 			dict.Delete(key)
 		}
 		count++

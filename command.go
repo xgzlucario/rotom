@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github.com/xgzlucario/rotom/internal/resp"
-	"github.com/xgzlucario/rotom/internal/timer"
 	"strconv"
 	"strings"
 	"time"
@@ -64,6 +63,7 @@ var cmdTable = []*Command{
 	{"zrange", zrangeCommand, 3, false},
 	{"eval", evalCommand, 2, true},
 	{"ping", pingCommand, 0, false},
+	{"hello", helloCommand, 0, false},
 	{"flushdb", flushdbCommand, 0, true},
 	{"load", loadCommand, 0, false},
 	{"save", saveCommand, 0, false},
@@ -110,7 +110,7 @@ func setCommand(writer *resp.Writer, args []resp.RESP) {
 				writer.WriteError(errParseInteger)
 				return
 			}
-			ttl = timer.GetNanoTime() + int64(n*time.Second)
+			ttl = time.Now().Add(n * time.Second).UnixNano()
 			extra = extra[2:]
 
 			// PX
@@ -120,7 +120,7 @@ func setCommand(writer *resp.Writer, args []resp.RESP) {
 				writer.WriteError(errParseInteger)
 				return
 			}
-			ttl = timer.GetNanoTime() + int64(n*time.Millisecond)
+			ttl = time.Now().Add(n * time.Millisecond).UnixNano()
 			extra = extra[2:]
 
 			// KEEPTTL
@@ -549,6 +549,39 @@ func zpopminCommand(writer *resp.Writer, args []resp.RESP) {
 func flushdbCommand(writer *resp.Writer, _ []resp.RESP) {
 	db.dict = New()
 	writer.WriteSString("OK")
+}
+
+func helloCommand(writer *resp.Writer, args []resp.RESP) {
+	var protoVersion int
+	var err error
+
+	if len(args) > 0 {
+		protoVersion, err = args[0].ToInt()
+		if err != nil {
+			writer.WriteError(err)
+			return
+		}
+	}
+
+	result := map[string]any{
+		"server":  "rotom",
+		"version": "1.0.0",
+		"proto":   protoVersion,
+	}
+	if protoVersion == 3 {
+		writer.WriteMapHead(len(result))
+	} else {
+		writer.WriteMapHead(len(result))
+	}
+	for k, v := range result {
+		writer.WriteBulkString(k)
+		switch val := v.(type) {
+		case string:
+			writer.WriteBulkString(val)
+		case int:
+			writer.WriteInteger(val)
+		}
+	}
 }
 
 func loadCommand(writer *resp.Writer, _ []resp.RESP) {

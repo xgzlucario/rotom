@@ -10,9 +10,14 @@ ARG BUILD_TIME
 
 WORKDIR /build
 
+# 挂载本地缓存加速
+VOLUME ["/go/pkg/mod", "/go/cache"]
+
 COPY . .
 
-RUN go build -ldflags="-s -w -X main.buildTime=${BUILD_TIME}" -o rotom .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -ldflags="-s -w -X main.buildTime=${BUILD_TIME}" -o rotom .
 
 FROM alpine:latest
 
