@@ -9,8 +9,7 @@ import (
 const N = 512
 
 func BenchmarkMap(b *testing.B) {
-	benchMapI("map", func() iface.MapI { return NewMap() }, b)
-	benchMapI("zipmap", func() iface.MapI { return NewZipMap() }, b)
+	benchMapI("zipmap", func() iface.MapI { return New() }, b)
 }
 
 func BenchmarkSet(b *testing.B) {

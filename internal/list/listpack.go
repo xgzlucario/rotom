@@ -176,18 +176,6 @@ func (it *LpIterator) RemoveNext() string {
 	return res
 }
 
-func (it *LpIterator) ReplaceNext(key string) {
-	if it.IsLast() {
-		return
-	}
-	before := it.index
-	it.Next()
-	alloc := appendEntry(nil, key)
-	it.data = slices.Replace(it.data, before, it.index, alloc...)
-	it.index = before
-	bpool.Put(alloc)
-}
-
 func appendEntry(dst []byte, data string) []byte {
 	if dst == nil {
 		sz := len(data) + 2*SizeUvarint(uint64(len(data)))

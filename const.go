@@ -15,7 +15,6 @@ const (
 	TypeString
 	TypeInteger
 	TypeMap
-	TypeZipMap
 	TypeSet
 	TypeZipSet
 	TypeList
@@ -36,8 +35,7 @@ const (
 
 // type2c is objectType to new encoder.
 var type2c = map[ObjectType]func() iface.Encoder{
-	TypeMap:     func() iface.Encoder { return hash.NewMap() },
-	TypeZipMap:  func() iface.Encoder { return hash.NewZipMap() },
+	TypeMap:     func() iface.Encoder { return hash.New() },
 	TypeSet:     func() iface.Encoder { return hash.NewSet() },
 	TypeZipSet:  func() iface.Encoder { return hash.NewZipSet() },
 	TypeList:    func() iface.Encoder { return list.New() },

@@ -637,7 +637,7 @@ func evalCommand(writer *resp.Writer, args []resp.RESP) {
 }
 
 func fetchMap(key []byte, setnx ...bool) (Map, error) {
-	return fetch(key, func() Map { return hash.NewZipMap() }, setnx...)
+	return fetch(key, func() Map { return hash.New() }, setnx...)
 }
 
 func fetchList(key []byte, setnx ...bool) (List, error) {
@@ -663,10 +663,6 @@ func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {
 		// conversion zipped structure
 		if len(setnx) > 0 && setnx[0] {
 			switch data := object.(type) {
-			case *hash.ZipMap:
-				if data.Len() >= 256 {
-					db.dict.Set(string(key), data.ToMap())
-				}
 			case *hash.ZipSet:
 				if data.Len() >= 512 {
 					db.dict.Set(string(key), data.ToSet())
@@ -696,10 +692,8 @@ func getObjectType(object any) ObjectType {
 		return TypeString
 	case int:
 		return TypeInteger
-	case *hash.Map:
-		return TypeMap
 	case *hash.ZipMap:
-		return TypeZipMap
+		return TypeMap
 	case *hash.Set:
 		return TypeSet
 	case *hash.ZipSet:

@@ -4,6 +4,7 @@ import (
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/resp"
+	"unsafe"
 )
 
 var _ iface.SetI = (*ZipSet)(nil)
@@ -76,4 +77,8 @@ func (zs *ZipSet) Encode(writer *resp.Writer) error {
 
 func (zs *ZipSet) Decode(reader *resp.Reader) error {
 	return zs.data.Decode(reader)
+}
+
+func b2s(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }

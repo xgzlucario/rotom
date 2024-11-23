@@ -12,8 +12,7 @@ const MAX = 10000
 
 func FuzzTestMap(f *testing.F) {
 	stdmap := make(map[string][]byte, MAX)
-	hashmap := NewMap()
-	zipmap := NewZipMap()
+	zipmap := New()
 
 	f.Fuzz(func(t *testing.T, op int, key, val string) {
 		ast := assert.New(t)
@@ -24,59 +23,42 @@ func FuzzTestMap(f *testing.F) {
 			}
 			_, ok := stdmap[key]
 			stdmap[key] = []byte(val)
-			ast.Equal(!ok, hashmap.Set(key, []byte(val)))
 			ast.Equal(!ok, zipmap.Set(key, []byte(val)))
 
 		case 3, 4, 5: // Get
 			val1, ok1 := stdmap[key]
-			val2, ok2 := hashmap.Get(key)
-			val3, ok3 := zipmap.Get(key)
+			val2, ok2 := zipmap.Get(key)
 
 			ast.Equal(string(val1), string(val2))
-			ast.Equal(string(val1), string(val3))
 			ast.Equal(ok1, ok2)
-			ast.Equal(ok1, ok3)
 
 		case 6, 7: // Delete
 			_, ok := stdmap[key]
 			delete(stdmap, key)
-			ast.Equal(ok, hashmap.Remove(key))
 			ast.Equal(ok, zipmap.Remove(key))
 
 		case 8: // Scan
 			n := len(stdmap)
 			kv1 := make([]string, 0, n)
 			kv2 := make([]string, 0, n)
-			kv3 := make([]string, 0, n)
 			for k, v := range stdmap {
 				kv1 = append(kv1, fmt.Sprintf("%s->%s", k, v))
 			}
-			hashmap.Scan(func(k string, v []byte) {
+			zipmap.Scan(func(k string, v []byte) {
 				kv2 = append(kv2, fmt.Sprintf("%s->%s", k, v))
 			})
-			// toMap
-			newMap := zipmap.ToMap()
-			newMap.Scan(func(k string, v []byte) {
-				kv3 = append(kv3, fmt.Sprintf("%s->%s", k, v))
-			})
 			ast.ElementsMatch(kv1, kv2)
-			ast.ElementsMatch(kv1, kv3)
+			ast.ElementsMatch(kv1, kv2)
 
 		case 9: // Encode
 			w := resp.NewWriter(0)
 
-			ast.Nil(hashmap.Encode(w))
-			hashmap = NewMap()
-			ast.Nil(hashmap.Decode(resp.NewReader(w.Bytes())))
-
 			w.Reset()
 			ast.Nil(zipmap.Encode(w))
-			zipmap = NewZipMap()
+			zipmap = New()
 			ast.Nil(zipmap.Decode(resp.NewReader(w.Bytes())))
 
-			n := len(stdmap)
-			ast.Equal(n, hashmap.Len())
-			ast.Equal(n, zipmap.Len())
+			ast.Equal(len(stdmap), zipmap.Len())
 		}
 	})
 }

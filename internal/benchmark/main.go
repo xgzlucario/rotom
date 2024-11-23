@@ -23,17 +23,19 @@ func gcPause() time.Duration {
 }
 
 func genKV(id int) (string, []byte) {
-	k := fmt.Sprintf("%08x", id)
+	k := fmt.Sprintf("key-%010d", id)
 	return k, []byte(k)
 }
 
 func genK(id int) string {
-	return fmt.Sprintf("%08x", id)
+	return fmt.Sprintf("key-%010d", id)
 }
 
 func main() {
 	c := ""
-	flag.StringVar(&c, "obj", "hashmap", "object to bench.")
+	n := 0
+	flag.StringVar(&c, "obj", "hashmap", "")
+	flag.IntVar(&n, "n", 512, "")
 	flag.Parse()
 	fmt.Println(c)
 
@@ -41,20 +43,20 @@ func main() {
 	m := map[int]any{}
 
 	switch c {
-	case "hashmap":
+	case "stdmap":
 		for i := 0; i < 10000; i++ {
-			hm := hash.NewMap()
-			for i := 0; i < 512; i++ {
-				k, v := genKV(i)
-				hm.Set(k, v)
+			hm := map[string][]byte{}
+			for j := 0; j < n; j++ {
+				k, v := genKV(j)
+				hm[k] = v
 			}
 			m[i] = hm
 		}
 	case "zipmap":
 		for i := 0; i < 10000; i++ {
-			hm := hash.NewZipMap()
-			for i := 0; i < 512; i++ {
-				k, v := genKV(i)
+			hm := hash.New()
+			for j := 0; j < n; j++ {
+				k, v := genKV(j)
 				hm.Set(k, v)
 			}
 			m[i] = hm
@@ -62,16 +64,16 @@ func main() {
 	case "zset":
 		for i := 0; i < 10000; i++ {
 			zs := zset.New()
-			for i := 0; i < 512; i++ {
-				zs.Set(genK(i), float64(i))
+			for j := 0; j < n; j++ {
+				zs.Set(genK(j), float64(j))
 			}
 			m[i] = zs
 		}
 	case "zipzset":
 		for i := 0; i < 10000; i++ {
 			zs := zset.NewZipZSet()
-			for i := 0; i < 512; i++ {
-				zs.Set(genK(i), float64(i))
+			for j := 0; j < n; j++ {
+				zs.Set(genK(j), float64(j))
 			}
 			m[i] = zs
 		}
@@ -84,7 +86,6 @@ func main() {
 	runtime.ReadMemStats(&mem)
 	debug.ReadGCStats(&stat)
 
-	fmt.Println("gcsys:", mem.GCSys/1024/1024, "mb")
 	fmt.Println("heap inuse:", mem.HeapInuse/1024/1024, "mb")
 	fmt.Println("heap object:", mem.HeapObjects/1024, "k")
 	fmt.Println("gc:", stat.NumGC)

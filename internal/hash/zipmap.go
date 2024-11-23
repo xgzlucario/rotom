@@ -1,114 +1,113 @@
 package hash
 
 import (
+	"bytes"
 	"encoding/binary"
+	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/resp"
-	"github.com/zeebo/xxh3"
-	"unsafe"
-
-	"github.com/xgzlucario/rotom/internal/list"
 )
 
 var _ iface.MapI = (*ZipMap)(nil)
 
-// ZipMap store data as [entryN, ..., entry1, entry0] in listpack.
 type ZipMap struct {
-	data *list.ListPack
+	unused uint32
+	data   []byte
+	index  *swiss.Map[string, uint32]
 }
 
-func NewZipMap() *ZipMap {
-	return &ZipMap{data: list.NewListPack()}
-}
-
-// entry store as [hash(1), vLen(varint), val, key].
-func (zm *ZipMap) encode(key string, val []byte) string {
-	entry := make([]byte, 0, 2+len(key)+len(val))
-	entry = append(entry, byte(xxh3.HashString(key)))
-	entry = binary.AppendUvarint(entry, uint64(len(val)))
-	entry = append(entry, val...)
-	entry = append(entry, key...)
-	return b2s(entry)
-}
-
-func (*ZipMap) decode(entry []byte) (string, []byte) {
-	entry = entry[1:]
-	vlen, n := binary.Uvarint(entry)
-	val := entry[n : vlen+uint64(n)]
-	key := entry[vlen+uint64(n):]
-	return b2s(key), val
-}
-
-func (zm *ZipMap) seek(key string) (*list.LpIterator, []byte) {
-	hash := byte(xxh3.HashString(key))
-	for it := zm.data.Iterator().SeekLast(); !it.IsFirst(); {
-		entry := it.Prev()
-		if hash == entry[0] {
-			preKey, preVal := zm.decode(entry)
-			if key == preKey {
-				return it, preVal
-			}
-		}
+func New() *ZipMap {
+	return &ZipMap{
+		data:  make([]byte, 0, 64),
+		index: swiss.New[string, uint32](8),
 	}
-	return nil, nil
+}
+
+func (zm *ZipMap) Get(key string) ([]byte, bool) {
+	pos, ok := zm.index.Get(key)
+	if !ok {
+		return nil, false
+	}
+	val, _ := zm.readVal(pos)
+	return val, true
 }
 
 func (zm *ZipMap) Set(key string, val []byte) bool {
-	it, oldVal := zm.seek(key)
-	if it != nil {
+	pos, ok := zm.index.Get(key)
+	// update inplace
+	if ok {
+		oldVal, n := zm.readVal(pos)
 		if len(oldVal) == len(val) {
 			copy(oldVal, val)
 			return false
 		}
-		it.ReplaceNext(zm.encode(key, val))
-		return false
+		// mem trash
+		zm.unused += uint32(n)
 	}
-	zm.data.RPush(zm.encode(key, val))
-	return true
+	zm.index.Put(key, uint32(len(zm.data)))
+	zm.data = binary.AppendUvarint(zm.data, uint64(len(val)))
+	zm.data = append(zm.data, val...)
+	return !ok
 }
 
-func (zm *ZipMap) Get(key string) ([]byte, bool) {
-	it, val := zm.seek(key)
-	if it != nil {
-		return val, true
-	}
-	return nil, false
+func (zm *ZipMap) readVal(pos uint32) ([]byte, int) {
+	data := zm.data[pos:]
+	vlen, n := binary.Uvarint(data)
+	val := data[n : n+int(vlen)]
+	return val, n + int(vlen)
 }
 
 func (zm *ZipMap) Remove(key string) bool {
-	it, _ := zm.seek(key)
-	if it != nil {
-		it.RemoveNext()
-		return true
+	pos, ok := zm.index.Get(key)
+	if ok {
+		zm.index.Delete(key)
+		_, n := zm.readVal(pos)
+		zm.unused += uint32(n)
 	}
-	return false
+	return ok
 }
 
 func (zm *ZipMap) Scan(fn func(string, []byte)) {
-	for it := zm.data.Iterator().SeekLast(); !it.IsFirst(); {
-		key, val := zm.decode(it.Prev())
+	zm.index.All(func(key string, pos uint32) bool {
+		val, _ := zm.readVal(pos)
 		fn(key, val)
-	}
-}
-
-func (zm *ZipMap) ToMap() *Map {
-	m := NewMap()
-	zm.Scan(func(key string, value []byte) {
-		m.Set(key, value)
+		return true
 	})
-	return m
 }
 
-func (zm *ZipMap) Len() int { return zm.data.Size() }
+func (zm *ZipMap) Len() int {
+	return zm.index.Len()
+}
+
+func (zm *ZipMap) Compress() {
+
+}
 
 func (zm *ZipMap) Encode(writer *resp.Writer) error {
-	return zm.data.Encode(writer)
+	writer.WriteArrayHead(zm.Len())
+	zm.Scan(func(k string, v []byte) {
+		writer.WriteBulkString(k)
+		writer.WriteBulk(v)
+	})
+	return nil
 }
 
 func (zm *ZipMap) Decode(reader *resp.Reader) error {
-	return zm.data.Decode(reader)
-}
-
-func b2s(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
+	n, err := reader.ReadArrayHead()
+	if err != nil {
+		return err
+	}
+	*zm = *New()
+	for range n {
+		key, err := reader.ReadBulk()
+		if err != nil {
+			return err
+		}
+		val, err := reader.ReadBulk()
+		if err != nil {
+			return err
+		}
+		zm.Set(string(key), bytes.Clone(val))
+	}
+	return nil
 }
