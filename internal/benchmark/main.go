@@ -37,7 +37,7 @@ func main() {
 	flag.StringVar(&c, "obj", "hashmap", "")
 	flag.IntVar(&n, "n", 512, "")
 	flag.Parse()
-	fmt.Println(c)
+	fmt.Println(c, n)
 
 	start := time.Now()
 	m := map[int]any{}
@@ -77,6 +77,8 @@ func main() {
 			}
 			m[i] = zs
 		}
+	default:
+		panic("unknown flags")
 	}
 
 	cost := time.Since(start)

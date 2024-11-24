@@ -5,20 +5,29 @@ import (
 	"encoding/binary"
 	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/iface"
+	"github.com/xgzlucario/rotom/internal/pool"
 	"github.com/xgzlucario/rotom/internal/resp"
+)
+
+const (
+	migrateThresholdRate = 0.5
+	migrateThresholdSize = 1024
 )
 
 var _ iface.MapI = (*ZipMap)(nil)
 
+var (
+	bpool = pool.NewBufferPool()
+)
+
 type ZipMap struct {
-	unused uint32
+	unused int
 	data   []byte
 	index  *swiss.Map[string, uint32]
 }
 
 func New() *ZipMap {
 	return &ZipMap{
-		data:  make([]byte, 0, 64),
 		index: swiss.New[string, uint32](8),
 	}
 }
@@ -34,7 +43,7 @@ func (zm *ZipMap) Get(key string) ([]byte, bool) {
 
 func (zm *ZipMap) Set(key string, val []byte) bool {
 	pos, ok := zm.index.Get(key)
-	// update inplace
+	// update inplaced
 	if ok {
 		oldVal, n := zm.readVal(pos)
 		if len(oldVal) == len(val) {
@@ -42,12 +51,17 @@ func (zm *ZipMap) Set(key string, val []byte) bool {
 			return false
 		}
 		// mem trash
-		zm.unused += uint32(n)
+		zm.unused += n
+		zm.Migrate()
 	}
-	zm.index.Put(key, uint32(len(zm.data)))
-	zm.data = binary.AppendUvarint(zm.data, uint64(len(val)))
-	zm.data = append(zm.data, val...)
+	zm.data = zm.appendKeyVal(zm.data, key, val)
 	return !ok
+}
+
+func (zm *ZipMap) appendKeyVal(dst []byte, key string, val []byte) []byte {
+	zm.index.Put(key, uint32(len(dst)))
+	dst = binary.AppendUvarint(dst, uint64(len(val)))
+	return append(dst, val...)
 }
 
 func (zm *ZipMap) readVal(pos uint32) ([]byte, int) {
@@ -62,7 +76,9 @@ func (zm *ZipMap) Remove(key string) bool {
 	if ok {
 		zm.index.Delete(key)
 		_, n := zm.readVal(pos)
-		zm.unused += uint32(n)
+		// mem trash
+		zm.unused += n
+		zm.Migrate()
 	}
 	return ok
 }
@@ -75,13 +91,23 @@ func (zm *ZipMap) Scan(fn func(string, []byte)) {
 	})
 }
 
-func (zm *ZipMap) Len() int {
-	return zm.index.Len()
+func (zm *ZipMap) Migrate() {
+	if zm.unused < migrateThresholdSize {
+		return
+	}
+	if float64(zm.unused)/float64(len(zm.data)) < migrateThresholdRate {
+		return
+	}
+	newData := bpool.Get(len(zm.data))
+	zm.Scan(func(key string, val []byte) {
+		newData = zm.appendKeyVal(newData, key, val)
+	})
+	bpool.Put(zm.data)
+	zm.data = newData
+	zm.unused = 0
 }
 
-func (zm *ZipMap) Compress() {
-
-}
+func (zm *ZipMap) Len() int { return zm.index.Len() }
 
 func (zm *ZipMap) Encode(writer *resp.Writer) error {
 	writer.WriteArrayHead(zm.Len())
