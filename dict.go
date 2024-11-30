@@ -18,7 +18,7 @@ func New() *Dict {
 	}
 }
 
-func (dict *Dict) Get(key string) (any, int) {
+func (dict *Dict) Get(key string) (any, int64) {
 	data, ok := dict.data.Get(key)
 	if !ok {
 		// key not exist
@@ -37,7 +37,7 @@ func (dict *Dict) Get(key string) (any, int) {
 		return nil, KeyNotExist
 	}
 
-	return data, int(ts-now) / int(time.Second)
+	return data, (ts - now) / int64(time.Second)
 }
 
 func (dict *Dict) Set(key string, data any) {

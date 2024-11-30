@@ -23,8 +23,8 @@ const (
 )
 
 const (
-	KeepTTL     = redis.KeepTTL
-	KeyNotExist = -2
+	KeepTTL     int64 = redis.KeepTTL
+	KeyNotExist int64 = -2
 )
 
 const (

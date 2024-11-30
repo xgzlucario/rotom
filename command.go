@@ -93,10 +93,14 @@ func pingCommand(writer *resp.Writer, _ []resp.RESP) {
 }
 
 func setCommand(writer *resp.Writer, args []resp.RESP) {
-	key := args[0].ToString()
-	value := args[1].Clone()
+	key := args[0].ToStringUnsafe()
 	extra := args[2:]
 	var ttl int64
+
+	_, ttl = db.dict.Get(key)
+	if ttl == KeyNotExist {
+		key = args[0].ToString() // copy
+	}
 
 	for len(extra) > 0 {
 		arg := extra[0].ToStringUnsafe()
@@ -140,6 +144,7 @@ func setCommand(writer *resp.Writer, args []resp.RESP) {
 		}
 	}
 
+	value := args[1].Clone()
 	db.dict.SetWithTTL(key, value, ttl)
 	writer.WriteSString("OK")
 }
@@ -212,7 +217,7 @@ func hsetCommand(writer *resp.Writer, args []resp.RESP) {
 	var count int
 	for i := 0; i < len(args); i += 2 {
 		field := args[i].ToString()
-		value := args[i+1].Clone()
+		value := args[i+1] // no need to clone
 		if hmap.Set(field, value) {
 			count++
 		}
