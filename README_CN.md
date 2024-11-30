@@ -15,7 +15,6 @@
 3. 实现了 dict, list, map, zipmap, set, zipset, zset 数据结构
 4. RDB 和 AOF 持久化支持
 5. 支持 20 多种常用命令
-6. 支持执行 lua 脚本
 
 ## AELoop 事件循环
 
@@ -39,10 +38,10 @@ AeLoop(Async Event Loop) 是 Redis 的核心异步事件驱动机制，主要有
 rotom 在数据结构上做了许多优化：
 
 - dict：rotom 使用 `stdmap` 作为 db 的哈希表，自带渐进式 rehash 功能
-- hash：当 hash 较小时使用 `zipmap`，较大时使用 `hashmap`
+- hash：基于 `zipmap`，拥有更高的内存效率 
 - set：当 set 较小时使用 `zipset`，较大时使用 `mapset`
 - list：使用基于 `listpack` 的双向链表 `quicklist`
-- zset：基于 `hashmap` + `rbtree`
+- zset：当 zset 较小时使用 `zipzset`，较大时使用 `hash` + `skiplist`
 
 值得一提的是，`zipmap` 和 `zipset` 是空间紧凑的数据结构，它们都基于 `listpack`, 这是 Redis 提出的替代 `ziplist` 的新型压缩列表，支持正序及逆序遍历，解决了 `ziplist` 存在级联更新的问题。
 

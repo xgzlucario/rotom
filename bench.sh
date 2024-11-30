@@ -6,9 +6,9 @@ IMAGE_NAME=$TEST_NAME
 
 OUTPUT_FILE="output/$TEST_NAME"
 
-COMMANDS="set,get,incr,lpush,rpush,lrange,hset,sadd,zadd"
+COMMANDS="set,get,incr,lpush,rpush,hset,sadd,zadd"
 
-PIPELINES=(1 10 50)
+PIPELINES=(1 100 1000)
 
 mkdir -p output
 

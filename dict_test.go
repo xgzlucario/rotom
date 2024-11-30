@@ -20,7 +20,7 @@ func TestDict(t *testing.T) {
 
 		data, ttl = dict.Get("none")
 		assert.Nil(data)
-		assert.Equal(ttl, KEY_NOT_EXIST)
+		assert.Equal(ttl, KeyNotExist)
 	})
 
 	t.Run("setTTL", func(t *testing.T) {
@@ -41,7 +41,7 @@ func TestDict(t *testing.T) {
 
 		// get expired
 		data, ttl = dict.Get("key")
-		assert.Equal(ttl, KEY_NOT_EXIST)
+		assert.Equal(ttl, KeyNotExist)
 		assert.Nil(data)
 
 		// setTTL expired

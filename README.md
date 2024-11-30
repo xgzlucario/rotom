@@ -15,7 +15,6 @@ This is rotom, a high performance, low latency tiny Redis Server written in Go. 
 3. Implements data structures such as dict, list, map, zipmap, set, zipset, and zset.
 4. Supports RDB & AOF.
 5. Supports 20+ commonly used commands.
-6. Supports execute lua scripts.
 
 ## AELoop
 
@@ -37,12 +36,12 @@ In rotom, the AeLoop event loop mechanism in Redis is replicated, specifically:
 ## Data Structures
 
 Rotom has made several optimizations in data structures:
-
+s
 - dict: Rotom uses `stdmap` as the db hash table, with built-in progressive rehashing.
-- hash: Uses `zipmap` when the hash is small and `hashmap` when it is large.
+- hash: Based on `zipmap` with higher memory efficiency.
 - set: Uses `zipset` when the set is small and `mapset` when it is large.
 - list: Uses a `quicklist` based on `listpack` for a doubly linked list.
-- zset: Based on `hashmap` + `rbtree`.
+- zset: Uses `zipzset` when small and `hash` + `skiplist` when it is large.
 
 Notably, `zipmap` and `zipset` are space-efficient data structures based on `listpack`, which is a new compressed list proposed by Redis to replace `ziplist`, supporting both forward and reverse traversal and solving the cascading update issue in `ziplist`.
 

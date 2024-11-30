@@ -11,7 +11,6 @@ import (
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/zset"
-	lua "github.com/yuin/gopher-lua"
 )
 
 var (
@@ -61,7 +60,6 @@ var cmdTable = []*Command{
 	{"zrank", zrankCommand, 2, false},
 	{"zpopmin", zpopminCommand, 1, true},
 	{"zrange", zrangeCommand, 3, false},
-	{"eval", evalCommand, 2, true},
 	{"ping", pingCommand, 0, false},
 	{"hello", helloCommand, 0, false},
 	{"flushdb", flushdbCommand, 0, true},
@@ -130,7 +128,7 @@ func setCommand(writer *resp.Writer, args []resp.RESP) {
 
 			// NX
 		} else if equalFold(arg, NX) {
-			if _, ttl := db.dict.Get(key); ttl != KEY_NOT_EXIST {
+			if _, ttl := db.dict.Get(key); ttl != KeyNotExist {
 				writer.WriteNull()
 				return
 			}
@@ -149,7 +147,7 @@ func setCommand(writer *resp.Writer, args []resp.RESP) {
 func incrCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0].ToString()
 	object, ttl := db.dict.Get(key)
-	if ttl == KEY_NOT_EXIST {
+	if ttl == KeyNotExist {
 		object = 0
 	}
 	switch v := object.(type) {
@@ -175,7 +173,7 @@ func incrCommand(writer *resp.Writer, args []resp.RESP) {
 func getCommand(writer *resp.Writer, args []resp.RESP) {
 	key := args[0].ToStringUnsafe()
 	object, ttl := db.dict.Get(key)
-	if ttl == KEY_NOT_EXIST {
+	if ttl == KeyNotExist {
 		writer.WriteNull()
 		return
 	}
@@ -601,41 +599,6 @@ func saveCommand(writer *resp.Writer, _ []resp.RESP) {
 	writer.WriteSString("OK")
 }
 
-func evalCommand(writer *resp.Writer, args []resp.RESP) {
-	L := server.lua
-	script := args[0].ToString()
-
-	if err := L.DoString(script); err != nil {
-		writer.WriteError(err)
-		return
-	}
-
-	var serialize func(isRoot bool, ret lua.LValue)
-	serialize = func(isRoot bool, ret lua.LValue) {
-		switch res := ret.(type) {
-		case lua.LString:
-			writer.WriteBulkString(res.String())
-
-		case lua.LNumber:
-			writer.WriteInteger(int(res))
-
-		case *lua.LTable:
-			writer.WriteArrayHead(res.Len())
-			res.ForEach(func(index, value lua.LValue) {
-				serialize(false, value)
-			})
-
-		default:
-			writer.WriteNull()
-		}
-
-		if isRoot && ret.Type() != lua.LTNil {
-			L.Pop(1)
-		}
-	}
-	serialize(true, L.Get(-1))
-}
-
 func fetchMap(key []byte, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return hash.New() }, setnx...)
 }
@@ -654,7 +617,7 @@ func fetchZSet(key []byte, setnx ...bool) (ZSet, error) {
 
 func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {
 	object, ttl := db.dict.Get(b2s(key))
-	if ttl != KEY_NOT_EXIST {
+	if ttl != KeyNotExist {
 		v, ok := object.(T)
 		if !ok {
 			return v, errWrongType

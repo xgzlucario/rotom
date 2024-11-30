@@ -165,38 +165,39 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 	})
 
 	t.Run("hash", func(t *testing.T) {
-		// hset
-		res, _ := rdb.HSet(ctx, "map", "k1", "v1").Result()
-		ast.Equal(res, int64(1))
-
-		res, _ = rdb.HSet(ctx, "map", "k2", "v2", "k3", "v3").Result()
-		ast.Equal(res, int64(2))
-
-		res, _ = rdb.HSet(ctx, "map", map[string]any{"k4": "v4", "k5": "v5"}).Result()
-		ast.Equal(res, int64(2))
-
-		res, _ = rdb.HSet(ctx, "map", map[string]any{"k4": "v4", "k5": "v5"}).Result()
-		ast.Equal(res, int64(0))
-
-		// hget
-		{
-			res, _ := rdb.HGet(ctx, "map", "k1").Result()
-			ast.Equal(res, "v1")
-
-			res, err := rdb.HGet(ctx, "map", "k99").Result()
-			ast.Equal(err, redis.Nil)
-			ast.Equal(res, "")
+		var keys, vals []string
+		for i := 0; i < 1000; i++ {
+			keys = append(keys, fmt.Sprintf("key-%08d", i))
+			vals = append(vals, fmt.Sprintf("val-%08d", i))
 		}
 
+		// hset
+		args := make([]string, 0, len(keys)+len(vals))
+		for i, k := range keys {
+			args = append(args, k)
+			args = append(args, vals[i])
+		}
+		res, err := rdb.HSet(ctx, "map", args).Result()
+		ast.Equal(res, int64(1000))
+		ast.Nil(err)
+
+		// hget
+		for i, k := range keys {
+			res, err := rdb.HGet(ctx, "map", k).Result()
+			ast.Equal(res, vals[i])
+			ast.Nil(err)
+		}
+
+		// hgetall
 		resm, _ := rdb.HGetAll(ctx, "map").Result()
-		ast.Equal(resm, map[string]string{"k1": "v1", "k2": "v2", "k3": "v3", "k4": "v4", "k5": "v5"})
+		ast.Equal(len(resm), 1000)
 
 		// hdel
-		res, _ = rdb.HDel(ctx, "map", "k1", "k2", "k3", "k99").Result()
-		ast.Equal(res, int64(3))
+		res, _ = rdb.HDel(ctx, "map", keys[0:10]...).Result()
+		ast.Equal(res, int64(10))
 
 		// error hset
-		_, err := rdb.HSet(ctx, "map").Result()
+		_, err = rdb.HSet(ctx, "map").Result()
 		ast.Contains(err.Error(), errWrongArguments.Error())
 
 		_, err = rdb.HSet(ctx, "map", "k1", "v1", "k2").Result()
@@ -422,33 +423,6 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 
 		_, err = rdb.ZPopMin(ctx, "key").Result()
 		ast.Equal(err.Error(), errWrongType.Error())
-	})
-
-	t.Run("eval", func(t *testing.T) {
-		res, _ := rdb.Eval(ctx, "return {'key1','key2','key3'}", nil).Result()
-		ast.Equal(res, []any{"key1", "key2", "key3"})
-
-		res, _ = rdb.Eval(ctx, "return {1,2,3}", nil).Result()
-		ast.Equal(res, []any{int64(1), int64(2), int64(3)})
-
-		// set
-		_, err := rdb.Eval(ctx, "redis.call('set','xgz','qwe')", nil).Result()
-		ast.Equal(err, redis.Nil)
-
-		res, _ = rdb.Eval(ctx, "return redis.call('set','xgz','qwe')", nil).Result()
-		ast.Equal(res, "OK")
-
-		// get
-		res, _ = rdb.Eval(ctx, "return redis.call('get','xgz')", nil).Result()
-		ast.Equal(res, "qwe")
-
-		// get nil
-		_, err = rdb.Eval(ctx, "return redis.call('get','not-ex-evalkey')", nil).Result()
-		ast.Equal(err, redis.Nil)
-
-		// error call
-		_, err = rdb.Eval(ctx, "return redis.call('myfunc','key')", nil).Result()
-		ast.NotNil(err)
 	})
 
 	t.Run("flushdb", func(t *testing.T) {

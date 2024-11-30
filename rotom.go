@@ -171,6 +171,7 @@ func freeClient(client *Client) {
 	delete(server.clients, client.fd)
 	server.aeLoop.ModDetach(client.fd)
 	_ = net.Close(client.fd)
+	log.Info().Msgf("free client %d", client.fd)
 }
 
 func ProcessQueryBuf(client *Client) {
@@ -240,13 +241,6 @@ func initServer(config *Config) (err error) {
 	if err != nil {
 		return err
 	}
-	// init lua state
-	L := lua.NewState()
-	L.Push(L.NewFunction(OpenRedis))
-	L.Push(lua.LString("redis"))
-	L.Call(1, 0)
-	server.lua = L
-
 	return nil
 }
 

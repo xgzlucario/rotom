@@ -22,7 +22,7 @@ func (dict *Dict) Get(key string) (any, int) {
 	data, ok := dict.data.Get(key)
 	if !ok {
 		// key not exist
-		return nil, KEY_NOT_EXIST
+		return nil, KeyNotExist
 	}
 
 	ts, ok := dict.expire.Get(key)
@@ -34,7 +34,7 @@ func (dict *Dict) Get(key string) (any, int) {
 	now := time.Now().UnixNano()
 	if ts < now {
 		dict.delete(key)
-		return nil, KEY_NOT_EXIST
+		return nil, KeyNotExist
 	}
 
 	return data, int(ts-now) / int(time.Second)

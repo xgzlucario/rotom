@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/alicebob/miniredis/v2 v2.33.0
-	github.com/bytedance/sonic v1.12.4
+	github.com/bytedance/sonic v1.12.5
 	github.com/chen3feng/stl4go v0.1.1
 	github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964
 	github.com/deckarep/golang-set/v2 v2.6.0
