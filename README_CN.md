@@ -20,7 +20,9 @@
 
 AeLoop(Async Event Loop) 是 Redis 的核心异步事件驱动机制，主要有以下部分：
 
-1. FileEvent：使用 IO 多路复用处理网络 socket 上的读写事件。事件分为 `READABLE` 和 `WRIABLE`
+![img](asserts/aeloop.png)
+
+1. FileEvent：使用 IO 多路复用处理网络 socket 上的读写事件。事件分为 `READABLE` 和 `WRITABLE`
 2. TimeEvent：处理需要延迟执行或定时执行的任务，如每隔 `100ms` 进行过期淘汰
 3. 当事件就绪时，通过该事件绑定的回调函数进行处理
 
@@ -47,7 +49,7 @@ rotom 在数据结构上做了许多优化：
 
 ## 性能
 
-![img](bench.jpg)
+![img](asserts/bench.jpg)
 
 测试将在同一台机器上，关闭 `appendonly`，并使用 `redis-benchmark` 工具测试不同命令的 qps。
 

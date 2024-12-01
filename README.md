@@ -20,6 +20,8 @@ This is rotom, a high performance, low latency tiny Redis Server written in Go. 
 
 AeLoop (Async Event Loop) is the core asynchronous event-driven mechanism in Redis, which mainly includes:
 
+![img](asserts/aeloop.png)
+
 1. FileEvent: Uses I/O multiplexing to handle read and write events on network sockets, categorized into `READABLE` and `WRITABLE`.
 2. TimeEvent: Handles tasks that need to be executed after a delay or periodically, such as expiring items every `100ms`.
 3. When events are ready, they are processed by callback functions bound to those events.
@@ -36,7 +38,7 @@ In rotom, the AeLoop event loop mechanism in Redis is replicated, specifically:
 ## Data Structures
 
 Rotom has made several optimizations in data structures:
-s
+
 - dict: Rotom uses `stdmap` as the db hash table, with built-in progressive rehashing.
 - hash: Based on `zipmap` with higher memory efficiency.
 - set: Uses `zipset` when the set is small and `mapset` when it is large.
@@ -47,7 +49,7 @@ Notably, `zipmap` and `zipset` are space-efficient data structures based on `lis
 
 ## Benchmark
 
-![img](bench.jpg)
+![img](asserts/bench.jpg)
 
 The test will run rotom on the same machine with `appendonly` disabled, and use `redis-benchmark` tool to test the latency of different commands.
 
