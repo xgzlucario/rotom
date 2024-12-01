@@ -10,11 +10,12 @@ This is rotom, a high performance, low latency tiny Redis Server written in Go. 
 
 ## Features
 
-1. Implements the AeLoop single-threaded event loop from Redis using the epoll network model.
-2. Compatible with the Redis RESP protocol, allowing any Redis client to connect to rotom.
-3. Implements data structures such as dict, list, map, zipmap, set, zipset, and zset.
-4. Supports RDB & AOF.
-5. Supports 20+ commonly used commands.
+- Implements the AeLoop single-threaded event loop from Redis using the epoll network model.
+- Excellent optimization, achieving native Redis performance.
+- Compatible with the Redis RESP protocol, allowing any Redis client to connected.
+- Implements data structures String, Hash, Set, List, ZSet.
+- Supports RDB & AOF.
+- Supports 20+ commonly used commands.
 
 ## AELoop
 
@@ -60,24 +61,11 @@ pkg: github.com/xgzlucario/rotom
 cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ```
 
-```
-	redis	rotom	redis_P10	rotom_P10	redis_P50	rotom_P50
-SET	268817	268817	2222222	2173913	3448276	5263158
-GET	265957	259740	2702702	1818181	4347826	4545454
-INCR	271739	261780	2500000	2439024	4347826	7692307
-LPUSH	289017	282485	2083333	2272727	2941176	4347826
-RPUSH	283286	271739	2272727	2439024	3333333	7692307
-SADD	273972	269541	2439024	2631579	4000000	7142857
-HSET	282485	277777	2000000	2127659	3030303	3703703
-ZADD	273224	272479	1960784	2702702	2941176	6249999
-```
-
 ## Roadmap
 
-- Support for LRU cache and memory eviction.
-- Support for gradual rehashing in dict.
-- Support for RDB and AOF Rewrite.
-- Compatibility with more commonly used commands.
+- [ ] Support for LRU cache and memory eviction.
+- [ ] Gradually rehashing in dict.
+- [ ] RDB and AOF Rewrite.
 
 ## Usage
 

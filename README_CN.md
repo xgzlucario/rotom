@@ -10,11 +10,12 @@
 
 ## 特性
 
-1. 基于 epoll 网络模型，还原了 Redis 中的 AeLoop 单线程事件循环
-2. 兼容 Redis RESP 协议，你可以使用任何 redis 客户端连接 rotom
-3. 实现了 dict, list, map, zipmap, set, zipset, zset 数据结构
-4. RDB 和 AOF 持久化支持
-5. 支持 20 多种常用命令
+- 基于 epoll 网络模型，还原了 Redis 中的 AeLoop 单线程事件循环
+- 非常好的优化，达到原生 Redis 的性能
+- 兼容 Redis RESP 协议，可以使用任何 redis 客户端连接
+- 实现了 String, Hash, Set, List, ZSet 数据结构
+- RDB 和 AOF 持久化支持 
+- 支持 20 多种常用命令
 
 ## AELoop 事件循环
 
@@ -58,18 +59,6 @@ goos: linux
 goarch: amd64
 pkg: github.com/xgzlucario/rotom
 cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
-```
-
-```
-	redis	rotom	redis_P10	rotom_P10	redis_P50	rotom_P50
-SET	268817	268817	2222222	2173913	3448276	5263158
-GET	265957	259740	2702702	1818181	4347826	4545454
-INCR	271739	261780	2500000	2439024	4347826	7692307
-LPUSH	289017	282485	2083333	2272727	2941176	4347826
-RPUSH	283286	271739	2272727	2439024	3333333	7692307
-SADD	273972	269541	2439024	2631579	4000000	7142857
-HSET	282485	277777	2000000	2127659	3030303	3703703
-ZADD	273224	272479	1960784	2702702	2941176	6249999
 ```
 
 ## 计划
