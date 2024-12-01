@@ -3,7 +3,6 @@ package hash
 import (
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/xgzlucario/rotom/internal/iface"
-	"github.com/xgzlucario/rotom/internal/resp"
 )
 
 const (
@@ -38,22 +37,3 @@ func (s Set) Scan(fn func(string)) {
 func (s Set) Exist(key string) bool { return s.Set.ContainsOne(key) }
 
 func (s Set) Len() int { return s.Cardinality() }
-
-func (s Set) Encode(writer *resp.Writer) error {
-	writer.WriteArray(s.Len())
-	s.Scan(func(key string) {
-		writer.WriteBulkString(key)
-	})
-	return nil
-}
-
-func (s Set) Decode(reader *resp.Reader) error {
-	cmd, err := reader.ReadCommand()
-	if err != nil {
-		return err
-	}
-	for _, arg := range cmd.Args {
-		s.Add(string(arg))
-	}
-	return nil
-}

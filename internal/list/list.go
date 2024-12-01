@@ -2,7 +2,6 @@ package list
 
 import (
 	"github.com/xgzlucario/rotom/internal/iface"
-	"github.com/xgzlucario/rotom/internal/resp"
 	"github.com/zyedidia/generic/list"
 )
 
@@ -129,34 +128,4 @@ func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 			return
 		}
 	}
-}
-
-func (ls *QuickList) Encode(writer *resp.Writer) error {
-	num := 0
-	for n := ls.ls.Front; n != nil; n = n.Next {
-		num++
-	}
-	writer.WriteArray(num)
-	for n := ls.ls.Front; n != nil; n = n.Next {
-		if err := n.Value.Encode(writer); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (ls *QuickList) Decode(reader *resp.Reader) error {
-	//n, err := reader.ReadCommand()
-	//if err != nil {
-	//	return err
-	//}
-	//for range n {
-	//	lp := NewListPack()
-	//	if err = lp.Decode(reader); err != nil {
-	//		return err
-	//	}
-	//	ls.ls.PushBack(lp)
-	//	ls.size += lp.Len()
-	//}
-	return nil
 }

@@ -2,11 +2,9 @@ package zset
 
 import (
 	"cmp"
+	"github.com/chen3feng/stl4go"
 	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/iface"
-	"github.com/xgzlucario/rotom/internal/resp"
-
-	"github.com/chen3feng/stl4go"
 )
 
 var (
@@ -98,37 +96,4 @@ func (z *ZSet) Scan(fn func(key string, score float64)) {
 
 func (z *ZSet) Len() int {
 	return z.m.Len()
-}
-
-func (z *ZSet) Encode(writer *resp.Writer) error {
-	writer.WriteArray(z.Len())
-	z.m.All(func(k string, s float64) bool {
-		writer.WriteBulkString(k)
-		writer.WriteFloat(s)
-		return true
-	})
-	return nil
-}
-
-func (z *ZSet) Decode(reader *resp.Reader) error {
-	//cmd, err := reader.ReadCommand()
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//
-	//for range n {
-	//	buf, err := reader.ReadBulk()
-	//	if err != nil {
-	//		return err
-	//	}
-	//	score, err := reader.ReadFloat()
-	//	if err != nil {
-	//		return err
-	//	}
-	//	key := string(buf)
-	//	z.skl.Insert(node{key, score}, struct{}{})
-	//	z.m.Put(key, score)
-	//}
-	return nil
 }

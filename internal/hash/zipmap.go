@@ -5,7 +5,6 @@ import (
 	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/pool"
-	"github.com/xgzlucario/rotom/internal/resp"
 )
 
 const (
@@ -107,25 +106,3 @@ func (zm *ZipMap) Migrate() {
 }
 
 func (zm *ZipMap) Len() int { return zm.index.Len() }
-
-func (zm *ZipMap) Encode(writer *resp.Writer) error {
-	writer.WriteArray(zm.Len() * 2)
-	zm.Scan(func(k string, v []byte) {
-		writer.WriteBulkString(k)
-		writer.WriteBulk(v)
-	})
-	return nil
-}
-
-func (zm *ZipMap) Decode(reader *resp.Reader) error {
-	cmd, err := reader.ReadCommand()
-	if err != nil {
-		return err
-	}
-	for i := 0; i < len(cmd.Args); i += 2 {
-		key := cmd.Args[i]
-		val := cmd.Args[i+1]
-		zm.Set(string(key), val)
-	}
-	return nil
-}

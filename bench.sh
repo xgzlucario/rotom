@@ -8,7 +8,7 @@ OUTPUT_FILE="output/$TEST_NAME"
 
 COMMANDS="set,get,incr,lpush,rpush,hset,sadd,zadd"
 
-PIPELINES=(1 10 100)
+PIPELINES=(1 10 50)
 
 mkdir -p output
 

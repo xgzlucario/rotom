@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/list"
-	"github.com/xgzlucario/rotom/internal/resp"
 	"math"
 	"unsafe"
 )
@@ -120,14 +119,6 @@ func (zs *ZipZSet) ToZSet() *ZSet {
 		zs2.Set(key, score)
 	})
 	return zs2
-}
-
-func (zs *ZipZSet) Encode(writer *resp.Writer) error {
-	return zs.data.Encode(writer)
-}
-
-func (zs *ZipZSet) Decode(reader *resp.Reader) error {
-	return zs.data.Decode(reader)
 }
 
 func b2s(b []byte) string {

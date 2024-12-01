@@ -3,7 +3,6 @@ package list
 import (
 	"encoding/binary"
 	"github.com/xgzlucario/rotom/internal/pool"
-	"github.com/xgzlucario/rotom/internal/resp"
 	"slices"
 )
 
@@ -75,22 +74,6 @@ type LpIterator struct {
 
 func (lp *ListPack) Iterator() *LpIterator {
 	return &LpIterator{ListPack: lp}
-}
-
-func (lp *ListPack) Encode(writer *resp.Writer) error {
-	writer.WriteInt(int(lp.size))
-	writer.WriteBulk(lp.data)
-	return nil
-}
-
-func (lp *ListPack) Decode(reader *resp.Reader) error {
-	//cmd, err := reader.ReadCommand()
-	//if err != nil {
-	//	return err
-	//}
-	//lp.size = uint32(redcon.RESP{Data: cmd.Args[0]}.Int())
-	//lp.data = bytes.Clone(cmd.Args[1])
-	return nil
 }
 
 func (it *LpIterator) SeekLast() *LpIterator {

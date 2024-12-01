@@ -1,4 +1,0 @@
-go test fuzz v1
-int(79)
-string("\xbc")
-string("\x9a")

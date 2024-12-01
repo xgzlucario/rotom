@@ -3,7 +3,6 @@ package hash
 import (
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/list"
-	"github.com/xgzlucario/rotom/internal/resp"
 	"unsafe"
 )
 
@@ -69,14 +68,6 @@ func (zs *ZipSet) ToSet() *Set {
 		s.Add(key)
 	})
 	return s
-}
-
-func (zs *ZipSet) Encode(writer *resp.Writer) error {
-	return zs.data.Encode(writer)
-}
-
-func (zs *ZipSet) Decode(reader *resp.Reader) error {
-	return zs.data.Decode(reader)
 }
 
 func b2s(b []byte) string {

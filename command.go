@@ -65,8 +65,8 @@ var cmdTable = []*Command{
 	{"ping", pingCommand, 0, false},
 	{"hello", helloCommand, 0, false},
 	{"flushdb", flushdbCommand, 0, true},
-	{"load", loadCommand, 0, false},
-	{"save", saveCommand, 0, false},
+	//{"load", loadCommand, 0, false},
+	//{"save", saveCommand, 0, false},
 }
 
 func equalFold(a, b string) bool {
@@ -526,22 +526,22 @@ func helloCommand(writer *resp.Writer, _ []redcon.RESP) {
 	})
 }
 
-func loadCommand(writer *resp.Writer, _ []redcon.RESP) {
-	db.dict = New()
-	if err := db.rdb.LoadDB(); err != nil {
-		writer.WriteError(err.Error())
-		return
-	}
-	writer.WriteString("OK")
-}
-
-func saveCommand(writer *resp.Writer, _ []redcon.RESP) {
-	if err := db.rdb.SaveDB(); err != nil {
-		writer.WriteError(err.Error())
-		return
-	}
-	writer.WriteString("OK")
-}
+//func loadCommand(writer *resp.Writer, _ []redcon.RESP) {
+//	db.dict = New()
+//	if err := db.rdb.LoadDB(); err != nil {
+//		writer.WriteError(err.Error())
+//		return
+//	}
+//	writer.WriteString("OK")
+//}
+//
+//func saveCommand(writer *resp.Writer, _ []redcon.RESP) {
+//	if err := db.rdb.SaveDB(); err != nil {
+//		writer.WriteError(err.Error())
+//		return
+//	}
+//	writer.WriteString("OK")
+//}
 
 func fetchMap(key []byte, setnx ...bool) (Map, error) {
 	return fetch(key, func() Map { return hash.New() }, setnx...)

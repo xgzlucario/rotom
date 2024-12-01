@@ -10,7 +10,6 @@ import (
 	"os"
 
 	"github.com/xgzlucario/rotom/internal/list"
-	lua "github.com/yuin/gopher-lua"
 )
 
 const (
@@ -28,7 +27,7 @@ type (
 type DB struct {
 	dict *Dict
 	aof  *Aof
-	rdb  *Rdb
+	//rdb  *Rdb
 }
 
 type Client struct {
@@ -47,7 +46,6 @@ type Server struct {
 	config  *Config
 	aeLoop  *AeLoop
 	clients map[int]*Client
-	lua     *lua.LState
 }
 
 type Config struct {
@@ -68,11 +66,11 @@ func InitDB(config *Config) (err error) {
 	db.dict = New()
 
 	if config.Save {
-		db.rdb = NewRdb(config.SaveFileName)
-		log.Debug().Msg("start loading rdb file...")
-		if err = db.rdb.LoadDB(); err != nil {
-			return err
-		}
+		//db.rdb = NewRdb(config.SaveFileName)
+		//log.Debug().Msg("start loading rdb file...")
+		//if err = db.rdb.LoadDB(); err != nil {
+		//	return err
+		//}
 	}
 	if config.AppendOnly {
 		db.aof, err = NewAof(config.AppendFileName)
