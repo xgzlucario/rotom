@@ -2,11 +2,9 @@ package main
 
 import (
 	"bytes"
-	"github.com/xgzlucario/rotom/internal/resp"
+	"github.com/tidwall/redcon"
 	"io"
 	"os"
-
-	"github.com/tidwall/mmap"
 )
 
 // Aof manages an append-only file system for storing data.
@@ -39,28 +37,24 @@ func (a *Aof) Flush() error {
 	return a.file.Sync()
 }
 
-func (a *Aof) Read(fn func(args []resp.RESP)) error {
-	// Read file data by mmap.
-	data, err := mmap.MapFile(a.file, false)
-	if len(data) == 0 {
-		return nil
-	}
+func (a *Aof) Read(fn func(args []redcon.RESP)) error {
+	rd := redcon.NewReader(a.file)
+	cmds, err := rd.ReadCommands()
 	if err != nil {
+		if err == io.EOF {
+			return nil
+		}
 		return err
 	}
+	respBuf := make([]redcon.RESP, 8)
 
 	// Iterate over the records in the file, applying the function to each.
-	reader := resp.NewReader(data)
-	argsBuf := make([]resp.RESP, 8)
-	for {
-		args, _, err := reader.ReadNextCommand(argsBuf)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return err
+	for _, cmd := range cmds {
+		respBuf = respBuf[:0]
+		for _, arg := range cmd.Args {
+			respBuf = append(respBuf, redcon.RESP{Data: arg})
 		}
-		fn(args)
+		fn(respBuf)
 	}
 	return nil
 }

@@ -40,7 +40,7 @@ func (s Set) Exist(key string) bool { return s.Set.ContainsOne(key) }
 func (s Set) Len() int { return s.Cardinality() }
 
 func (s Set) Encode(writer *resp.Writer) error {
-	writer.WriteArrayHead(s.Len())
+	writer.WriteArray(s.Len())
 	s.Scan(func(key string) {
 		writer.WriteBulkString(key)
 	})
@@ -48,16 +48,12 @@ func (s Set) Encode(writer *resp.Writer) error {
 }
 
 func (s Set) Decode(reader *resp.Reader) error {
-	n, err := reader.ReadArrayHead()
+	cmd, err := reader.ReadCommand()
 	if err != nil {
 		return err
 	}
-	for range n {
-		key, err := reader.ReadBulk()
-		if err != nil {
-			return err
-		}
-		s.Add(string(key))
+	for _, arg := range cmd.Args {
+		s.Add(string(arg))
 	}
 	return nil
 }

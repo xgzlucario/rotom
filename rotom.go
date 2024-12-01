@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"github.com/bytedance/sonic"
+	"github.com/tidwall/redcon"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/net"
 	"github.com/xgzlucario/rotom/internal/resp"
-	"io"
 	"os"
 
 	"github.com/xgzlucario/rotom/internal/list"
@@ -14,9 +14,7 @@ import (
 )
 
 const (
-	QueryBufSize = 8 * KB
-	WriteBufSize = 8 * KB
-
+	QueryBufSize    = 8 * KB
 	MaxQueryDataLen = 128 * MB
 )
 
@@ -38,8 +36,10 @@ type Client struct {
 	recvx       int
 	readx       int
 	queryBuf    []byte
-	argsBuf     []resp.RESP
 	replyWriter *resp.Writer
+
+	argsBuf [][]byte
+	respBuf []redcon.RESP
 }
 
 type Server struct {
@@ -82,10 +82,9 @@ func InitDB(config *Config) (err error) {
 		log.Debug().Msg("start loading aof file...")
 
 		// Load the initial data into memory by processing each stored command.
-		emptyWriter := resp.NewWriter(WriteBufSize)
-		return db.aof.Read(func(args []resp.RESP) {
-			command := args[0].ToStringUnsafe()
-
+		emptyWriter := resp.NewWriter()
+		return db.aof.Read(func(args []redcon.RESP) {
+			command := b2s(args[0].Bytes())
 			cmd, err := lookupCommand(command)
 			if err == nil {
 				cmd.process(emptyWriter, args[1:])
@@ -117,11 +116,13 @@ func AcceptHandler(loop *AeLoop, fd int, _ interface{}) {
 		return
 	}
 	log.Info().Msgf("accept new client fd: %d", cfd)
+
 	client := &Client{
 		fd:          cfd,
-		replyWriter: resp.NewWriter(WriteBufSize),
+		replyWriter: resp.NewWriter(),
 		queryBuf:    make([]byte, QueryBufSize),
-		argsBuf:     make([]resp.RESP, 8),
+		argsBuf:     make([][]byte, 8),
+		respBuf:     make([]redcon.RESP, 8),
 	}
 	server.clients[cfd] = client
 	loop.AddRead(cfd, ReadQueryFromClient, client)
@@ -175,44 +176,51 @@ func freeClient(client *Client) {
 }
 
 func ProcessQueryBuf(client *Client) {
-	queryBuf := client.queryBuf[client.readx:client.recvx]
+	for client.readx < client.recvx {
+		queryBuf := client.queryBuf[client.readx:client.recvx]
+		// buffer pre alloc
+		respBuf := client.respBuf[:0]
+		argsBuf := client.argsBuf[:0]
 
-	reader := resp.NewReader(queryBuf)
-	for {
-		args, n, err := reader.ReadNextCommand(client.argsBuf)
+		complete, args, _, left, err := redcon.ReadNextCommand(queryBuf, argsBuf)
 		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Error().Msgf("read resp error: %v", err)
+			log.Error().Msgf("read next command error: %v", err)
+			resetClient(client)
 			return
 		}
+		if !complete {
+			break
+		}
+		n := len(queryBuf) - len(left)
 		client.readx += n
 
-		command := args[0].ToStringUnsafe()
-		args = args[1:]
+		command := b2s(args[0])
+		for _, arg := range args[1:] {
+			respBuf = append(respBuf, redcon.RESP{Data: arg})
+		}
 
 		cmd, err := lookupCommand(command)
 		if err != nil {
-			client.replyWriter.WriteError(err)
+			client.replyWriter.WriteError(err.Error())
 			log.Error().Msg(err.Error())
 
 		} else {
-			cmd.process(client.replyWriter, args)
+			cmd.process(client.replyWriter, respBuf)
 			// write aof file
 			if cmd.persist && server.config.AppendOnly {
-				_, _ = db.aof.Write(queryBuf)
+				_, _ = db.aof.Write(queryBuf[:n])
 			}
 		}
-
-		resetClient(client)
-		server.aeLoop.ModWrite(client.fd, SendReplyToClient, client)
 	}
+	if client.readx == client.recvx {
+		resetClient(client)
+	}
+	server.aeLoop.ModWrite(client.fd, SendReplyToClient, client)
 }
 
 func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	client := extra.(*Client)
-	sentbuf := client.replyWriter.Bytes()
+	sentbuf := client.replyWriter.Buffer()
 
 	n, err := net.Write(fd, sentbuf)
 	if err != nil {

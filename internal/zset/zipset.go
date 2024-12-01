@@ -111,7 +111,7 @@ func (zs *ZipZSet) Scan(fn func(key string, score float64)) {
 }
 
 func (zs *ZipZSet) Len() int {
-	return zs.data.Size()
+	return zs.data.Len()
 }
 
 func (zs *ZipZSet) ToZSet() *ZSet {

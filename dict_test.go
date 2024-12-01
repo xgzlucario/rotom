@@ -8,19 +8,19 @@ import (
 )
 
 func TestDict(t *testing.T) {
-	assert := assert.New(t)
+	ast := assert.New(t)
 
 	t.Run("set", func(t *testing.T) {
 		dict := New()
 		dict.Set("key", []byte("hello"))
 
 		data, ttl := dict.Get("key")
-		assert.Equal(ttl, KeepTTL)
-		assert.Equal(data, []byte("hello"))
+		ast.Equal(ttl, KeepTTL)
+		ast.Equal(data, []byte("hello"))
 
 		data, ttl = dict.Get("none")
-		assert.Nil(data)
-		assert.Equal(ttl, KeyNotExist)
+		ast.Nil(data)
+		ast.Equal(ttl, KeyNotExist)
 	})
 
 	t.Run("setTTL", func(t *testing.T) {
@@ -30,24 +30,24 @@ func TestDict(t *testing.T) {
 		time.Sleep(time.Second / 10)
 
 		data, ttl := dict.Get("key")
-		assert.Equal(ttl, int64(59))
-		assert.Equal(data, []byte("hello"))
+		ast.Equal(ttl, int64(59))
+		ast.Equal(data, []byte("hello"))
 
 		res := dict.SetTTL("key", time.Now().Add(-time.Second).UnixNano())
-		assert.Equal(res, 1)
+		ast.Equal(res, 1)
 
 		res = dict.SetTTL("not-exist", KeepTTL)
-		assert.Equal(res, 0)
+		ast.Equal(res, 0)
 
 		// get expired
 		data, ttl = dict.Get("key")
-		assert.Equal(ttl, KeyNotExist)
-		assert.Nil(data)
+		ast.Equal(ttl, KeyNotExist)
+		ast.Nil(data)
 
 		// setTTL expired
 		dict.SetWithTTL("keyx", []byte("hello"), time.Now().Add(-time.Second).UnixNano())
 		res = dict.SetTTL("keyx", 1)
-		assert.Equal(res, 0)
+		ast.Equal(res, 0)
 	})
 
 	t.Run("delete", func(t *testing.T) {
@@ -55,13 +55,13 @@ func TestDict(t *testing.T) {
 		dict.Set("key", []byte("hello"))
 
 		ok := dict.Delete("key")
-		assert.True(ok)
+		ast.True(ok)
 
 		ok = dict.Delete("none")
-		assert.False(ok)
+		ast.False(ok)
 
 		dict.SetWithTTL("keyx", []byte("hello"), time.Now().UnixNano())
 		ok = dict.Delete("keyx")
-		assert.True(ok)
+		ast.True(ok)
 	})
 }

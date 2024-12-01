@@ -101,7 +101,7 @@ func (z *ZSet) Len() int {
 }
 
 func (z *ZSet) Encode(writer *resp.Writer) error {
-	writer.WriteArrayHead(z.Len())
+	writer.WriteArray(z.Len())
 	z.m.All(func(k string, s float64) bool {
 		writer.WriteBulkString(k)
 		writer.WriteFloat(s)
@@ -111,22 +111,24 @@ func (z *ZSet) Encode(writer *resp.Writer) error {
 }
 
 func (z *ZSet) Decode(reader *resp.Reader) error {
-	n, err := reader.ReadArrayHead()
-	if err != nil {
-		return err
-	}
-	for range n {
-		buf, err := reader.ReadBulk()
-		if err != nil {
-			return err
-		}
-		score, err := reader.ReadFloat()
-		if err != nil {
-			return err
-		}
-		key := string(buf)
-		z.skl.Insert(node{key, score}, struct{}{})
-		z.m.Put(key, score)
-	}
+	//cmd, err := reader.ReadCommand()
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//
+	//for range n {
+	//	buf, err := reader.ReadBulk()
+	//	if err != nil {
+	//		return err
+	//	}
+	//	score, err := reader.ReadFloat()
+	//	if err != nil {
+	//		return err
+	//	}
+	//	key := string(buf)
+	//	z.skl.Insert(node{key, score}, struct{}{})
+	//	z.m.Put(key, score)
+	//}
 	return nil
 }

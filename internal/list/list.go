@@ -61,7 +61,7 @@ func (ls *QuickList) RPush(keys ...string) {
 }
 
 func (ls *QuickList) LPop() (key string, ok bool) {
-	if ls.Size() == 0 {
+	if ls.Len() == 0 {
 		return
 	}
 	for n := ls.ls.Front; n != nil && n.Value.size == 0; n = n.Next {
@@ -72,7 +72,7 @@ func (ls *QuickList) LPop() (key string, ok bool) {
 }
 
 func (ls *QuickList) RPop() (key string, ok bool) {
-	if ls.Size() == 0 {
+	if ls.Len() == 0 {
 		return
 	}
 	for n := ls.ls.Back; n != nil && n.Value.size == 0; n = n.Prev {
@@ -82,31 +82,31 @@ func (ls *QuickList) RPop() (key string, ok bool) {
 	return ls.tail().RPop()
 }
 
-func (ls *QuickList) Size() int { return ls.size }
+func (ls *QuickList) Len() int { return ls.size }
 
 func (ls *QuickList) RangeCount(start, stop int) int {
 	if start < 0 {
-		start += ls.Size()
+		start += ls.Len()
 	}
 	if stop < 0 {
-		stop += ls.Size()
+		stop += ls.Len()
 	}
 	start = max(0, start)
-	stop = min(ls.Size(), stop)
+	stop = min(ls.Len(), stop)
 	if start <= stop {
-		return min(ls.Size(), stop-start+1)
+		return min(ls.Len(), stop-start+1)
 	}
 	return 0
 }
 
 func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 	if start < 0 {
-		start += ls.Size()
+		start += ls.Len()
 	}
 
 	lp := ls.ls.Front
-	for lp != nil && start > lp.Value.Size() {
-		start -= lp.Value.Size()
+	for lp != nil && start > lp.Value.Len() {
+		start -= lp.Value.Len()
 		lp = lp.Next
 	}
 	if lp == nil {
@@ -120,7 +120,7 @@ func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 	for {
 		if it.IsLast() {
 			lp = lp.Next
-			if lp == nil || lp.Value.Size() == 0 {
+			if lp == nil || lp.Value.Len() == 0 {
 				return
 			}
 			it = lp.Value.Iterator()
@@ -136,7 +136,7 @@ func (ls *QuickList) Encode(writer *resp.Writer) error {
 	for n := ls.ls.Front; n != nil; n = n.Next {
 		num++
 	}
-	writer.WriteArrayHead(num)
+	writer.WriteArray(num)
 	for n := ls.ls.Front; n != nil; n = n.Next {
 		if err := n.Value.Encode(writer); err != nil {
 			return err
@@ -146,17 +146,17 @@ func (ls *QuickList) Encode(writer *resp.Writer) error {
 }
 
 func (ls *QuickList) Decode(reader *resp.Reader) error {
-	n, err := reader.ReadArrayHead()
-	if err != nil {
-		return err
-	}
-	for range n {
-		lp := NewListPack()
-		if err = lp.Decode(reader); err != nil {
-			return err
-		}
-		ls.ls.PushBack(lp)
-		ls.size += lp.Size()
-	}
+	//n, err := reader.ReadCommand()
+	//if err != nil {
+	//	return err
+	//}
+	//for range n {
+	//	lp := NewListPack()
+	//	if err = lp.Decode(reader); err != nil {
+	//		return err
+	//	}
+	//	ls.ls.PushBack(lp)
+	//	ls.size += lp.Len()
+	//}
 	return nil
 }

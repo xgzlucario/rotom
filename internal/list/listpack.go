@@ -1,7 +1,6 @@
 package list
 
 import (
-	"bytes"
 	"encoding/binary"
 	"github.com/xgzlucario/rotom/internal/pool"
 	"github.com/xgzlucario/rotom/internal/resp"
@@ -38,7 +37,7 @@ func NewListPack() *ListPack {
 	return &ListPack{data: bpool.Get(32)[:0]}
 }
 
-func (lp *ListPack) Size() int {
+func (lp *ListPack) Len() int {
 	return int(lp.size)
 }
 
@@ -54,14 +53,14 @@ func (lp *ListPack) RPush(data ...string) {
 }
 
 func (lp *ListPack) LPop() (val string, ok bool) {
-	if lp.Size() == 0 {
+	if lp.Len() == 0 {
 		return
 	}
 	return lp.Iterator().RemoveNext(), true
 }
 
 func (lp *ListPack) RPop() (val string, ok bool) {
-	if lp.Size() == 0 {
+	if lp.Len() == 0 {
 		return
 	}
 	it := lp.Iterator().SeekLast()
@@ -79,22 +78,18 @@ func (lp *ListPack) Iterator() *LpIterator {
 }
 
 func (lp *ListPack) Encode(writer *resp.Writer) error {
-	writer.WriteInteger(int(lp.size))
+	writer.WriteInt(int(lp.size))
 	writer.WriteBulk(lp.data)
 	return nil
 }
 
 func (lp *ListPack) Decode(reader *resp.Reader) error {
-	n, err := reader.ReadInteger()
-	if err != nil {
-		return err
-	}
-	data, err := reader.ReadBulk()
-	if err != nil {
-		return err
-	}
-	lp.size = uint32(n)
-	lp.data = bytes.Clone(data)
+	//cmd, err := reader.ReadCommand()
+	//if err != nil {
+	//	return err
+	//}
+	//lp.size = uint32(redcon.RESP{Data: cmd.Args[0]}.Int())
+	//lp.data = bytes.Clone(cmd.Args[1])
 	return nil
 }
 

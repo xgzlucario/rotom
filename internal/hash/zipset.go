@@ -61,7 +61,7 @@ func (zs *ZipSet) Pop() (string, bool) {
 	return zs.data.RPop()
 }
 
-func (zs *ZipSet) Len() int { return zs.data.Size() }
+func (zs *ZipSet) Len() int { return zs.data.Len() }
 
 func (zs *ZipSet) ToSet() *Set {
 	s := NewSet()

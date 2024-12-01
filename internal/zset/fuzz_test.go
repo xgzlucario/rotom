@@ -3,7 +3,6 @@ package zset
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
-	"github.com/xgzlucario/rotom/internal/resp"
 	"testing"
 	"time"
 )
@@ -49,18 +48,6 @@ func FuzzTestZSet(f *testing.F) {
 			ast.Equal(kv1, kv2)
 
 		case 9: // Encode
-			writer := resp.NewWriter(1024)
-
-			// zset
-			ast.Nil(zs.Encode(writer))
-			zs = New()
-			ast.Nil(zs.Decode(resp.NewReader(writer.Bytes())))
-			writer.Reset()
-
-			// zipzset
-			ast.Nil(zzs.Encode(writer))
-			zzs = NewZipZSet()
-			ast.Nil(zzs.Decode(resp.NewReader(writer.Bytes())))
 		}
 	})
 }

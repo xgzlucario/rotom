@@ -1,7 +1,6 @@
 package hash
 
 import (
-	"bytes"
 	"encoding/binary"
 	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/iface"
@@ -110,7 +109,7 @@ func (zm *ZipMap) Migrate() {
 func (zm *ZipMap) Len() int { return zm.index.Len() }
 
 func (zm *ZipMap) Encode(writer *resp.Writer) error {
-	writer.WriteArrayHead(zm.Len())
+	writer.WriteArray(zm.Len() * 2)
 	zm.Scan(func(k string, v []byte) {
 		writer.WriteBulkString(k)
 		writer.WriteBulk(v)
@@ -119,21 +118,14 @@ func (zm *ZipMap) Encode(writer *resp.Writer) error {
 }
 
 func (zm *ZipMap) Decode(reader *resp.Reader) error {
-	n, err := reader.ReadArrayHead()
+	cmd, err := reader.ReadCommand()
 	if err != nil {
 		return err
 	}
-	*zm = *New()
-	for range n {
-		key, err := reader.ReadBulk()
-		if err != nil {
-			return err
-		}
-		val, err := reader.ReadBulk()
-		if err != nil {
-			return err
-		}
-		zm.Set(string(key), bytes.Clone(val))
+	for i := 0; i < len(cmd.Args); i += 2 {
+		key := cmd.Args[i]
+		val := cmd.Args[i+1]
+		zm.Set(string(key), val)
 	}
 	return nil
 }

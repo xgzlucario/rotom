@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/xgzlucario/rotom/internal/resp"
+	"github.com/tidwall/redcon"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,19 +24,19 @@ func TestAof(t *testing.T) {
 	t.Run("read", func(t *testing.T) {
 		aof, err := NewAof("test.aof")
 		ast.Nil(err)
-		_ = aof.Read(func(args []resp.RESP) {
+		_ = aof.Read(func(args []redcon.RESP) {
 			// SET foo bar
 			ast.Equal(len(args), 3)
-			ast.Equal(args[0].ToString(), "set")
-			ast.Equal(args[1].ToString(), "foo")
-			ast.Equal(args[2].ToString(), "bar")
+			ast.Equal(args[0].String(), "set")
+			ast.Equal(args[1].String(), "foo")
+			ast.Equal(args[2].String(), "bar")
 		})
 		defer aof.Close()
 	})
 
 	t.Run("read-err-content", func(t *testing.T) {
 		aof, _ := NewAof("LICENSE")
-		err := aof.Read(func(args []resp.RESP) {})
+		err := aof.Read(func(args []redcon.RESP) {})
 		ast.NotNil(err)
 	})
 
@@ -44,7 +44,7 @@ func TestAof(t *testing.T) {
 		aof, _ := NewAof("not-exist.aof")
 		defer aof.Close()
 
-		_ = aof.Read(func(args []resp.RESP) {
+		_ = aof.Read(func(args []redcon.RESP) {
 			panic("should not call")
 		})
 	})

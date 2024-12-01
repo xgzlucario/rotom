@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/tidwall/mmap"
+	"github.com/tidwall/redcon"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/resp"
 	"os"
@@ -25,22 +26,22 @@ func (r *Rdb) SaveDB() (err error) {
 		return err
 	}
 
-	writer := resp.NewWriter(MB)
-	writer.WriteArrayHead(db.dict.data.Len())
+	writer := &resp.Writer{Writer: redcon.NewWriter(fs)}
+	writer.WriteArray(db.dict.data.Len())
 
 	db.dict.data.All(func(k string, v any) bool {
 		// format: {objectType,ttl,key,value}
 		objectType := getObjectType(v)
-		writer.WriteInteger(int(objectType))
+		writer.WriteInt(int(objectType))
 		ttl, _ := db.dict.expire.Get(k)
-		writer.WriteInteger(int(ttl))
+		writer.WriteInt(int(ttl))
 		writer.WriteBulkString(k)
 
 		switch objectType {
 		case TypeString:
 			writer.WriteBulk(v.([]byte))
 		case TypeInteger:
-			writer.WriteInteger(v.(int))
+			writer.WriteInt(v.(int))
 		default:
 			if err = v.(iface.Encoder).Encode(writer); err != nil {
 				log.Error().Msgf("[rdb] encode error: %v, %v", objectType, err)
@@ -51,7 +52,7 @@ func (r *Rdb) SaveDB() (err error) {
 	})
 
 	// flush
-	_, err = writer.FlushTo(fs)
+	err = writer.Flush()
 	if err != nil {
 		return err
 	}
@@ -72,47 +73,47 @@ func (r *Rdb) LoadDB() error {
 		return err
 	}
 
-	reader := resp.NewReader(data)
-	n, err := reader.ReadArrayHead()
-	if err != nil {
-		return err
-	}
-
-	for range n {
-		// format: {objectType,ttl,key,value}
-		objectType, err := reader.ReadInteger()
-		if err != nil {
-			return err
-		}
-		ttl, err := reader.ReadInteger()
-		if err != nil {
-			return err
-		}
-		key, err := reader.ReadBulk()
-		if err != nil {
-			return err
-		}
-
-		switch ObjectType(objectType) {
-		case TypeString:
-			val, err := reader.ReadBulk()
-			if err != nil {
-				return err
-			}
-			db.dict.SetWithTTL(string(key), val, int64(ttl))
-		case TypeInteger:
-			n, err := reader.ReadInteger()
-			if err != nil {
-				return err
-			}
-			db.dict.SetWithTTL(string(key), n, int64(ttl))
-		default:
-			val := type2c[ObjectType(objectType)]()
-			if err = val.Decode(reader); err != nil {
-				return err
-			}
-			db.dict.Set(string(key), val)
-		}
-	}
+	//reader := redcon.NewReader(bytes.NewReader(data))
+	//n, err := reader.ReadArrayHead()
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//for range n {
+	//	// format: {objectType,ttl,key,value}
+	//	objectType, err := reader.ReadInteger()
+	//	if err != nil {
+	//		return err
+	//	}
+	//	ttl, err := reader.ReadInteger()
+	//	if err != nil {
+	//		return err
+	//	}
+	//	key, err := reader.ReadBulk()
+	//	if err != nil {
+	//		return err
+	//	}
+	//
+	//	switch ObjectType(objectType) {
+	//	case TypeString:
+	//		val, err := reader.ReadBulk()
+	//		if err != nil {
+	//			return err
+	//		}
+	//		db.dict.SetWithTTL(string(key), val, int64(ttl))
+	//	case TypeInteger:
+	//		n, err := reader.ReadInteger()
+	//		if err != nil {
+	//			return err
+	//		}
+	//		db.dict.SetWithTTL(string(key), n, int64(ttl))
+	//	default:
+	//		val := type2c[ObjectType(objectType)]()
+	//		if err = val.Decode(reader); err != nil {
+	//			return err
+	//		}
+	//		db.dict.Set(string(key), val)
+	//	}
+	//}
 	return nil
 }
