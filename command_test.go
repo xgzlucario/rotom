@@ -422,14 +422,29 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		ast.Equal(err.Error(), errWrongType.Error())
 	})
 
-	//t.Run("flushdb", func(t *testing.T) {
-	//	rdb.Set(ctx, "test-flush", "1", 0)
-	//	res, _ := rdb.FlushDB(ctx).Result()
-	//	ast.Equal(res, "OK")
-	//
-	//	_, err := rdb.Get(ctx, "test-flush").Result()
-	//	ast.Equal(err, redis.Nil)
-	//})
+	t.Run("flushdb", func(t *testing.T) {
+		rdb.Set(ctx, "test-flush", "1", 0)
+		res, _ := rdb.FlushDB(ctx).Result()
+		ast.Equal(res, "OK")
+
+		_, err := rdb.Get(ctx, "test-flush").Result()
+		ast.Equal(err, redis.Nil)
+	})
+
+	t.Run("scan", func(t *testing.T) {
+		for i := 0; i < 10; i++ {
+			rdb.Set(ctx, fmt.Sprintf("key-%d", i), 1, 0)
+		}
+		keys, cursor, err := rdb.Scan(ctx, 0, "", 5).Result()
+		ast.Equal(len(keys), 5)
+		ast.Equal(cursor, uint64(5))
+		ast.Nil(err)
+
+		keys, cursor, err = rdb.Scan(ctx, 0, "", 10).Result()
+		ast.Equal(len(keys), 10)
+		ast.Equal(cursor, uint64(0))
+		ast.Nil(err)
+	})
 
 	t.Run("pipline", func(t *testing.T) {
 		pip := rdb.Pipeline()

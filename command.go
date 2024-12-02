@@ -15,12 +15,14 @@ import (
 	"github.com/xgzlucario/rotom/internal/zset"
 )
 
-var (
-	WithScores = "WITHSCORES"
+const (
 	KeepTtl    = "KEEPTTL"
+	Count      = "COUNT"
+	Match      = "MATCH"
 	NX         = "NX"
 	EX         = "EX"
 	PX         = "PX"
+	WithScores = "WITHSCORES"
 )
 
 type Command struct {
@@ -43,6 +45,7 @@ var cmdTable = []*Command{
 	{"set", setCommand, 2, true},
 	{"get", getCommand, 1, false},
 	{"del", delCommand, 1, true},
+	{"scan", scanCommand, 1, false},
 	{"incr", incrCommand, 1, true},
 	{"hset", hsetCommand, 3, true},
 	{"hget", hgetCommand, 2, false},
@@ -106,24 +109,20 @@ func setCommand(writer *resp.Writer, args []redcon.RESP) {
 
 	for len(extra) > 0 {
 		arg := b2s(extra[0].Bytes())
-
 		// EX
 		if equalFold(arg, EX) && len(extra) >= 2 {
 			n := extra[1].Int()
 			ttl = time.Now().Add(time.Duration(n) * time.Second).UnixNano()
 			extra = extra[2:]
-
 			// PX
 		} else if equalFold(arg, PX) && len(extra) >= 2 {
 			n := extra[1].Int()
 			ttl = time.Now().Add(time.Duration(n) * time.Millisecond).UnixNano()
 			extra = extra[2:]
-
 			// KEEPTTL
 		} else if equalFold(arg, KeepTtl) {
 			extra = extra[1:]
 			ttl = -1
-
 			// NX
 		} else if equalFold(arg, NX) {
 			if _, ttl := db.dict.Get(key); ttl != KeyNotExist {
@@ -131,7 +130,6 @@ func setCommand(writer *resp.Writer, args []redcon.RESP) {
 				return
 			}
 			extra = extra[1:]
-
 		} else {
 			writer.WriteError(errSyntax.Error())
 			return
@@ -194,6 +192,39 @@ func delCommand(writer *resp.Writer, args []redcon.RESP) {
 		}
 	}
 	writer.WriteInt(count)
+}
+
+func scanCommand(writer *resp.Writer, args []redcon.RESP) {
+	cursor := int(args[0].Int())
+	count := 10
+	extra := args[1:]
+
+	for len(extra) > 0 {
+		arg := b2s(extra[0].Bytes())
+		// COUNT
+		if equalFold(arg, Count) && len(extra) >= 2 {
+			count = int(extra[1].Int())
+			extra = extra[2:]
+		} else {
+			writer.WriteError(errSyntax.Error())
+			return
+		}
+	}
+
+	keys := make([]string, 0, count)
+	db.dict.data.All(func(key string, _ any) bool {
+		keys = append(keys, key)
+		return count > len(keys)
+	})
+
+	if len(keys) == db.dict.data.Len() {
+		cursor = 0
+	} else {
+		cursor = count
+	}
+	writer.WriteArray(2)
+	writer.WriteInt(cursor)
+	writer.WriteAny(keys)
 }
 
 func hsetCommand(writer *resp.Writer, args []redcon.RESP) {
