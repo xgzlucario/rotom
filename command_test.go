@@ -104,7 +104,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			res, _ = rdb.Get(ctx, "foo").Result()
 			ast.Equal(res, "bar")
 
-			sleepFn(time.Second + 100*time.Millisecond)
+			sleepFn(time.Second + 10*time.Millisecond)
 
 			_, err := rdb.Get(ctx, "foo").Result()
 			ast.Equal(err, redis.Nil)
@@ -311,7 +311,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		ast.Equal(err, redis.Nil)
 
 		// srem
-		rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
+		_, _ = rdb.SAdd(ctx, "set", "k1", "k2", "k3").Result()
 		res, _ := rdb.SRem(ctx, "set", "k1", "k2", "k999").Result()
 		ast.Equal(res, int64(2))
 
@@ -329,37 +329,37 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 	})
 
 	t.Run("zset", func(t *testing.T) {
-		n, _ := rdb.ZAdd(ctx, "rank", redis.Z{Member: "player1"}).Result()
+		n, _ := rdb.ZAdd(ctx, "rank", redis.Z{Member: "user1"}).Result()
 		ast.Equal(n, int64(1))
 
 		n, _ = rdb.ZAdd(ctx, "rank",
-			redis.Z{Member: "player1", Score: 100},
-			redis.Z{Member: "player2", Score: 300.5},
-			redis.Z{Member: "player3", Score: 100}).Result()
+			redis.Z{Member: "user1", Score: 100},
+			redis.Z{Member: "user2", Score: 300.5},
+			redis.Z{Member: "user3", Score: 100}).Result()
 		ast.Equal(n, int64(2))
 
 		// zrank
 		{
-			res, _ := rdb.ZRank(ctx, "rank", "player1").Result()
+			res, _ := rdb.ZRank(ctx, "rank", "user1").Result()
 			ast.Equal(res, int64(0))
 
-			res, _ = rdb.ZRank(ctx, "rank", "player2").Result()
+			res, _ = rdb.ZRank(ctx, "rank", "user2").Result()
 			ast.Equal(res, int64(2))
 
-			res, _ = rdb.ZRank(ctx, "rank", "player3").Result()
+			res, _ = rdb.ZRank(ctx, "rank", "user3").Result()
 			ast.Equal(res, int64(1))
 
-			_, err := rdb.ZRank(ctx, "rank", "player999").Result()
+			_, err := rdb.ZRank(ctx, "rank", "user0").Result()
 			ast.Equal(err, redis.Nil)
 		}
 
 		// zrange
 		{
 			res, _ := rdb.ZRange(ctx, "rank", 0, -1).Result()
-			ast.Equal(res, []string{"player1", "player3", "player2"})
+			ast.Equal(res, []string{"user1", "user3", "user2"})
 
 			res, _ = rdb.ZRange(ctx, "rank", 1, 3).Result()
-			ast.Equal(res, []string{"player3", "player2"})
+			ast.Equal(res, []string{"user3", "user2"})
 
 			res, err := rdb.ZRange(ctx, "rank", 70, 60).Result()
 			ast.Equal(len(res), 0)
@@ -369,15 +369,15 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		{
 			res, _ := rdb.ZRangeWithScores(ctx, "rank", 0, -1).Result()
 			ast.Equal(res, []redis.Z{
-				{Member: "player1", Score: 100},
-				{Member: "player3", Score: 100},
-				{Member: "player2", Score: 300.5},
+				{Member: "user1", Score: 100},
+				{Member: "user3", Score: 100},
+				{Member: "user2", Score: 300.5},
 			})
 
 			res, _ = rdb.ZRangeWithScores(ctx, "rank", 1, 3).Result()
 			ast.Equal(res, []redis.Z{
-				{Member: "player3", Score: 100},
-				{Member: "player2", Score: 300.5},
+				{Member: "user3", Score: 100},
+				{Member: "user2", Score: 300.5},
 			})
 
 			res, err := rdb.ZRangeWithScores(ctx, "rank", 70, 60).Result()
@@ -385,25 +385,21 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			ast.Nil(err)
 		}
 		// zpopmin
-		//{
-		//	res, _ := rdb.ZPopMin(ctx, "rank", 2).Result()
-		//	ast.Equal(res, []redis.Z{
-		//		{Member: "player1", Score: 100},
-		//		{Member: "player3", Score: 100},
-		//	})
-		//
-		//	res, _ = rdb.ZPopMin(ctx, "rank").Result()
-		//	ast.Equal(res, []redis.Z{
-		//		{Member: "player2", Score: 300.5},
-		//	})
-		//}
+		{
+			res, _ := rdb.ZPopMin(ctx, "rank", 3).Result()
+			ast.Equal(res, []redis.Z{
+				{Member: "user1", Score: 100},
+				{Member: "user3", Score: 100},
+				{Member: "user2", Score: 300.5},
+			})
+		}
 		// zrem
 		rdb.ZAdd(ctx, "rank",
-			redis.Z{Member: "player1", Score: 100},
-			redis.Z{Member: "player2", Score: 300.5},
-			redis.Z{Member: "player3", Score: 100})
+			redis.Z{Member: "user1", Score: 100},
+			redis.Z{Member: "user2", Score: 300.5},
+			redis.Z{Member: "user3", Score: 100})
 
-		res, _ := rdb.ZRem(ctx, "rank", "player1", "player2", "player999").Result()
+		res, _ := rdb.ZRem(ctx, "rank", "user1", "user2", "user0").Result()
 		ast.Equal(res, int64(2))
 
 		// err wrong type

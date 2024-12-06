@@ -516,7 +516,7 @@ func zrangeCommand(writer *resp.Writer, args []redcon.RESP) {
 		if start <= 0 && stop >= 0 {
 			writer.WriteBulkString(key)
 			if withScores {
-				writer.WriteFloat(score)
+				writer.WriteAny(score)
 			}
 		}
 		start--
@@ -535,12 +535,12 @@ func zpopminCommand(writer *resp.Writer, args []redcon.RESP) {
 		writer.WriteError(err.Error())
 		return
 	}
-	size := min(zs.Len(), count)
-	writer.WriteArray(size * 2)
-	for range size {
-		key, score := zs.PopMin()
-		writer.WriteBulkString(key)
-		writer.WriteFloat(score)
+	n := min(zs.Len(), count)
+	writer.WriteArray(n * 2)
+	for range n {
+		kstr, score := zs.PopMin()
+		writer.WriteBulkString(kstr)
+		writer.WriteAny(score)
 	}
 }
 
@@ -554,6 +554,8 @@ func helloCommand(writer *resp.Writer, _ []redcon.RESP) {
 		"server":  "rotom",
 		"version": "1.0.0",
 		"proto":   2,
+		"mode":    "standalone",
+		"role":    "master",
 	})
 }
 

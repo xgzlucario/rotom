@@ -90,7 +90,6 @@ func InitDB(config *Config) (err error) {
 			}
 		})
 	}
-
 	return nil
 }
 

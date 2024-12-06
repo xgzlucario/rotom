@@ -90,7 +90,7 @@ DO:
 func (zs *ZipZSet) PopMin() (string, float64) {
 	entry, ok := zs.data.RPop()
 	if ok {
-		return zs.decode(s2b(entry))
+		return zs.decode([]byte(entry))
 	}
 	return "", 0
 }
@@ -123,10 +123,6 @@ func (zs *ZipZSet) ToZSet() *ZSet {
 
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
-}
-
-func s2b(s string) []byte {
-	return *(*[]byte)(unsafe.Pointer(&s))
 }
 
 func b2f(b []byte) float64 {

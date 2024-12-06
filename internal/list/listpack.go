@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	maxListPackSize = 16 * 1024
+	maxListPackSize = 8 * 1024
 )
 
 var bpool = pool.NewBufferPool()
