@@ -1,8 +1,8 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/bytedance/sonic"
 	"github.com/tidwall/redcon"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/net"
@@ -99,7 +99,7 @@ func LoadConfig(path string) (config *Config, err error) {
 		return
 	}
 	config = &Config{}
-	if err = sonic.Unmarshal(jsonStr, config); err != nil {
+	if err = json.Unmarshal(jsonStr, config); err != nil {
 		return nil, err
 	}
 	return

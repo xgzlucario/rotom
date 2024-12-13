@@ -98,7 +98,7 @@ Alternatively, you can run it in a container. First, build the Docker image by r
 
 ```
 REPOSITORY       TAG           IMAGE ID       CREATED         SIZE
-rotom            latest        e93cf2060e5f   13 seconds ago  40.2MB
+rotom            latest        0cd91943967a   5 seconds ago   20.9MB
 ```
 
 Then, start the container:
