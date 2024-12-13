@@ -18,7 +18,6 @@ import (
 const (
 	KeepTtl    = "KEEPTTL"
 	Count      = "COUNT"
-	Match      = "MATCH"
 	NX         = "NX"
 	EX         = "EX"
 	PX         = "PX"
@@ -45,6 +44,7 @@ var cmdTable = []*Command{
 	{"set", setCommand, 2, true},
 	{"get", getCommand, 1, false},
 	{"del", delCommand, 1, true},
+	{"type", typeCommand, 1, false},
 	{"scan", scanCommand, 1, false},
 	{"incr", incrCommand, 1, true},
 	{"hset", hsetCommand, 3, true},
@@ -194,6 +194,29 @@ func delCommand(writer *resp.Writer, args []redcon.RESP) {
 	writer.WriteInt(count)
 }
 
+func typeCommand(writer *resp.Writer, args []redcon.RESP) {
+	key := b2s(args[0].Bytes())
+	object, ttl := db.dict.Get(key)
+	if ttl == KeyNotExist {
+		writer.WriteString("none")
+		return
+	}
+	switch v := object.(type) {
+	case int, []byte:
+		writer.WriteString("string")
+	case *hash.ZipMap:
+		writer.WriteString("hash")
+	case *hash.ZipSet, *hash.Set:
+		writer.WriteString("set")
+	case *list.QuickList:
+		writer.WriteString("list")
+	case *zset.ZipZSet, *zset.ZSet:
+		writer.WriteString("zset")
+	default:
+		writer.WriteError(fmt.Sprintf("unknown type: %T", v))
+	}
+}
+
 func scanCommand(writer *resp.Writer, args []redcon.RESP) {
 	cursor := int(args[0].Int())
 	count := 10
@@ -304,11 +327,16 @@ func lpushCommand(writer *resp.Writer, args []redcon.RESP) {
 		writer.WriteError(err.Error())
 		return
 	}
-	keys := make([]string, 0, len(args)-1)
-	for _, arg := range args[1:] {
-		keys = append(keys, b2s(arg.Bytes()))
+	// fast push
+	if len(args[1:]) == 1 {
+		ls.LPush(b2s(args[1].Bytes()))
+	} else {
+		keys := make([]string, 0, len(args)-1)
+		for _, arg := range args[1:] {
+			keys = append(keys, b2s(arg.Bytes()))
+		}
+		ls.LPush(keys...)
 	}
-	ls.LPush(keys...)
 	writer.WriteInt(ls.Len())
 }
 
@@ -319,11 +347,16 @@ func rpushCommand(writer *resp.Writer, args []redcon.RESP) {
 		writer.WriteError(err.Error())
 		return
 	}
-	keys := make([]string, 0, len(args)-1)
-	for _, arg := range args[1:] {
-		keys = append(keys, b2s(arg.Bytes()))
+	// fast push
+	if len(args[1:]) == 1 {
+		ls.RPush(b2s(args[1].Bytes()))
+	} else {
+		keys := make([]string, 0, len(args)-1)
+		for _, arg := range args[1:] {
+			keys = append(keys, b2s(arg.Bytes()))
+		}
+		ls.RPush(keys...)
 	}
-	ls.RPush(keys...)
 	writer.WriteInt(ls.Len())
 }
 
@@ -599,7 +632,6 @@ func fetch[T any](key []byte, new func() T, setnx ...bool) (T, error) {
 		if !ok {
 			return v, errWrongType
 		}
-
 		// conversion zipped structure
 		if len(setnx) > 0 && setnx[0] {
 			switch data := object.(type) {

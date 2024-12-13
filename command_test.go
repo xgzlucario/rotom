@@ -94,6 +94,12 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		ast.Equal(res, "")
 		ast.Equal(err, redis.Nil)
 
+		_type, _ := rdb.Type(ctx, "foo").Result()
+		ast.Equal(_type, "string")
+
+		_type, _ = rdb.Type(ctx, "not-exist").Result()
+		ast.Equal(_type, "none")
+
 		n, _ := rdb.Del(ctx, "foo", "none").Result()
 		ast.Equal(n, int64(1))
 		// setex
@@ -150,6 +156,9 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		res, _ = rdb.Incr(ctx, "testInt").Result()
 		ast.Equal(res, int64(2))
 
+		_type, _ := rdb.Type(ctx, "testInt").Result()
+		ast.Equal(_type, "string")
+
 		// get int
 		str, _ := rdb.Get(ctx, "testInt").Result()
 		ast.Equal(str, "2")
@@ -188,9 +197,15 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			ast.Nil(err)
 		}
 
+		_, err = rdb.HGet(ctx, "map", "not-exist").Result()
+		ast.Equal(err, redis.Nil)
+
 		// hgetall
 		resm, _ := rdb.HGetAll(ctx, "map").Result()
 		ast.Equal(len(resm), 100)
+
+		_type, _ := rdb.Type(ctx, "map").Result()
+		ast.Equal(_type, "hash")
 
 		// hdel
 		res, _ = rdb.HDel(ctx, "map", keys[0:10]...).Result()
@@ -228,6 +243,9 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		n, _ = rdb.RPush(ctx, "list", "4", "5", "6").Result()
 		ast.Equal(n, int64(6))
 
+		_type, _ := rdb.Type(ctx, "list").Result()
+		ast.Equal(_type, "list")
+
 		// list: [1,2,3,4,5,6]
 		// lrange
 		res, _ := rdb.LRange(ctx, "list", 0, -1).Result()
@@ -260,6 +278,9 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		// rpop
 		val, _ = rdb.RPop(ctx, "list").Result()
 		ast.Equal(val, "6")
+
+		n, _ = rdb.LPush(ctx, "list", "6").Result()
+		ast.Equal(n, int64(5))
 
 		// pop nil
 		{
@@ -301,6 +322,9 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		mems, _ := rdb.SMembers(ctx, "set").Result()
 		ast.ElementsMatch(mems, []string{"k1", "k2", "k3"})
 
+		_type, _ := rdb.Type(ctx, "set").Result()
+		ast.Equal(_type, "set")
+
 		// spop
 		for i := 0; i < 3; i++ {
 			val, _ := rdb.SPop(ctx, "set").Result()
@@ -324,6 +348,9 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		_, err = rdb.SRem(ctx, "key", "1").Result()
 		ast.Equal(err.Error(), errWrongType.Error())
 
+		_, err = rdb.SMembers(ctx, "key").Result()
+		ast.Equal(err.Error(), errWrongType.Error())
+
 		_, err = rdb.SPop(ctx, "key").Result()
 		ast.Equal(err.Error(), errWrongType.Error())
 	})
@@ -337,6 +364,9 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			redis.Z{Member: "user2", Score: 300.5},
 			redis.Z{Member: "user3", Score: 100}).Result()
 		ast.Equal(n, int64(2))
+
+		_type, _ := rdb.Type(ctx, "rank").Result()
+		ast.Equal(_type, "zset")
 
 		// zrank
 		{
@@ -409,6 +439,9 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		ast.Equal(err.Error(), errWrongType.Error())
 
 		_, err = rdb.ZRank(ctx, "key", "member1").Result()
+		ast.Equal(err.Error(), errWrongType.Error())
+
+		_, err = rdb.ZRange(ctx, "key", 0, -1).Result()
 		ast.Equal(err.Error(), errWrongType.Error())
 
 		_, err = rdb.ZRem(ctx, "key", "member1").Result()
