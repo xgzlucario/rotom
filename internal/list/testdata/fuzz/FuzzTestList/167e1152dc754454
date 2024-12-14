@@ -1,3 +1,0 @@
-go test fuzz v1
-int(186)
-string("0")
