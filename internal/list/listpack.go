@@ -150,7 +150,7 @@ func (it *LpIterator) RemoveNext() string {
 	before := it.index
 	res := string(it.Next())
 	it.size--
-	it.data = slices.Delete(it.data, before, it.index)
+	it.data = append(it.data[:before], it.data[it.index:]...)
 	it.index = before
 	return res
 }

@@ -24,12 +24,20 @@ func (w *Writer) WriteBytes(key []byte) {
 	w.b = append(w.b, key...)
 }
 
+func (w *Writer) WriteUint8(n uint8) {
+	w.b = append(w.b, n)
+}
+
 func (w *Writer) WriteUint32(n uint32) {
 	w.b = order.AppendUint32(w.b, n)
 }
 
 func (w *Writer) WriteUint64(n uint64) {
 	w.b = order.AppendUint64(w.b, n)
+}
+
+func (w *Writer) WriteVarint(n int) {
+	w.b = binary.AppendVarint(w.b, int64(n))
 }
 
 func (w *Writer) Bytes() []byte { return w.b }
@@ -59,6 +67,12 @@ func (r *Reader) ReadBytes() []byte {
 	return key
 }
 
+func (r *Reader) ReadUint8() uint8 {
+	n := r.b[0]
+	r.b = r.b[1:]
+	return n
+}
+
 func (r *Reader) ReadUint32() uint32 {
 	n := order.Uint32(r.b)
 	r.b = r.b[4:]
@@ -71,6 +85,8 @@ func (r *Reader) ReadUint64() uint64 {
 	return n
 }
 
-func (r *Reader) IsEnd() bool {
-	return len(r.b) == 0
+func (r *Reader) ReadVarint() int64 {
+	x, n := binary.Varint(r.b)
+	r.b = r.b[n:]
+	return x
 }

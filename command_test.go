@@ -19,7 +19,7 @@ func startup() {
 		Port:           20082,
 		AppendOnly:     true,
 		AppendFileName: "test.aof",
-		Save:           false,
+		Save:           true,
 		SaveFileName:   "dump.rdb",
 	}
 	_ = os.Remove(config.AppendFileName)
@@ -110,7 +110,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			res, _ = rdb.Get(ctx, "foo").Result()
 			ast.Equal(res, "bar")
 
-			sleepFn(time.Second + 10*time.Millisecond)
+			sleepFn(time.Second + 100*time.Millisecond)
 
 			_, err := rdb.Get(ctx, "foo").Result()
 			ast.Equal(err, redis.Nil)
@@ -521,57 +521,62 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			}
 		})
 
-		//t.Run("save-load", func(t *testing.T) {
-		//	rdb.FlushDB(ctx)
-		//	// set key
-		//	rdb.Set(ctx, "rdb-key1", "123", 0)
-		//	rdb.Set(ctx, "rdb-key2", "234", time.Minute)
-		//	rdb.Set(ctx, "rdb-key3", "345", 1)
-		//	rdb.Incr(ctx, "key-incr")
-		//	rdb.HSet(ctx, "rdb-hash1", "k1", "v1", "k2", "v2")
-		//	rdb.SAdd(ctx, "rdb-set1", "k1", "k2")
-		//	for i := 0; i < 1024; i++ {
-		//		key := fmt.Sprintf("%d", i)
-		//		rdb.HSet(ctx, "rdb-hash2", key, key)
-		//		rdb.SAdd(ctx, "rdb-set2", key)
-		//	}
-		//	rdb.RPush(ctx, "rdb-list1", "k1", "k2", "k3")
-		//	rdb.ZAdd(ctx, "rdb-zset1",
-		//		redis.Z{Score: 200, Member: "k2"},
-		//		redis.Z{Score: 100, Member: "k1"},
-		//		redis.Z{Score: 300, Member: "k3"})
-		//
-		//	res, _ := rdb.Save(context.Background()).Result()
-		//	ast.Equal(res, "OK")
-		//
-		//	_, err := rdb.Do(ctx, "load").Result()
-		//	ast.Nil(err)
-		//
-		//	// valid
-		//	res, _ = rdb.Get(ctx, "rdb-key1").Result()
-		//	ast.Equal(res, "123")
-		//	res, _ = rdb.Get(ctx, "rdb-key2").Result()
-		//	ast.Equal(res, "234")
-		//	_, err = rdb.Get(ctx, "rdb-key3").Result()
-		//	ast.Equal(err, redis.Nil)
-		//
-		//	res, _ = rdb.Get(ctx, "key-incr").Result()
-		//	ast.Equal(res, "1")
-		//
-		//	resm, _ := rdb.HGetAll(ctx, "rdb-hash1").Result()
-		//	ast.Equal(resm, map[string]string{"k1": "v1", "k2": "v2"})
-		//
-		//	ress, _ := rdb.SMembers(ctx, "rdb-set1").Result()
-		//	ast.ElementsMatch(ress, []string{"k1", "k2"})
-		//
-		//	ress, _ = rdb.LRange(ctx, "rdb-list1", 0, -1).Result()
-		//	ast.Equal(ress, []string{"k1", "k2", "k3"})
-		//
-		//	resz, _ := rdb.ZPopMin(ctx, "rdb-zset1").Result()
-		//	ast.Equal(resz, []redis.Z{{
-		//		Member: "k1", Score: 100,
-		//	}})
-		//})
+		t.Run("save-load", func(t *testing.T) {
+			rdb.FlushDB(ctx)
+			// set key
+			rdb.Set(ctx, "rdb-key1", "123", 0)
+			rdb.Set(ctx, "rdb-key2", "234", time.Minute)
+			rdb.Set(ctx, "rdb-key3", "345", 1)
+			rdb.Incr(ctx, "key-incr")
+
+			rdb.HSet(ctx, "rdb-hash1", "k1", "v1", "k2", "v2")
+			rdb.SAdd(ctx, "rdb-set1", "k1", "k2")
+			for i := 0; i < 1024; i++ {
+				key := fmt.Sprintf("%d", i)
+				rdb.HSet(ctx, "rdb-hash2", key, key)
+				rdb.SAdd(ctx, "rdb-set2", key)
+			}
+
+			rdb.RPush(ctx, "rdb-list1", "k1", "k2", "k3")
+			rdb.ZAdd(ctx, "rdb-zset1",
+				redis.Z{Score: 200, Member: "k2"},
+				redis.Z{Score: 100, Member: "k1"},
+				redis.Z{Score: 300, Member: "k3"})
+
+			res, _ := rdb.Save(context.Background()).Result()
+			ast.Equal(res, "OK")
+
+			_, err := rdb.Do(ctx, "load").Result()
+			ast.Nil(err)
+
+			// valid
+			res, _ = rdb.Get(ctx, "rdb-key1").Result()
+			ast.Equal(res, "123")
+			res, _ = rdb.Get(ctx, "rdb-key2").Result()
+			ast.Equal(res, "234")
+			_, err = rdb.Get(ctx, "rdb-key3").Result()
+			ast.Equal(err, redis.Nil)
+			res, _ = rdb.Get(ctx, "key-incr").Result()
+			ast.Equal(res, "1")
+
+			resm, _ := rdb.HGetAll(ctx, "rdb-hash1").Result()
+			ast.Equal(resm, map[string]string{"k1": "v1", "k2": "v2"})
+			ress, _ := rdb.SMembers(ctx, "rdb-set1").Result()
+			ast.ElementsMatch(ress, []string{"k1", "k2"})
+
+			resm, _ = rdb.HGetAll(ctx, "rdb-hash2").Result()
+			ast.Equal(len(resm), 1024)
+			ress, _ = rdb.SMembers(ctx, "rdb-set2").Result()
+			ast.Equal(len(ress), 1024)
+
+			ress, _ = rdb.LRange(ctx, "rdb-list1", 0, -1).Result()
+			ast.Equal(ress, []string{"k1", "k2", "k3"})
+
+			resz, _ := rdb.ZPopMin(ctx, "rdb-zset1").Result()
+			ast.Equal(resz, []redis.Z{{
+				Member: "k1", Score: 100,
+			}})
+		})
 	}
 
 	t.Run("close", func(t *testing.T) {

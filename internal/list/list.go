@@ -1,9 +1,9 @@
 package list
 
 import (
+	"bytes"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/zyedidia/generic/list"
-	"unsafe"
 )
 
 var (
@@ -132,20 +132,28 @@ func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 }
 
 func (ls *QuickList) ReadFrom(rd *iface.Reader) {
-	for !rd.IsEnd() {
-		key := rd.ReadBytes()
-		ls.RPush(b2s(key))
+	ls.size = int(rd.ReadUint64())
+	total := rd.ReadUint64()
+	for range total {
+		sz := rd.ReadUint32()
+		data := rd.ReadBytes()
+		ls.ls.PushBack(&ListPack{
+			size: sz,
+			data: bytes.Clone(data),
+		})
 	}
 }
 
 // WriteTo encode zipmap to [size, listpack1, listpack2, ...].
 func (ls *QuickList) WriteTo(w *iface.Writer) {
-	ls.Range(0, func(key []byte) (stop bool) {
-		w.WriteBytes(key)
-		return false
+	w.WriteUint64(uint64(ls.size))
+	// cal total
+	total := 0
+	ls.ls.Front.Each(func(lp *ListPack) {
+		total++
 	})
-}
-
-func b2s(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
+	w.WriteUint64(uint64(total))
+	ls.ls.Front.Each(func(lp *ListPack) {
+		lp.WriteTo(w)
+	})
 }

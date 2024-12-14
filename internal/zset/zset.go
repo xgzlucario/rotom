@@ -100,15 +100,17 @@ func (z *ZSet) Len() int {
 }
 
 func (z *ZSet) ReadFrom(rd *iface.Reader) {
-	for !rd.IsEnd() {
+	n := rd.ReadUint64()
+	for range n {
 		key := rd.ReadString()
-		n := rd.ReadUint64()
-		score := math.Float64frombits(n)
+		x := rd.ReadUint64()
+		score := math.Float64frombits(x)
 		z.Set(key, score)
 	}
 }
 
 func (z *ZSet) WriteTo(w *iface.Writer) {
+	w.WriteUint64(uint64(z.m.Len()))
 	z.Scan(func(key string, score float64) {
 		w.WriteString(key)
 		w.WriteUint64(math.Float64bits(score))
