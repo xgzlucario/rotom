@@ -114,11 +114,19 @@ func (zs *ZipZSet) Len() int {
 }
 
 func (zs *ZipZSet) ToZSet() *ZSet {
-	zs2 := New()
+	zsNew := New()
 	zs.Scan(func(key string, score float64) {
-		zs2.Set(key, score)
+		zsNew.Set(key, score)
 	})
-	return zs2
+	return zsNew
+}
+
+func (zs *ZipZSet) ReadFrom(rd *iface.Reader) {
+	zs.data.ReadFrom(rd)
+}
+
+func (zs *ZipZSet) WriteTo(w *iface.Writer) {
+	zs.data.WriteTo(w)
 }
 
 func b2s(b []byte) string {

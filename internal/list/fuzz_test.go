@@ -1,6 +1,7 @@
 package list
 
 import (
+	"github.com/xgzlucario/rotom/internal/iface"
 	"math/rand/v2"
 	"testing"
 
@@ -97,7 +98,20 @@ func FuzzTestList(f *testing.F) {
 			ast.ElementsMatch(keys1, keys2)
 			ast.ElementsMatch(keys1, keys3)
 
-		case 7: // Marshal
+		case 7: // Encode
+			{
+				w := iface.NewWriter(nil)
+				lp.WriteTo(w)
+				lp = NewListPack()
+				lp.ReadFrom(iface.NewReaderFrom(w))
+			}
+			{
+				w := iface.NewWriter(nil)
+				ls.WriteTo(w)
+				ls = New()
+				ls.ReadFrom(iface.NewReaderFrom(w))
+			}
+			ast.Equal(lp.Len(), ls.Len())
 		}
 	})
 }

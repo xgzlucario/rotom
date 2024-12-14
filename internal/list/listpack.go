@@ -2,6 +2,7 @@ package list
 
 import (
 	"encoding/binary"
+	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/pool"
 	"slices"
 )
@@ -162,4 +163,15 @@ func appendEntry(dst []byte, data string) []byte {
 	dst = appendUvarint(dst, len(data), false)
 	dst = append(dst, data...)
 	return appendUvarint(dst, len(data), true)
+}
+
+func (lp *ListPack) ReadFrom(rd *iface.Reader) {
+	lp.size = rd.ReadUint32()
+	lp.data = rd.ReadBytes()
+}
+
+// WriteTo encode zipmap to [size, data].
+func (lp *ListPack) WriteTo(w *iface.Writer) {
+	w.WriteUint32(lp.size)
+	w.WriteBytes(lp.data)
 }

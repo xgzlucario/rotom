@@ -3,6 +3,7 @@ package hash
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/xgzlucario/rotom/internal/iface"
 	"golang.org/x/exp/maps"
 	"testing"
 )
@@ -50,6 +51,10 @@ func FuzzTestMap(f *testing.F) {
 			ast.ElementsMatch(kv1, kv2)
 
 		case 9: // Encode
+			w := iface.NewWriter(nil)
+			zipmap.WriteTo(w)
+			zipmap = New()
+			zipmap.ReadFrom(iface.NewReaderFrom(w))
 		}
 	})
 }
@@ -99,6 +104,18 @@ func FuzzTestSet(f *testing.F) {
 			ast.ElementsMatch(keys1, keys3)
 
 		case 9: // Encode
+			{
+				w := iface.NewWriter(nil)
+				hashset.WriteTo(w)
+				hashset = NewSet()
+				hashset.ReadFrom(iface.NewReaderFrom(w))
+			}
+			{
+				w := iface.NewWriter(nil)
+				zipset.WriteTo(w)
+				zipset = NewZipSet()
+				zipset.ReadFrom(iface.NewReaderFrom(w))
+			}
 		}
 	})
 }

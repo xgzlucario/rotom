@@ -106,3 +106,22 @@ func (zm *ZipMap) Migrate() {
 }
 
 func (zm *ZipMap) Len() int { return zm.index.Len() }
+
+func (zm *ZipMap) ReadFrom(rd *iface.Reader) {
+	zm.unused = int(rd.ReadUint64())
+	zm.data = rd.ReadBytes()
+	for !rd.IsEnd() {
+		zm.index.Put(rd.ReadString(), rd.ReadUint32())
+	}
+}
+
+// WriteTo encode zipmap to [unused, data, key1, pos1, ...].
+func (zm *ZipMap) WriteTo(w *iface.Writer) {
+	w.WriteUint64(uint64(zm.unused))
+	w.WriteBytes(zm.data)
+	zm.index.All(func(key string, pos uint32) bool {
+		w.WriteString(key)
+		w.WriteUint32(pos)
+		return true
+	})
+}

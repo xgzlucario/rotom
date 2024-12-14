@@ -3,6 +3,7 @@ package list
 import (
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/zyedidia/generic/list"
+	"unsafe"
 )
 
 var (
@@ -128,4 +129,23 @@ func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 			return
 		}
 	}
+}
+
+func (ls *QuickList) ReadFrom(rd *iface.Reader) {
+	for !rd.IsEnd() {
+		key := rd.ReadBytes()
+		ls.RPush(b2s(key))
+	}
+}
+
+// WriteTo encode zipmap to [size, listpack1, listpack2, ...].
+func (ls *QuickList) WriteTo(w *iface.Writer) {
+	ls.Range(0, func(key []byte) (stop bool) {
+		w.WriteBytes(key)
+		return false
+	})
+}
+
+func b2s(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
 }

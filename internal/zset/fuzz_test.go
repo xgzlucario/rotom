@@ -3,6 +3,7 @@ package zset
 import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/xgzlucario/rotom/internal/iface"
 	"testing"
 	"time"
 )
@@ -48,6 +49,19 @@ func FuzzTestZSet(f *testing.F) {
 			ast.Equal(kv1, kv2)
 
 		case 9: // Encode
+			{
+				w := iface.NewWriter(nil)
+				zs.WriteTo(w)
+				zs = New()
+				zs.ReadFrom(iface.NewReaderFrom(w))
+			}
+			{
+				w := iface.NewWriter(nil)
+				zzs.WriteTo(w)
+				zzs = NewZipZSet()
+				zzs.ReadFrom(iface.NewReaderFrom(w))
+			}
+			ast.Equal(zs.Len(), zzs.Len())
 		}
 	})
 }

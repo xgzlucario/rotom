@@ -70,6 +70,14 @@ func (zs *ZipSet) ToSet() *Set {
 	return s
 }
 
+func (zs *ZipSet) ReadFrom(rd *iface.Reader) {
+	zs.data.ReadFrom(rd)
+}
+
+func (zs *ZipSet) WriteTo(w *iface.Writer) {
+	zs.data.WriteTo(w)
+}
+
 func b2s(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }

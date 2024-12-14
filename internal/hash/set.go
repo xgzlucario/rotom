@@ -37,3 +37,16 @@ func (s Set) Scan(fn func(string)) {
 func (s Set) Exist(key string) bool { return s.Set.ContainsOne(key) }
 
 func (s Set) Len() int { return s.Cardinality() }
+
+func (s Set) ReadFrom(rd *iface.Reader) {
+	for !rd.IsEnd() {
+		s.Add(rd.ReadString())
+	}
+}
+
+// WriteTo encode set to [klen, key, ...].
+func (s Set) WriteTo(w *iface.Writer) {
+	s.Scan(func(key string) {
+		w.WriteString(key)
+	})
+}

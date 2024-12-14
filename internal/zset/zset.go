@@ -5,6 +5,7 @@ import (
 	"github.com/chen3feng/stl4go"
 	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/iface"
+	"math"
 )
 
 var (
@@ -96,4 +97,20 @@ func (z *ZSet) Scan(fn func(key string, score float64)) {
 
 func (z *ZSet) Len() int {
 	return z.m.Len()
+}
+
+func (z *ZSet) ReadFrom(rd *iface.Reader) {
+	for !rd.IsEnd() {
+		key := rd.ReadString()
+		n := rd.ReadUint64()
+		score := math.Float64frombits(n)
+		z.Set(key, score)
+	}
+}
+
+func (z *ZSet) WriteTo(w *iface.Writer) {
+	z.Scan(func(key string, score float64) {
+		w.WriteString(key)
+		w.WriteUint64(math.Float64bits(score))
+	})
 }

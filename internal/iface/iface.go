@@ -1,6 +1,8 @@
 package iface
 
 type Encoder interface {
+	WriteTo(writer *Writer)
+	ReadFrom(reader *Reader)
 }
 
 type MapI interface {
