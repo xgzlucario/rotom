@@ -110,7 +110,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			res, _ = rdb.Get(ctx, "foo").Result()
 			ast.Equal(res, "bar")
 
-			sleepFn(time.Second + 100*time.Millisecond)
+			sleepFn(time.Second + 500*time.Millisecond)
 
 			_, err := rdb.Get(ctx, "foo").Result()
 			ast.Equal(err, redis.Nil)

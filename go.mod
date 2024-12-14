@@ -7,6 +7,7 @@ require (
 	github.com/chen3feng/stl4go v0.1.1
 	github.com/cockroachdb/swiss v0.0.0-20240612210725-f4de07ae6964
 	github.com/deckarep/golang-set/v2 v2.7.0
+	github.com/klauspost/rvarint v1.0.1
 	github.com/redis/go-redis/v9 v9.7.0
 	github.com/rs/zerolog v1.33.0
 	github.com/stretchr/testify v1.9.0

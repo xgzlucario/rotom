@@ -2,8 +2,10 @@ package list
 
 import (
 	"encoding/binary"
+	"github.com/klauspost/rvarint"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/pool"
+	"math/bits"
 	"slices"
 )
 
@@ -116,7 +118,7 @@ func (it *LpIterator) Prev() []byte {
 	//  +-----+------------+--------------+------------+
 	//        |<--- n ---->|<- data_len ->|<---- n --->|
 	//
-	dataLen, n := uvarintReverse(it.data[:it.index])
+	dataLen, n := rvarint.Uvarint(it.data[:it.index])
 	indexNext := it.index - n - int(dataLen) - n
 
 	dataStartPos := indexNext + n
@@ -160,9 +162,10 @@ func appendEntry(dst []byte, data string) []byte {
 		sz := len(data) + 2*SizeUvarint(uint64(len(data)))
 		dst = bpool.Get(sz)[:0]
 	}
-	dst = appendUvarint(dst, len(data), false)
+	dst = binary.AppendUvarint(dst, uint64(len(data)))
 	dst = append(dst, data...)
-	return appendUvarint(dst, len(data), true)
+	dst = rvarint.AppendUvarint(dst, uint64(len(data)))
+	return dst
 }
 
 func (lp *ListPack) ReadFrom(rd *iface.Reader) {
@@ -174,4 +177,10 @@ func (lp *ListPack) ReadFrom(rd *iface.Reader) {
 func (lp *ListPack) WriteTo(w *iface.Writer) {
 	w.WriteUint32(lp.size)
 	w.WriteBytes(lp.data)
+}
+
+// SizeUvarint
+// See https://go-review.googlesource.com/c/go/+/572196/1/src/encoding/binary/varint.go#174
+func SizeUvarint(x uint64) int {
+	return int(9*uint32(bits.Len64(x))+64) / 64
 }
