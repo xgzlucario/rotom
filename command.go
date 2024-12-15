@@ -70,6 +70,7 @@ var cmdTable = []*Command{
 	{"flushdb", flushdbCommand, 0, true},
 	{"load", loadCommand, 0, false},
 	{"save", saveCommand, 0, false},
+	{"config", configCommand, 2, false},
 }
 
 func equalFold(a, b string) bool {
@@ -607,6 +608,19 @@ func saveCommand(writer *resp.Writer, _ []redcon.RESP) {
 		return
 	}
 	writer.WriteString("OK")
+}
+
+func configCommand(writer *resp.Writer, args []redcon.RESP) {
+	key := args[0].String()
+	op := args[1].String()
+	switch strings.ToLower(op) {
+	case "get":
+		writer.WriteAny(configGet(key))
+	case "set":
+		writer.WriteString("OK")
+	default:
+		writer.WriteError(fmt.Sprintf("ERR unknown op type: %s", op))
+	}
 }
 
 func fetchMap(key []byte, setnx ...bool) (Map, error) {

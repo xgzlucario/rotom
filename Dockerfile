@@ -32,8 +32,8 @@ VOLUME /data
 WORKDIR /data
 
 COPY --from=builder /build/rotom /data/rotom
-COPY config.json /etc/rotom/config.json
+COPY rotom.toml /etc/rotom/rotom.toml
 
 EXPOSE 6379
 
-CMD ["./rotom", "-config", "/etc/rotom/config.json"]
+CMD ["./rotom", "-conf", "/etc/rotom/rotom.toml"]

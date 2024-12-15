@@ -1,15 +1,12 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"github.com/dustin/go-humanize"
 	"github.com/tidwall/redcon"
 	"github.com/xgzlucario/rotom/internal/iface"
+	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/net"
 	"github.com/xgzlucario/rotom/internal/resp"
-	"os"
-
-	"github.com/xgzlucario/rotom/internal/list"
 )
 
 const (
@@ -43,17 +40,8 @@ type Client struct {
 
 type Server struct {
 	fd      int
-	config  *Config
 	aeLoop  *AeLoop
 	clients map[int]*Client
-}
-
-type Config struct {
-	Port           int    `json:"port"`
-	AppendOnly     bool   `json:"appendonly"`
-	AppendFileName string `json:"appendfilename"`
-	Save           bool   `json:"save"`
-	SaveFileName   string `json:"savefilename"`
 }
 
 var (
@@ -62,18 +50,18 @@ var (
 )
 
 // InitDB initializes database and redo appendonly files if needed.
-func InitDB(config *Config) (err error) {
+func InitDB() (err error) {
 	db.dict = New()
 
-	if config.Save {
-		db.rdb = NewRdb(config.SaveFileName)
+	if configGetBool("save") {
+		db.rdb = NewRdb()
 		log.Debug().Msg("start loading rdb file...")
 		if err = db.rdb.LoadDB(); err != nil {
 			return err
 		}
 	}
-	if config.AppendOnly {
-		db.aof, err = NewAof(config.AppendFileName)
+	if configGetAppendOnly() {
+		db.aof, err = NewAof(configGetAppendFileName())
 		if err != nil {
 			return
 		}
@@ -91,18 +79,6 @@ func InitDB(config *Config) (err error) {
 		})
 	}
 	return nil
-}
-
-func LoadConfig(path string) (config *Config, err error) {
-	jsonStr, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
-	config = &Config{}
-	if err = json.Unmarshal(jsonStr, config); err != nil {
-		return nil, err
-	}
-	return
 }
 
 // AcceptHandler is the main file event of aeloop.
@@ -153,7 +129,8 @@ READ:
 	// queryBuf need grow up
 	if client.recvx == len(client.queryBuf) {
 		client.queryBuf = append(client.queryBuf, make([]byte, client.recvx)...)
-		log.Warn().Msgf("client %d queryBuf grow up to size %s", fd, readableSize(len(client.queryBuf)))
+		sz := uint64(len(client.queryBuf))
+		log.Warn().Msgf("client %d queryBuf grow up to size %s", fd, humanize.Bytes(sz))
 		goto READ
 	}
 
@@ -204,7 +181,7 @@ func ProcessQueryBuf(client *Client) {
 		} else {
 			cmd.process(client.replyWriter, respBuf)
 			// write aof file
-			if cmd.persist && server.config.AppendOnly {
+			if cmd.persist && configGetAppendOnly() {
 				_, _ = db.aof.Write(queryBuf[:n])
 			}
 		}
@@ -233,8 +210,7 @@ func SendReplyToClient(loop *AeLoop, fd int, extra interface{}) {
 	loop.ModRead(fd, ReadQueryFromClient, client)
 }
 
-func initServer(config *Config) (err error) {
-	server.config = config
+func initServer() (err error) {
 	server.clients = make(map[int]*Client)
 	// init aeLoop
 	server.aeLoop, err = AeLoopCreate()
@@ -242,31 +218,19 @@ func initServer(config *Config) (err error) {
 		return err
 	}
 	// init tcp server
-	server.fd, err = net.TcpServer(config.Port)
+	server.fd, err = net.TcpServer(configGetPort())
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func CronSyncAOF(_ *AeLoop, _ int, _ interface{}) {
+func CronSyncAOF(ae *AeLoop, fd int, extra interface{}) {
 	if err := db.aof.Flush(); err != nil {
 		log.Error().Msgf("sync aof error: %v", err)
 	}
 }
 
-func CronEvictExpired(_ *AeLoop, _ int, _ interface{}) {
+func CronEvictExpired(ae *AeLoop, fd int, extra interface{}) {
 	db.dict.EvictExpired()
-}
-
-func readableSize[T int | uint64](sz T) string {
-	switch {
-	case sz >= GB:
-		return fmt.Sprintf("%.1fGB", float64(sz)/float64(GB))
-	case sz >= MB:
-		return fmt.Sprintf("%.1fMB", float64(sz)/float64(MB))
-	case sz >= KB:
-		return fmt.Sprintf("%.1fKB", float64(sz)/float64(KB))
-	}
-	return fmt.Sprintf("%dB", sz)
 }

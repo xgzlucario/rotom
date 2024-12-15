@@ -9,11 +9,10 @@ import (
 )
 
 type Rdb struct {
-	path string
 }
 
-func NewRdb(path string) *Rdb {
-	return &Rdb{path: path}
+func NewRdb() *Rdb {
+	return &Rdb{}
 }
 
 func (r *Rdb) SaveDB() (err error) {
@@ -54,12 +53,12 @@ func (r *Rdb) SaveDB() (err error) {
 	if err != nil {
 		return err
 	}
-	return os.Rename(fname, r.path)
+	return os.Rename(fname, configGetDbFileName())
 }
 
 func (r *Rdb) LoadDB() error {
 	// Read file data by mmap.
-	data, err := mmap.Open(r.path, false)
+	data, err := mmap.Open(configGetDbFileName(), false)
 	if len(data) == 0 {
 		return nil
 	}

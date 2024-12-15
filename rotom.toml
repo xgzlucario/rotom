@@ -1,0 +1,11 @@
+[tcp]
+port = 6379
+
+[rdb]
+save = false
+dbfilename = "dump.rdb"
+
+[aof]
+appendonly = false
+appendfilename = "appendonly.aof"
+appendfsync = "everysec"

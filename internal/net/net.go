@@ -4,7 +4,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const BACKLOG int = 64
+/*
+BACKLOG is TCP listen() backlog.
+In high requests-per-second environments you need a high backlog in order
+to avoid slow clients connections issues. Note that the Linux kernel
+will silently truncate it to the value of /proc/sys/net/core/somaxconn so
+make sure to raise both the value of somaxconn and tcp_max_syn_backlog
+in order to get the desired effect.
+*/
+const BACKLOG int = 511
 
 func Accept(fd int) (int, error) {
 	nfd, _, err := unix.Accept(fd)

@@ -26,16 +26,19 @@ func initLogger() zerolog.Logger {
 		Logger()
 }
 
-func config4Server(config *Config) {
-	if err := initServer(config); err != nil {
+func config4Server(fileName string) {
+	if err := initConfig(fileName); err != nil {
+		log.Fatal().Msgf("init config error: %v", err)
+	}
+	if err := initServer(); err != nil {
 		log.Fatal().Msgf("init server error: %v", err)
 	}
-	if err := InitDB(config); err != nil {
+	if err := InitDB(); err != nil {
 		log.Fatal().Msgf("init db error: %v", err)
 	}
 }
 
-func printBanner(config *Config) {
+func printBanner() {
 	log.Printf(`
 ________      _____                  
 ___  __ \_______  /_____________ ___   Rotom %d bit (%s/%s)
@@ -44,7 +47,7 @@ _  _, _// /_/ / /_ / /_/ /  / / / / /  Build: %s
 /_/ |_| \____/\__/ \____//_/ /_/ /_/
 	   `,
 		strconv.IntSize, runtime.GOARCH, runtime.GOOS,
-		config.Port, os.Getpid(),
+		configGetPort(), os.Getpid(),
 		buildTime)
 }
 
@@ -52,11 +55,8 @@ _  _, _// /_/ / /_ / /_/ /  / / / / /  Build: %s
 func RegisterAeLoop(server *Server) {
 	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
 	server.aeLoop.AddTimeEvent(AeNormal, 100, CronEvictExpired, nil)
-	if server.config.AppendOnly {
+	if configGetAppendOnly() {
 		server.aeLoop.AddTimeEvent(AeNormal, 1000, CronSyncAOF, nil)
-	}
-	if server.config.Save {
-		// TODO: rdb
 	}
 }
 
@@ -64,22 +64,16 @@ func main() {
 	var path string
 	var debug bool
 
-	flag.StringVar(&path, "config", "config.json", "default config file path.")
+	flag.StringVar(&path, "conf", defaultConfigFileName, "config file path.")
 	flag.BoolVar(&debug, "debug", false, "run with debug mode.")
 	flag.Parse()
 
-	config, err := LoadConfig(path)
-	if err != nil {
-		log.Fatal().Msgf("load config error: %v", err)
-	}
-	printBanner(config)
+	config4Server(path)
+	printBanner()
 
 	if debug {
 		go http.ListenAndServe(":6060", nil)
 	}
-
-	log.Info().Str("config", path).Msg("read config file")
-	config4Server(config)
 
 	log.Info().Msg("rotom server is ready to accept.")
 

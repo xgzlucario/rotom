@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/alicebob/miniredis/v2"
 	"math/rand/v2"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -15,16 +14,8 @@ import (
 )
 
 func startup() {
-	config := &Config{
-		Port:           20082,
-		AppendOnly:     true,
-		AppendFileName: "test.aof",
-		Save:           true,
-		SaveFileName:   "dump.rdb",
-	}
-	_ = os.Remove(config.AppendFileName)
-	config4Server(config)
-	printBanner(config)
+	config4Server("rotom_test.toml")
+	printBanner()
 	RegisterAeLoop(&server)
 	// custom
 	server.aeLoop.AddTimeEvent(AeOnce, 300, func(_ *AeLoop, _ int, _ interface{}) {}, nil)
@@ -64,7 +55,7 @@ func TestCommand(t *testing.T) {
 		go startup()
 		time.Sleep(time.Second / 2)
 		rdb := redis.NewClient(&redis.Options{
-			Addr: ":20082",
+			Addr: ":7979",
 		})
 		sleepFn := func(dur time.Duration) {
 			time.Sleep(dur)
@@ -582,22 +573,4 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 	t.Run("close", func(t *testing.T) {
 		ast.Nil(rdb.Close())
 	})
-}
-
-func TestConfig(t *testing.T) {
-	ast := assert.New(t)
-	cfg, _ := LoadConfig("config.json")
-	ast.Equal(cfg.Port, 6379)
-	_, err := LoadConfig("not-exist.json")
-	ast.NotNil(err)
-	_, err = LoadConfig("go.mod")
-	ast.NotNil(err)
-}
-
-func TestReadableSize(t *testing.T) {
-	ast := assert.New(t)
-	ast.Equal(readableSize(50), "50B")
-	ast.Equal(readableSize(50*KB), "50.0KB")
-	ast.Equal(readableSize(50*MB), "50.0MB")
-	ast.Equal(readableSize(50*GB), "50.0GB")
 }

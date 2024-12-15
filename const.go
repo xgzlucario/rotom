@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/dustin/go-humanize"
 	"github.com/redis/go-redis/v9"
 	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/iface"
@@ -28,9 +29,8 @@ const (
 )
 
 const (
-	KB = 1024
-	MB = 1024 * KB
-	GB = 1024 * MB
+	KB = humanize.Byte
+	MB = humanize.MiByte
 )
 
 var type2c = map[ObjectType]func() iface.Encoder{
