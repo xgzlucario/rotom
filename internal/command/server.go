@@ -66,7 +66,17 @@ func loadCommand(ctx *Context) {
 		ctx.W.WriteError("ERR " + err.Error())
 		return
 	}
+	old := ctx.DB.Dict
 	ctx.DB.Dict = dict
+	// LOAD itself is not logged to the AOF, so rewrite it from the loaded
+	// data; otherwise a restart would bring back the old dataset.
+	if ctx.RewriteAOF != nil {
+		if err := ctx.RewriteAOF(); err != nil {
+			ctx.DB.Dict = old
+			ctx.W.WriteError("ERR LOAD aborted, cannot rewrite the AOF: " + strings.TrimPrefix(err.Error(), "ERR "))
+			return
+		}
+	}
 	ctx.W.WriteString("OK")
 }
 

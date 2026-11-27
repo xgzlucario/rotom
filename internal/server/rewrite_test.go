@@ -156,3 +156,33 @@ func TestBgRewriteAofDisabled(t *testing.T) {
 	defer conn.Close()
 	assert.Equal(t, "-ERR AOF is not enabled\r\n", send(t, conn, bufio.NewReader(conn), "BGREWRITEAOF\r\n"))
 }
+
+// LOAD is not logged to the AOF, so it must rewrite it: otherwise a restart
+// would replay the commands LOAD discarded.
+func TestLoadRewritesAof(t *testing.T) {
+	ast := assert.New(t)
+	cfg := aofConfig(t)
+	cfg.RDB.DBFileName = filepath.Join(t.TempDir(), "dump.rdb")
+	_, addr := startServer(t, cfg)
+	conn, err := gonet.Dial("tcp", addr)
+	ast.Nil(err)
+	defer conn.Close()
+	rd := bufio.NewReader(conn)
+
+	send(t, conn, rd, "SET k saved\r\n")
+	ast.Equal("+OK\r\n", send(t, conn, rd, "SAVE\r\n"))
+	send(t, conn, rd, "SET k discarded\r\n")
+	send(t, conn, rd, "SET other discarded\r\n")
+	ast.Equal("+OK\r\n", send(t, conn, rd, "LOAD\r\n"))
+	send(t, conn, rd, "SET after load\r\n")
+	waitRewrite(t, cfg.AOF.AppendDirName, 1)
+
+	s, err := New(cfg)
+	ast.Nil(err)
+	defer s.aof.Close()
+	v, _, _ := s.db.GetString("k")
+	ast.Equal("saved", string(v))
+	ast.False(s.db.Exists("other"))
+	v, _, _ = s.db.GetString("after")
+	ast.Equal("load", string(v))
+}

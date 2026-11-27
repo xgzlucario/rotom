@@ -239,6 +239,21 @@ func TestServerCommands(t *testing.T) {
 	ast.Contains(UnknownCommandError([]byte("x")), "unknown command 'x'")
 
 	ast.Equal("-ERR AOF is not enabled\r\n", tt.do("bgrewriteaof"))
+
+	// with the AOF on, LOAD rewrites it, and is undone if it cannot
+	tt.ctx.Config.RDB.DBFileName = filepath.Join(t.TempDir(), "dump.rdb")
+	tt.do("set", "k", "saved")
+	ast.Equal(ok, tt.do("save"))
+	tt.do("set", "k", "changed")
+	tt.ctx.RewriteAOF = func() error { return errors.New("ERR busy") }
+	ast.Equal("-ERR LOAD aborted, cannot rewrite the AOF: busy\r\n", tt.do("load"))
+	ast.Equal("$7\r\nchanged\r\n", tt.do("get", "k"))
+	rewrites := 0
+	tt.ctx.RewriteAOF = func() error { rewrites++; return nil }
+	ast.Equal(ok, tt.do("load"))
+	ast.Equal("$5\r\nsaved\r\n", tt.do("get", "k"))
+	ast.Equal(1, rewrites)
+	tt.ctx.RewriteAOF = nil
 	calls := 0
 	tt.ctx.RewriteAOF = func() error {
 		if calls++; calls > 1 {
