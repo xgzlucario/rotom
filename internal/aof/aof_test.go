@@ -92,10 +92,39 @@ func TestAof(t *testing.T) {
 	})
 
 	t.Run("parse-policy", func(t *testing.T) {
-		p, err := ParseFsyncPolicy("always")
-		ast.Nil(err)
-		ast.Equal(FsyncAlways, p)
-		_, err = ParseFsyncPolicy("sometimes")
+		for s, want := range map[string]FsyncPolicy{"always": FsyncAlways, "everysec": FsyncEverySec, "": FsyncEverySec, "no": FsyncNo} {
+			p, err := ParseFsyncPolicy(s)
+			ast.Nil(err)
+			ast.Equal(want, p)
+		}
+		_, err := ParseFsyncPolicy("sometimes")
 		ast.NotNil(err)
+	})
+
+	t.Run("policies", func(t *testing.T) {
+		for _, policy := range []FsyncPolicy{FsyncAlways, FsyncEverySec, FsyncNo} {
+			p := filepath.Join(dir, "policy.aof")
+			_ = os.Remove(p)
+			aof, err := NewAof(p, policy)
+			ast.Nil(err)
+			ast.Equal(policy, aof.Policy())
+			ast.Nil(aof.Write()) // nothing buffered
+			aof.Append([][]byte{[]byte("ping")})
+			ast.Nil(aof.Write())
+			ast.Nil(aof.Sync())
+			ast.Nil(aof.Close())
+			data, _ := os.ReadFile(p)
+			ast.Equal("*1\r\n$4\r\nping\r\n", string(data))
+		}
+	})
+
+	t.Run("write-after-close", func(t *testing.T) {
+		aof, _ := NewAof(filepath.Join(dir, "closed.aof"), FsyncNo)
+		ast.Nil(aof.Close())
+		aof.Append([][]byte{[]byte("ping")})
+		ast.NotNil(aof.Write())
+		ast.NotNil(aof.Flush())
+		ast.NotNil(aof.Close())
+		ast.NotNil(aof.Read(func([][]byte) {}))
 	})
 }

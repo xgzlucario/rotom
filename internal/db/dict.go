@@ -93,14 +93,6 @@ func (d *Dict) setExpire(e *entry, expireAt int64) {
 	e.expireAt = expireAt
 }
 
-// Get returns the value of key: []byte for strings, else a container.
-func (d *Dict) Get(key string) (any, bool) {
-	if e := d.lookup(key); e != nil {
-		return e.value(), true
-	}
-	return nil, false
-}
-
 func (d *Dict) Exists(key string) bool { return d.lookup(key) != nil }
 
 // SetString sets key to a copy of val. With keepTTL the expire time is

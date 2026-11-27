@@ -116,10 +116,6 @@ func (s *Server) Listen() (err error) {
 // Run serves until Stop is called. It must run on a single goroutine.
 func (s *Server) Run() { s.loop.Main() }
 
-// Stop makes Run return. It must be called from the event loop goroutine,
-// e.g. from a time event.
-func (s *Server) Stop() { s.loop.Stop() }
-
 // Close releases sockets and flushes the AOF.
 func (s *Server) Close() error {
 	for _, c := range s.clients {

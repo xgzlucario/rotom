@@ -7,12 +7,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v4
+      - uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
+      - name: Vet
+        run: go vet ./...
       - name: Run coverage
-        run: go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+        # -coverpkg credits code exercised by other packages' tests, e.g. the
+        # command handlers driven by the server integration tests.
+        run: go test -race -coverpkg=./... -coverprofile=coverage.txt -covermode=atomic ./...
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4-beta
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.txt

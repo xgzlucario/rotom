@@ -1,0 +1,2 @@
+ignore:
+  - "main.go" # flag parsing and startup only

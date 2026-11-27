@@ -36,6 +36,26 @@ func TestLoad(t *testing.T) {
 		ast.Equal("no", v)
 	})
 
+	t.Run("get", func(t *testing.T) {
+		c := Default()
+		c.AOF.AppendOnly = true
+		for name, want := range map[string]string{
+			"port": "6379", "appendonly": "yes", "appendfilename": "appendonly.aof",
+			"appendfsync": "everysec", "dbfilename": "dump.rdb", "save": "",
+		} {
+			got, ok := c.Get(name)
+			ast.True(ok, name)
+			ast.Equal(want, got, name)
+		}
+		_, ok := c.Get("nope")
+		ast.False(ok)
+	})
+
+	t.Run("missing-file", func(t *testing.T) {
+		_, err := Load(filepath.Join(t.TempDir(), "none.toml"))
+		ast.NotNil(err)
+	})
+
 	t.Run("unknown-key", func(t *testing.T) {
 		_, err := Load(write(t, "[aof]\nappendonlyy = true\n"))
 		ast.NotNil(err)
@@ -45,6 +65,10 @@ func TestLoad(t *testing.T) {
 		_, err := Load(write(t, "[aof]\nappendfsync = \"sometimes\"\n"))
 		ast.NotNil(err)
 		_, err = Load(write(t, "[tcp]\nport = 0\n"))
+		ast.NotNil(err)
+		_, err = Load(write(t, "[rdb]\ndbfilename = \"\"\n"))
+		ast.NotNil(err)
+		_, err = Load(write(t, "[aof]\nappendfilename = \"\"\n"))
 		ast.NotNil(err)
 	})
 }

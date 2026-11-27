@@ -100,6 +100,66 @@ func TestDict(t *testing.T) {
 		ast.True(d.Exists("key"))
 	})
 
+	t.Run("scan-and-all-skip-expired", func(t *testing.T) {
+		d := NewDict()
+		d.SetString("live", []byte("v"), 0, false)
+		d.SetString("dead", []byte("v"), d.Now()-1, false)
+		var scanned []string
+		for cursor := d.Scan(0, func(k string, _ any) { scanned = append(scanned, k) }); cursor != 0; {
+			cursor = d.Scan(cursor, func(k string, _ any) { scanned = append(scanned, k) })
+		}
+		ast.Equal([]string{"live"}, scanned)
+		n := 0
+		for range d.All() {
+			n++
+			break // early stop
+		}
+		ast.Equal(1, n)
+		_, ok := d.ExpireAt("dead")
+		ast.False(ok)
+		ast.Zero(NewDict().Scan(0, func(string, any) {}))
+	})
+
+	t.Run("types", func(t *testing.T) {
+		d := New()
+		h, _ := d.HashForWrite("h")
+		h.Set("f", []byte("v"))
+		l, _ := d.ListForWrite("l")
+		l.RPush("x")
+		s, _ := d.SetForWrite("s", [][]byte{[]byte("m")})
+		s.Add("m")
+		z, _ := d.ZSetForWrite("z", [][]byte{[]byte("m")})
+		z.Set("m", 1)
+		d.SetString("str", nil, 0, false)
+		for key, want := range map[string]string{"h": "hash", "l": "list", "s": "set", "z": "zset", "str": "string", "none": "none"} {
+			ast.Equal(want, d.Type(key).String(), key)
+		}
+		ast.Equal(TypeNone, TypeOf(42))
+		ast.Panics(func() { EncodingOf(42) })
+		_, err := newObject(Encoding(99))
+		ast.NotNil(err)
+
+		// wrong types and missing keys
+		got, err := d.GetList("none")
+		ast.Nil(got)
+		ast.Nil(err)
+		_, err = d.GetSet("h")
+		ast.ErrorIs(err, ErrWrongType)
+		_, err = d.GetZSet("h")
+		ast.ErrorIs(err, ErrWrongType)
+		_, err = d.ListForWrite("h")
+		ast.ErrorIs(err, ErrWrongType)
+		_, err = d.SetForWrite("h", nil)
+		ast.ErrorIs(err, ErrWrongType)
+		_, err = d.ZSetForWrite("h", nil)
+		ast.ErrorIs(err, ErrWrongType)
+
+		d.DeleteIfEmpty("l", 1)
+		ast.True(d.Exists("l"))
+		d.DeleteIfEmpty("l", 0)
+		ast.False(d.Exists("l"))
+	})
+
 	t.Run("active-expire", func(t *testing.T) {
 		d := NewDict()
 		for i := range 1000 {

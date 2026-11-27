@@ -87,11 +87,6 @@ func (w *Writer) WriteNull() {
 	w.b = append(w.b, "$-1\r\n"...)
 }
 
-// WriteNullArray writes a null array: *-1\r\n
-func (w *Writer) WriteNullArray() {
-	w.b = append(w.b, "*-1\r\n"...)
-}
-
 // WriteArray writes an array header; the caller must write exactly n elements.
 func (w *Writer) WriteArray(n int) {
 	w.b = append(w.b, '*')
