@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/xgzlucario/rotom/internal/codec"
+	"github.com/xgzlucario/rotom/internal/fileutil"
 )
 
 // rdb file layout:
@@ -20,9 +21,14 @@ const (
 	rdbVersion = 2
 )
 
-// SaveRDB writes dict to path atomically: a temp file is written, fsynced
-// and renamed, so a crash never leaves a partial file behind.
-func SaveRDB(path string, dict *Dict) (err error) {
+// SaveRDB writes dict to path atomically.
+func SaveRDB(path string, dict *Dict) error {
+	return fileutil.WriteAtomic(path, EncodeRDB(dict))
+}
+
+// EncodeRDB returns the rdb encoding of dict. AOF rewrites use it as the base
+// file, so it must be a consistent snapshot: it never modifies the dict.
+func EncodeRDB(dict *Dict) []byte {
 	buf := append(make([]byte, 0, 4096), rdbMagic...)
 	w := codec.NewWriter(append(buf, rdbVersion))
 
@@ -44,31 +50,7 @@ func SaveRDB(path string, dict *Dict) (err error) {
 		}
 	}
 	w.WriteUint32(crc32.ChecksumIEEE(w.Bytes()))
-	return writeFileAtomic(path, w.Bytes())
-}
-
-func writeFileAtomic(path string, data []byte) (err error) {
-	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err != nil {
-			_ = f.Close()
-			_ = os.Remove(tmp)
-		}
-	}()
-	if _, err = f.Write(data); err != nil {
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return w.Bytes()
 }
 
 // LoadRDB reads an rdb file into a new Dict. A missing file yields an empty Dict.

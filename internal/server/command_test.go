@@ -23,7 +23,7 @@ func testConfig(dir string) *config.Config {
 	cfg.RDB.Save = true
 	cfg.RDB.DBFileName = filepath.Join(dir, "dump.rdb")
 	cfg.AOF.AppendOnly = true
-	cfg.AOF.AppendFileName = filepath.Join(dir, "appendonly.aof")
+	cfg.AOF.AppendDirName = filepath.Join(dir, "appendonlydir")
 	return cfg
 }
 

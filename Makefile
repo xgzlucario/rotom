@@ -23,7 +23,7 @@ heap:
 	go tool pprof http://$(PPROF_HOST)/debug/pprof/heap
 
 clean:
-	rm -f coverage.* *.aof *.rdb
+	rm -rf coverage.* *.aof *.rdb appendonlydir
 
 bench:
 	go test -run XXX -bench . -benchmem ./internal/...

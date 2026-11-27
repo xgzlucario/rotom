@@ -1,6 +1,7 @@
 package command
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -236,4 +237,15 @@ func TestServerCommands(t *testing.T) {
 	ast.True(isErr(tt.do("load")))
 
 	ast.Contains(UnknownCommandError([]byte("x")), "unknown command 'x'")
+
+	ast.Equal("-ERR AOF is not enabled\r\n", tt.do("bgrewriteaof"))
+	calls := 0
+	tt.ctx.RewriteAOF = func() error {
+		if calls++; calls > 1 {
+			return errors.New("ERR busy")
+		}
+		return nil
+	}
+	ast.Equal("+Background append only file rewriting started\r\n", tt.do("bgrewriteaof"))
+	ast.Equal("-ERR busy\r\n", tt.do("bgrewriteaof"))
 }

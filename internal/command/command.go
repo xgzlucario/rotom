@@ -45,6 +45,9 @@ type Context struct {
 	DB     *db.DB
 	Config *config.Config
 
+	// RewriteAOF starts a background AOF rewrite; nil when the AOF is off.
+	RewriteAOF func() error
+
 	// propagate, when set, is written to the AOF instead of the original
 	// command (e.g. relative TTLs rewritten to absolute times).
 	propagate [][]byte
@@ -111,6 +114,7 @@ func init() {
 	register("hello", helloCommand, -1, 0)
 	register("flushdb", flushdbCommand, -1, w)
 	register("save", saveCommand, 1, 0)
+	register("bgrewriteaof", bgrewriteaofCommand, 1, 0)
 	register("load", loadCommand, 1, 0)
 	register("config", configCommand, -2, 0)
 }

@@ -14,7 +14,7 @@
 - 非常好的优化，达到原生 Redis 的性能
 - 兼容 Redis RESP 协议，可以使用任何 redis 客户端连接
 - 实现了 String, Hash, Set, List, ZSet 数据结构
-- RDB 和 AOF 持久化支持 
+- 支持 RDB 和 AOF 持久化，AOF 采用 Redis 7 的 multi-part 结构，支持后台重写
 - 支持 20 多种常用命令
 
 ## AELoop 事件循环
@@ -57,11 +57,27 @@ internal/
   server/    客户端、请求处理、AOF/RDB 接入
   command/   命令表与命令实现
   db/        键空间：dict、过期、值类型、RDB
-  aof/       AOF 文件
+  aof/       multi-part AOF 与重写
   codec/     RDB 二进制编码
   listpack/  hash/  list/  set/  zset/     数据结构
   config/    toml 配置
+  fileutil/  原子写文件
 ```
+
+## 持久化
+
+开启 `appendonly = true` 后，AOF 是一个目录，结构与 Redis 7 的 multi-part AOF 相同：
+
+```
+appendonlydir/
+  appendonly.aof.manifest      下面这些文件及其加载顺序
+  appendonly.aof.3.base.rdb    上次重写生成的快照
+  appendonly.aof.7.incr.aof    快照之后写入的命令
+```
+
+执行 `BGREWRITEAOF`，或者 AOF 增长超过 `auto-aof-rewrite-percentage` / `auto-aof-rewrite-min-size` 时，会触发重写，不需要 fork：先同步编码数据集，同时把后续写命令切到新的 incr 文件；快照在后台写盘，确认落盘后再切换 manifest。任何时刻崩溃，manifest 指向的文件组合都是完整的数据集。
+
+编码快照这一步会阻塞事件循环，大约每 10 万个 key 30ms，而 Redis 的 fork 几乎不阻塞。最后一个 incr 文件末尾如果有崩溃时写了一半的命令，加载时会自动截掉。旧版本的单文件 `appendonly.aof` 启动时会被自动移进目录。
 
 ## 性能
 
@@ -79,8 +95,6 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ## 计划
 
 - LRU 缓存及内存淘汰支持
-- dict 渐进式哈希支持
-- RDB 及 AOF Rewrite 支持
 - 兼容更多常用命令
 
 ## 使用

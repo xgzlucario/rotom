@@ -29,14 +29,15 @@ const (
 	// maxAcceptsPerCall bounds accepts per readable event on the listener.
 	maxAcceptsPerCall = 1000
 
-	cronExpireMs = 100
-	cronAofMs    = 1000
+	cronExpireMs  = 100
+	cronAofMs     = 1000
+	cronRewriteMs = 100
 )
 
 type Server struct {
 	cfg *config.Config
 	db  *db.DB
-	aof *aof.Aof
+	aof *aof.AOF
 
 	loop    *ae.Loop
 	fd      int
@@ -80,18 +81,70 @@ func (s *Server) loadData() error {
 	if err != nil {
 		return err
 	}
-	s.aof, err = aof.NewAof(s.cfg.AOF.AppendFileName, policy)
+	a, err := aof.Open(s.cfg.AOF.AppendDirName, s.cfg.AOF.AppendFileName, policy)
 	if err != nil {
 		return err
 	}
-	log.Debug().Msg("loading aof file...")
+	log.Debug().Msg("loading aof...")
 	ctx := s.newContext(resp.NewWriter(KB))
-	return s.aof.Read(func(argv [][]byte) {
+	loadBase := func(path string) error {
+		dict, err := db.LoadRDB(path)
+		if err == nil {
+			s.db.Dict = dict
+		}
+		return err
+	}
+	replay := func(argv [][]byte) {
 		if cmd := command.Lookup(argv[0]); cmd != nil {
 			command.Execute(cmd, ctx, argv[1:])
 			ctx.W.Reset()
 		}
-	})
+	}
+	if err := a.Load(loadBase, replay); err != nil {
+		_ = a.Close()
+		return err
+	}
+	s.aof = a
+	return nil
+}
+
+// rewriteAOF starts a background AOF rewrite. Encoding the snapshot blocks
+// the event loop; writing it to disk does not.
+func (s *Server) rewriteAOF() error {
+	if s.aof.Rewriting() {
+		return aof.ErrRewriteInProgress
+	}
+	start := time.Now()
+	snapshot := db.EncodeRDB(s.db.Dict)
+	if err := s.aof.StartRewrite(snapshot); err != nil {
+		return err
+	}
+	log.Info().Msgf("aof rewrite started: %d keys, %d bytes snapshot encoded in %v",
+		s.db.Len(), len(snapshot), time.Since(start))
+	return nil
+}
+
+// cronRewriteAof finishes a background rewrite, and starts one when the AOF
+// has grown enough, like redis' auto-aof-rewrite-percentage/min-size.
+func (s *Server) cronRewriteAof(*ae.Loop, int, any) int64 {
+	if done, err := s.aof.PollRewrite(); err != nil {
+		log.Error().Msgf("aof rewrite failed: %v", err)
+	} else if done {
+		log.Info().Msgf("aof rewrite finished, size %d bytes", s.aof.Size())
+	}
+
+	pct := int64(s.cfg.AOF.AutoRewritePercentage)
+	size := s.aof.Size()
+	if pct > 0 && !s.aof.Rewriting() && size >= int64(s.cfg.AOF.AutoRewriteMinSize) {
+		base := max(s.aof.SizeAfterRewrite(), 1)
+		if growth := (size - base) * 100 / base; growth >= pct {
+			log.Info().Msgf("starting automatic aof rewrite: %d%% growth", growth)
+			if err := s.rewriteAOF(); err != nil {
+				log.Error().Msgf("aof rewrite: %v", err)
+			}
+		}
+	}
+	return cronRewriteMs
 }
 
 // Listen opens the listening socket and registers the event handlers.
@@ -109,6 +162,7 @@ func (s *Server) Listen() (err error) {
 	s.loop.AddTimeEvent(cronExpireMs, s.cronExpire, nil)
 	if s.aof != nil {
 		s.loop.AddTimeEvent(cronAofMs, s.cronSyncAof, nil)
+		s.loop.AddTimeEvent(cronRewriteMs, s.cronRewriteAof, nil)
 	}
 	return nil
 }
@@ -134,7 +188,11 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) newContext(w *resp.Writer) *command.Context {
-	return &command.Context{W: w, DB: s.db, Config: s.cfg}
+	ctx := &command.Context{W: w, DB: s.db, Config: s.cfg}
+	if s.cfg.AOF.AppendOnly {
+		ctx.RewriteAOF = s.rewriteAOF
+	}
+	return ctx
 }
 
 // processCommand runs one command with ctx, appending the reply to ctx.W.

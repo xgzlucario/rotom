@@ -7,5 +7,8 @@ dbfilename = "dump.rdb"
 
 [aof]
 appendonly = false
+appenddirname = "appendonlydir"
 appendfilename = "appendonly.aof"
 appendfsync = "everysec"
+auto-aof-rewrite-percentage = 100
+auto-aof-rewrite-min-size = "64mb"

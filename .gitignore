@@ -10,3 +10,4 @@ output/
 # go test binaries and profiles
 *.test
 *.prof
+appendonlydir/

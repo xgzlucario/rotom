@@ -14,7 +14,7 @@ This is rotom, a high performance, low latency tiny Redis Server written in Go. 
 - Excellent optimization, achieving native Redis performance.
 - Compatible with the Redis RESP protocol, allowing any Redis client to connected.
 - Implements data structures String, Hash, Set, List, ZSet.
-- Supports RDB & AOF.
+- Supports RDB & AOF, with redis 7 style multi-part AOF and background AOF rewrite.
 - Supports 20+ commonly used commands.
 
 ## AELoop
@@ -57,11 +57,27 @@ internal/
   server/    clients, query processing, AOF/RDB wiring
   command/   command table and handlers
   db/        keyspace: dict, expiration, value types, RDB
-  aof/       append only file
+  aof/       multi-part append only file and rewrite
   codec/     binary encoding for RDB
   listpack/  hash/  list/  set/  zset/     data structures
   config/    toml config
+  fileutil/  durable atomic file writes
 ```
+
+## Persistence
+
+With `appendonly = true`, the AOF is a directory, like redis 7's multi-part AOF:
+
+```
+appendonlydir/
+  appendonly.aof.manifest      the files below, in load order
+  appendonly.aof.3.base.rdb    snapshot taken by the last rewrite
+  appendonly.aof.7.incr.aof    commands written since
+```
+
+`BGREWRITEAOF`, or growth past `auto-aof-rewrite-percentage` / `auto-aof-rewrite-min-size`, starts a rewrite without fork: the dataset is encoded synchronously while writes switch to a new incr file, then the snapshot is written in the background and the manifest is switched once it is durable. A crash at any point leaves a manifest that names a complete dataset.
+
+The encoding step blocks the event loop, about 30ms per 100k keys, where redis' fork is nearly free. An incomplete command at the end of the last incr file, left by a crash mid-write, is truncated on load. A single `appendonly.aof` from older versions is moved into the directory automatically.
 
 ## Benchmark
 
@@ -79,7 +95,7 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ## Roadmap
 
 - [ ] Support for LRU cache and memory eviction.
-- [ ] RDB and AOF Rewrite.
+- [x] AOF Rewrite.
 
 ## Usage
 

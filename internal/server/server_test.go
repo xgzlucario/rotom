@@ -192,31 +192,38 @@ func TestLoadData(t *testing.T) {
 		ast.ErrorContains(err, "load rdb")
 	})
 
-	t.Run("bad-aof", func(t *testing.T) {
+	// legacyAOF configures an AOF whose old single-file layout holds data:
+	// it is migrated into the directory on startup.
+	legacyAOF := func(t *testing.T, data []byte) *config.Config {
+		dir := t.TempDir()
 		cfg := config.Default()
 		cfg.AOF.AppendOnly = true
-		cfg.AOF.AppendFileName = filepath.Join(t.TempDir(), "a.aof")
-		ast.Nil(os.WriteFile(cfg.AOF.AppendFileName, []byte("*1\r\n$x\r\n"), 0644))
+		cfg.AOF.AppendDirName = filepath.Join(dir, "appendonlydir")
+		ast.Nil(os.WriteFile(filepath.Join(dir, cfg.AOF.AppendFileName), data, 0644))
+		return cfg
+	}
+
+	t.Run("bad-aof", func(t *testing.T) {
+		cfg := legacyAOF(t, []byte("*1\r\n$x\r\n"))
 		_, err := New(cfg)
-		ast.NotNil(err)
+		ast.ErrorContains(err, "corrupted")
 
 		cfg.AOF.AppendFsync = "sometimes"
 		_, err = New(cfg)
 		ast.NotNil(err)
 
 		cfg.AOF.AppendFsync = "everysec"
-		cfg.AOF.AppendFileName = t.TempDir() // a directory
+		file := filepath.Join(t.TempDir(), "file")
+		ast.Nil(os.WriteFile(file, nil, 0644))
+		cfg.AOF.AppendDirName = file // not a directory
 		_, err = New(cfg)
 		ast.NotNil(err)
 	})
 
 	t.Run("aof-skips-unknown-commands", func(t *testing.T) {
-		cfg := config.Default()
-		cfg.AOF.AppendOnly = true
-		cfg.AOF.AppendFileName = filepath.Join(t.TempDir(), "a.aof")
 		data := aof.Encode(nil, [][]byte{[]byte("nope")})
 		data = aof.Encode(data, [][]byte{[]byte("set"), []byte("k"), []byte("v")})
-		ast.Nil(os.WriteFile(cfg.AOF.AppendFileName, data, 0644))
+		cfg := legacyAOF(t, data)
 		s, err := New(cfg)
 		ast.Nil(err)
 		ast.True(s.db.Exists("k"))
@@ -242,7 +249,7 @@ func TestAofEndToEnd(t *testing.T) {
 	cfg := config.Default()
 	cfg.AOF.AppendOnly = true
 	cfg.AOF.AppendFsync = "always"
-	cfg.AOF.AppendFileName = filepath.Join(t.TempDir(), "a.aof")
+	cfg.AOF.AppendDirName = t.TempDir()
 	_, addr := startServer(t, cfg)
 
 	conn, err := gonet.Dial("tcp", addr)
@@ -254,8 +261,7 @@ func TestAofEndToEnd(t *testing.T) {
 	readLine(t, rd)
 
 	// with appendfsync always the write is on disk before the reply
-	data, err := os.ReadFile(cfg.AOF.AppendFileName)
-	ast.Nil(err)
+	data := readIncrs(t, cfg.AOF.AppendDirName)
 	ast.True(bytes.Contains(data, []byte("SET")))
 	ast.False(bytes.Contains(data, []byte("GET")))
 }

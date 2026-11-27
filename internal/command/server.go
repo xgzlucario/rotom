@@ -47,6 +47,18 @@ func saveCommand(ctx *Context) {
 	ctx.W.WriteString("OK")
 }
 
+func bgrewriteaofCommand(ctx *Context) {
+	if ctx.RewriteAOF == nil {
+		ctx.W.WriteError("ERR AOF is not enabled")
+		return
+	}
+	if err := ctx.RewriteAOF(); err != nil {
+		ctx.W.WriteError(err.Error())
+		return
+	}
+	ctx.W.WriteString("Background append only file rewriting started")
+}
+
 func loadCommand(ctx *Context) {
 	// load into a new dict and swap only on success.
 	dict, err := db.LoadRDB(ctx.Config.RDB.DBFileName)

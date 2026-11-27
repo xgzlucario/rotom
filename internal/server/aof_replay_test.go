@@ -24,7 +24,7 @@ func replay(t *testing.T, delay time.Duration, cmds [][]string) (live, replayed 
 	cfg := config.Default()
 	cfg.AOF.AppendOnly = true
 	cfg.AOF.AppendFsync = "no"
-	cfg.AOF.AppendFileName = filepath.Join(t.TempDir(), "replay.aof")
+	cfg.AOF.AppendDirName = t.TempDir()
 
 	s1, err := New(cfg)
 	if err != nil {
@@ -50,7 +50,7 @@ func replay(t *testing.T, delay time.Duration, cmds [][]string) (live, replayed 
 		t.Fatal(err)
 	}
 	defer s2.Close()
-	aofData, _ = os.ReadFile(cfg.AOF.AppendFileName)
+	aofData = readIncrs(t, cfg.AOF.AppendDirName)
 	return s1.db.Dict, s2.db.Dict, aofData
 }
 
@@ -150,4 +150,23 @@ func dump(d *db.Dict) map[string]any {
 		res[it.Key] = []any{val, it.ExpireAt}
 	}
 	return res
+}
+
+// readIncrs returns the content of all incr files in dir, in order.
+func readIncrs(t *testing.T, dir string) []byte {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(dir, "*.incr.aof"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(paths) // fine for the single-digit seqs used in tests
+	var data []byte
+	for _, p := range paths {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data = append(data, b...)
+	}
+	return data
 }
