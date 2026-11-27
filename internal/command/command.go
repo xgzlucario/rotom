@@ -37,7 +37,8 @@ func (c *Command) checkArity(argc int) bool {
 	return argc >= -c.arity
 }
 
-// Context carries one command invocation.
+// Context carries one command invocation. A server keeps one Context per
+// client and reuses it for every command, so executing does not allocate.
 type Context struct {
 	W      *resp.Writer
 	Args   [][]byte // arguments, excluding the command name
@@ -139,9 +140,11 @@ type Result struct {
 	Argv [][]byte
 }
 
-// Execute runs cmd. A panic in the handler is turned into an error reply, so
-// a bug in one command cannot take down the whole server.
-func Execute(cmd *Command, ctx *Context) (res Result) {
+// Execute runs cmd with args (excluding the command name), appending the
+// reply to ctx.W. A panic in the handler is turned into an error reply, so a
+// bug in one command cannot take down the whole server.
+func Execute(cmd *Command, ctx *Context, args [][]byte) (res Result) {
+	ctx.Args, ctx.propagate, ctx.noPropagate = args, nil, false
 	w := ctx.W
 	if !cmd.checkArity(len(ctx.Args) + 1) {
 		w.WriteError(fmt.Sprintf("%s for '%s' command", ErrWrongArguments, cmd.Name))

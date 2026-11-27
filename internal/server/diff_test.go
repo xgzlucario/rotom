@@ -124,7 +124,7 @@ func fixArgs(args []any) []any {
 	}
 	res := args[:2:2]
 	for _, a := range args[2:] {
-		for _, p := range strings.Fields(a.(string)) {
+		for p := range strings.FieldsSeq(a.(string)) {
 			res = append(res, p)
 		}
 	}

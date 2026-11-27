@@ -1,29 +1,46 @@
 package db
 
 import (
+	"iter"
 	"strings"
 	"time"
 )
 
-// entry is a value with its expire time stored inline, so that a lookup
-// needs a single hash probe.
-//
-// Entries are stored by pointer and updated in place. This matters: for
-// string keys, assigning to an existing map key also replaces the stored key,
-// and callers usually pass keys that alias the network buffer.
+// entry is one key of the keyspace. It is also the node of its hashtable
+// bucket chain, and holds the value and expire time inline, so a lookup is a
+// single hash probe and a string key costs three objects: the entry, the key
+// and the value bytes.
 type entry struct {
-	value    any
-	expireAt int64 // unix ms, 0 means no expire
+	key      string
+	next     *entry // bucket chain
+	expireAt int64  // unix ms, 0 means no expire
+
+	// A value is either a string (obj == nil) or a container. Strings are
+	// kept out of `any` so that storing them does not box a slice header.
+	str []byte
+	obj any
 }
 
-// Dict is the keyspace of rotom.
+func (e *entry) isString() bool { return e.obj == nil }
+
+// value returns the value as stored in the RDB/type switches.
+func (e *entry) value() any {
+	if e.isString() {
+		return e.str
+	}
+	return e.obj
+}
+
+// Dict is the keyspace.
 //
-// Keys live in a redis-style hashtable (see hashtable.go), which supports
-// SCAN cursors. Expired keys are removed lazily on access and actively by
-// ActiveExpire, which samples the `volatile` index (keys with an expire time).
+// Expired keys are removed lazily on access and actively by ActiveExpire,
+// which samples `volatile`, the set of entries with an expire time.
+//
+// The Dict never retains caller strings: keys are cloned on insert, so
+// callers may pass strings aliasing a network buffer.
 type Dict struct {
 	data     *hashtable
-	volatile map[string]struct{}
+	volatile map[*entry]struct{}
 
 	// now is the cached clock in unix ms. It is refreshed once per command
 	// (see Tick) so that a command sees a consistent time, like redis.
@@ -33,7 +50,7 @@ type Dict struct {
 func NewDict() *Dict {
 	return &Dict{
 		data:     newHashtable(),
-		volatile: make(map[string]struct{}, 64),
+		volatile: make(map[*entry]struct{}),
 		now:      time.Now().UnixMilli(),
 	}
 }
@@ -44,76 +61,84 @@ func (d *Dict) Tick() { d.now = time.Now().UnixMilli() }
 // Now returns the cached clock in unix ms.
 func (d *Dict) Now() int64 { return d.now }
 
+// Len returns the number of keys, including expired keys not yet evicted.
 func (d *Dict) Len() int { return d.data.Len() }
+
+func (d *Dict) expired(e *entry) bool { return e.expireAt > 0 && e.expireAt <= d.now }
 
 // lookup returns the live entry of key, deleting it if expired.
 func (d *Dict) lookup(key string) *entry {
 	e := d.data.Get(key)
-	if e == nil {
-		return nil
-	}
-	if e.expireAt > 0 && e.expireAt <= d.now {
-		d.delete(key)
+	if e != nil && d.expired(e) {
+		d.Delete(key)
 		return nil
 	}
 	return e
 }
 
-// Get returns the value of key.
-func (d *Dict) Get(key string) (any, bool) {
-	if e := d.lookup(key); e != nil {
-		return e.value, true
-	}
-	return nil, false
+// insert adds a new entry for key, which must not exist.
+func (d *Dict) insert(key string) *entry {
+	e := &entry{key: strings.Clone(key)}
+	d.data.Insert(e)
+	return e
 }
 
-// Set sets the value of key and keeps its expire time, if any.
-//
-// The Dict never retains key: it is cloned on insert, so callers may pass
-// strings that alias a network buffer.
-func (d *Dict) Set(key string, value any) {
-	if e := d.lookup(key); e != nil {
-		e.value = value
-		return
-	}
-	d.data.Insert(strings.Clone(key), &entry{value: value})
-}
-
-// SetWithExpire sets the value of key and replaces its expire time.
-// expireAt is unix ms; 0 removes the expire time. Key ownership as in Set.
-func (d *Dict) SetWithExpire(key string, value any, expireAt int64) {
-	e := d.lookup(key)
-	if e == nil {
-		e = &entry{}
-		d.data.Insert(strings.Clone(key), e)
-	}
-	e.value = value
-	d.setExpire(key, e, expireAt)
-}
-
-func (d *Dict) setExpire(key string, e *entry, expireAt int64) {
+func (d *Dict) setExpire(e *entry, expireAt int64) {
 	switch {
 	case expireAt > 0 && e.expireAt == 0:
-		// clone: key may alias a network buffer
-		d.volatile[strings.Clone(key)] = struct{}{}
+		d.volatile[e] = struct{}{}
 	case expireAt == 0 && e.expireAt > 0:
-		delete(d.volatile, key)
+		delete(d.volatile, e)
 	}
 	e.expireAt = expireAt
 }
 
-func (d *Dict) delete(key string) {
-	d.data.Delete(key)
-	delete(d.volatile, key)
+// Get returns the value of key: []byte for strings, else a container.
+func (d *Dict) Get(key string) (any, bool) {
+	if e := d.lookup(key); e != nil {
+		return e.value(), true
+	}
+	return nil, false
+}
+
+func (d *Dict) Exists(key string) bool { return d.lookup(key) != nil }
+
+// SetString sets key to a copy of val. With keepTTL the expire time is
+// kept, otherwise it is replaced by expireAt (unix ms, 0 = none).
+func (d *Dict) SetString(key string, val []byte, expireAt int64, keepTTL bool) {
+	e := d.lookup(key)
+	if e == nil {
+		e = d.insert(key)
+	}
+	// reuse the old buffer when it fits: overwrites do not allocate
+	if e.isString() && cap(e.str) >= len(val) && cap(e.str) <= 2*len(val)+16 {
+		e.str = append(e.str[:0], val...)
+	} else {
+		e.str = append(make([]byte, 0, len(val)), val...)
+	}
+	e.obj = nil
+	if !keepTTL {
+		d.setExpire(e, expireAt)
+	}
+}
+
+// setObject sets key to a container, keeping the expire time.
+func (d *Dict) setObject(key string, obj any) {
+	e := d.lookup(key)
+	if e == nil {
+		e = d.insert(key)
+	}
+	e.str, e.obj = nil, obj
 }
 
 // Delete removes key and reports whether a live key was removed.
 func (d *Dict) Delete(key string) bool {
-	if d.lookup(key) == nil {
+	e := d.data.Delete(key)
+	if e == nil {
 		return false
 	}
-	d.delete(key)
-	return true
+	delete(d.volatile, e)
+	return !d.expired(e)
 }
 
 // ExpireAt returns the expire time of key (0 if it has none) and whether it exists.
@@ -132,10 +157,10 @@ func (d *Dict) SetExpireAt(key string, expireAt int64) bool {
 		return false
 	}
 	if expireAt <= d.now {
-		d.delete(key)
-		return true
+		d.Delete(key)
+	} else {
+		d.setExpire(e, expireAt)
 	}
-	d.setExpire(key, e, expireAt)
 	return true
 }
 
@@ -145,27 +170,45 @@ func (d *Dict) Persist(key string) bool {
 	if e == nil || e.expireAt == 0 {
 		return false
 	}
-	d.setExpire(key, e, 0)
+	d.setExpire(e, 0)
 	return true
 }
 
-// Range calls fn for every live key until fn returns false.
-// fn must not modify the dict.
-func (d *Dict) Range(fn func(key string, value any, expireAt int64) bool) {
-	d.data.All(func(key string, e *entry) bool {
-		if e.expireAt > 0 && e.expireAt <= d.now {
-			return true
+// Item is a key as seen by Dict.All.
+type Item struct {
+	Key      string
+	Value    any
+	ExpireAt int64
+}
+
+// All iterates live keys. The dict must not be used meanwhile: even reads
+// advance incremental rehashing.
+func (d *Dict) All() iter.Seq[Item] {
+	return func(yield func(Item) bool) {
+		for e := range d.live() {
+			if !yield(Item{e.key, e.value(), e.expireAt}) {
+				return
+			}
 		}
-		return fn(key, e.value, e.expireAt)
-	})
+	}
+}
+
+func (d *Dict) live() iter.Seq[*entry] {
+	return func(yield func(*entry) bool) {
+		for e := range d.data.All() {
+			if !d.expired(e) && !yield(e) {
+				return
+			}
+		}
+	}
 }
 
 // Scan visits keys from cursor on and returns the next cursor (0 when done),
 // following redis SCAN guarantees. Expired keys are skipped.
 func (d *Dict) Scan(cursor uint64, fn func(key string, value any)) uint64 {
-	return d.data.Scan(cursor, func(key string, e *entry) {
-		if e.expireAt == 0 || e.expireAt > d.now {
-			fn(key, e.value)
+	return d.data.Scan(cursor, func(e *entry) {
+		if !d.expired(e) {
+			fn(e.key, e.value())
 		}
 	})
 }
@@ -184,15 +227,14 @@ func (d *Dict) ActiveExpire(budget time.Duration) int {
 	total := 0
 	for len(d.volatile) > 0 {
 		sampled, expired := 0, 0
-		// map iteration starts at a random position, which makes this a
-		// cheap random sample.
-		for key := range d.volatile {
+		// map iteration starts at a random position: a cheap random sample.
+		for e := range d.volatile {
 			if sampled == activeExpireSamples {
 				break
 			}
 			sampled++
-			if e := d.data.Get(key); e == nil || e.expireAt <= d.now {
-				d.delete(key)
+			if d.expired(e) {
+				d.Delete(e.key)
 				expired++
 			}
 		}

@@ -3,24 +3,64 @@ package db
 import (
 	"errors"
 	"fmt"
+	"iter"
 
+	"github.com/xgzlucario/rotom/internal/codec"
 	"github.com/xgzlucario/rotom/internal/hash"
-	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/list"
+	"github.com/xgzlucario/rotom/internal/set"
 	"github.com/xgzlucario/rotom/internal/zset"
 )
 
 // Values stored in the keyspace, by type and encoding:
 //
-//	string  []byte
+//	string  []byte (entry.str)
 //	hash    *hash.ZipMap
 //	list    *list.QuickList
-//	set     *hash.ZipSet (compact) -> *hash.Set
+//	set     *set.ZipSet (compact) -> set.Set
 //	zset    *zset.ZipZSet (compact) -> *zset.ZSet
 //
 // Every type switch over values lives in this file.
 
 var ErrWrongType = errors.New("WRONGTYPE Operation against a key holding the wrong kind of value")
+
+// Set is implemented by both set encodings.
+type Set interface {
+	Add(member string) bool
+	Contains(member string) bool
+	Remove(member string) bool
+	Pop() (string, bool)
+	Len() int
+	All() iter.Seq[string]
+}
+
+// ZSet is implemented by both sorted set encodings.
+type ZSet interface {
+	Get(member string) (float64, bool)
+	Set(member string, score float64) bool
+	Remove(member string) bool
+	PopMin() (string, float64)
+	Rank(member string) int
+	Len() int
+	All() iter.Seq2[string, float64]
+	// Range iterates ranks start..stop inclusive, clamped to [0, Len()).
+	Range(start, stop int) iter.Seq2[string, float64]
+}
+
+var (
+	_ Set  = set.Set(nil)
+	_ Set  = (*set.ZipSet)(nil)
+	_ ZSet = (*zset.ZSet)(nil)
+	_ ZSet = (*zset.ZipZSet)(nil)
+)
+
+// Thresholds for converting compact encodings, like redis'
+// set-max-listpack-entries / zset-max-listpack-entries / *-max-listpack-value.
+const (
+	MaxZipSetEntries  = 128
+	MaxZipZSetEntries = 128
+	MaxZipValueLen    = 64
+)
 
 // Type is the logical type reported by TYPE.
 type Type uint8
@@ -35,36 +75,8 @@ const (
 )
 
 func (t Type) String() string {
-	switch t {
-	case TypeString:
-		return "string"
-	case TypeHash:
-		return "hash"
-	case TypeList:
-		return "list"
-	case TypeSet:
-		return "set"
-	case TypeZSet:
-		return "zset"
-	}
-	return "none"
+	return [...]string{"none", "string", "hash", "list", "set", "zset"}[t]
 }
-
-// Encoding is the physical representation. It is persisted in RDB files,
-// so the values must never change.
-type Encoding uint8
-
-const (
-	EncodingUnknown   Encoding = 0
-	EncodingString    Encoding = 1
-	_                 Encoding = 2 // was: integer string
-	EncodingZipMap    Encoding = 3
-	EncodingHashSet   Encoding = 4
-	EncodingZipSet    Encoding = 5
-	EncodingQuickList Encoding = 6
-	EncodingSkipList  Encoding = 7
-	EncodingZipZSet   Encoding = 8
-)
 
 func TypeOf(v any) Type {
 	switch v.(type) {
@@ -74,13 +86,27 @@ func TypeOf(v any) Type {
 		return TypeHash
 	case *list.QuickList:
 		return TypeList
-	case *hash.ZipSet, *hash.Set:
+	case Set:
 		return TypeSet
-	case *zset.ZipZSet, *zset.ZSet:
+	case ZSet:
 		return TypeZSet
 	}
 	return TypeNone
 }
+
+// Encoding is the physical representation. It is persisted in RDB files,
+// so the values must never change.
+type Encoding uint8
+
+const (
+	EncodingString    Encoding = 1
+	EncodingZipMap    Encoding = 3
+	EncodingHashSet   Encoding = 4
+	EncodingZipSet    Encoding = 5
+	EncodingQuickList Encoding = 6
+	EncodingSkipList  Encoding = 7
+	EncodingZipZSet   Encoding = 8
+)
 
 func EncodingOf(v any) Encoding {
 	switch v.(type) {
@@ -88,9 +114,9 @@ func EncodingOf(v any) Encoding {
 		return EncodingString
 	case *hash.ZipMap:
 		return EncodingZipMap
-	case *hash.Set:
+	case set.Set:
 		return EncodingHashSet
-	case *hash.ZipSet:
+	case *set.ZipSet:
 		return EncodingZipSet
 	case *list.QuickList:
 		return EncodingQuickList
@@ -99,18 +125,18 @@ func EncodingOf(v any) Encoding {
 	case *zset.ZipZSet:
 		return EncodingZipZSet
 	}
-	return EncodingUnknown
+	panic(fmt.Sprintf("unknown value type %T", v))
 }
 
-// newEncoded returns an empty container of the given encoding.
-func newEncoded(enc Encoding) (iface.Encoder, error) {
+// newObject returns an empty container of the given encoding.
+func newObject(enc Encoding) (codec.Encoder, error) {
 	switch enc {
 	case EncodingZipMap:
 		return hash.New(), nil
 	case EncodingHashSet:
-		return hash.NewSet(), nil
+		return set.New(), nil
 	case EncodingZipSet:
-		return hash.NewZipSet(), nil
+		return set.NewZipSet(), nil
 	case EncodingQuickList:
 		return list.New(), nil
 	case EncodingSkipList:
@@ -118,105 +144,111 @@ func newEncoded(enc Encoding) (iface.Encoder, error) {
 	case EncodingZipZSet:
 		return zset.NewZipZSet(), nil
 	}
-	return nil, fmt.Errorf("unknown encoding: %d", enc)
+	return nil, fmt.Errorf("unknown encoding %d", enc)
 }
 
-// Thresholds for converting compact encodings, like redis'
-// set-max-listpack-entries / zset-max-listpack-entries / *-max-listpack-value.
-const (
-	MaxZipSetEntries  = 512
-	MaxZipZSetEntries = 256
-	MaxZipValueLen    = 64
-)
-
-// lookup returns the value of key as T. A missing key returns ok == false.
-func lookup[T any](d *Dict, key string) (v T, ok bool, err error) {
-	object, ok := d.Get(key)
-	if !ok {
-		return v, false, nil
+// Type returns the type of key.
+func (d *Dict) Type(key string) Type {
+	e := d.lookup(key)
+	if e == nil {
+		return TypeNone
 	}
-	v, ok = object.(T)
-	if !ok {
-		return v, false, ErrWrongType
-	}
-	return v, true, nil
+	return TypeOf(e.value())
 }
 
-// lookupOrCreate returns the value of key as T, creating it if missing.
-func lookupOrCreate[T any](d *Dict, key string, create func() T) (T, error) {
-	v, ok, err := lookup[T](d, key)
-	if err != nil || ok {
-		return v, err
+// GetString returns the string at key; ok is false if the key is missing.
+// The result is owned by the dict: valid until the key is modified.
+func (d *Dict) GetString(key string) (val []byte, ok bool, err error) {
+	e := d.lookup(key)
+	switch {
+	case e == nil:
+		return nil, false, nil
+	case !e.isString():
+		return nil, false, ErrWrongType
 	}
-	v = create()
-	d.Set(key, v)
+	return e.str, true, nil
+}
+
+// get returns the container at key as T, or the zero T if key is missing.
+func get[T any](d *Dict, key string) (T, error) {
+	var zero T
+	e := d.lookup(key)
+	if e == nil {
+		return zero, nil
+	}
+	return asObject[T](e)
+}
+
+// asObject returns the container of e as T. Strings are stored outside
+// e.obj, so a string entry has a nil obj, which never matches T.
+func asObject[T any](e *entry) (T, error) {
+	v, ok := e.obj.(T)
+	if !ok {
+		return v, ErrWrongType
+	}
 	return v, nil
 }
 
-// GetString returns the string at key. ok is false if the key is missing.
-func (d *Dict) GetString(key string) ([]byte, bool, error) {
-	return lookup[[]byte](d, key)
-}
-
-// GetHash returns the hash at key, or nil if the key is missing.
-func (d *Dict) GetHash(key string) (iface.MapI, error) {
-	v, _, err := lookup[*hash.ZipMap](d, key)
-	if v == nil {
-		return nil, err
+// getOrCreate returns the container at key as T, creating it if missing.
+func getOrCreate[T any](d *Dict, key string, create func() T) (T, error) {
+	if e := d.lookup(key); e != nil {
+		return asObject[T](e)
 	}
-	return v, err
+	v := create()
+	d.setObject(key, v)
+	return v, nil
 }
 
-func (d *Dict) GetList(key string) (*list.QuickList, error) {
-	v, _, err := lookup[*list.QuickList](d, key)
-	return v, err
-}
+// The Get* accessors return nil when the key is missing; the *ForWrite
+// accessors create the container.
 
-func (d *Dict) GetSet(key string) (iface.SetI, error) {
-	v, _, err := lookup[iface.SetI](d, key)
-	return v, err
-}
+func (d *Dict) GetHash(key string) (*hash.ZipMap, error)    { return get[*hash.ZipMap](d, key) }
+func (d *Dict) GetList(key string) (*list.QuickList, error) { return get[*list.QuickList](d, key) }
+func (d *Dict) GetSet(key string) (Set, error)              { return get[Set](d, key) }
+func (d *Dict) GetZSet(key string) (ZSet, error)            { return get[ZSet](d, key) }
 
-func (d *Dict) GetZSet(key string) (iface.ZSetI, error) {
-	v, _, err := lookup[iface.ZSetI](d, key)
-	return v, err
-}
-
-// HashForWrite returns the hash at key, creating it if missing.
-func (d *Dict) HashForWrite(key string) (iface.MapI, error) {
-	return lookupOrCreate(d, key, func() iface.MapI { return hash.New() })
+func (d *Dict) HashForWrite(key string) (*hash.ZipMap, error) {
+	return getOrCreate(d, key, hash.New)
 }
 
 func (d *Dict) ListForWrite(key string) (*list.QuickList, error) {
-	return lookupOrCreate(d, key, list.New)
+	return getOrCreate(d, key, list.New)
 }
 
 // SetForWrite returns the set at key, creating it if missing. The caller
-// announces that it is about to add `adding` members, the longest of which
-// is maxLen bytes, so a compact set can be converted beforehand.
-func (d *Dict) SetForWrite(key string, adding, maxLen int) (iface.SetI, error) {
-	s, err := lookupOrCreate(d, key, func() iface.SetI { return hash.NewZipSet() })
+// announces the members it is about to add, so that a compact set is
+// converted beforehand if it would grow too large.
+func (d *Dict) SetForWrite(key string, adding [][]byte) (Set, error) {
+	s, err := getOrCreate(d, key, func() Set { return set.NewZipSet() })
 	if err != nil {
 		return nil, err
 	}
-	if zs, ok := s.(*hash.ZipSet); ok && (zs.Len()+adding > MaxZipSetEntries || maxLen > MaxZipValueLen) {
+	if zs, ok := s.(*set.ZipSet); ok && (zs.Len()+len(adding) > MaxZipSetEntries || maxLen(adding) > MaxZipValueLen) {
 		s = zs.ToSet()
-		d.Set(key, s)
+		d.setObject(key, s)
 	}
 	return s, nil
 }
 
 // ZSetForWrite is like SetForWrite, for sorted sets.
-func (d *Dict) ZSetForWrite(key string, adding, maxLen int) (iface.ZSetI, error) {
-	z, err := lookupOrCreate(d, key, func() iface.ZSetI { return zset.NewZipZSet() })
+func (d *Dict) ZSetForWrite(key string, adding [][]byte) (ZSet, error) {
+	z, err := getOrCreate(d, key, func() ZSet { return zset.NewZipZSet() })
 	if err != nil {
 		return nil, err
 	}
-	if zz, ok := z.(*zset.ZipZSet); ok && (zz.Len()+adding > MaxZipZSetEntries || maxLen > MaxZipValueLen) {
+	if zz, ok := z.(*zset.ZipZSet); ok && (zz.Len()+len(adding) > MaxZipZSetEntries || maxLen(adding) > MaxZipValueLen) {
 		z = zz.ToZSet()
-		d.Set(key, z)
+		d.setObject(key, z)
 	}
 	return z, nil
+}
+
+func maxLen(items [][]byte) int {
+	n := 0
+	for _, it := range items {
+		n = max(n, len(it))
+	}
+	return n
 }
 
 // DeleteIfEmpty removes a container key once its last element is gone, like redis.
@@ -225,10 +257,3 @@ func (d *Dict) DeleteIfEmpty(key string, length int) {
 		d.Delete(key)
 	}
 }
-
-// DB is the database a command operates on.
-type DB struct {
-	*Dict
-}
-
-func New() *DB { return &DB{Dict: NewDict()} }

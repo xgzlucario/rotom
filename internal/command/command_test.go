@@ -63,7 +63,7 @@ func run(d *db.DB, args ...string) (string, Result) {
 		argv[i] = []byte(a)
 	}
 	w := resp.NewWriter(64)
-	res := Execute(Lookup(argv[0]), &Context{W: w, Args: argv[1:], DB: d, Config: config.Default()})
+	res := Execute(Lookup(argv[0]), &Context{W: w, DB: d, Config: config.Default()}, argv[1:])
 	return string(w.Bytes()), res
 }
 
@@ -91,6 +91,20 @@ func TestExecute(t *testing.T) {
 
 	_, res = run(d, "set", "k", "v", "ex", "10")
 	ast.Equal("pxat", string(res.Argv[3]))
+}
+
+func TestExecuteDoesNotAllocate(t *testing.T) {
+	d := db.New()
+	ctx := &Context{W: resp.NewWriter(1024), DB: d, Config: config.Default()}
+	set := [][]byte{[]byte("k"), []byte("value")}
+	get := [][]byte{[]byte("k")}
+	setCmd, getCmd := Lookup([]byte("SET")), Lookup([]byte("GET"))
+	allocs := testing.AllocsPerRun(1000, func() {
+		ctx.W.Reset()
+		Execute(setCmd, ctx, set)
+		Execute(getCmd, ctx, get)
+	})
+	assert.Zero(t, allocs)
 }
 
 func TestPanicRecovery(t *testing.T) {

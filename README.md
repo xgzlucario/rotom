@@ -38,13 +38,30 @@ In rotom, the AeLoop event loop mechanism in Redis is replicated, specifically:
 
 Rotom has made several optimizations in data structures:
 
-- dict: Rotom uses `stdmap` as the db hash table, with built-in progressive rehashing.
-- hash: Based on `zipmap` with higher memory efficiency.
-- set: Uses `zipset` when the set is small and `mapset` when it is large.
-- list: Uses a `quicklist` based on `listpack` for a doubly linked list.
-- zset: Uses `zipzset` when small and `hash` + `skiplist` when it is large.
+- dict: a port of the redis dict, with incremental rehashing and a reverse-binary `SCAN` cursor. Entries are the bucket nodes themselves and store their expire time inline.
+- hash: `zipmap`, values packed in one byte slice plus a field -> offset index.
+- set: `zipset` (a listpack) while small, a hash set when it grows.
+- list: `quicklist`, a doubly linked list of listpacks.
+- zset: `zipzset` (a sorted listpack) while small, a map + skiplist with spans (O(log n) rank and range) when it grows.
 
-Notably, `zipmap` and `zipset` are space-efficient data structures based on `listpack`, which is a new compressed list proposed by Redis to replace `ziplist`, supporting both forward and reverse traversal and solving the cascading update issue in `ziplist`.
+`listpack` is the compact list redis uses instead of `ziplist`: entry lengths are stored on both sides, so it can be walked in both directions without cascading updates.
+
+## Code Layout
+
+```
+main.go                 flags, logging, startup
+internal/
+  ae/        event loop (epoll on linux, kqueue on darwin/bsd)
+  net/       non-blocking socket syscalls
+  resp/      RESP request parser and reply writer (zero allocation)
+  server/    clients, query processing, AOF/RDB wiring
+  command/   command table and handlers
+  db/        keyspace: dict, expiration, value types, RDB
+  aof/       append only file
+  codec/     binary encoding for RDB
+  listpack/  hash/  list/  set/  zset/     data structures
+  config/    toml config
+```
 
 ## Benchmark
 
@@ -62,7 +79,6 @@ cpu: 13th Gen Intel(R) Core(TM) i5-13600KF
 ## Roadmap
 
 - [ ] Support for LRU cache and memory eviction.
-- [ ] Gradually rehashing in dict.
 - [ ] RDB and AOF Rewrite.
 
 ## Usage

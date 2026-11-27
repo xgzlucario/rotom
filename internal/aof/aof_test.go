@@ -58,6 +58,28 @@ func TestAof(t *testing.T) {
 		ast.NotNil(aof.Read(func([][]byte) {}))
 	})
 
+	t.Run("truncated", func(t *testing.T) {
+		p := filepath.Join(dir, "trunc.aof")
+		ast.Nil(os.WriteFile(p, []byte("*1\r\n$4\r\nPING\r\n*1\r\n$4\r\nPI"), 0644))
+		aof, _ := NewAof(p, FsyncNo)
+		defer aof.Close()
+		n := 0
+		ast.ErrorContains(aof.Read(func([][]byte) { n++ }), "truncated")
+		ast.Equal(1, n)
+	})
+
+	t.Run("big-command", func(t *testing.T) {
+		// larger than the read buffer
+		p := filepath.Join(dir, "big.aof")
+		aof, _ := NewAof(p, FsyncNo)
+		big := make([]byte, 1<<20)
+		aof.Append([][]byte{[]byte("set"), []byte("k"), big})
+		ast.Nil(aof.Close())
+		aof, _ = NewAof(p, FsyncNo)
+		defer aof.Close()
+		ast.Nil(aof.Read(func(argv [][]byte) { ast.Len(argv[2], 1<<20) }))
+	})
+
 	t.Run("empty-aof", func(t *testing.T) {
 		aof, _ := NewAof(filepath.Join(dir, "empty.aof"), FsyncNo)
 		defer aof.Close()

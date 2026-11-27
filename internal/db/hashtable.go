@@ -2,6 +2,7 @@ package db
 
 import (
 	"hash/maphash"
+	"iter"
 	"math/bits"
 )
 
@@ -9,7 +10,8 @@ import (
 // sizes, incremental rehashing, and a stateless reverse-binary scan cursor.
 //
 // Go maps cannot provide a resumable SCAN cursor, which is why the keyspace
-// uses this table.
+// uses this table. It is intrusive: entries are the chain nodes themselves
+// (entry.next), so a key costs a single allocation.
 type hashtable struct {
 	ht        [2]table
 	rehashIdx int // -1 when not rehashing
@@ -17,14 +19,8 @@ type hashtable struct {
 }
 
 type table struct {
-	buckets []*htNode
+	buckets []*entry
 	used    int
-}
-
-type htNode struct {
-	key  string
-	val  *entry
-	next *htNode
 }
 
 const (
@@ -89,10 +85,10 @@ func (h *hashtable) resize(size int) {
 		return
 	}
 	if h.ht[0].buckets == nil {
-		h.ht[0].buckets = make([]*htNode, n)
+		h.ht[0].buckets = make([]*entry, n)
 		return
 	}
-	h.ht[1] = table{buckets: make([]*htNode, n)}
+	h.ht[1] = table{buckets: make([]*entry, n)}
 	h.rehashIdx = 0
 }
 
@@ -124,12 +120,12 @@ func (h *hashtable) Get(key string) *entry {
 	}
 	h.rehashStep(1)
 	hv := h.hash(key)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		t := &h.ht[i]
 		if t.buckets != nil {
 			for x := t.buckets[hv&t.mask()]; x != nil; x = x.next {
 				if x.key == key {
-					return x.val
+					return x
 				}
 			}
 		}
@@ -140,33 +136,34 @@ func (h *hashtable) Get(key string) *entry {
 	return nil
 }
 
-// Insert adds a key that must not be present. The table retains key.
-func (h *hashtable) Insert(key string, val *entry) {
+// Insert adds e, whose key must not be present.
+func (h *hashtable) Insert(e *entry) {
 	h.rehashStep(1)
 	h.expandIfNeeded()
 	t := &h.ht[0]
 	if h.rehashing() {
 		t = &h.ht[1] // new keys go to the new table
 	}
-	idx := h.hash(key) & t.mask()
-	t.buckets[idx] = &htNode{key: key, val: val, next: t.buckets[idx]}
+	idx := h.hash(e.key) & t.mask()
+	e.next = t.buckets[idx]
+	t.buckets[idx] = e
 	t.used++
 }
 
-// Delete removes key and reports whether it existed.
-func (h *hashtable) Delete(key string) bool {
+// Delete removes key and returns its entry, or nil.
+func (h *hashtable) Delete(key string) *entry {
 	if h.Len() == 0 {
-		return false
+		return nil
 	}
 	h.rehashStep(1)
 	hv := h.hash(key)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		t := &h.ht[i]
 		if t.buckets == nil {
 			continue
 		}
 		idx := hv & t.mask()
-		var prev *htNode
+		var prev *entry
 		for x := t.buckets[idx]; x != nil; prev, x = x, x.next {
 			if x.key != key {
 				continue
@@ -176,24 +173,27 @@ func (h *hashtable) Delete(key string) bool {
 			} else {
 				prev.next = x.next
 			}
+			x.next = nil
 			t.used--
 			h.shrinkIfNeeded()
-			return true
+			return x
 		}
 		if !h.rehashing() {
 			break
 		}
 	}
-	return false
+	return nil
 }
 
-// All calls fn for every key until it returns false. fn must not modify the table.
-func (h *hashtable) All(fn func(key string, val *entry) bool) {
-	for i := 0; i < 2; i++ {
-		for _, x := range h.ht[i].buckets {
-			for ; x != nil; x = x.next {
-				if !fn(x.key, x.val) {
-					return
+// All iterates every entry. The table must not be modified meanwhile.
+func (h *hashtable) All() iter.Seq[*entry] {
+	return func(yield func(*entry) bool) {
+		for i := range h.ht {
+			for _, x := range h.ht[i].buckets {
+				for ; x != nil; x = x.next {
+					if !yield(x) {
+						return
+					}
 				}
 			}
 		}
@@ -206,13 +206,13 @@ func (h *hashtable) All(fn func(key string, val *entry) bool) {
 // The cursor is incremented in reverse-bit order, so a resize between calls
 // never makes it skip a bucket: every key present during the whole scan is
 // returned at least once (some may be returned more than once).
-func (h *hashtable) Scan(cursor uint64, fn func(key string, val *entry)) uint64 {
+func (h *hashtable) Scan(cursor uint64, fn func(*entry)) uint64 {
 	if h.Len() == 0 {
 		return 0
 	}
 	emit := func(t *table, idx uint64) {
 		for x := t.buckets[idx]; x != nil; x = x.next {
-			fn(x.key, x.val)
+			fn(x)
 		}
 	}
 	v := cursor

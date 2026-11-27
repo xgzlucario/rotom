@@ -81,11 +81,3 @@ func normalizeRange(start, stop, length int) (int, int, bool) {
 	}
 	return start, stop, true
 }
-
-func maxLen(args [][]byte) int {
-	n := 0
-	for _, a := range args {
-		n = max(n, len(a))
-	}
-	return n
-}

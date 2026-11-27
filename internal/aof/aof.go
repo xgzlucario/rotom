@@ -8,7 +8,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/tidwall/redcon"
+	"github.com/xgzlucario/rotom/internal/resp"
 )
 
 // FsyncPolicy mirrors redis `appendfsync`.
@@ -114,22 +114,47 @@ func (a *Aof) Flush() error {
 	return a.file.Sync()
 }
 
-// Read replays every command stored in the file.
-func (a *Aof) Read(fn func(args [][]byte)) error {
+// Read calls fn for every command stored in the file. The arguments are
+// only valid during the call.
+func (a *Aof) Read(fn func(argv [][]byte)) error {
 	if _, err := a.file.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	// NOTE: rd.ReadCommands() only returns the commands of one buffered
-	// chunk, so we must loop until EOF.
-	rd := redcon.NewReader(a.file)
+	buf := make([]byte, 0, 64<<10)
+	var argv [][]byte
+	pos := 0 // buf[pos:] is not parsed yet
 	for {
-		cmd, err := rd.ReadCommand()
+		for {
+			var n int
+			var err error
+			argv, n, err = resp.ReadCommand(buf[pos:], argv)
+			if err == resp.ErrIncomplete {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("aof corrupted at offset %d: %w", pos, err)
+			}
+			pos += n
+			if len(argv) > 0 {
+				fn(argv)
+			}
+		}
+		// compact, grow if a single command does not fit, then read more.
+		buf = buf[:copy(buf, buf[pos:])]
+		pos = 0
+		if len(buf) == cap(buf) {
+			buf = append(buf, 0)[:len(buf)]
+		}
+		n, err := a.file.Read(buf[len(buf):cap(buf)])
+		buf = buf[:len(buf)+n]
 		if err == io.EOF {
+			if len(buf) > 0 {
+				return fmt.Errorf("aof truncated: %d trailing bytes", len(buf))
+			}
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		fn(cmd.Args)
 	}
 }

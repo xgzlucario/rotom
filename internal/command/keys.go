@@ -26,7 +26,7 @@ func delCommand(ctx *Context) {
 func existsCommand(ctx *Context) {
 	var count int
 	for _, arg := range ctx.Args {
-		if _, ok := ctx.DB.Get(b2s(arg)); ok {
+		if ctx.DB.Exists(b2s(arg)) {
 			count++
 		}
 	}
@@ -34,8 +34,7 @@ func existsCommand(ctx *Context) {
 }
 
 func typeCommand(ctx *Context) {
-	v, _ := ctx.DB.Get(b2s(ctx.Args[0]))
-	ctx.W.WriteString(typeName(v))
+	ctx.W.WriteString(ctx.DB.Type(b2s(ctx.Args[0])).String())
 }
 
 // scanCommand implements SCAN cursor [MATCH pattern] [COUNT count] [TYPE type].
@@ -84,7 +83,7 @@ func scanCommand(ctx *Context) {
 			if pattern != "" && !match.Match(key, pattern) {
 				return
 			}
-			if typ != "" && typeName(v) != typ {
+			if typ != "" && db.TypeOf(v).String() != typ {
 				return
 			}
 			keys = append(keys, key)
@@ -181,5 +180,3 @@ func persistCommand(ctx *Context) {
 		ctx.W.WriteInt(0)
 	}
 }
-
-func typeName(v any) string { return db.TypeOf(v).String() }

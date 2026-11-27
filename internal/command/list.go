@@ -8,14 +8,12 @@ func pushGeneric(ctx *Context, left bool) {
 		ctx.err(err)
 		return
 	}
-	items := make([]string, 0, len(ctx.Args)-1)
-	for _, arg := range ctx.Args[1:] {
-		items = append(items, b2s(arg)) // the listpack copies the data
-	}
-	if left {
-		ls.LPush(items...)
-	} else {
-		ls.RPush(items...)
+	for _, v := range ctx.Args[1:] {
+		if left {
+			ls.LPush(b2s(v)) // the listpack copies the data
+		} else {
+			ls.RPush(b2s(v))
+		}
 	}
 	ctx.W.WriteInt(ls.Len())
 }
@@ -35,14 +33,14 @@ func popGeneric(ctx *Context, left bool) {
 		ctx.W.WriteNull()
 		return
 	}
-	var val string
+	var v string
 	if left {
-		val, _ = ls.LPop()
+		v, _ = ls.LPop()
 	} else {
-		val, _ = ls.RPop()
+		v, _ = ls.RPop()
 	}
 	ctx.DB.DeleteIfEmpty(key, ls.Len())
-	ctx.W.WriteBulkString(val)
+	ctx.W.WriteBulkString(v)
 }
 
 func lpopCommand(ctx *Context) { popGeneric(ctx, true) }
@@ -64,14 +62,13 @@ func lrangeCommand(ctx *Context) {
 		ctx.W.WriteArray(0)
 		return
 	}
-	count := ls.RangeCount(int(start), int(stop))
-	ctx.W.WriteArray(count)
-	if count == 0 {
+	from, to, ok := normalizeRange(int(start), int(stop), ls.Len())
+	if !ok {
+		ctx.W.WriteArray(0)
 		return
 	}
-	ls.Range(int(start), func(data []byte) (stop bool) {
-		ctx.W.WriteBulk(data)
-		count--
-		return count == 0
-	})
+	ctx.W.WriteArray(to - from + 1)
+	for v := range ls.Range(from, to) {
+		ctx.W.WriteBulk(v)
+	}
 }

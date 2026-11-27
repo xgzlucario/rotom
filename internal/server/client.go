@@ -2,8 +2,8 @@ package server
 
 import (
 	"github.com/rs/zerolog/log"
-	"github.com/tidwall/redcon"
 	"github.com/xgzlucario/rotom/internal/ae"
+	"github.com/xgzlucario/rotom/internal/command"
 	"github.com/xgzlucario/rotom/internal/net"
 	"github.com/xgzlucario/rotom/internal/resp"
 )
@@ -19,6 +19,8 @@ type Client struct {
 	// reply[sentlen:] is pending output.
 	reply   *resp.Writer
 	sentlen int
+
+	ctx *command.Context // reused for every command of this client
 
 	// closeAfterReply closes the connection once pending output is flushed,
 	// e.g. after a protocol error.
@@ -45,6 +47,7 @@ func (s *Server) acceptHandler(loop *ae.Loop, fd int, _ any) {
 			queryBuf: make([]byte, 0, readChunk),
 			argv:     make([][]byte, 0, 8),
 		}
+		c.ctx = s.newContext(c.reply)
 		if err := loop.AddFileEvent(cfd, ae.Readable, s.readQueryFromClient, c); err != nil {
 			log.Error().Msgf("add client fd %d err: %v", cfd, err)
 			_ = net.Close(cfd)
@@ -115,20 +118,19 @@ func (s *Server) readQueryFromClient(_ *ae.Loop, fd int, extra any) {
 func (s *Server) processInputBuffer(c *Client) {
 	for c.qpos < len(c.queryBuf) && !c.closeAfterReply {
 		buf := c.queryBuf[c.qpos:]
-		complete, args, _, left, err := redcon.ReadNextCommand(buf, c.argv[:0])
+		args, n, err := resp.ReadCommand(buf, c.argv)
+		c.argv = args[:0] // keep the grown buffer for next time
+		if err == resp.ErrIncomplete {
+			break
+		}
 		if err != nil {
 			c.reply.WriteError("ERR Protocol error: " + err.Error())
 			c.closeAfterReply = true
 			break
 		}
-		if !complete {
-			break
-		}
-		c.argv = args[:0] // keep the grown buffer for next time
-		n := len(buf) - len(left)
 		c.qpos += n
 		if len(args) > 0 {
-			s.processCommand(c.reply, args, buf[:n])
+			s.processCommand(c.ctx, args, buf[:n])
 		}
 	}
 

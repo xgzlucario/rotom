@@ -78,7 +78,7 @@ func (sl *skiplist) insert(score float64, member string) *skiplistNode {
 	}
 
 	x = &skiplistNode{member: member, score: score, level: make([]skiplistLevel, level)}
-	for i := 0; i < level; i++ {
+	for i := range level {
 		x.level[i].forward = update[i].level[i].forward
 		update[i].level[i].forward = x
 		x.level[i].span = update[i].level[i].span - (rank[0] - rank[i])

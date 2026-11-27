@@ -21,13 +21,17 @@ func TestHashtable(t *testing.T) {
 		}
 		if insert {
 			if _, ok := ref[key]; !ok {
-				e := &entry{value: i}
-				h.Insert(key, e)
+				e := &entry{key: key}
+				h.Insert(e)
 				ref[key] = e
 			}
 		} else {
-			_, ok := ref[key]
-			ast.Equal(ok, h.Delete(key))
+			e, ok := ref[key]
+			if ok {
+				ast.Same(e, h.Delete(key))
+			} else {
+				ast.Nil(h.Delete(key))
+			}
 			delete(ref, key)
 		}
 		if i%1000 == 0 {
@@ -39,7 +43,9 @@ func TestHashtable(t *testing.T) {
 	}
 	ast.Nil(h.Get("missing"))
 	n := 0
-	h.All(func(string, *entry) bool { n++; return true })
+	for range h.All() {
+		n++
+	}
 	ast.Equal(len(ref), n)
 }
 
@@ -53,14 +59,14 @@ func TestHashtableScanGuarantee(t *testing.T) {
 			stable := map[string]bool{}
 			for i := range 1000 {
 				key := fmt.Sprint("stable", i)
-				h.Insert(key, &entry{})
+				h.Insert(&entry{key: key})
 				stable[key] = true
 			}
 			var churn []string
 			if mode == "shrink" {
 				for i := range 20000 {
 					key := fmt.Sprint("churn", i)
-					h.Insert(key, &entry{})
+					h.Insert(&entry{key: key})
 					churn = append(churn, key)
 				}
 			}
@@ -68,14 +74,14 @@ func TestHashtableScanGuarantee(t *testing.T) {
 			seen := map[string]bool{}
 			cursor, step := uint64(0), 0
 			for {
-				cursor = h.Scan(cursor, func(key string, _ *entry) { seen[key] = true })
+				cursor = h.Scan(cursor, func(e *entry) { seen[e.key] = true })
 				step++
 				// mutate between calls: forces resizes and incremental rehash.
 				if mode == "grow" {
 					// fewer inserts than buckets visited, or the scan never ends
 					// (same as redis with a tiny COUNT under heavy writes).
 					if step%2 == 0 {
-						h.Insert(fmt.Sprint("new", step), &entry{})
+						h.Insert(&entry{key: fmt.Sprint("new", step)})
 					}
 				} else if len(churn) > 0 {
 					n := min(len(churn), 50)

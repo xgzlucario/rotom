@@ -92,7 +92,9 @@ func TestSkiplistRank(t *testing.T) {
 	ast.Equal(-1, z.Rank("missing"))
 
 	var got []string
-	z.Range(10, 20, func(k string, _ float64) { got = append(got, k) })
+	for k := range z.Range(10, 20) {
+		got = append(got, k)
+	}
 	var want []string
 	for _, e := range sorted[10:21] {
 		want = append(want, e.k)

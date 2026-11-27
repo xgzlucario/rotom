@@ -9,117 +9,113 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func str(d *Dict, key string) string {
+	v, _, _ := d.GetString(key)
+	return string(v)
+}
+
 func TestDict(t *testing.T) {
 	ast := assert.New(t)
 
-	t.Run("set", func(t *testing.T) {
-		dict := NewDict()
-		dict.Set("key", []byte("hello"))
-
-		data, ok := dict.Get("key")
+	t.Run("string", func(t *testing.T) {
+		d := NewDict()
+		d.SetString("key", []byte("hello"), 0, false)
+		v, ok, err := d.GetString("key")
 		ast.True(ok)
-		ast.Equal(data, []byte("hello"))
-		at, ok := dict.ExpireAt("key")
-		ast.True(ok)
-		ast.Equal(int64(0), at)
+		ast.Nil(err)
+		ast.Equal("hello", string(v))
+		ast.Equal(TypeString, d.Type("key"))
 
-		data, ok = dict.Get("none")
+		_, ok, _ = d.GetString("none")
 		ast.False(ok)
-		ast.Nil(data)
+		ast.Equal(TypeNone, d.Type("none"))
+
+		// containers are not strings
+		_, _ = d.ListForWrite("list")
+		_, _, err = d.GetString("list")
+		ast.ErrorIs(err, ErrWrongType)
+		_, err = d.GetHash("key")
+		ast.ErrorIs(err, ErrWrongType)
+
+		// overwriting a container with a string
+		d.SetString("list", []byte("x"), 0, false)
+		ast.Equal(TypeString, d.Type("list"))
+	})
+
+	t.Run("overwrite-reuses-buffer", func(t *testing.T) {
+		d := NewDict()
+		d.SetString("k", []byte("aaaa"), 0, false)
+		v1, _, _ := d.GetString("k")
+		d.SetString("k", []byte("bbbb"), 0, false)
+		v2, _, _ := d.GetString("k")
+		ast.Equal(unsafe.SliceData(v1), unsafe.SliceData(v2))
+		ast.Equal("bbbb", string(v2))
+		ast.Equal(0.0, testing.AllocsPerRun(100, func() {
+			d.SetString("k", []byte("cccc"), 0, false)
+		}))
 	})
 
 	t.Run("expire", func(t *testing.T) {
-		dict := NewDict()
-		at := dict.Now() + time.Minute.Milliseconds()
-		dict.SetWithExpire("key", []byte("hello"), at)
-
-		got, ok := dict.ExpireAt("key")
-		ast.True(ok)
+		d := NewDict()
+		at := d.Now() + time.Minute.Milliseconds()
+		d.SetString("key", []byte("v"), at, false)
+		got, _ := d.ExpireAt("key")
 		ast.Equal(at, got)
 
-		// Set keeps the expire time, SetWithExpire replaces it.
-		dict.Set("key", []byte("world"))
-		got, _ = dict.ExpireAt("key")
+		d.SetString("key", []byte("v2"), 0, true) // KEEPTTL
+		got, _ = d.ExpireAt("key")
 		ast.Equal(at, got)
-		dict.SetWithExpire("key", []byte("world"), 0)
-		got, _ = dict.ExpireAt("key")
-		ast.Equal(int64(0), got)
-		ast.Empty(dict.volatile)
+		d.SetString("key", []byte("v3"), 0, false)
+		got, _ = d.ExpireAt("key")
+		ast.Zero(got)
+		ast.Empty(d.volatile)
 
-		// expire time in the past deletes the key
-		ast.True(dict.SetExpireAt("key", dict.Now()-1))
-		_, ok = dict.Get("key")
-		ast.False(ok)
-		ast.False(dict.SetExpireAt("not-exist", at))
+		ast.True(d.SetExpireAt("key", at))
+		ast.Len(d.volatile, 1)
+		ast.True(d.Persist("key"))
+		ast.False(d.Persist("key"))
+		ast.Empty(d.volatile)
+
+		ast.True(d.SetExpireAt("key", d.Now()-1)) // in the past: deleted
+		ast.False(d.Exists("key"))
+		ast.False(d.SetExpireAt("none", at))
 	})
 
 	t.Run("lazy-expire", func(t *testing.T) {
-		dict := NewDict()
-		dict.SetWithExpire("key", []byte("hello"), dict.Now()+10)
+		d := NewDict()
+		d.SetString("key", []byte("v"), d.Now()+10, false)
 		time.Sleep(20 * time.Millisecond)
-		dict.Tick()
-		_, ok := dict.Get("key")
-		ast.False(ok)
-		ast.Equal(0, dict.Len())
-		ast.Empty(dict.volatile)
+		d.Tick()
+		ast.False(d.Exists("key"))
+		ast.Equal(0, d.Len())
+		ast.Empty(d.volatile)
+		ast.False(d.Delete("key"))
 	})
 
-	t.Run("persist", func(t *testing.T) {
-		dict := NewDict()
-		dict.SetWithExpire("key", []byte("hello"), dict.Now()+time.Minute.Milliseconds())
-		ast.True(dict.Persist("key"))
-		ast.False(dict.Persist("key"))
-		ast.Empty(dict.volatile)
-	})
-
-	t.Run("delete", func(t *testing.T) {
-		dict := NewDict()
-		dict.Set("key", []byte("hello"))
-		ast.True(dict.Delete("key"))
-		ast.False(dict.Delete("none"))
-
-		// an expired key counts as missing
-		dict.SetWithExpire("keyx", []byte("hello"), dict.Now()-1)
-		ast.False(dict.Delete("keyx"))
-	})
-
-	t.Run("update-does-not-retain-key", func(t *testing.T) {
-		dict := NewDict()
-		dict.Set("key", 1)
-		// simulate a key that aliases a reused network buffer
+	t.Run("keys-are-copied", func(t *testing.T) {
+		d := NewDict()
 		buf := []byte("key")
-		alias := unsafe.String(&buf[0], len(buf))
-		dict.Set(alias, 2)
-		ast.True(dict.SetExpireAt(alias, dict.Now()+1000))
-		ast.True(dict.Persist(alias))
-		dict.SetWithExpire(alias, 3, dict.Now()+1000)
+		d.SetString(unsafe.String(&buf[0], len(buf)), []byte("v"), d.Now()+1000, false)
 		copy(buf, "xyz")
-		v, ok := dict.Get("key")
-		ast.True(ok)
-		ast.Equal(3, v)
-		_, ok = dict.volatile["key"]
-		ast.True(ok)
+		ast.True(d.Exists("key"))
 	})
 
 	t.Run("active-expire", func(t *testing.T) {
-		dict := NewDict()
+		d := NewDict()
 		for i := range 1000 {
-			dict.SetWithExpire(fmt.Sprint("dead", i), 1, dict.Now()-1)
+			d.SetString(fmt.Sprint("dead", i), nil, d.Now()-1, false)
 		}
 		for i := range 100 {
-			dict.SetWithExpire(fmt.Sprint("live", i), 1, dict.Now()+time.Hour.Milliseconds())
-		}
-		for i := range 100 {
-			dict.Set(fmt.Sprint("forever", i), 1)
+			d.SetString(fmt.Sprint("live", i), nil, d.Now()+time.Hour.Milliseconds(), false)
+			d.SetString(fmt.Sprint("forever", i), nil, 0, false)
 		}
 		// expired keys are the majority, so one cycle keeps sampling.
-		n := dict.ActiveExpire(time.Second)
-		ast.Greater(n, 3*activeExpireSamples)
+		ast.Greater(d.ActiveExpire(time.Second), 3*activeExpireSamples)
 		// sampling is probabilistic: enough cycles clear every expired key.
 		for range 500 {
-			dict.ActiveExpire(time.Second)
+			d.ActiveExpire(time.Second)
 		}
-		ast.Equal(200, dict.Len())
-		ast.Len(dict.volatile, 100)
+		ast.Equal(200, d.Len())
+		ast.Len(d.volatile, 100)
 	})
 }

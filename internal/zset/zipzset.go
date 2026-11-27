@@ -2,151 +2,136 @@ package zset
 
 import (
 	"encoding/binary"
-	"github.com/xgzlucario/rotom/internal/iface"
-	"github.com/xgzlucario/rotom/internal/list"
+	"iter"
 	"math"
+	"strings"
 	"unsafe"
+
+	"github.com/xgzlucario/rotom/internal/codec"
+	"github.com/xgzlucario/rotom/internal/listpack"
 )
 
-var (
-	_ iface.ZSetI = (*ZipZSet)(nil)
-
-	order = binary.LittleEndian
-)
-
-// ZipZSet store data as [score1, key1, score2, key2...] in listpack.
-// exp: [300, "xgz", 200, "abc", 100, "xgz"]
+// ZipZSet keeps entries sorted by (score, member) in a listpack. Every
+// operation is O(n), which is fast for the small sizes it is used for.
+//
+// entry: | score (8 bytes, little endian float64) | member |
 type ZipZSet struct {
-	data *list.ListPack
+	lp listpack.ListPack
 }
 
-func NewZipZSet() *ZipZSet {
-	return &ZipZSet{data: list.NewListPack()}
+func NewZipZSet() *ZipZSet { return &ZipZSet{} }
+
+func encodeEntry(member string, score float64) string {
+	b := make([]byte, 8, 8+len(member))
+	binary.LittleEndian.PutUint64(b, math.Float64bits(score))
+	b = append(b, member...)
+	return unsafe.String(unsafe.SliceData(b), len(b))
 }
 
-// entry store as [score(8 bytes), key].
-func (*ZipZSet) encode(key string, score float64) []byte {
-	entry := make([]byte, 0, 8+len(key))
-	entry = order.AppendUint64(entry, math.Float64bits(score))
-	return append(entry, key...)
+// decodeEntry returns a member aliasing entry.
+func decodeEntry(entry []byte) (string, float64) {
+	score := math.Float64frombits(binary.LittleEndian.Uint64(entry))
+	return unsafe.String(unsafe.SliceData(entry[8:]), len(entry)-8), score
 }
 
-func (*ZipZSet) decode(entry []byte) (string, float64) {
-	return b2s(entry[8:]), b2f(entry[:8])
-}
+func (zs *ZipZSet) Len() int { return zs.lp.Len() }
 
-func (zs *ZipZSet) Get(key string) (float64, bool) {
-	it, _, score := zs.rank(key)
-	if it != nil {
-		return score, true
+// find returns a cursor before member, its rank and score.
+func (zs *ZipZSet) find(member string) (c listpack.Cursor, rank int, score float64) {
+	c = zs.lp.Front()
+	for v, ok := c.Next(); ok; v, ok = c.Next() {
+		m, s := decodeEntry(v)
+		if m == member {
+			c.Prev()
+			return c, rank, s
+		}
+		rank++
 	}
-	return 0, false
+	return c, -1, 0
 }
 
-func (zs *ZipZSet) Set(key string, score float64) bool {
-	ok := zs.Remove(key)
-	zs.insert(key, score)
-	return !ok
+func (zs *ZipZSet) Get(member string) (float64, bool) {
+	_, rank, score := zs.find(member)
+	return score, rank >= 0
 }
 
-func (zs *ZipZSet) Remove(key string) bool {
-	it, _, _ := zs.rank(key)
-	if it != nil {
-		it.RemoveNext()
+func (zs *ZipZSet) Set(member string, score float64) bool {
+	c, rank, old := zs.find(member)
+	if rank >= 0 {
+		if old == score {
+			return false
+		}
+		c.Remove()
 	}
-	return it != nil
-}
-
-func (zs *ZipZSet) rank(key string) (*list.LpIterator, int, float64) {
-	it := zs.data.Iterator().SeekLast()
-	for i := 0; !it.IsFirst(); i++ {
-		prevKey, prevScore := zs.decode(it.Prev())
-		if key == prevKey {
-			return it, i, prevScore
+	// insert before the first entry that sorts after (score, member)
+	c = zs.lp.Front()
+	for v, ok := c.Next(); ok; v, ok = c.Next() {
+		m, s := decodeEntry(v)
+		if s > score || (s == score && m > member) {
+			c.Prev()
+			break
 		}
 	}
-	return nil, -1, 0
+	c.Insert(encodeEntry(member, score))
+	return rank < 0
 }
 
-func (zs *ZipZSet) insert(key string, score float64) {
-	it := zs.data.Iterator().SeekLast()
-	for !it.IsFirst() {
-		prevKey, prevScore := zs.decode(it.Prev())
-		if score < prevScore {
-			it.Next()
-			goto DO
-		}
-		if score == prevScore {
-			if key < prevKey {
-				it.Next()
-				goto DO
-			}
-		}
+func (zs *ZipZSet) Remove(member string) bool {
+	c, rank, _ := zs.find(member)
+	if rank >= 0 {
+		c.Remove()
 	}
-DO:
-	it.Insert(b2s(zs.encode(key, score)))
+	return rank >= 0
 }
 
+// PopMin removes the first entry. The set must not be empty.
 func (zs *ZipZSet) PopMin() (string, float64) {
-	entry, ok := zs.data.RPop()
-	if ok {
-		return zs.decode([]byte(entry))
-	}
-	return "", 0
+	entry, _ := zs.lp.PopFront()
+	return decodeEntry([]byte(entry))
 }
 
-func (zs *ZipZSet) Rank(key string) int {
-	_, index, _ := zs.rank(key)
-	return index
+func (zs *ZipZSet) Rank(member string) int {
+	_, rank, _ := zs.find(member)
+	return rank
 }
 
-func (zs *ZipZSet) Scan(fn func(key string, score float64)) {
-	it := zs.data.Iterator().SeekLast()
-	for !it.IsFirst() {
-		entry := it.Prev()
-		key, score := zs.decode(entry)
-		fn(key, score)
-	}
-}
+func (zs *ZipZSet) All() iter.Seq2[string, float64] { return zs.Range(0, zs.Len()-1) }
 
-func (zs *ZipZSet) Range(start, stop int, fn func(key string, score float64)) {
-	i := 0
-	it := zs.data.Iterator().SeekLast()
-	for !it.IsFirst() && i <= stop {
-		if i >= start {
-			key, score := zs.decode(it.Prev())
-			fn(key, score)
-		} else {
-			it.Prev()
+// Range iterates ranks start..stop inclusive. Members alias the listpack
+// and are only valid until it is modified.
+func (zs *ZipZSet) Range(start, stop int) iter.Seq2[string, float64] {
+	return func(yield func(string, float64) bool) {
+		i := 0
+		for v := range zs.lp.All() {
+			if i > stop {
+				return
+			}
+			if i >= start {
+				if !yield(decodeEntry(v)) {
+					return
+				}
+			}
+			i++
 		}
-		i++
 	}
 }
 
-func (zs *ZipZSet) Len() int {
-	return zs.data.Len()
-}
-
+// ToZSet converts to the skiplist encoding.
 func (zs *ZipZSet) ToZSet() *ZSet {
-	zsNew := New()
-	zs.Scan(func(key string, score float64) {
-		zsNew.Set(key, score)
-	})
-	return zsNew
+	z := New()
+	for member, score := range zs.All() {
+		z.Set(strings.Clone(member), score) // member aliases the listpack
+	}
+	return z
 }
 
-func (zs *ZipZSet) ReadFrom(rd *iface.Reader) {
-	zs.data.ReadFrom(rd)
-}
+func (zs *ZipZSet) Encode(w *codec.Writer) { zs.lp.Encode(w) }
 
-func (zs *ZipZSet) WriteTo(w *iface.Writer) {
-	zs.data.WriteTo(w)
-}
-
-func b2s(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
-}
-
-func b2f(b []byte) float64 {
-	return math.Float64frombits(order.Uint64(b))
+func (zs *ZipZSet) Decode(r *codec.Reader) {
+	zs.lp.Decode(r)
+	for v := range zs.lp.All() {
+		if len(v) < 8 {
+			panic(codec.ErrCorrupted)
+		}
+	}
 }

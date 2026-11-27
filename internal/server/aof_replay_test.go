@@ -1,8 +1,10 @@
 package server
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -10,7 +12,7 @@ import (
 	"github.com/xgzlucario/rotom/internal/aof"
 	"github.com/xgzlucario/rotom/internal/config"
 	"github.com/xgzlucario/rotom/internal/db"
-	"github.com/xgzlucario/rotom/internal/iface"
+	"github.com/xgzlucario/rotom/internal/hash"
 	"github.com/xgzlucario/rotom/internal/list"
 	"github.com/xgzlucario/rotom/internal/resp"
 )
@@ -28,14 +30,14 @@ func replay(t *testing.T, delay time.Duration, cmds [][]string) (live, replayed 
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := resp.NewWriter(KB)
+	ctx := s1.newContext(resp.NewWriter(KB))
 	for _, cmd := range cmds {
 		args := make([][]byte, len(cmd))
 		for i, a := range cmd {
 			args[i] = []byte(a)
 		}
-		s1.processCommand(w, args, aof.Encode(nil, args))
-		w.Reset()
+		s1.processCommand(ctx, args, aof.Encode(nil, args))
+		ctx.W.Reset()
 	}
 	if err := s1.Close(); err != nil {
 		t.Fatal(err)
@@ -106,9 +108,8 @@ func TestAofReplay(t *testing.T) {
 		cfg := testConfig(dir)
 		cfg.TCP.Port = 0
 		s1, _ := New(cfg)
-		w := resp.NewWriter(KB)
 		args := [][]byte{[]byte("rpush"), []byte("l"), []byte("a")}
-		s1.processCommand(w, args, aof.Encode(nil, args))
+		s1.processCommand(s1.newContext(resp.NewWriter(KB)), args, aof.Encode(nil, args))
 		ast.Nil(db.SaveRDB(cfg.RDB.DBFileName, s1.db.Dict))
 		ast.Nil(s1.Close())
 
@@ -123,32 +124,30 @@ func TestAofReplay(t *testing.T) {
 // dump renders a dict as comparable values.
 func dump(d *db.Dict) map[string]any {
 	res := map[string]any{}
-	d.Range(func(key string, v any, expireAt int64) bool {
+	for it := range d.All() {
 		var val any
-		switch x := v.(type) {
-		case iface.SetI:
-			m := map[string]bool{}
-			x.Scan(func(k string) { m[k] = true })
-			val = m
-		case iface.MapI:
+		switch x := it.Value.(type) {
+		case []byte:
+			val = string(x)
+		case db.Set:
+			val = slices.Sorted(x.All())
+		case *hash.ZipMap:
 			m := map[string]string{}
-			x.Scan(func(k string, v []byte) { m[k] = string(v) })
+			for f, v := range x.All() {
+				m[f] = string(v)
+			}
 			val = m
 		case *list.QuickList:
 			var l []string
-			x.Range(0, func(b []byte) bool { l = append(l, string(b)); return false })
+			for v := range x.All() {
+				l = append(l, string(v))
+			}
 			val = l
-		case iface.ZSetI:
-			m := map[string]float64{}
-			x.Scan(func(k string, s float64) { m[k] = s })
+		case db.ZSet:
+			m := maps.Collect(x.All())
 			val = m
-		case []byte:
-			val = string(x)
-		default:
-			val = x
 		}
-		res[key] = []any{val, expireAt}
-		return true
-	})
+		res[it.Key] = []any{val, it.ExpireAt}
+	}
 	return res
 }

@@ -210,7 +210,7 @@ func (l *Loop) processTimeEvents() {
 	now := nowMs()
 	// iterate over a snapshot: procs may add new time events.
 	n := len(l.timeEvents)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		te := l.timeEvents[i]
 		if te.deleted || te.when > now {
 			continue

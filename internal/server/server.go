@@ -85,11 +85,11 @@ func (s *Server) loadData() error {
 		return err
 	}
 	log.Debug().Msg("loading aof file...")
-	w := resp.NewWriter(KB)
-	return s.aof.Read(func(args [][]byte) {
-		if cmd := command.Lookup(args[0]); cmd != nil {
-			command.Execute(cmd, &command.Context{W: w, Args: args[1:], DB: s.db, Config: s.cfg})
-			w.Reset()
+	ctx := s.newContext(resp.NewWriter(KB))
+	return s.aof.Read(func(argv [][]byte) {
+		if cmd := command.Lookup(argv[0]); cmd != nil {
+			command.Execute(cmd, ctx, argv[1:])
+			ctx.W.Reset()
 		}
 	})
 }
@@ -137,16 +137,19 @@ func (s *Server) Close() error {
 	return nil
 }
 
-// processCommand runs one command, appending its reply to w. raw is the
-// original RESP encoding of args, used for the AOF.
-func (s *Server) processCommand(w *resp.Writer, args [][]byte, raw []byte) {
-	cmd := command.Lookup(args[0])
+func (s *Server) newContext(w *resp.Writer) *command.Context {
+	return &command.Context{W: w, DB: s.db, Config: s.cfg}
+}
+
+// processCommand runs one command with ctx, appending the reply to ctx.W.
+// raw is the original RESP encoding of argv, used for the AOF.
+func (s *Server) processCommand(ctx *command.Context, argv [][]byte, raw []byte) {
+	cmd := command.Lookup(argv[0])
 	if cmd == nil {
-		w.WriteError(command.UnknownCommandError(args[0]))
+		ctx.W.WriteError(command.UnknownCommandError(argv[0]))
 		return
 	}
-	ctx := command.Context{W: w, Args: args[1:], DB: s.db, Config: s.cfg}
-	res := command.Execute(cmd, &ctx)
+	res := command.Execute(cmd, ctx, argv[1:])
 	if !res.Persist || s.aof == nil {
 		return
 	}

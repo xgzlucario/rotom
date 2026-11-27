@@ -3,21 +3,19 @@ package command
 import "fmt"
 
 func hsetCommand(ctx *Context) {
-	args := ctx.Args
-	pairs := args[1:]
+	pairs := ctx.Args[1:]
 	if len(pairs)%2 == 1 {
 		ctx.W.WriteError(fmt.Sprintf("%s for 'hset' command", ErrWrongArguments))
 		return
 	}
-	hmap, err := ctx.DB.HashForWrite(b2s(args[0]))
+	h, err := ctx.DB.HashForWrite(b2s(ctx.Args[0]))
 	if err != nil {
 		ctx.err(err)
 		return
 	}
 	var count int
 	for i := 0; i < len(pairs); i += 2 {
-		// field is retained by the map, value is copied into its buffer.
-		if hmap.Set(string(pairs[i]), pairs[i+1]) {
+		if h.Set(b2s(pairs[i]), pairs[i+1]) { // field and value are copied
 			count++
 		}
 	}
@@ -25,14 +23,14 @@ func hsetCommand(ctx *Context) {
 }
 
 func hgetCommand(ctx *Context) {
-	hmap, err := ctx.DB.GetHash(b2s(ctx.Args[0]))
+	h, err := ctx.DB.GetHash(b2s(ctx.Args[0]))
 	if err != nil {
 		ctx.err(err)
 		return
 	}
-	if hmap != nil {
-		if value, ok := hmap.Get(b2s(ctx.Args[1])); ok {
-			ctx.W.WriteBulk(value)
+	if h != nil {
+		if v, ok := h.Get(b2s(ctx.Args[1])); ok {
+			ctx.W.WriteBulk(v)
 			return
 		}
 	}
@@ -41,19 +39,19 @@ func hgetCommand(ctx *Context) {
 
 func hdelCommand(ctx *Context) {
 	key := b2s(ctx.Args[0])
-	hmap, err := ctx.DB.GetHash(key)
+	h, err := ctx.DB.GetHash(key)
 	if err != nil {
 		ctx.err(err)
 		return
 	}
 	var count int
-	if hmap != nil {
+	if h != nil {
 		for _, field := range ctx.Args[1:] {
-			if hmap.Remove(b2s(field)) {
+			if h.Remove(b2s(field)) {
 				count++
 			}
 		}
-		ctx.DB.DeleteIfEmpty(key, hmap.Len())
+		ctx.DB.DeleteIfEmpty(key, h.Len())
 	}
 	if count == 0 {
 		ctx.unchanged()
@@ -62,18 +60,18 @@ func hdelCommand(ctx *Context) {
 }
 
 func hgetallCommand(ctx *Context) {
-	hmap, err := ctx.DB.GetHash(b2s(ctx.Args[0]))
+	h, err := ctx.DB.GetHash(b2s(ctx.Args[0]))
 	if err != nil {
 		ctx.err(err)
 		return
 	}
-	if hmap == nil {
+	if h == nil {
 		ctx.W.WriteArray(0)
 		return
 	}
-	ctx.W.WriteArray(hmap.Len() * 2)
-	hmap.Scan(func(key string, value []byte) {
-		ctx.W.WriteBulkString(key)
+	ctx.W.WriteArray(h.Len() * 2)
+	for field, value := range h.All() {
+		ctx.W.WriteBulkString(field)
 		ctx.W.WriteBulk(value)
-	})
+	}
 }

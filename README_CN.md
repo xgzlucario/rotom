@@ -38,13 +38,30 @@ AeLoop(Async Event Loop) 是 Redis 的核心异步事件驱动机制，主要有
 
 rotom 在数据结构上做了许多优化：
 
-- dict：rotom 使用 `stdmap` 作为 db 的哈希表，自带渐进式 rehash 功能
-- hash：基于 `zipmap`，拥有更高的内存效率 
-- set：当 set 较小时使用 `zipset`，较大时使用 `mapset`
-- list：使用基于 `listpack` 的双向链表 `quicklist`
-- zset：当 zset 较小时使用 `zipzset`，较大时使用 `hash` + `skiplist`
+- dict：移植自 Redis 的 dict，支持渐进式 rehash 和反向二进制 `SCAN` 游标。entry 本身就是桶链表节点，过期时间内联存储
+- hash：`zipmap`，所有值紧凑存放在一个字节数组中，另有 field -> offset 索引
+- set：较小时使用 `zipset`（基于 listpack），变大后转为哈希集合
+- list：`quicklist`，由 listpack 组成的双向链表
+- zset：较小时使用 `zipzset`（有序 listpack），变大后转为 map + 带 span 的跳表（rank 和区间查询 O(log n)）
 
-值得一提的是，`zipmap` 和 `zipset` 是空间紧凑的数据结构，它们都基于 `listpack`, 这是 Redis 提出的替代 `ziplist` 的新型压缩列表，支持正序及逆序遍历，解决了 `ziplist` 存在级联更新的问题。
+`listpack` 是 Redis 用来替代 `ziplist` 的紧凑列表：每个 entry 的长度在两端都有记录，可以双向遍历，也不存在级联更新问题。
+
+## 代码结构
+
+```
+main.go                 参数、日志、启动
+internal/
+  ae/        事件循环（linux 上用 epoll，darwin/bsd 上用 kqueue）
+  net/       非阻塞 socket 系统调用
+  resp/      RESP 请求解析与回复写入（零分配）
+  server/    客户端、请求处理、AOF/RDB 接入
+  command/   命令表与命令实现
+  db/        键空间：dict、过期、值类型、RDB
+  aof/       AOF 文件
+  codec/     RDB 二进制编码
+  listpack/  hash/  list/  set/  zset/     数据结构
+  config/    toml 配置
+```
 
 ## 性能
 

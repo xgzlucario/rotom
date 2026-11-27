@@ -7,7 +7,7 @@ import (
 )
 
 func setCommand(ctx *Context) {
-	w, args := ctx.W, ctx.Args
+	args := ctx.Args
 	key := b2s(args[0])
 	var expireAt int64 // unix ms, 0 means no expire
 	var keepTTL, nx, xx, hasExpire bool
@@ -43,25 +43,19 @@ func setCommand(ctx *Context) {
 		}
 	}
 
-	_, exists := ctx.DB.Get(key)
-	if (nx && exists) || (xx && !exists) {
-		ctx.unchanged()
-		w.WriteNull()
-		return
+	if nx || xx {
+		if exists := ctx.DB.Exists(key); (nx && exists) || (xx && !exists) {
+			ctx.unchanged()
+			ctx.W.WriteNull()
+			return
+		}
 	}
-
-	value := append(make([]byte, 0, len(args[1])), args[1]...)
-	if keepTTL {
-		ctx.DB.Set(key, value)
-	} else {
-		// a plain SET discards any previous TTL.
-		ctx.DB.SetWithExpire(key, value, expireAt)
-	}
+	ctx.DB.SetString(key, args[1], expireAt, keepTTL)
 	if hasExpire {
 		// persist an absolute time, so that replaying the AOF does not extend the TTL.
 		ctx.rewrite([]byte("set"), args[0], args[1], []byte("pxat"), strconv.AppendInt(nil, expireAt, 10))
 	}
-	w.WriteString("OK")
+	ctx.W.WriteString("OK")
 }
 
 func getCommand(ctx *Context) {
@@ -95,7 +89,7 @@ func incrCommand(ctx *Context) {
 		return
 	}
 	num++
-	// the dict owns v, so its buffer can be reused; Set keeps the TTL like redis.
-	ctx.DB.Set(key, strconv.AppendInt(v[:0], num, 10))
+	var buf [20]byte
+	ctx.DB.SetString(key, strconv.AppendInt(buf[:0], num, 10), 0, true) // INCR keeps the TTL
 	ctx.W.WriteInt64(num)
 }

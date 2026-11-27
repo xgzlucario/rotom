@@ -1,14 +1,12 @@
 package db
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/xgzlucario/rotom/internal/hash"
-	"github.com/xgzlucario/rotom/internal/list"
-	"github.com/xgzlucario/rotom/internal/zset"
 )
 
 func TestRDB(t *testing.T) {
@@ -16,35 +14,39 @@ func TestRDB(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "dump.rdb")
 
 	d := NewDict()
-	d.Set("str", []byte("v"))
-	d.SetWithExpire("ttl", []byte("v"), d.Now()+100000)
-	d.SetWithExpire("dead", []byte("v"), d.Now()-1)
-	h := hash.New()
+	d.SetString("str", []byte("v"), 0, false)
+	d.SetString("empty", []byte{}, 0, false)
+	d.SetString("ttl", []byte("v"), d.Now()+100000, false)
+	d.SetString("dead", []byte("v"), d.Now()-1, false)
+	h, _ := d.HashForWrite("hash")
 	h.Set("f", []byte("v"))
-	d.Set("hash", h)
-	l := list.New()
-	l.RPush("a", "b")
-	d.Set("list", l)
-	zs := hash.NewZipSet()
-	zs.Add("m")
-	d.Set("zipset", zs)
-	d.Set("set", zs.ToSet())
-	zz := zset.NewZipZSet()
-	zz.Set("m", 1.5)
-	d.Set("zipzset", zz)
-	d.Set("zset", zz.ToZSet())
+	l, _ := d.ListForWrite("list")
+	l.RPush("a")
+	small, _ := d.SetForWrite("zipset", nil)
+	small.Add("m")
+	big, _ := d.SetForWrite("set", make([][]byte, MaxZipSetEntries+1))
+	big.Add("m")
+	zsmall, _ := d.ZSetForWrite("zipzset", nil)
+	zsmall.Set("m", 1.5)
+	zbig, _ := d.ZSetForWrite("zset", make([][]byte, MaxZipZSetEntries+1))
+	zbig.Set("m", 1.5)
 	ast.Nil(SaveRDB(path, d))
 
 	got, err := LoadRDB(path)
 	ast.Nil(err)
-	ast.Equal(8, got.Len(), "expired keys are not saved")
+	ast.Equal(9, got.Len(), "expired keys are not saved")
 	at, _ := got.ExpireAt("ttl")
 	ast.Equal(d.Now()+100000, at)
-	for _, key := range []string{"str", "hash", "list", "zipset", "set", "zipzset", "zset"} {
-		v1, _ := d.Get(key)
-		v2, _ := got.Get(key)
-		ast.Equal(EncodingOf(v1), EncodingOf(v2), key)
-		ast.Equal(TypeOf(v1), TypeOf(v2), key)
+	ast.Len(got.volatile, 1)
+	want := map[string]Item{}
+	for it := range d.All() {
+		want[it.Key] = it
+	}
+	for it := range got.All() {
+		w := want[it.Key]
+		ast.Equal(EncodingOf(w.Value), EncodingOf(it.Value), it.Key)
+		ast.Equal(summary(w.Value), summary(it.Value), it.Key)
+		ast.Equal(w.ExpireAt, it.ExpireAt, it.Key)
 	}
 
 	t.Run("missing-file", func(t *testing.T) {
@@ -65,4 +67,16 @@ func TestRDB(t *testing.T) {
 		_, err = LoadRDB(bad)
 		ast.ErrorContains(err, "not a rotom rdb")
 	})
+}
+
+// summary renders a value's content; per-type encode/decode round trips
+// are tested in each data structure package.
+func summary(v any) string {
+	switch x := v.(type) {
+	case []byte:
+		return string(x)
+	case interface{ Len() int }:
+		return fmt.Sprint(x.Len())
+	}
+	return fmt.Sprintf("%T", v)
 }

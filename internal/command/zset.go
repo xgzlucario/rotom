@@ -9,25 +9,25 @@ func zaddCommand(ctx *Context) {
 		return
 	}
 	// validate all scores before mutating anything
-	scores := make([]float64, 0, len(pairs)/2)
-	longest := 0
 	for i := 0; i < len(pairs); i += 2 {
-		score, err := parseFloat(pairs[i])
-		if err != nil {
+		if _, err := parseFloat(pairs[i]); err != nil {
 			ctx.err(err)
 			return
 		}
-		scores = append(scores, score)
-		longest = max(longest, len(pairs[i+1]))
 	}
-	zs, err := ctx.DB.ZSetForWrite(b2s(ctx.Args[0]), len(scores), longest)
+	members := make([][]byte, 0, 8)
+	for i := 1; i < len(pairs); i += 2 {
+		members = append(members, pairs[i])
+	}
+	zs, err := ctx.DB.ZSetForWrite(b2s(ctx.Args[0]), members)
 	if err != nil {
 		ctx.err(err)
 		return
 	}
 	var count int
 	for i := 0; i < len(pairs); i += 2 {
-		if zs.Set(string(pairs[i+1]), scores[i/2]) {
+		score, _ := parseFloat(pairs[i])
+		if zs.Set(string(pairs[i+1]), score) { // the zset retains members: copy
 			count++
 		}
 	}
@@ -109,12 +109,12 @@ func zrangeCommand(ctx *Context) {
 	} else {
 		w.WriteArray(n)
 	}
-	zs.Range(from, to, func(key string, score float64) {
-		w.WriteBulkString(key)
+	for member, score := range zs.Range(from, to) {
+		w.WriteBulkString(member)
 		if withScores {
 			w.WriteFloat(score)
 		}
-	})
+	}
 }
 
 func zpopminCommand(ctx *Context) {

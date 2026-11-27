@@ -46,10 +46,8 @@ func TestServer(t *testing.T) {
 		}()
 
 		var wg sync.WaitGroup
-		for i := 0; i < testCount; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		for range testCount {
+			wg.Go(func() {
 				conn, err := net.Dial("tcp", "127.0.0.1:20083")
 				if !ast.Nil(err) {
 					return
@@ -63,7 +61,7 @@ func TestServer(t *testing.T) {
 				n, err := conn.Read(res[:])
 				ast.Nil(err)
 				ast.Equal(msg, string(res[:n]))
-			}()
+			})
 		}
 		wg.Wait()
 	})

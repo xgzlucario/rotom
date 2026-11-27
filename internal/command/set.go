@@ -2,14 +2,14 @@ package command
 
 func saddCommand(ctx *Context) {
 	members := ctx.Args[1:]
-	set, err := ctx.DB.SetForWrite(b2s(ctx.Args[0]), len(members), maxLen(members))
+	s, err := ctx.DB.SetForWrite(b2s(ctx.Args[0]), members)
 	if err != nil {
 		ctx.err(err)
 		return
 	}
 	var count int
 	for _, m := range members {
-		if set.Add(string(m)) {
+		if s.Add(string(m)) { // the set retains members: copy
 			count++
 		}
 	}
@@ -21,19 +21,19 @@ func saddCommand(ctx *Context) {
 
 func sremCommand(ctx *Context) {
 	key := b2s(ctx.Args[0])
-	set, err := ctx.DB.GetSet(key)
+	s, err := ctx.DB.GetSet(key)
 	if err != nil {
 		ctx.err(err)
 		return
 	}
 	var count int
-	if set != nil {
+	if s != nil {
 		for _, m := range ctx.Args[1:] {
-			if set.Remove(b2s(m)) {
+			if s.Remove(b2s(m)) {
 				count++
 			}
 		}
-		ctx.DB.DeleteIfEmpty(key, set.Len())
+		ctx.DB.DeleteIfEmpty(key, s.Len())
 	}
 	if count == 0 {
 		ctx.unchanged()
@@ -42,33 +42,35 @@ func sremCommand(ctx *Context) {
 }
 
 func smembersCommand(ctx *Context) {
-	set, err := ctx.DB.GetSet(b2s(ctx.Args[0]))
+	s, err := ctx.DB.GetSet(b2s(ctx.Args[0]))
 	if err != nil {
 		ctx.err(err)
 		return
 	}
-	if set == nil {
+	if s == nil {
 		ctx.W.WriteArray(0)
 		return
 	}
-	ctx.W.WriteArray(set.Len())
-	set.Scan(func(m string) { ctx.W.WriteBulkString(m) })
+	ctx.W.WriteArray(s.Len())
+	for m := range s.All() {
+		ctx.W.WriteBulkString(m)
+	}
 }
 
 func spopCommand(ctx *Context) {
 	key := b2s(ctx.Args[0])
-	set, err := ctx.DB.GetSet(key)
+	s, err := ctx.DB.GetSet(key)
 	if err != nil {
 		ctx.err(err)
 		return
 	}
-	if set == nil {
+	if s == nil {
 		ctx.unchanged()
 		ctx.W.WriteNull()
 		return
 	}
-	member, _ := set.Pop()
-	ctx.DB.DeleteIfEmpty(key, set.Len())
+	member, _ := s.Pop()
+	ctx.DB.DeleteIfEmpty(key, s.Len())
 	// SPOP is not deterministic: persist which member was removed.
 	ctx.rewrite([]byte("srem"), ctx.Args[0], []byte(member))
 	ctx.W.WriteBulkString(member)

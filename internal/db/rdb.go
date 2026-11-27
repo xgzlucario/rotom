@@ -8,45 +8,46 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/xgzlucario/rotom/internal/iface"
+	"github.com/xgzlucario/rotom/internal/codec"
 )
 
 // rdb file layout:
 //
-//	magic "ROTOM" | version u8 | count u64 | entries... | crc32 u32 (of everything before)
-//	entry: objectType u8 | expireAt varint (unix ms, 0 = none) | key | value
+//	magic "ROTOM" | version u8 | count uvarint | entries... | crc32 u32 (of everything before)
+//	entry: encoding u8 | expireAt varint (unix ms, 0 = none) | key | value
 const (
 	rdbMagic   = "ROTOM"
-	rdbVersion = 1
+	rdbVersion = 2
 )
 
-// SaveRDB writes dict to path atomically.
+// SaveRDB writes dict to path atomically: a temp file is written, fsynced
+// and renamed, so a crash never leaves a partial file behind.
 func SaveRDB(path string, dict *Dict) (err error) {
-	writer := iface.NewWriter(make([]byte, 0, 4096))
-	for _, c := range []byte(rdbMagic) {
-		writer.WriteUint8(c)
+	buf := append(make([]byte, 0, 4096), rdbMagic...)
+	w := codec.NewWriter(append(buf, rdbVersion))
+
+	count := 0
+	for range dict.live() {
+		count++
 	}
-	writer.WriteUint8(rdbVersion)
-	var count uint64
-	dict.Range(func(string, any, int64) bool { count++; return true })
-	writer.WriteUint64(count)
-
-	dict.Range(func(k string, v any, expireAt int64) bool {
+	w.WriteUvarint(uint64(count))
+	for e := range dict.live() {
+		v := e.value()
 		enc := EncodingOf(v)
-		writer.WriteUint8(uint8(enc))
-		writer.WriteVarint(int(expireAt))
-		writer.WriteString(k)
-
+		w.WriteUint8(uint8(enc))
+		w.WriteVarint(e.expireAt)
+		w.WriteString(e.key)
 		if enc == EncodingString {
-			writer.WriteBytes(v.([]byte))
+			w.WriteBytes(e.str)
 		} else {
-			v.(iface.Encoder).WriteTo(writer)
+			v.(codec.Encoder).Encode(w)
 		}
-		return true
-	})
-	writer.WriteUint32(crc32.ChecksumIEEE(writer.Bytes()))
+	}
+	w.WriteUint32(crc32.ChecksumIEEE(w.Bytes()))
+	return writeFileAtomic(path, w.Bytes())
+}
 
-	// write to a temp file, fsync, then atomically rename.
+func writeFileAtomic(path string, data []byte) (err error) {
 	tmp := path + ".tmp"
 	f, err := os.Create(tmp)
 	if err != nil {
@@ -58,7 +59,7 @@ func SaveRDB(path string, dict *Dict) (err error) {
 			_ = os.Remove(tmp)
 		}
 	}()
-	if _, err = f.Write(writer.Bytes()); err != nil {
+	if _, err = f.Write(data); err != nil {
 		return err
 	}
 	if err = f.Sync(); err != nil {
@@ -74,22 +75,19 @@ func SaveRDB(path string, dict *Dict) (err error) {
 func LoadRDB(path string) (dict *Dict, err error) {
 	dict = NewDict()
 	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
+	if errors.Is(err, fs.ErrNotExist) || (err == nil && len(data) == 0) {
 		return dict, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if len(data) == 0 {
-		return dict, nil
-	}
 
-	headerLen := len(rdbMagic) + 1
-	if len(data) < headerLen+8+4 || string(data[:len(rdbMagic)]) != rdbMagic {
+	header := len(rdbMagic) + 1
+	if len(data) < header+4 || string(data[:len(rdbMagic)]) != rdbMagic {
 		return nil, errors.New("not a rotom rdb file")
 	}
 	if v := data[len(rdbMagic)]; v != rdbVersion {
-		return nil, fmt.Errorf("unsupported rdb version %d", v)
+		return nil, fmt.Errorf("unsupported rdb version %d (want %d)", v, rdbVersion)
 	}
 	body, sum := data[:len(data)-4], binary.LittleEndian.Uint32(data[len(data)-4:])
 	if crc32.ChecksumIEEE(body) != sum {
@@ -103,23 +101,29 @@ func LoadRDB(path string) (dict *Dict, err error) {
 		}
 	}()
 
-	rd := iface.NewReader(body[headerLen:])
-	n := rd.ReadUint64()
-	for range n {
-		enc := Encoding(rd.ReadUint8())
-		expireAt := rd.ReadVarint()
-		key := rd.ReadString()
-
+	r := codec.NewReader(body[header:])
+	for range r.ReadLen() {
+		enc := Encoding(r.ReadUint8())
+		expireAt := r.ReadVarint()
+		key := r.ReadString()
+		if dict.data.Get(key) != nil {
+			return nil, fmt.Errorf("duplicate key %q", key)
+		}
+		e := dict.insert(key)
+		dict.setExpire(e, expireAt)
 		if enc == EncodingString {
-			dict.SetWithExpire(key, rd.ReadBytes(), expireAt)
+			e.str = r.ReadBytes()
 			continue
 		}
-		val, err := newEncoded(enc)
+		obj, err := newObject(enc)
 		if err != nil {
 			return nil, err
 		}
-		val.ReadFrom(rd)
-		dict.SetWithExpire(key, val, expireAt)
+		obj.Decode(r)
+		e.obj = obj
+	}
+	if r.Len() != 0 {
+		return nil, errors.New("rdb file has trailing data")
 	}
 	return dict, nil
 }

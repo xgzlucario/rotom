@@ -181,7 +181,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 
 	t.Run("hash", func(t *testing.T) {
 		var keys, vals []string
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			keys = append(keys, fmt.Sprintf("key-%08d", i))
 			vals = append(vals, fmt.Sprintf("val-%08d", i))
 		}
@@ -332,7 +332,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		ast.Equal(_type, "set")
 
 		// spop
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			val, _ := rdb.SPop(ctx, "set").Result()
 			ast.NotEqual(val, "")
 		}
@@ -469,7 +469,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 	t.Run("scan", func(t *testing.T) {
 		rdb.FlushDB(ctx)
 		want := map[string]bool{}
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			key := fmt.Sprintf("key-%d", i)
 			rdb.Set(ctx, key, 1, 0)
 			want[key] = true
@@ -513,9 +513,8 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 
 	t.Run("concurrency", func(t *testing.T) {
 		var wg sync.WaitGroup
-		for i := 0; i < 1000; i++ {
-			wg.Add(1)
-			go func() {
+		for range 1000 {
+			wg.Go(func() {
 				key := fmt.Sprintf("key%08x", rand.Int())
 				value := fmt.Sprintf("val%08x", rand.Int())
 
@@ -525,8 +524,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 				res, _ := rdb.Get(ctx, key).Result()
 				ast.Equal(res, value)
 
-				wg.Done()
-			}()
+			})
 		}
 		wg.Wait()
 	})
@@ -555,7 +553,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 
 			rdb.HSet(ctx, "rdb-hash1", "k1", "v1", "k2", "v2")
 			rdb.SAdd(ctx, "rdb-set1", "k1", "k2")
-			for i := 0; i < 1024; i++ {
+			for i := range 1024 {
 				key := fmt.Sprintf("%d", i)
 				rdb.HSet(ctx, "rdb-hash2", key, key)
 				rdb.SAdd(ctx, "rdb-set2", key)
