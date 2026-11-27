@@ -1,25 +1,41 @@
-package main
+package server
 
 import (
 	"context"
 	"fmt"
 	"github.com/alicebob/miniredis/v2"
 	"math/rand/v2"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/xgzlucario/rotom/internal/command"
+	"github.com/xgzlucario/rotom/internal/config"
 )
 
-func startup() {
-	config4Server("rotom_test.toml")
-	printBanner()
-	RegisterAeLoop(&server)
-	// custom
-	server.aeLoop.AddTimeEvent(AeOnce, 300, func(_ *AeLoop, _ int, _ interface{}) {}, nil)
-	server.aeLoop.AeMain()
+// testConfig returns a config on port 7979 with both persistence files in dir.
+func testConfig(dir string) *config.Config {
+	cfg := config.Default()
+	cfg.TCP.Port = 7979
+	cfg.RDB.Save = true
+	cfg.RDB.DBFileName = filepath.Join(dir, "dump.rdb")
+	cfg.AOF.AppendOnly = true
+	cfg.AOF.AppendFileName = filepath.Join(dir, "appendonly.aof")
+	return cfg
+}
+
+func startup(t *testing.T) {
+	srv, err := New(testConfig(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.Listen(); err != nil {
+		t.Fatal(err)
+	}
+	go srv.Run()
 }
 
 const (
@@ -52,8 +68,7 @@ func TestCommand(t *testing.T) {
 	//	rdb.FlushDB(context.Background())
 	//})
 	t.Run(testTypeRotom, func(t *testing.T) {
-		go startup()
-		time.Sleep(time.Second / 2)
+		startup(t)
 		rdb := redis.NewClient(&redis.Options{
 			Addr: ":7979",
 		})
@@ -135,7 +150,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			rdb.RPush(ctx, lskey, "1")
 
 			_, err := rdb.Get(ctx, lskey).Result()
-			ast.Equal(err.Error(), errWrongType.Error())
+			ast.Equal(err.Error(), command.ErrWrongType.Error())
 		}
 	})
 
@@ -161,7 +176,7 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 
 		rdb.Set(ctx, "notNum", "bar", 0)
 		_, err := rdb.Incr(ctx, "notNum").Result()
-		ast.Equal(err.Error(), errParseInteger.Error())
+		ast.Equal(err.Error(), command.ErrParseInteger.Error())
 	})
 
 	t.Run("hash", func(t *testing.T) {
@@ -204,25 +219,25 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 
 		// error hset
 		_, err = rdb.HSet(ctx, "map").Result()
-		ast.Contains(err.Error(), errWrongArguments.Error())
+		ast.Contains(err.Error(), command.ErrWrongArguments.Error())
 
 		_, err = rdb.HSet(ctx, "map", "k1", "v1", "k2").Result()
-		ast.Contains(err.Error(), errWrongArguments.Error())
+		ast.Contains(err.Error(), command.ErrWrongArguments.Error())
 
 		// err wrong type
 		rdb.Set(ctx, "key", "value", 0)
 
 		_, err = rdb.HGet(ctx, "key", "field1").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.HSet(ctx, "key", "field1", "value1").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.HDel(ctx, "key", "field1").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.HGetAll(ctx, "key").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 	})
 
 	t.Run("list", func(t *testing.T) {
@@ -286,23 +301,23 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		rdb.Set(ctx, "key", "value", 0)
 
 		_, err := rdb.LPush(ctx, "key", "1").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.RPush(ctx, "key", "1").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.LPop(ctx, "key").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.RPop(ctx, "key").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.LRange(ctx, "key", 0, -1).Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		rdb.RPush(ctx, "ls-test", "A")
 		_, err = rdb.Incr(ctx, "ls-test").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 	})
 
 	t.Run("set", func(t *testing.T) {
@@ -334,16 +349,16 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		rdb.Set(ctx, "key", "value", 0)
 
 		_, err = rdb.SAdd(ctx, "key", "1").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.SRem(ctx, "key", "1").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.SMembers(ctx, "key").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.SPop(ctx, "key").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 	})
 
 	t.Run("zset", func(t *testing.T) {
@@ -427,19 +442,19 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 		rdb.Set(ctx, "key", "value", 0)
 
 		_, err := rdb.ZAdd(ctx, "key", redis.Z{}).Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.ZRank(ctx, "key", "member1").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.ZRange(ctx, "key", 0, -1).Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.ZRem(ctx, "key", "member1").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 
 		_, err = rdb.ZPopMin(ctx, "key").Result()
-		ast.Equal(err.Error(), errWrongType.Error())
+		ast.Equal(err.Error(), command.ErrWrongType.Error())
 	})
 
 	t.Run("flushdb", func(t *testing.T) {
@@ -452,18 +467,36 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 	})
 
 	t.Run("scan", func(t *testing.T) {
-		for i := 0; i < 10; i++ {
-			rdb.Set(ctx, fmt.Sprintf("key-%d", i), 1, 0)
+		rdb.FlushDB(ctx)
+		want := map[string]bool{}
+		for i := 0; i < 1000; i++ {
+			key := fmt.Sprintf("key-%d", i)
+			rdb.Set(ctx, key, 1, 0)
+			want[key] = true
 		}
-		keys, cursor, err := rdb.Scan(ctx, 0, "", 5).Result()
-		ast.Equal(len(keys), 5)
-		ast.Equal(cursor, uint64(5))
-		ast.Nil(err)
+		rdb.RPush(ctx, "scan-list", "a")
 
-		keys, cursor, err = rdb.Scan(ctx, 0, "", 10).Result()
-		ast.Equal(len(keys), 10)
-		ast.Equal(cursor, uint64(0))
+		// a full iteration returns every key; COUNT is only a hint.
+		seen := map[string]bool{}
+		var cursor uint64
+		for {
+			keys, next, err := rdb.Scan(ctx, cursor, "key-*", 50).Result()
+			ast.Nil(err)
+			for _, k := range keys {
+				seen[k] = true
+			}
+			if cursor = next; cursor == 0 {
+				break
+			}
+		}
+		ast.Equal(want, seen)
+
+		keys, _, err := rdb.ScanType(ctx, 0, "", 2000, "list").Result()
 		ast.Nil(err)
+		ast.Equal([]string{"scan-list"}, keys)
+
+		_, err = rdb.Do(ctx, "scan", "0", "count", "0").Result()
+		ast.NotNil(err)
 	})
 
 	t.Run("pipline", func(t *testing.T) {
@@ -569,6 +602,14 @@ func testCommand(t *testing.T, testType string, rdb *redis.Client, sleepFn func(
 			}})
 		})
 	}
+
+	t.Run("expire", func(t *testing.T) {
+		testExpire(t, rdb, sleepFn)
+	})
+
+	t.Run("regression", func(t *testing.T) {
+		testRegression(t, testType, rdb)
+	})
 
 	t.Run("close", func(t *testing.T) {
 		ast.Nil(rdb.Close())

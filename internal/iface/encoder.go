@@ -1,8 +1,13 @@
 package iface
 
 import (
+	"bytes"
 	"encoding/binary"
+	"errors"
 )
+
+// ErrCorrupted is raised (via panic) by Reader on malformed input.
+var ErrCorrupted = errors.New("corrupted data")
 
 var order = binary.LittleEndian
 
@@ -57,11 +62,21 @@ func NewReaderFrom(w *Writer) *Reader {
 }
 
 func (r *Reader) ReadString() string {
-	return string(r.ReadBytes())
+	return string(r.readBytes())
 }
 
+// ReadBytes returns a copy of the next length-prefixed byte slice.
+// The copy matters: callers keep and mutate the result (e.g. INCR, listpack
+// removal), so it must not alias the reader's underlying buffer.
 func (r *Reader) ReadBytes() []byte {
+	return bytes.Clone(r.readBytes())
+}
+
+func (r *Reader) readBytes() []byte {
 	klen, n := binary.Uvarint(r.b)
+	if n <= 0 || uint64(len(r.b)-n) < klen {
+		panic(ErrCorrupted)
+	}
 	key := r.b[n : int(klen)+n]
 	r.b = r.b[int(klen)+n:]
 	return key

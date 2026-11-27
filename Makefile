@@ -7,19 +7,26 @@ test-cover:
 	go tool cover -html=coverage.txt -o coverage.html
 
 fuzz-test:
-	go test -fuzz=FuzzRESPReader
+	go test -run XXX -fuzz=FuzzTestZSet -fuzztime 30s ./internal/zset
+	go test -run XXX -fuzz=FuzzTestMap -fuzztime 30s ./internal/hash
+	go test -run XXX -fuzz=FuzzTestList -fuzztime 30s ./internal/list
+
+diff-test:
+	go test -run TestDifferential ./internal/server -diff.ops=300000 -v
+
+PPROF_HOST ?= localhost:6060
 
 pprof:
-	go tool pprof -http=:18081 "http://192.168.10.139:6060/debug/pprof/profile?seconds=30"
+	go tool pprof -http=:18081 "http://$(PPROF_HOST)/debug/pprof/profile?seconds=30"
 
 heap:
-	go tool pprof http://192.168.1.6:6060/debug/pprof/heap
+	go tool pprof http://$(PPROF_HOST)/debug/pprof/heap
 
 clean:
 	rm -f coverage.* *.aof *.rdb
 
 bench:
-	go test -bench . -benchmem
+	go test -run XXX -bench . -benchmem ./internal/...
 
 build:
 	CGO_ENABLED=0 \

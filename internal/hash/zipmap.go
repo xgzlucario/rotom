@@ -2,7 +2,6 @@ package hash
 
 import (
 	"encoding/binary"
-	"github.com/cockroachdb/swiss"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/xgzlucario/rotom/internal/pool"
 )
@@ -21,17 +20,17 @@ var (
 type ZipMap struct {
 	unused int
 	data   []byte
-	index  *swiss.Map[string, uint32]
+	index  map[string]uint32
 }
 
 func New() *ZipMap {
 	return &ZipMap{
-		index: swiss.New[string, uint32](8),
+		index: make(map[string]uint32, 8),
 	}
 }
 
 func (zm *ZipMap) Get(key string) ([]byte, bool) {
-	pos, ok := zm.index.Get(key)
+	pos, ok := zm.index[key]
 	if !ok {
 		return nil, false
 	}
@@ -40,7 +39,7 @@ func (zm *ZipMap) Get(key string) ([]byte, bool) {
 }
 
 func (zm *ZipMap) Set(key string, val []byte) bool {
-	pos, ok := zm.index.Get(key)
+	pos, ok := zm.index[key]
 	// update inplaced
 	if ok {
 		oldVal, n := zm.readVal(pos)
@@ -57,7 +56,7 @@ func (zm *ZipMap) Set(key string, val []byte) bool {
 }
 
 func (zm *ZipMap) appendKeyVal(dst []byte, key string, val []byte) []byte {
-	zm.index.Put(key, uint32(len(dst)))
+	zm.index[key] = uint32(len(dst))
 	dst = binary.AppendUvarint(dst, uint64(len(val)))
 	return append(dst, val...)
 }
@@ -70,9 +69,9 @@ func (zm *ZipMap) readVal(pos uint32) ([]byte, int) {
 }
 
 func (zm *ZipMap) Remove(key string) bool {
-	pos, ok := zm.index.Get(key)
+	pos, ok := zm.index[key]
 	if ok {
-		zm.index.Delete(key)
+		delete(zm.index, key)
 		_, n := zm.readVal(pos)
 		// mem trash
 		zm.unused += n
@@ -82,11 +81,10 @@ func (zm *ZipMap) Remove(key string) bool {
 }
 
 func (zm *ZipMap) Scan(fn func(string, []byte)) {
-	zm.index.All(func(key string, pos uint32) bool {
+	for key, pos := range zm.index {
 		val, _ := zm.readVal(pos)
 		fn(key, val)
-		return true
-	})
+	}
 }
 
 func (zm *ZipMap) Migrate() {
@@ -96,7 +94,7 @@ func (zm *ZipMap) Migrate() {
 	if float64(zm.unused)/float64(len(zm.data)) < migrateThresholdRate {
 		return
 	}
-	newData := bpool.Get(len(zm.data))
+	newData := bpool.Get(len(zm.data) - zm.unused)[:0]
 	zm.Scan(func(key string, val []byte) {
 		newData = zm.appendKeyVal(newData, key, val)
 	})
@@ -105,14 +103,14 @@ func (zm *ZipMap) Migrate() {
 	zm.unused = 0
 }
 
-func (zm *ZipMap) Len() int { return zm.index.Len() }
+func (zm *ZipMap) Len() int { return len(zm.index) }
 
 func (zm *ZipMap) ReadFrom(rd *iface.Reader) {
 	zm.unused = int(rd.ReadUint64())
 	zm.data = rd.ReadBytes()
 	n := rd.ReadUint64()
 	for range n {
-		zm.index.Put(rd.ReadString(), rd.ReadUint32())
+		zm.index[rd.ReadString()] = rd.ReadUint32()
 	}
 }
 
@@ -120,10 +118,9 @@ func (zm *ZipMap) ReadFrom(rd *iface.Reader) {
 func (zm *ZipMap) WriteTo(w *iface.Writer) {
 	w.WriteUint64(uint64(zm.unused))
 	w.WriteBytes(zm.data)
-	w.WriteUint64(uint64(zm.index.Len()))
-	zm.index.All(func(key string, pos uint32) bool {
+	w.WriteUint64(uint64(len(zm.index)))
+	for key, pos := range zm.index {
 		w.WriteString(key)
 		w.WriteUint32(pos)
-		return true
-	})
+	}
 }

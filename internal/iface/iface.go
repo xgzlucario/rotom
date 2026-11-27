@@ -37,4 +37,6 @@ type ZSetI interface {
 	PopMin() (key string, score float64)
 	Rank(key string) int
 	Scan(fn func(key string, score float64))
+	// Range iterates 0-based ranks start..stop inclusive (already clamped).
+	Range(start, stop int, fn func(key string, score float64))
 }

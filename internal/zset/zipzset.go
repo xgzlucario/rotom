@@ -109,6 +109,20 @@ func (zs *ZipZSet) Scan(fn func(key string, score float64)) {
 	}
 }
 
+func (zs *ZipZSet) Range(start, stop int, fn func(key string, score float64)) {
+	i := 0
+	it := zs.data.Iterator().SeekLast()
+	for !it.IsFirst() && i <= stop {
+		if i >= start {
+			key, score := zs.decode(it.Prev())
+			fn(key, score)
+		} else {
+			it.Prev()
+		}
+		i++
+	}
+}
+
 func (zs *ZipZSet) Len() int {
 	return zs.data.Len()
 }

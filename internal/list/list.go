@@ -1,7 +1,6 @@
 package list
 
 import (
-	"bytes"
 	"github.com/xgzlucario/rotom/internal/iface"
 	"github.com/zyedidia/generic/list"
 )
@@ -92,9 +91,9 @@ func (ls *QuickList) RangeCount(start, stop int) int {
 		stop += ls.Len()
 	}
 	start = max(0, start)
-	stop = min(ls.Len(), stop)
+	stop = min(ls.Len()-1, stop)
 	if start <= stop {
-		return min(ls.Len(), stop-start+1)
+		return stop - start + 1
 	}
 	return 0
 }
@@ -118,9 +117,9 @@ func (ls *QuickList) Range(start int, fn func(key []byte) (stop bool)) {
 		it.Next()
 	}
 	for {
-		if it.IsLast() {
+		for it.IsLast() {
 			lp = lp.Next
-			if lp == nil || lp.Value.Len() == 0 {
+			if lp == nil {
 				return
 			}
 			it = lp.Value.Iterator()
@@ -139,7 +138,7 @@ func (ls *QuickList) ReadFrom(rd *iface.Reader) {
 		data := rd.ReadBytes()
 		ls.ls.PushBack(&ListPack{
 			size: sz,
-			data: bytes.Clone(data),
+			data: data,
 		})
 	}
 }

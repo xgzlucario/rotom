@@ -10,7 +10,7 @@
 
 ## 特性
 
-- 基于 epoll 网络模型，还原了 Redis 中的 AeLoop 单线程事件循环
+- 还原了 Redis 中的 AeLoop 单线程事件循环，Linux 上基于 epoll，macOS/BSD 上基于 kqueue
 - 非常好的优化，达到原生 Redis 的性能
 - 兼容 Redis RESP 协议，可以使用任何 redis 客户端连接
 - 实现了 String, Hash, Set, List, ZSet 数据结构
@@ -29,12 +29,10 @@ AeLoop(Async Event Loop) 是 Redis 的核心异步事件驱动机制，主要有
 
 在 rotom 内部实现中，还原了 Redis 中的 AeLoop 事件循环机制，具体来说：
 
-1. 当一个新的 tcp 连接到达时，通过 `AcceptHandler` 获取连接的 socket fd，并添加至事件循环，注册读事件
-2. 读事件就绪时，通过 `ReadQueryFromClient` 将缓冲数据读出至 `queryBuf`
-3. 通过 `ProcessQueryBuf` 从 `queryBuf` 中解析并执行对应命令
-4. 保存命令执行结果，并注册 socket fd 的写事件
-5. 写事件就绪时，通过 `SendReplyToClient` 将所有结果写回客户端，一个写事件可能一次性写回多个读事件的结果
-6. 资源释放，并不断循环上述过程，直到服务关闭
+1. 当一个新的 tcp 连接到达时，`acceptHandler` 以非阻塞方式接受连接，并注册读事件
+2. 读事件就绪时，`readQueryFromClient` 将数据读入客户端的 `queryBuf`
+3. `processInputBuffer` 解析并执行 `queryBuf` 中所有完整的命令，回复追加到客户端的回复缓冲区，写命令追加到 AOF 缓冲区
+4. 事件循环进入等待前，`beforeSleep` 先写 AOF 缓冲区，再直接把回复写入 socket。只有 socket 缓冲区写不下时才注册写事件，由 `sendReplyToClient` 继续发送
 
 ## 数据结构
 

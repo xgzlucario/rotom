@@ -1,102 +1,95 @@
 package zset
 
 import (
-	"cmp"
-	"github.com/chen3feng/stl4go"
-	"github.com/cockroachdb/swiss"
-	"github.com/xgzlucario/rotom/internal/iface"
 	"math"
+
+	"github.com/xgzlucario/rotom/internal/iface"
 )
 
 var (
 	_ iface.ZSetI = (*ZSet)(nil)
 )
 
-type node struct {
-	key   string
-	score float64
-}
-
-func nodeCompare(a, b node) int {
-	if a.score == b.score {
-		return cmp.Compare(a.key, b.key)
-	}
-	return cmp.Compare(a.score, b.score)
-}
-
+// ZSet is the redis sorted set: a map for member -> score lookups plus a
+// skiplist with spans for ordered and rank-based access.
 type ZSet struct {
-	m   *swiss.Map[string, float64]
-	skl *stl4go.SkipList[node, struct{}]
+	m   map[string]float64
+	skl *skiplist
 }
 
 func New() *ZSet {
 	return &ZSet{
-		m:   swiss.New[string, float64](8),
-		skl: stl4go.NewSkipListFunc[node, struct{}](nodeCompare),
+		m:   make(map[string]float64, 8),
+		skl: newSkiplist(),
 	}
 }
 
 func (z *ZSet) Get(key string) (float64, bool) {
-	return z.m.Get(key)
+	score, ok := z.m[key]
+	return score, ok
 }
 
 func (z *ZSet) Set(key string, score float64) bool {
-	old, ok := z.m.Get(key)
+	old, ok := z.m[key]
 	if ok {
-		// same
 		if score == old {
 			return false
 		}
-		z.skl.Remove(node{key, old})
+		z.skl.delete(old, key)
 	}
-	z.m.Put(key, score)
-	z.skl.Insert(node{key, score}, struct{}{})
+	z.m[key] = score
+	z.skl.insert(score, key)
 	return !ok
 }
 
 func (z *ZSet) Remove(key string) bool {
-	score, ok := z.m.Get(key)
+	score, ok := z.m[key]
 	if !ok {
 		return false
 	}
-	z.m.Delete(key)
-	z.skl.Remove(node{key, score})
+	delete(z.m, key)
+	z.skl.delete(score, key)
 	return true
 }
 
 func (z *ZSet) PopMin() (key string, score float64) {
-	z.skl.ForEachIf(func(n node, _ struct{}) bool {
-		key = n.key
-		score = n.score
-		return false
-	})
-	z.m.Delete(key)
-	z.skl.Remove(node{key, score})
+	x := z.skl.first()
+	if x == nil {
+		return "", 0
+	}
+	key, score = x.member, x.score
+	delete(z.m, key)
+	z.skl.delete(score, key)
 	return
 }
 
-func (z *ZSet) Rank(key string) (index int) {
-	index = -1
-	_, ok := z.m.Get(key)
+// Rank returns the 0-based rank of key, or -1. O(log n).
+func (z *ZSet) Rank(key string) int {
+	score, ok := z.m[key]
 	if !ok {
-		return
+		return -1
 	}
-	z.skl.ForEachIf(func(n node, _ struct{}) bool {
-		index++
-		return n.key != key
-	})
-	return
+	return z.skl.rank(score, key) - 1
 }
 
 func (z *ZSet) Scan(fn func(key string, score float64)) {
-	z.skl.ForEachIf(func(n node, _ struct{}) bool {
-		fn(n.key, n.score)
-		return true
-	})
+	for x := z.skl.first(); x != nil; x = x.level[0].forward {
+		fn(x.member, x.score)
+	}
+}
+
+// Range calls fn for 0-based ranks start..stop (inclusive, already clamped
+// by the caller). O(log n + stop - start).
+func (z *ZSet) Range(start, stop int, fn func(key string, score float64)) {
+	x := z.skl.byRank(start + 1)
+	for i := start; i <= stop && x != nil; i++ {
+		fn(x.member, x.score)
+		x = x.level[0].forward
+	}
 }
 
 func (z *ZSet) Len() int {
-	return z.m.Len()
+	return len(z.m)
 }
 
 func (z *ZSet) ReadFrom(rd *iface.Reader) {
@@ -110,7 +103,7 @@ func (z *ZSet) ReadFrom(rd *iface.Reader) {
 }
 
 func (z *ZSet) WriteTo(w *iface.Writer) {
-	w.WriteUint64(uint64(z.m.Len()))
+	w.WriteUint64(uint64(len(z.m)))
 	z.Scan(func(key string, score float64) {
 		w.WriteString(key)
 		w.WriteUint64(math.Float64bits(score))

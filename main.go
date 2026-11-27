@@ -10,35 +10,14 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/xgzlucario/rotom/internal/config"
+	"github.com/xgzlucario/rotom/internal/server"
 )
 
-var (
-	log       = initLogger()
-	buildTime string
-)
+var buildTime string
 
-func initLogger() zerolog.Logger {
-	return zerolog.
-		New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime}).
-		Level(zerolog.TraceLevel).
-		With().
-		Timestamp().
-		Logger()
-}
-
-func config4Server(fileName string) {
-	if err := initConfig(fileName); err != nil {
-		log.Fatal().Msgf("init config error: %v", err)
-	}
-	if err := initServer(); err != nil {
-		log.Fatal().Msgf("init server error: %v", err)
-	}
-	if err := InitDB(); err != nil {
-		log.Fatal().Msgf("init db error: %v", err)
-	}
-}
-
-func printBanner() {
+func printBanner(cfg *config.Config) {
 	log.Printf(`
 ________      _____                  
 ___  __ \_______  /_____________ ___   Rotom %d bit (%s/%s)
@@ -47,36 +26,42 @@ _  _, _// /_/ / /_ / /_/ /  / / / / /  Build: %s
 /_/ |_| \____/\__/ \____//_/ /_/ /_/
 	   `,
 		strconv.IntSize, runtime.GOARCH, runtime.GOOS,
-		configGetPort(), os.Getpid(),
+		cfg.TCP.Port, os.Getpid(),
 		buildTime)
-}
-
-// RegisterAeLoop register main aeLoop event.
-func RegisterAeLoop(server *Server) {
-	server.aeLoop.AddRead(server.fd, AcceptHandler, nil)
-	server.aeLoop.AddTimeEvent(AeNormal, 100, CronEvictExpired, nil)
-	if configGetAppendOnly() {
-		server.aeLoop.AddTimeEvent(AeNormal, 1000, CronSyncAOF, nil)
-	}
 }
 
 func main() {
 	var path string
 	var debug bool
 
-	flag.StringVar(&path, "conf", defaultConfigFileName, "config file path.")
-	flag.BoolVar(&debug, "debug", false, "run with debug mode.")
+	flag.StringVar(&path, "conf", "rotom.toml", "config file path.")
+	flag.BoolVar(&debug, "debug", false, "run with debug mode (debug logs, pprof on :6060).")
 	flag.Parse()
 
-	config4Server(path)
-	printBanner()
+	level := zerolog.InfoLevel
+	if debug {
+		level = zerolog.DebugLevel
+	}
+	log.Logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.DateTime}).
+		Level(level).With().Timestamp().Logger()
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		log.Fatal().Msgf("load config error: %v", err)
+	}
+	srv, err := server.New(cfg)
+	if err != nil {
+		log.Fatal().Msgf("init server error: %v", err)
+	}
+	if err := srv.Listen(); err != nil {
+		log.Fatal().Msgf("listen error: %v", err)
+	}
+	printBanner(cfg)
 
 	if debug {
 		go http.ListenAndServe(":6060", nil)
 	}
 
 	log.Info().Msg("rotom server is ready to accept.")
-
-	RegisterAeLoop(&server)
-	server.aeLoop.AeMain()
+	srv.Run()
 }

@@ -10,6 +10,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// retry calls fn until it returns a non-temporary result.
+func retry(fn func() (int, error)) (int, error) {
+	for {
+		n, err := fn()
+		if err != nil && IsTemporary(err) {
+			time.Sleep(time.Millisecond)
+			continue
+		}
+		return n, err
+	}
+}
+
 func TestServer(t *testing.T) {
 	ast := assert.New(t)
 	testCount := 100
@@ -17,48 +29,52 @@ func TestServer(t *testing.T) {
 	t.Run("echo-server", func(t *testing.T) {
 		fd, err := TcpServer(20083)
 		ast.Nil(err)
-
-		var wg sync.WaitGroup
+		defer Close(fd)
 
 		// start listener
 		go func() {
 			for {
-				cfd, err := Accept(fd)
-				ast.Nil(err)
-				wg.Add(1)
-
-				// read
+				cfd, err := retry(func() (int, error) { return Accept(fd) })
+				if err != nil {
+					return
+				}
 				var buf [32]byte
-				n, _ := Read(cfd, buf[:])
-
-				// write
-				Write(cfd, buf[:n])
-				wg.Done()
+				n, _ := retry(func() (int, error) { return Read(cfd, buf[:]) })
+				_, _ = Write(cfd, buf[:n])
+				_ = Close(cfd)
 			}
 		}()
 
-		// start clients
-		go func() {
-			for i := 0; i < testCount; i++ {
-				tcpConn, err := net.Dial("tcp", "127.0.0.1:20083")
-				ast.Nil(err)
-				wg.Add(1)
+		var wg sync.WaitGroup
+		for i := 0; i < testCount; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				conn, err := net.Dial("tcp", "127.0.0.1:20083")
+				if !ast.Nil(err) {
+					return
+				}
+				defer conn.Close()
 
-				// write
 				msg := fmt.Sprintf("%d", time.Now().UnixNano())
-				tcpConn.Write([]byte(msg))
+				_, _ = conn.Write([]byte(msg))
 
-				// read
 				var res [32]byte
-				n, err := tcpConn.Read(res[:])
+				n, err := conn.Read(res[:])
 				ast.Nil(err)
-
-				// equal
 				ast.Equal(msg, string(res[:n]))
-				wg.Done()
-			}
-		}()
-
+			}()
+		}
 		wg.Wait()
+	})
+
+	t.Run("nonblocking", func(t *testing.T) {
+		fd, err := TcpServer(20084)
+		ast.Nil(err)
+		defer Close(fd)
+
+		// no pending connection: must not block
+		_, err = Accept(fd)
+		ast.True(IsTemporary(err))
 	})
 }

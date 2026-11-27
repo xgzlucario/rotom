@@ -10,7 +10,7 @@ This is rotom, a high performance, low latency tiny Redis Server written in Go. 
 
 ## Features
 
-- Implements the AeLoop single-threaded event loop from Redis using the epoll network model.
+- Implements the AeLoop single-threaded event loop from Redis, on epoll (Linux) or kqueue (macOS/BSD).
 - Excellent optimization, achieving native Redis performance.
 - Compatible with the Redis RESP protocol, allowing any Redis client to connected.
 - Implements data structures String, Hash, Set, List, ZSet.
@@ -29,12 +29,10 @@ AeLoop (Async Event Loop) is the core asynchronous event-driven mechanism in Red
 
 In rotom, the AeLoop event loop mechanism in Redis is replicated, specifically:
 
-1. When a new TCP connection arrives, the `AcceptHandler` obtains the socket fd and adds it to the event loop, registering a read event.
-2. When the read event is ready, `ReadQueryFromClient` reads buffered data into `queryBuf`.
-3. `ProcessQueryBuf` parses and executes the corresponding commands from `queryBuf`.
-4. The command execution result is saved, and the socket fd's write event is registered.
-5. When the write event is ready, `SendReplyToClient` writes all results back to the client. A write event may return multiple read event results at once.
-6. Resources are released, and the process continues until the service is shut down.
+1. When a new TCP connection arrives, `acceptHandler` accepts it as a non-blocking socket and registers a read event.
+2. When the read event is ready, `readQueryFromClient` reads data into the client's `queryBuf`.
+3. `processInputBuffer` parses and executes every complete command in `queryBuf`; replies are appended to the client's reply buffer and write commands to the AOF buffer.
+4. Before the loop sleeps again, `beforeSleep` writes the AOF buffer, then writes replies to the sockets directly. Only a reply that does not fit into the socket buffer registers a write event, handled by `sendReplyToClient`.
 
 ## Data Structures
 
