@@ -6,3 +6,7 @@ rotom
 bench/
 *.rdb
 output/
+
+# go test binaries and profiles
+*.test
+*.prof
