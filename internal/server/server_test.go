@@ -75,13 +75,18 @@ func TestSlowReader(t *testing.T) {
 	conn, err := gonet.Dial("tcp", addr)
 	ast.Nil(err)
 	defer conn.Close()
-	_ = conn.(*gonet.TCPConn).SetReadBuffer(4096)
+	// fail fast instead of hanging the whole test binary on a bug.
+	// (do not shrink SO_RCVBUF here: after the handshake, linux then drops
+	// segments beyond the new buffer and the transfer crawls on retransmits.)
+	_ = conn.SetDeadline(time.Now().Add(30 * time.Second))
 	rd := bufio.NewReader(conn)
 
 	value := strings.Repeat("x", 1<<20)
 	ast.Equal("+OK\r\n", send(t, conn, rd, fmt.Sprintf("*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$%d\r\n%s\r\n", len(value), value)))
 
-	// ask for 32MB of replies without reading, then read slowly.
+	// ask for 32MB of replies without reading for a while: far more than
+	// the socket buffers hold, so the server must finish them from the
+	// writable event handler.
 	const n = 32
 	var sb strings.Builder
 	for range n {
