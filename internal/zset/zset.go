@@ -31,14 +31,15 @@ func (z *ZSet) Get(member string) (float64, bool) {
 func (z *ZSet) Set(member string, score float64) bool {
 	old, ok := z.m[member]
 	if ok {
-		if score == old {
-			return false
+		if score != old {
+			z.m[member] = score
+			z.skl.updateScore(old, member, score)
 		}
-		z.skl.delete(old, member)
+		return false
 	}
 	z.m[member] = score
 	z.skl.insert(score, member)
-	return !ok
+	return true
 }
 
 func (z *ZSet) Remove(member string) bool {

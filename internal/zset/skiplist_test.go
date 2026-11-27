@@ -62,6 +62,22 @@ func TestSkiplistRank(t *testing.T) {
 	}
 	checkInvariants(t, z.skl)
 
+	// score updates: small moves (in place) and large moves (relink)
+	for range 5000 {
+		for key := range ref {
+			score := ref[key]
+			if rand.IntN(2) == 0 {
+				score += 0.001 // usually stays between neighbours
+			} else {
+				score = float64(rand.IntN(100))
+			}
+			z.Set(key, score)
+			ref[key] = score
+			break
+		}
+	}
+	checkInvariants(t, z.skl)
+
 	type kv struct {
 		k string
 		s float64

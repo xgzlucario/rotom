@@ -39,35 +39,87 @@ func newSkiplist() *skiplist {
 
 func randomLevel() int {
 	level := 1
-	for level < skiplistMaxLevel && rand.Float64() < skiplistP {
+	for level < skiplistMaxLevel && rand.Uint32() < uint32(skiplistP*(1<<32)) {
 		level++
 	}
 	return level
 }
 
-// less reports whether (score, member) of n sorts before (score, member).
+// newNode allocates a node and its levels in a single object for the common
+// small levels (~98% of nodes have level <= 3), like redis' flexible array
+// member. This halves allocations and keeps a node's levels next to its key,
+// so a lookup touches one cache line less per visited node.
+func newNode(level int, score float64, member string) *skiplistNode {
+	switch level {
+	case 1:
+		n := &struct {
+			skiplistNode
+			levels [1]skiplistLevel
+		}{}
+		n.level = n.levels[:]
+		n.score, n.member = score, member
+		return &n.skiplistNode
+	case 2:
+		n := &struct {
+			skiplistNode
+			levels [2]skiplistLevel
+		}{}
+		n.level = n.levels[:]
+		n.score, n.member = score, member
+		return &n.skiplistNode
+	case 3:
+		n := &struct {
+			skiplistNode
+			levels [3]skiplistLevel
+		}{}
+		n.level = n.levels[:]
+		n.score, n.member = score, member
+		return &n.skiplistNode
+	}
+	return &skiplistNode{member: member, score: score, level: make([]skiplistLevel, level)}
+}
+
+// less reports whether n sorts before (score, member).
 func (n *skiplistNode) less(score float64, member string) bool {
 	return n.score < score || (n.score == score && n.member < member)
 }
 
-// insert adds a new node. The caller guarantees member is not present.
-func (sl *skiplist) insert(score float64, member string) *skiplistNode {
-	var update [skiplistMaxLevel]*skiplistNode
-	var rank [skiplistMaxLevel]int
-
+// findUpdate walks to the last node before (score, member) on every level,
+// recording it in update and its rank in rank (rank may be nil).
+func (sl *skiplist) findUpdate(score float64, member string, update *[skiplistMaxLevel]*skiplistNode, rank *[skiplistMaxLevel]int) *skiplistNode {
 	x := sl.head
+	traversed := 0
 	for i := sl.level - 1; i >= 0; i-- {
-		if i != sl.level-1 {
-			rank[i] = rank[i+1]
-		}
-		for x.level[i].forward != nil && x.level[i].forward.less(score, member) {
-			rank[i] += x.level[i].span
-			x = x.level[i].forward
+		for {
+			next := x.level[i].forward
+			if next == nil || !next.less(score, member) {
+				break
+			}
+			traversed += x.level[i].span
+			x = next
 		}
 		update[i] = x
+		if rank != nil {
+			rank[i] = traversed
+		}
 	}
+	return x
+}
 
-	level := randomLevel()
+// insert adds a new node. The caller guarantees member is not present.
+func (sl *skiplist) insert(score float64, member string) *skiplistNode {
+	x := newNode(randomLevel(), score, member)
+	sl.link(x)
+	return x
+}
+
+// link inserts the detached node x at its position by (score, member).
+func (sl *skiplist) link(x *skiplistNode) {
+	var update [skiplistMaxLevel]*skiplistNode
+	var rank [skiplistMaxLevel]int
+	sl.findUpdate(x.score, x.member, &update, &rank)
+
+	level := len(x.level)
 	if level > sl.level {
 		for i := sl.level; i < level; i++ {
 			rank[i] = 0
@@ -77,7 +129,6 @@ func (sl *skiplist) insert(score float64, member string) *skiplistNode {
 		sl.level = level
 	}
 
-	x = &skiplistNode{member: member, score: score, level: make([]skiplistLevel, level)}
 	for i := range level {
 		x.level[i].forward = update[i].level[i].forward
 		update[i].level[i].forward = x
@@ -89,6 +140,7 @@ func (sl *skiplist) insert(score float64, member string) *skiplistNode {
 		update[i].level[i].span++
 	}
 
+	x.backward = nil
 	if update[0] != sl.head {
 		x.backward = update[0]
 	}
@@ -98,11 +150,11 @@ func (sl *skiplist) insert(score float64, member string) *skiplistNode {
 		sl.tail = x
 	}
 	sl.length++
-	return x
 }
 
-func (sl *skiplist) deleteNode(x *skiplistNode, update *[skiplistMaxLevel]*skiplistNode) {
-	for i := 0; i < sl.level; i++ {
+// unlink removes x given its predecessors on every level.
+func (sl *skiplist) unlink(x *skiplistNode, update *[skiplistMaxLevel]*skiplistNode) {
+	for i := range sl.level {
 		if update[i].level[i].forward == x {
 			update[i].level[i].span += x.level[i].span - 1
 			update[i].level[i].forward = x.level[i].forward
@@ -121,22 +173,43 @@ func (sl *skiplist) deleteNode(x *skiplistNode, update *[skiplistMaxLevel]*skipl
 	sl.length--
 }
 
+// find returns the node with (score, member) and its predecessors, or nil.
+func (sl *skiplist) find(score float64, member string, update *[skiplistMaxLevel]*skiplistNode) *skiplistNode {
+	x := sl.findUpdate(score, member, update, nil).level[0].forward
+	if x != nil && x.score == score && x.member == member {
+		return x
+	}
+	return nil
+}
+
 // delete removes the node with (score, member). It reports whether it existed.
 func (sl *skiplist) delete(score float64, member string) bool {
 	var update [skiplistMaxLevel]*skiplistNode
-	x := sl.head
-	for i := sl.level - 1; i >= 0; i-- {
-		for x.level[i].forward != nil && x.level[i].forward.less(score, member) {
-			x = x.level[i].forward
-		}
-		update[i] = x
+	x := sl.find(score, member, &update)
+	if x == nil {
+		return false
 	}
-	x = x.level[0].forward
-	if x != nil && x.score == score && x.member == member {
-		sl.deleteNode(x, &update)
-		return true
+	sl.unlink(x, &update)
+	return true
+}
+
+// updateScore changes the score of the existing (oldScore, member) node,
+// like redis' zslUpdateScore: if the node still sorts between its neighbours
+// it is updated in place, otherwise it is moved, reusing the node so that no
+// allocation happens.
+func (sl *skiplist) updateScore(oldScore float64, member string, newScore float64) {
+	var update [skiplistMaxLevel]*skiplistNode
+	x := sl.find(oldScore, member, &update)
+
+	prev, next := x.backward, x.level[0].forward
+	if (prev == nil || prev.less(newScore, member)) &&
+		(next == nil || !next.less(newScore, member)) {
+		x.score = newScore
+		return
 	}
-	return false
+	sl.unlink(x, &update)
+	x.score = newScore
+	sl.link(x)
 }
 
 // rank returns the 1-based rank of (score, member), or 0 if not found.
@@ -144,11 +217,13 @@ func (sl *skiplist) rank(score float64, member string) int {
 	rank := 0
 	x := sl.head
 	for i := sl.level - 1; i >= 0; i-- {
-		for x.level[i].forward != nil &&
-			(x.level[i].forward.less(score, member) ||
-				(x.level[i].forward.score == score && x.level[i].forward.member == member)) {
+		for {
+			next := x.level[i].forward
+			if next == nil || !(next.less(score, member) || (next.score == score && next.member == member)) {
+				break
+			}
 			rank += x.level[i].span
-			x = x.level[i].forward
+			x = next
 		}
 		if x != sl.head && x.score == score && x.member == member {
 			return rank

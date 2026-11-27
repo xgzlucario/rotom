@@ -97,3 +97,21 @@ func BenchmarkZSet(b *testing.B) {
 		}
 	})
 }
+
+// BenchmarkZAddUpdate mirrors valkey-benchmark's ZADD test: one large zset
+// whose random members get random new scores, so nearly every call moves a
+// node to another position.
+func BenchmarkZAddUpdate(b *testing.B) {
+	const n = 100000
+	z := New()
+	members := make([]string, n)
+	for i := range n {
+		members[i] = fmt.Sprintf("element:%012d", i)
+		z.Set(members[i], float64(rand.IntN(n)))
+	}
+	r := rand.New(rand.NewPCG(1, 2))
+	b.ReportAllocs()
+	for b.Loop() {
+		z.Set(members[r.IntN(n)], float64(r.IntN(n)))
+	}
+}
